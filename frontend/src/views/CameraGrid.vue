@@ -1,182 +1,266 @@
 <template>
-  <div class="p-8">
-    <div class="flex justify-between items-center mb-6">
-      <h1 class="text-3xl font-bold text-foreground">Camera Grid</h1>
-      <div class="flex items-center space-x-4">
-        <span class="text-sm text-muted-foreground">
+  <div class="h-full w-full bg-background">
+    <!-- Header -->
+    <div class="flex justify-between items-center p-3 border-b">
+      <h1 class="text-base font-bold text-foreground">Live Camera Feed</h1>
+      <div class="flex items-center space-x-3">
+        <span class="text-xs text-muted-foreground">
           {{ onlineCameras }}/{{ cameras.length }} cameras online
         </span>
-        <button @click="refreshCameras"
-                class="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90">
+        <button
+          @click="refreshCameras"
+          class="px-3 py-1.5 bg-primary text-primary-foreground text-xs rounded-lg hover:bg-primary/90 transition-colors"
+        >
           Refresh
         </button>
       </div>
     </div>
 
-    <!-- Loading State -->
-    <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      <div v-for="i in 6" :key="i" class="bg-card border rounded-lg p-6 animate-pulse">
-        <div class="h-48 bg-muted rounded-lg mb-4"></div>
-        <div class="h-4 bg-muted rounded w-3/4 mb-2"></div>
-        <div class="h-3 bg-muted rounded w-1/2"></div>
-      </div>
-    </div>
+    <!-- Camera Grid - 4x4 Layout -->
+    <div class="grid grid-cols-4 gap-1 p-1 h-[calc(100vh-60px)]">
+      <div
+        v-for="camera in cameras"
+        :key="camera.id"
+        class="relative bg-gray-900 rounded-lg overflow-hidden group"
+      >
+        <!-- Video Element -->
+        <video
+          :ref="el => videoRefs[camera.id] = el as HTMLVideoElement"
+          class="w-full h-full object-cover"
+          autoplay
+          muted
+          playsinline
+        ></video>
 
-    <!-- Camera Grid -->
-    <div v-else-if="cameras.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      <div v-for="camera in cameras" :key="camera.id"
-           class="bg-card border rounded-lg overflow-hidden hover:shadow-lg transition-shadow">
+        <!-- Camera Overlay Info -->
+        <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/50 pointer-events-none">
+          <!-- Top Bar -->
+          <div class="absolute top-0 left-0 right-0 p-3 flex justify-between items-start">
+            <div>
+              <h3 class="text-white font-semibold text-sm drop-shadow-lg">{{ camera.name }}</h3>
+              <p class="text-white/80 text-[10px] drop-shadow-lg">{{ camera.id }}</p>
+            </div>
+            <div class="flex items-center space-x-2">
+              <!-- Status Indicator -->
+              <div class="flex items-center space-x-1 bg-black/50 px-1.5 py-0.5 rounded backdrop-blur-sm">
+                <span
+                  :class="camera.status === 'online' ? 'bg-green-500' : 'bg-red-500'"
+                  class="w-1.5 h-1.5 rounded-full animate-pulse"
+                ></span>
+                <span class="text-white text-[10px] uppercase">{{ camera.status }}</span>
+              </div>
+              <!-- Live Indicator -->
+              <div class="flex items-center space-x-1 bg-red-600/90 px-1.5 py-0.5 rounded backdrop-blur-sm">
+                <span class="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span>
+                <span class="text-white text-[10px] font-semibold">LIVE</span>
+              </div>
+            </div>
+          </div>
 
-        <!-- Camera Feed Placeholder -->
-        <div class="relative h-48 bg-gray-900 flex items-center justify-center">
+          <!-- Bottom Info Bar -->
+          <div class="absolute bottom-0 left-0 right-0 p-3">
+            <div class="flex justify-between items-end">
+              <div class="text-white text-[10px] space-y-0.5">
+                <div class="flex items-center space-x-1.5">
+                  <span class="opacity-80">Resolution:</span>
+                  <span class="font-mono">{{ camera.capabilities?.resolution || '1920x1080' }}</span>
+                </div>
+                <div class="flex items-center space-x-1.5">
+                  <span class="opacity-80">FPS:</span>
+                  <span class="font-mono">{{ camera.capabilities?.fps || 30 }}</span>
+                </div>
+              </div>
+              <div class="flex space-x-1.5 pointer-events-auto">
+                <button
+                  @click="toggleFullscreen(camera.id)"
+                  class="px-2 py-1 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white text-[10px] rounded transition-colors"
+                >
+                  Fullscreen
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Loading Spinner -->
+        <div
+          v-if="!streamReady[camera.id]"
+          class="absolute inset-0 flex items-center justify-center bg-gray-900"
+        >
           <div class="text-center text-white">
-            <div class="text-6xl mb-2">📹</div>
-            <p class="text-sm">Live Feed</p>
-            <p class="text-xs opacity-75">{{ camera.rtspUrl }}</p>
-          </div>
-
-          <!-- Status Indicator -->
-          <div class="absolute top-3 right-3 flex items-center space-x-2 bg-black/50 px-2 py-1 rounded">
-            <span :class="camera.status === 'online' ? 'bg-green-500' : 'bg-red-500'"
-                  class="w-2 h-2 rounded-full"></span>
-            <span class="text-white text-xs capitalize">{{ camera.status }}</span>
-          </div>
-
-          <!-- PTZ Indicator -->
-          <div v-if="camera.capabilities?.ptz"
-               class="absolute top-3 left-3 bg-black/50 px-2 py-1 rounded">
-            <span class="text-white text-xs">PTZ</span>
-          </div>
-        </div>
-
-        <!-- Camera Info -->
-        <div class="p-4">
-          <div class="flex justify-between items-start mb-2">
-            <h3 class="font-semibold text-lg">{{ camera.name }}</h3>
-            <span class="text-sm text-muted-foreground">{{ camera.id }}</span>
-          </div>
-
-          <div class="space-y-2 text-sm text-muted-foreground">
-            <div class="flex justify-between">
-              <span>Resolution:</span>
-              <span>{{ camera.capabilities?.resolution || 'Unknown' }}</span>
-            </div>
-            <div class="flex justify-between">
-              <span>FPS:</span>
-              <span>{{ camera.capabilities?.fps || 'Unknown' }}</span>
-            </div>
-            <div class="flex justify-between">
-              <span>Analytics:</span>
-              <span>{{ camera.capabilities?.analytics ? 'Enabled' : 'Disabled' }}</span>
-            </div>
-          </div>
-
-          <!-- Action Buttons -->
-          <div class="mt-4 flex space-x-2">
-            <button @click="viewCamera(camera)"
-                    class="flex-1 px-3 py-2 bg-primary text-primary-foreground text-sm rounded hover:bg-primary/90">
-              View
-            </button>
-            <button @click="getSnapshot(camera)"
-                    :disabled="camera.status !== 'online'"
-                    class="px-3 py-2 border border-border text-sm rounded hover:bg-accent disabled:opacity-50">
-              Snapshot
-            </button>
-            <button v-if="camera.capabilities?.ptz" @click="controlPTZ(camera)"
-                    :disabled="camera.status !== 'online'"
-                    class="px-3 py-2 border border-border text-sm rounded hover:bg-accent disabled:opacity-50">
-              PTZ
-            </button>
+            <div class="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin mb-4 mx-auto"></div>
+            <p class="text-sm">Connecting to camera...</p>
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- Empty State -->
-    <div v-else class="text-center py-12">
-      <div class="text-6xl mb-4">📹</div>
-      <h3 class="text-xl font-semibold mb-2">No Cameras Found</h3>
-      <p class="text-muted-foreground mb-4">No cameras are currently configured in the system.</p>
-      <button @click="refreshCameras"
-              class="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90">
-        Refresh
-      </button>
     </div>
 
     <!-- Error Display -->
-    <div v-if="error" class="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
-      <p class="text-destructive font-medium">Error loading cameras:</p>
-      <p class="text-destructive text-sm">{{ error }}</p>
+    <div v-if="error" class="absolute bottom-4 right-4 max-w-md p-4 bg-destructive/90 text-white rounded-lg shadow-lg">
+      <p class="font-medium">Error:</p>
+      <p class="text-sm">{{ error }}</p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { CameraApiClient } from '../api/clients/cameras'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import type { Camera } from '../types/generated'
+import { useCameraStore } from '../stores/cameras'
 
-const cameras = ref<Camera[]>([])
-const loading = ref(true)
+// Use camera store
+const cameraStore = useCameraStore()
+const cameras = computed(() => cameraStore.cameras)
+
+const videoRefs = ref<Record<string, HTMLVideoElement>>({})
+const streamReady = ref<Record<string, boolean>>({})
+const peerConnections = ref<Record<string, RTCPeerConnection>>({})
 const error = ref<string | null>(null)
 
-const cameraClient = new CameraApiClient()
+const onlineCameras = computed(() => cameraStore.onlineCount)
 
-const onlineCameras = computed(() =>
-  cameras.value.filter(camera => camera.status === 'online').length
-)
+// Mock WebRTC setup for each camera
+const setupMockWebRTC = async (camera: Camera) => {
+  try {
+    // Create RTCPeerConnection
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+    })
+
+    peerConnections.value[camera.id] = pc
+
+    // Create a mock video stream using canvas
+    const canvas = document.createElement('canvas')
+    canvas.width = 1920
+    canvas.height = 1080
+    const ctx = canvas.getContext('2d')!
+
+    // Animation function to simulate camera feed
+    let frame = 0
+    const animate = () => {
+      // Draw background
+      ctx.fillStyle = '#1a1a2e'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+      // Draw grid pattern
+      ctx.strokeStyle = '#16213e'
+      ctx.lineWidth = 2
+      for (let i = 0; i < canvas.width; i += 100) {
+        ctx.beginPath()
+        ctx.moveTo(i, 0)
+        ctx.lineTo(i, canvas.height)
+        ctx.stroke()
+      }
+      for (let i = 0; i < canvas.height; i += 100) {
+        ctx.beginPath()
+        ctx.moveTo(0, i)
+        ctx.lineTo(canvas.width, i)
+        ctx.stroke()
+      }
+
+      // Draw moving elements to simulate motion
+      const time = Date.now() / 1000
+
+      // Simulate a moving object (like a person or vehicle)
+      const x = (Math.sin(time * 0.5) * 0.4 + 0.5) * canvas.width
+      const y = (Math.cos(time * 0.3) * 0.3 + 0.5) * canvas.height
+
+      ctx.fillStyle = '#4ecca3'
+      ctx.beginPath()
+      ctx.arc(x, y, 30, 0, Math.PI * 2)
+      ctx.fill()
+
+      // Draw camera info overlay
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
+      ctx.fillRect(20, 20, 300, 120)
+
+      ctx.fillStyle = '#ffffff'
+      ctx.font = 'bold 24px monospace'
+      ctx.fillText(camera.name, 40, 55)
+
+      ctx.font = '16px monospace'
+      ctx.fillStyle = '#4ecca3'
+      ctx.fillText(`CAM ID: ${camera.id}`, 40, 85)
+      ctx.fillText(`FPS: ${camera.capabilities?.fps || 30}`, 40, 110)
+
+      // Draw timestamp
+      const now = new Date()
+      ctx.fillText(now.toLocaleTimeString(), 40, 135)
+
+      // Draw "recording" indicator
+      if (Math.floor(time * 2) % 2 === 0) {
+        ctx.fillStyle = '#ff0000'
+        ctx.beginPath()
+        ctx.arc(canvas.width - 40, 40, 10, 0, Math.PI * 2)
+        ctx.fill()
+      }
+
+      frame++
+      if (peerConnections.value[camera.id]) {
+        requestAnimationFrame(animate)
+      }
+    }
+
+    animate()
+
+    // Capture stream from canvas
+    const stream = canvas.captureStream(camera.capabilities?.fps || 30)
+
+    // Add tracks to peer connection
+    stream.getTracks().forEach(track => {
+      pc.addTrack(track, stream)
+    })
+
+    // Get video element and set stream
+    const videoElement = videoRefs.value[camera.id]
+    if (videoElement) {
+      videoElement.srcObject = stream
+      streamReady.value[camera.id] = true
+    }
+
+    console.log(`WebRTC stream started for ${camera.name}`)
+  } catch (err) {
+    console.error(`Failed to setup WebRTC for ${camera.name}:`, err)
+    error.value = `Failed to connect to ${camera.name}`
+  }
+}
 
 const refreshCameras = async () => {
-  loading.value = true
-  error.value = null
+  // Re-initialize all streams
+  cameras.value.forEach(camera => {
+    if (camera.status === 'online') {
+      setupMockWebRTC(camera)
+    }
+  })
+}
 
-  try {
-    const data = await cameraClient.getCameras()
-    cameras.value = data
-    console.log('Loaded cameras:', data)
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Unknown error occurred'
-    console.error('Failed to load cameras:', err)
-  } finally {
-    loading.value = false
+const toggleFullscreen = (cameraId: string) => {
+  const videoElement = videoRefs.value[cameraId]
+  if (videoElement) {
+    if (!document.fullscreenElement) {
+      videoElement.requestFullscreen()
+    } else {
+      document.exitFullscreen()
+    }
   }
-}
-
-const viewCamera = (camera: Camera) => {
-  // TODO: Open detailed camera view
-  console.log('Viewing camera:', camera.name)
-  alert(`Viewing camera: ${camera.name}\nStatus: ${camera.status}\nRTSP: ${camera.rtspUrl}`)
-}
-
-const getSnapshot = async (camera: Camera) => {
-  try {
-    console.log('Getting snapshot for:', camera.name)
-    const blob = await cameraClient.getSnapshot(camera.id)
-
-    // Create a download link for the snapshot
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${camera.name}-snapshot-${Date.now()}.png`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-
-    console.log('Snapshot downloaded for:', camera.name)
-  } catch (err) {
-    console.error('Failed to get snapshot:', err)
-    alert(`Failed to get snapshot: ${err instanceof Error ? err.message : 'Unknown error'}`)
-  }
-}
-
-const controlPTZ = (camera: Camera) => {
-  // TODO: Open PTZ control panel
-  console.log('PTZ control for:', camera.name)
-  alert(`PTZ Control for: ${camera.name}\nCapabilities: ${JSON.stringify(camera.capabilities?.ptz)}`)
 }
 
 onMounted(() => {
-  refreshCameras()
+  // Initialize WebRTC streams for all cameras
+  setTimeout(() => {
+    cameras.value.forEach(camera => {
+      if (camera.status === 'online') {
+        setupMockWebRTC(camera)
+      }
+    })
+  }, 100)
+})
+
+onUnmounted(() => {
+  // Clean up peer connections
+  Object.values(peerConnections.value).forEach(pc => {
+    pc.close()
+  })
+  peerConnections.value = {}
 })
 </script>

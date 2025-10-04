@@ -1,10 +1,43 @@
 import { createApp } from 'vue'
+import { createPinia } from 'pinia'
 import './index.css'
-import App from './App.vue'
-import router from './router'
+import { useAuthStore } from './stores/auth'
 
-const app = createApp(App)
+// Initialize Pinia first to check auth state
+const pinia = createPinia()
+const tempApp = createApp({ template: '<div></div>' })
+tempApp.use(pinia)
+const authStore = useAuthStore()
+authStore.restoreSession()
 
-app.use(router)
+// Determine which app to load based on authentication
+if (authStore.isAuthenticated) {
+  // Load full SPA for authenticated users
+  import('./App.vue').then(({ default: App }) => {
+    import('./router').then(({ default: router }) => {
+      const app = createApp(App)
+      app.use(pinia)
+      app.use(router)
+      app.mount('#app')
+    })
+  })
+} else {
+  // Load minimal login app for unauthenticated users
+  import('./views/Login.vue').then(({ default: Login }) => {
+    const app = createApp(Login)
+    app.use(pinia)
+    app.mount('#app')
 
-app.mount('#app')
+    // Listen for successful login to reload and mount full SPA
+    const unwatch = authStore.$onAction(({ name, after }) => {
+      if (name === 'login') {
+        after(() => {
+          if (authStore.isAuthenticated) {
+            unwatch()
+            window.location.reload()
+          }
+        })
+      }
+    })
+  })
+}

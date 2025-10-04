@@ -22,7 +22,7 @@ export class DetectionApiClient {
 
     const response = await fetch(`${this.baseUrl}/detections?${searchParams}`, {
       headers: {
-        'Authorization': `Bearer ${this.getStoredToken()}`,
+        Authorization: `Bearer ${this.getStoredToken()}`,
       },
     })
 
@@ -36,7 +36,7 @@ export class DetectionApiClient {
   async getDetection(detectionId: string): Promise<Detection> {
     const response = await fetch(`${this.baseUrl}/detections/${detectionId}`, {
       headers: {
-        'Authorization': `Bearer ${this.getStoredToken()}`,
+        Authorization: `Bearer ${this.getStoredToken()}`,
       },
     })
 
@@ -57,13 +57,14 @@ export class DetectionApiClient {
     const searchParams = new URLSearchParams()
     if (params?.type) searchParams.append('type', params.type)
     if (params?.severity) searchParams.append('severity', params.severity)
-    if (params?.acknowledged !== undefined) searchParams.append('acknowledged', params.acknowledged.toString())
+    if (params?.acknowledged !== undefined)
+      searchParams.append('acknowledged', params.acknowledged.toString())
     if (params?.limit) searchParams.append('limit', params.limit.toString())
     if (params?.offset) searchParams.append('offset', params.offset.toString())
 
     const response = await fetch(`${this.baseUrl}/alarms?${searchParams}`, {
       headers: {
-        'Authorization': `Bearer ${this.getStoredToken()}`,
+        Authorization: `Bearer ${this.getStoredToken()}`,
       },
     })
 
@@ -79,7 +80,7 @@ export class DetectionApiClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.getStoredToken()}`,
+        Authorization: `Bearer ${this.getStoredToken()}`,
       },
       body: JSON.stringify({ acknowledgedBy }),
     })
@@ -103,7 +104,7 @@ export class DetectionApiClient {
 
     const response = await fetch(`${this.baseUrl}/tracks?${searchParams}`, {
       headers: {
-        'Authorization': `Bearer ${this.getStoredToken()}`,
+        Authorization: `Bearer ${this.getStoredToken()}`,
       },
     })
 
