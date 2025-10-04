@@ -1,0 +1,2 @@
+*.detections.json filter=lfs diff=lfs merge=lfs -text
+*.detections.json.gz filter=lfs diff=lfs merge=lfs -text

@@ -1,0 +1,216 @@
+openapi: 3.0.3
+info:
+  title: Broken API Contract - Fix Me!
+  version: 1.0.0
+  description: |
+    🐛 This OpenAPI contract has several errors. Can you find and fix them all?
+
+    **Your Task:**
+    1. Run `spectral lint broken-contract.yaml` to find the errors
+    2. Fix each error one by one
+    3. Re-validate until all errors are gone
+    4. Compare with the solution file when done
+
+    **Hints:**
+    - Look for missing required fields
+    - Check for invalid data types
+    - Watch for broken $ref references
+    - Verify enum values are used correctly
+    - Check for duplicate operationIds
+
+paths:
+  /users:
+    get:
+      summary: Get all users
+      # ERROR: Missing operationId
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+
+    post:
+      summary: Create a new user
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUser'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                # ERROR: This reference doesn't exist
+                $ref: '#/components/schemas/UserResponse'
+
+  /users/{userId}:
+    get:
+      summary: Get user by ID
+      # ERROR: Duplicate operationId (same as POST /users)
+      operationId: createUser
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            # ERROR: Wrong type - should be string or integer, not boolean
+            type: boolean
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        # ERROR: Response code should be a string, not a number
+        404:
+          description: User not found
+
+  /products:
+    get:
+      summary: List products
+      operationId: listProducts
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            # ERROR: Enum value has typo - should match the values used in Product schema
+            enum:
+              - electronicss
+              - clothing
+              - food
+      responses:
+        '200':
+          description: List of products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+
+  /orders:
+    post:
+      summary: Create order
+      operationId: createOrder
+      requestBody:
+        # ERROR: Missing 'required: true'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Order'
+      responses:
+        '201':
+          description: Order created
+
+components:
+  schemas:
+    User:
+      type: object
+      required:
+        - id
+        - email
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        age:
+          type: integer
+          minimum: 0
+          # ERROR: Maximum age is less than minimum - should be higher
+          maximum: -1
+        # ERROR: Property name has space in it
+        phone number:
+          type: string
+        status:
+          type: string
+          enum:
+            - active
+            - inactive
+            # ERROR: Duplicate enum value
+            - active
+
+    CreateUser:
+      type: object
+      required:
+        - email
+        - name
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          # ERROR: minLength is greater than maxLength
+          minLength: 20
+          maxLength: 8
+
+    Product:
+      type: object
+      required:
+        - id
+        - name
+        - price
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        price:
+          # ERROR: Price should be number, not string
+          type: string
+        category:
+          type: string
+          enum:
+            - electronics
+            - clothing
+            - food
+        # ERROR: inStock should be boolean, not string
+        inStock:
+          type: string
+
+    Order:
+      type: object
+      required:
+        - userId
+        - items
+        - totalAmount
+      properties:
+        userId:
+          type: string
+          format: uuid
+        items:
+          type: array
+          items:
+            # ERROR: This schema doesn't exist
+            $ref: '#/components/schemas/OrderItem'
+        totalAmount:
+          type: number
+          format: float
+        status:
+          type: string
+          # ERROR: Missing 'default' enum value in the list
+          default: pending
+          enum:
+            - confirmed
+            - shipped
+            - delivered

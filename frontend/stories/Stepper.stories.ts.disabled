@@ -1,0 +1,1062 @@
+import type { Meta, StoryObj } from '@storybook/vue3-vite'
+import {
+  Stepper,
+  StepperDescription,
+  StepperIndicator,
+  StepperItem,
+  StepperSeparator,
+  StepperTitle,
+  StepperTrigger,
+} from '@/components/ui/stepper'
+import {
+  Check,
+  User,
+  Mail,
+  CreditCard,
+  Package,
+  Truck,
+  CheckCircle,
+  Circle,
+  Settings,
+  Shield,
+  Bell,
+  Globe,
+  UserPlus,
+  Building,
+  FileText,
+  Key,
+  Database,
+  Cloud,
+  Monitor,
+  Smartphone,
+  Palette,
+  Zap,
+  Code,
+  Layers,
+  PenTool,
+  Upload,
+  Camera,
+  MapPin,
+  Phone,
+  Calendar,
+} from 'lucide-vue-next'
+
+// Mock data for different stepper scenarios
+const mockStepperData = {
+  // Simple form wizard steps
+  formWizard: [
+    {
+      value: 'personal',
+      title: 'Personal Information',
+      description: 'Enter your basic details',
+      icon: User,
+      status: 'completed',
+    },
+    {
+      value: 'contact',
+      title: 'Contact Details',
+      description: 'Add your contact information',
+      icon: Mail,
+      status: 'current',
+    },
+    {
+      value: 'verification',
+      title: 'Verification',
+      description: 'Verify your account',
+      icon: Shield,
+      status: 'upcoming',
+    },
+  ],
+
+  // E-commerce checkout process
+  checkout: [
+    {
+      value: 'cart',
+      title: 'Shopping Cart',
+      description: 'Review your items',
+      icon: Package,
+      status: 'completed',
+    },
+    {
+      value: 'shipping',
+      title: 'Shipping Info',
+      description: 'Enter delivery address',
+      icon: Truck,
+      status: 'completed',
+    },
+    {
+      value: 'payment',
+      title: 'Payment',
+      description: 'Choose payment method',
+      icon: CreditCard,
+      status: 'current',
+    },
+    {
+      value: 'confirmation',
+      title: 'Confirmation',
+      description: 'Review and confirm order',
+      icon: CheckCircle,
+      status: 'upcoming',
+    },
+  ],
+
+  // User onboarding flow
+  onboarding: [
+    {
+      value: 'welcome',
+      title: 'Welcome',
+      description: 'Get started with your account',
+      icon: Zap,
+      status: 'completed',
+    },
+    {
+      value: 'profile',
+      title: 'Create Profile',
+      description: 'Set up your profile information',
+      icon: User,
+      status: 'completed',
+    },
+    {
+      value: 'preferences',
+      title: 'Preferences',
+      description: 'Customize your experience',
+      icon: Settings,
+      status: 'current',
+    },
+    {
+      value: 'team',
+      title: 'Invite Team',
+      description: 'Add your team members',
+      icon: UserPlus,
+      status: 'upcoming',
+    },
+    {
+      value: 'complete',
+      title: 'All Set!',
+      description: 'Start using the platform',
+      icon: CheckCircle,
+      status: 'upcoming',
+    },
+  ],
+
+  // Software setup wizard
+  setup: [
+    {
+      value: 'requirements',
+      title: 'System Requirements',
+      description: 'Check system compatibility',
+      icon: Monitor,
+      status: 'completed',
+    },
+    {
+      value: 'installation',
+      title: 'Installation',
+      description: 'Install required components',
+      icon: Code,
+      status: 'completed',
+    },
+    {
+      value: 'configuration',
+      title: 'Configuration',
+      description: 'Configure application settings',
+      icon: Settings,
+      status: 'completed',
+    },
+    {
+      value: 'database',
+      title: 'Database Setup',
+      description: 'Connect and configure database',
+      icon: Database,
+      status: 'current',
+    },
+    {
+      value: 'testing',
+      title: 'Testing',
+      description: 'Test the installation',
+      icon: CheckCircle,
+      status: 'upcoming',
+    },
+  ],
+
+  // Project creation workflow
+  projectCreation: [
+    {
+      value: 'template',
+      title: 'Choose Template',
+      description: 'Select a project template',
+      icon: Layers,
+      status: 'completed',
+    },
+    {
+      value: 'details',
+      title: 'Project Details',
+      description: 'Name and describe your project',
+      icon: FileText,
+      status: 'completed',
+    },
+    {
+      value: 'team',
+      title: 'Team Setup',
+      description: 'Add collaborators',
+      icon: UserPlus,
+      status: 'current',
+    },
+    {
+      value: 'integration',
+      title: 'Integrations',
+      description: 'Connect external services',
+      icon: Globe,
+      status: 'upcoming',
+    },
+  ],
+
+  // Account verification process
+  verification: [
+    {
+      value: 'email',
+      title: 'Email Verification',
+      description: 'Verify your email address',
+      icon: Mail,
+      status: 'completed',
+    },
+    {
+      value: 'phone',
+      title: 'Phone Verification',
+      description: 'Verify your phone number',
+      icon: Phone,
+      status: 'current',
+    },
+    {
+      value: 'identity',
+      title: 'Identity Verification',
+      description: 'Verify your identity',
+      icon: Shield,
+      status: 'upcoming',
+    },
+  ],
+
+  // Content creation workflow
+  contentCreation: [
+    {
+      value: 'planning',
+      title: 'Content Planning',
+      description: 'Define your content strategy',
+      icon: Calendar,
+      status: 'completed',
+    },
+    {
+      value: 'creation',
+      title: 'Create Content',
+      description: 'Write and design your content',
+      icon: PenTool,
+      status: 'completed',
+    },
+    {
+      value: 'media',
+      title: 'Add Media',
+      description: 'Upload images and videos',
+      icon: Upload,
+      status: 'current',
+    },
+    {
+      value: 'review',
+      title: 'Review',
+      description: 'Review and edit content',
+      icon: FileText,
+      status: 'upcoming',
+    },
+    {
+      value: 'publish',
+      title: 'Publish',
+      description: 'Make your content live',
+      icon: Globe,
+      status: 'upcoming',
+    },
+  ],
+
+  // Simple linear steps
+  simpleSteps: [
+    {
+      value: 'step-1',
+      title: 'Step 1',
+      description: 'First step description',
+      status: 'completed',
+    },
+    {
+      value: 'step-2',
+      title: 'Step 2',
+      description: 'Second step description',
+      status: 'current',
+    },
+    {
+      value: 'step-3',
+      title: 'Step 3',
+      description: 'Third step description',
+      status: 'upcoming',
+    },
+  ],
+
+  // Minimal steps without descriptions
+  minimal: [
+    {
+      value: 'start',
+      title: 'Start',
+      status: 'completed',
+    },
+    {
+      value: 'process',
+      title: 'Process',
+      status: 'current',
+    },
+    {
+      value: 'finish',
+      title: 'Finish',
+      status: 'upcoming',
+    },
+  ],
+}
+
+const meta = {
+  title: 'UI Components/Stepper',
+  component: Stepper,
+  parameters: {
+    layout: 'padded',
+    docs: {
+      description: {
+        component:
+          'A stepper component displays progress through a sequence of logical and numbered steps. It provides visual feedback about the current step and overall progress.',
+      },
+    },
+  },
+  tags: ['autodocs'],
+  argTypes: {
+    orientation: {
+      control: { type: 'select' },
+      options: ['horizontal', 'vertical'],
+      description: 'The orientation of the stepper',
+      table: {
+        type: { summary: 'string' },
+        defaultValue: { summary: 'horizontal' },
+      },
+    },
+    currentStep: {
+      control: { type: 'number' },
+      description: 'The index of the currently active step',
+      table: {
+        type: { summary: 'number' },
+        defaultValue: { summary: '0' },
+      },
+    },
+    completedSteps: {
+      control: { type: 'object' },
+      description: 'Array of completed step indices',
+      table: {
+        type: { summary: 'number[]' },
+      },
+    },
+    variant: {
+      control: { type: 'select' },
+      options: ['default', 'ghost', 'outline'],
+      description: 'Visual variant of the stepper',
+      table: {
+        type: { summary: 'string' },
+        defaultValue: { summary: 'default' },
+      },
+    },
+    size: {
+      control: { type: 'select' },
+      options: ['sm', 'default', 'lg'],
+      description: 'Size of the stepper components',
+      table: {
+        type: { summary: 'string' },
+        defaultValue: { summary: 'default' },
+      },
+    },
+    clickable: {
+      control: { type: 'boolean' },
+      description: 'Whether step indicators are clickable for navigation',
+      table: {
+        type: { summary: 'boolean' },
+        defaultValue: { summary: 'false' },
+      },
+    },
+  },
+} satisfies Meta<typeof Stepper>
+
+export default meta
+type Story = StoryObj<typeof meta>
+
+// Default horizontal stepper
+export const Default: Story = {
+  render: (args) => ({
+    components: {
+      Stepper,
+      StepperItem,
+      StepperTrigger,
+      StepperIndicator,
+      StepperTitle,
+      StepperDescription,
+      StepperSeparator,
+      Check,
+      Circle,
+    },
+    setup() {
+      const steps = mockStepperData.formWizard
+      return { args, steps }
+    },
+    template: `
+      <Stepper v-bind="args" class="max-w-4xl mx-auto">
+        <template v-for="(step, index) in steps" :key="step.value">
+          <StepperItem :value="step.value">
+            <StepperTrigger>
+              <StepperIndicator>
+                <Check v-if="step.status === 'completed'" class="h-4 w-4" />
+                <Circle v-else class="h-4 w-4" />
+              </StepperIndicator>
+              <div class="flex flex-col text-left">
+                <StepperTitle>{{ step.title }}</StepperTitle>
+                <StepperDescription>{{ step.description }}</StepperDescription>
+              </div>
+            </StepperTrigger>
+          </StepperItem>
+          <StepperSeparator v-if="index < steps.length - 1" />
+        </template>
+      </Stepper>
+    `,
+  }),
+  args: {
+    orientation: 'horizontal',
+    currentStep: 1,
+  },
+}
+
+// Vertical stepper layout
+export const Vertical: Story = {
+  render: () => ({
+    components: {
+      Stepper,
+      StepperItem,
+      StepperTrigger,
+      StepperIndicator,
+      StepperTitle,
+      StepperDescription,
+      StepperSeparator,
+      Check,
+      Circle,
+    },
+    setup() {
+      const steps = mockStepperData.onboarding
+      return { steps }
+    },
+    template: `
+      <Stepper orientation="vertical" class="max-w-md mx-auto">
+        <template v-for="(step, index) in steps" :key="step.value">
+          <StepperItem :value="step.value">
+            <StepperTrigger>
+              <StepperIndicator>
+                <Check v-if="step.status === 'completed'" class="h-4 w-4" />
+                <Circle v-else class="h-4 w-4" />
+              </StepperIndicator>
+              <div class="flex flex-col text-left ml-4">
+                <StepperTitle>{{ step.title }}</StepperTitle>
+                <StepperDescription>{{ step.description }}</StepperDescription>
+              </div>
+            </StepperTrigger>
+          </StepperItem>
+          <StepperSeparator v-if="index < steps.length - 1" />
+        </template>
+      </Stepper>
+    `,
+  }),
+}
+
+// E-commerce checkout stepper
+export const CheckoutFlow: Story = {
+  render: () => ({
+    components: {
+      Stepper,
+      StepperItem,
+      StepperTrigger,
+      StepperIndicator,
+      StepperTitle,
+      StepperDescription,
+      StepperSeparator,
+      Check,
+    },
+    setup() {
+      const steps = mockStepperData.checkout
+      return { steps }
+    },
+    template: `
+      <div class="max-w-4xl mx-auto space-y-6">
+        <div class="text-center">
+          <h2 class="text-2xl font-bold mb-2">Checkout Process</h2>
+          <p class="text-muted-foreground">Complete your purchase in a few simple steps</p>
+        </div>
+        
+        <Stepper orientation="horizontal" class="w-full">
+          <template v-for="(step, index) in steps" :key="step.value">
+            <StepperItem :value="step.value">
+              <StepperTrigger>
+                <StepperIndicator>
+                  <Check v-if="step.status === 'completed'" class="h-4 w-4" />
+                  <component v-else :is="step.icon" class="h-4 w-4" />
+                </StepperIndicator>
+                <div class="flex flex-col text-left">
+                  <StepperTitle>{{ step.title }}</StepperTitle>
+                  <StepperDescription>{{ step.description }}</StepperDescription>
+                </div>
+              </StepperTrigger>
+            </StepperItem>
+            <StepperSeparator v-if="index < steps.length - 1" />
+          </template>
+        </Stepper>
+      </div>
+    `,
+  }),
+}
+
+// User onboarding with numbered steps
+export const OnboardingFlow: Story = {
+  render: () => ({
+    components: {
+      Stepper,
+      StepperItem,
+      StepperTrigger,
+      StepperIndicator,
+      StepperTitle,
+      StepperDescription,
+      StepperSeparator,
+      Check,
+    },
+    setup() {
+      const steps = mockStepperData.onboarding
+      return { steps }
+    },
+    template: `
+      <div class="max-w-4xl mx-auto space-y-6">
+        <div class="text-center">
+          <h2 class="text-2xl font-bold mb-2">Welcome to Our Platform</h2>
+          <p class="text-muted-foreground">Let's get you set up in just a few minutes</p>
+        </div>
+        
+        <Stepper orientation="horizontal" class="w-full">
+          <template v-for="(step, index) in steps" :key="step.value">
+            <StepperItem :value="step.value">
+              <StepperTrigger>
+                <StepperIndicator>
+                  <Check v-if="step.status === 'completed'" class="h-4 w-4" />
+                  <span v-else-if="step.status === 'current'" class="text-sm font-semibold">{{ index + 1 }}</span>
+                  <span v-else class="text-sm font-semibold text-muted-foreground">{{ index + 1 }}</span>
+                </StepperIndicator>
+                <div class="flex flex-col text-left">
+                  <StepperTitle>{{ step.title }}</StepperTitle>
+                  <StepperDescription>{{ step.description }}</StepperDescription>
+                </div>
+              </StepperTrigger>
+            </StepperItem>
+            <StepperSeparator v-if="index < steps.length - 1" />
+          </template>
+        </Stepper>
+        
+        <div class="flex justify-between pt-6">
+          <button class="px-4 py-2 text-sm border border-border rounded-md hover:bg-muted">
+            Previous
+          </button>
+          <button class="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
+            Continue
+          </button>
+        </div>
+      </div>
+    `,
+  }),
+}
+
+// Software setup wizard
+export const SetupWizard: Story = {
+  render: () => ({
+    components: {
+      Stepper,
+      StepperItem,
+      StepperTrigger,
+      StepperIndicator,
+      StepperTitle,
+      StepperDescription,
+      StepperSeparator,
+      Check,
+      Circle,
+    },
+    setup() {
+      const steps = mockStepperData.setup
+      return { steps }
+    },
+    template: `
+      <div class="max-w-2xl mx-auto space-y-6">
+        <div class="text-center">
+          <h2 class="text-2xl font-bold mb-2">Installation Wizard</h2>
+          <p class="text-muted-foreground">Follow these steps to set up your application</p>
+        </div>
+        
+        <Stepper orientation="vertical" class="w-full">
+          <template v-for="(step, index) in steps" :key="step.value">
+            <StepperItem :value="step.value">
+              <StepperTrigger>
+                <StepperIndicator>
+                  <Check v-if="step.status === 'completed'" class="h-5 w-5" />
+                  <component v-else :is="step.icon" class="h-5 w-5" />
+                </StepperIndicator>
+                <div class="flex flex-col text-left ml-4">
+                  <StepperTitle class="text-base font-semibold">{{ step.title }}</StepperTitle>
+                  <StepperDescription class="text-sm">{{ step.description }}</StepperDescription>
+                  
+                  <div v-if="step.status === 'current'" class="mt-3">
+                    <div class="flex items-center gap-2 text-sm">
+                      <div class="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
+                      <span class="text-primary">In progress...</span>
+                    </div>
+                  </div>
+                </div>
+              </StepperTrigger>
+            </StepperItem>
+            <StepperSeparator v-if="index < steps.length - 1" />
+          </template>
+        </Stepper>
+      </div>
+    `,
+  }),
+}
+
+// Clickable stepper with navigation
+export const ClickableNavigation: Story = {
+  render: () => ({
+    components: {
+      Stepper,
+      StepperItem,
+      StepperTrigger,
+      StepperIndicator,
+      StepperTitle,
+      StepperDescription,
+      StepperSeparator,
+      Check,
+      Circle,
+    },
+    setup() {
+      const steps = mockStepperData.projectCreation
+      return { steps }
+    },
+    template: `
+      <div class="max-w-4xl mx-auto space-y-6">
+        <div class="text-center">
+          <h2 class="text-2xl font-bold mb-2">Create New Project</h2>
+          <p class="text-muted-foreground">Click on any step to navigate</p>
+        </div>
+        
+        <Stepper orientation="horizontal" clickable class="w-full">
+          <template v-for="(step, index) in steps" :key="step.value">
+            <StepperItem :value="step.value">
+              <StepperTrigger 
+                class="cursor-pointer hover:bg-muted/50 rounded-lg p-2 transition-colors"
+                :class="{
+                  'bg-primary/5 border border-primary/20': step.status === 'current',
+                  'hover:bg-green-50': step.status === 'completed'
+                }"
+              >
+                <StepperIndicator>
+                  <Check v-if="step.status === 'completed'" class="h-4 w-4" />
+                  <component v-else :is="step.icon" class="h-4 w-4" />
+                </StepperIndicator>
+                <div class="flex flex-col text-left">
+                  <StepperTitle>{{ step.title }}</StepperTitle>
+                  <StepperDescription>{{ step.description }}</StepperDescription>
+                </div>
+              </StepperTrigger>
+            </StepperItem>
+            <StepperSeparator v-if="index < steps.length - 1" />
+          </template>
+        </Stepper>
+      </div>
+    `,
+  }),
+}
+
+// Minimal stepper without descriptions
+export const Minimal: Story = {
+  render: () => ({
+    components: {
+      Stepper,
+      StepperItem,
+      StepperTrigger,
+      StepperIndicator,
+      StepperTitle,
+      StepperSeparator,
+      Check,
+      Circle,
+    },
+    setup() {
+      const steps = mockStepperData.minimal
+      return { steps }
+    },
+    template: `
+      <Stepper orientation="horizontal" class="max-w-2xl mx-auto">
+        <template v-for="(step, index) in steps" :key="step.value">
+          <StepperItem :value="step.value">
+            <StepperTrigger>
+              <StepperIndicator>
+                <Check v-if="step.status === 'completed'" class="h-4 w-4" />
+                <Circle v-else class="h-4 w-4" />
+              </StepperIndicator>
+              <StepperTitle>{{ step.title }}</StepperTitle>
+            </StepperTrigger>
+          </StepperItem>
+          <StepperSeparator v-if="index < steps.length - 1" />
+        </template>
+      </Stepper>
+    `,
+  }),
+}
+
+// Linear numbered steps
+export const LinearNumbered: Story = {
+  render: () => ({
+    components: {
+      Stepper,
+      StepperItem,
+      StepperTrigger,
+      StepperIndicator,
+      StepperTitle,
+      StepperDescription,
+      StepperSeparator,
+      Check,
+    },
+    setup() {
+      const steps = mockStepperData.simpleSteps
+      return { steps }
+    },
+    template: `
+      <Stepper orientation="horizontal" class="max-w-3xl mx-auto">
+        <template v-for="(step, index) in steps" :key="step.value">
+          <StepperItem :value="step.value">
+            <StepperTrigger>
+              <StepperIndicator>
+                <Check v-if="step.status === 'completed'" class="h-4 w-4" />
+                <span v-else class="text-sm font-semibold">{{ index + 1 }}</span>
+              </StepperIndicator>
+              <div class="flex flex-col text-left">
+                <StepperTitle>{{ step.title }}</StepperTitle>
+                <StepperDescription>{{ step.description }}</StepperDescription>
+              </div>
+            </StepperTrigger>
+          </StepperItem>
+          <StepperSeparator v-if="index < steps.length - 1" />
+        </template>
+      </Stepper>
+    `,
+  }),
+}
+
+// Account verification process
+export const VerificationProcess: Story = {
+  render: () => ({
+    components: {
+      Stepper,
+      StepperItem,
+      StepperTrigger,
+      StepperIndicator,
+      StepperTitle,
+      StepperDescription,
+      StepperSeparator,
+      Check,
+    },
+    setup() {
+      const steps = mockStepperData.verification
+      return { steps }
+    },
+    template: `
+      <div class="max-w-2xl mx-auto space-y-6">
+        <div class="text-center">
+          <h2 class="text-2xl font-bold mb-2">Account Verification</h2>
+          <p class="text-muted-foreground">Verify your account to unlock all features</p>
+        </div>
+        
+        <Stepper orientation="vertical" class="w-full">
+          <template v-for="(step, index) in steps" :key="step.value">
+            <StepperItem :value="step.value">
+              <StepperTrigger>
+                <StepperIndicator>
+                  <Check v-if="step.status === 'completed'" class="h-4 w-4" />
+                  <component v-else :is="step.icon" class="h-4 w-4" />
+                </StepperIndicator>
+                <div class="flex flex-col text-left ml-4">
+                  <StepperTitle>{{ step.title }}</StepperTitle>
+                  <StepperDescription>{{ step.description }}</StepperDescription>
+                  
+                  <div v-if="step.status === 'completed'" class="mt-2">
+                    <span class="inline-flex items-center gap-1 text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full">
+                      <Check class="h-3 w-3" />
+                      Completed
+                    </span>
+                  </div>
+                  
+                  <div v-else-if="step.status === 'current'" class="mt-2">
+                    <span class="inline-flex items-center gap-1 text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
+                      <Circle class="h-3 w-3 animate-pulse" />
+                      In Progress
+                    </span>
+                  </div>
+                </div>
+              </StepperTrigger>
+            </StepperItem>
+            <StepperSeparator v-if="index < steps.length - 1" />
+          </template>
+        </Stepper>
+      </div>
+    `,
+  }),
+}
+
+// Content creation workflow
+export const ContentCreationWorkflow: Story = {
+  render: () => ({
+    components: {
+      Stepper,
+      StepperItem,
+      StepperTrigger,
+      StepperIndicator,
+      StepperTitle,
+      StepperDescription,
+      StepperSeparator,
+      Check,
+      Circle,
+    },
+    setup() {
+      const steps = mockStepperData.contentCreation
+      return { steps }
+    },
+    template: `
+      <div class="max-w-4xl mx-auto space-y-6">
+        <div class="text-center">
+          <h2 class="text-2xl font-bold mb-2">Content Creation Pipeline</h2>
+          <p class="text-muted-foreground">From planning to publishing in 5 easy steps</p>
+        </div>
+        
+        <Stepper orientation="horizontal" class="w-full">
+          <template v-for="(step, index) in steps" :key="step.value">
+            <StepperItem :value="step.value">
+              <StepperTrigger>
+                <StepperIndicator>
+                  <Check v-if="step.status === 'completed'" class="h-4 w-4" />
+                  <component v-else :is="step.icon" class="h-4 w-4" />
+                </StepperIndicator>
+                <div class="flex flex-col text-left">
+                  <StepperTitle>{{ step.title }}</StepperTitle>
+                  <StepperDescription>{{ step.description }}</StepperDescription>
+                </div>
+              </StepperTrigger>
+            </StepperItem>
+            <StepperSeparator v-if="index < steps.length - 1" />
+          </template>
+        </Stepper>
+        
+        <div class="bg-muted/20 rounded-lg p-6 text-center">
+          <h3 class="font-semibold mb-2">Current Step: Add Media</h3>
+          <p class="text-sm text-muted-foreground mb-4">
+            Upload images, videos, and other media files for your content
+          </p>
+          <div class="flex justify-center gap-3">
+            <button class="px-4 py-2 text-sm border border-border rounded-md hover:bg-muted">
+              <Upload class="mr-2 h-4 w-4" />
+              Upload Files
+            </button>
+            <button class="px-4 py-2 text-sm border border-border rounded-md hover:bg-muted">
+              <Camera class="mr-2 h-4 w-4" />
+              Take Photo
+            </button>
+          </div>
+        </div>
+      </div>
+    `,
+  }),
+}
+
+// All orientations comparison
+export const AllOrientations: Story = {
+  render: () => ({
+    components: {
+      Stepper,
+      StepperItem,
+      StepperTrigger,
+      StepperIndicator,
+      StepperTitle,
+      StepperDescription,
+      StepperSeparator,
+      Check,
+      Circle,
+    },
+    setup() {
+      const horizontalSteps = mockStepperData.formWizard
+      const verticalSteps = mockStepperData.verification
+      return { horizontalSteps, verticalSteps }
+    },
+    template: `
+      <div class="max-w-6xl mx-auto space-y-12">
+        <div>
+          <h3 class="text-lg font-semibold mb-4">Horizontal Stepper</h3>
+          <Stepper orientation="horizontal" class="max-w-4xl">
+            <template v-for="(step, index) in horizontalSteps" :key="step.value">
+              <StepperItem :value="step.value">
+                <StepperTrigger>
+                  <StepperIndicator>
+                    <Check v-if="step.status === 'completed'" class="h-4 w-4" />
+                    <Circle v-else class="h-4 w-4" />
+                  </StepperIndicator>
+                  <div class="flex flex-col text-left">
+                    <StepperTitle>{{ step.title }}</StepperTitle>
+                    <StepperDescription>{{ step.description }}</StepperDescription>
+                  </div>
+                </StepperTrigger>
+              </StepperItem>
+              <StepperSeparator v-if="index < horizontalSteps.length - 1" />
+            </template>
+          </Stepper>
+        </div>
+        
+        <div>
+          <h3 class="text-lg font-semibold mb-4">Vertical Stepper</h3>
+          <Stepper orientation="vertical" class="max-w-md">
+            <template v-for="(step, index) in verticalSteps" :key="step.value">
+              <StepperItem :value="step.value">
+                <StepperTrigger>
+                  <StepperIndicator>
+                    <Check v-if="step.status === 'completed'" class="h-4 w-4" />
+                    <component v-else :is="step.icon" class="h-4 w-4" />
+                  </StepperIndicator>
+                  <div class="flex flex-col text-left ml-4">
+                    <StepperTitle>{{ step.title }}</StepperTitle>
+                    <StepperDescription>{{ step.description }}</StepperDescription>
+                  </div>
+                </StepperTrigger>
+              </StepperItem>
+              <StepperSeparator v-if="index < verticalSteps.length - 1" />
+            </template>
+          </Stepper>
+        </div>
+      </div>
+    `,
+  }),
+}
+
+// Complex real-world example - Multi-step form
+export const ComplexFormWizard: Story = {
+  render: () => ({
+    components: {
+      Stepper,
+      StepperItem,
+      StepperTrigger,
+      StepperIndicator,
+      StepperTitle,
+      StepperDescription,
+      StepperSeparator,
+      Check,
+      User,
+      Building,
+      CreditCard,
+      CheckCircle,
+    },
+    setup() {
+      const steps = [
+        {
+          value: 'personal',
+          title: 'Personal Details',
+          description: 'Basic information',
+          icon: User,
+          status: 'completed',
+          fields: ['Name', 'Email', 'Phone'],
+        },
+        {
+          value: 'business',
+          title: 'Business Information',
+          description: 'Company details',
+          icon: Building,
+          status: 'completed',
+          fields: ['Company Name', 'Industry', 'Size'],
+        },
+        {
+          value: 'billing',
+          title: 'Billing Details',
+          description: 'Payment information',
+          icon: CreditCard,
+          status: 'current',
+          fields: ['Card Number', 'Expiry', 'CVV'],
+        },
+        {
+          value: 'review',
+          title: 'Review & Submit',
+          description: 'Confirm all details',
+          icon: CheckCircle,
+          status: 'upcoming',
+          fields: ['Summary', 'Terms'],
+        },
+      ]
+
+      const currentStepData = steps.find((s) => s.status === 'current')
+
+      return { steps, currentStepData }
+    },
+    template: `
+      <div class="max-w-4xl mx-auto space-y-8">
+        <div class="text-center">
+          <h2 class="text-3xl font-bold mb-2">Account Registration</h2>
+          <p class="text-muted-foreground">Complete all steps to create your account</p>
+        </div>
+        
+        <Stepper orientation="horizontal" class="w-full">
+          <template v-for="(step, index) in steps" :key="step.value">
+            <StepperItem :value="step.value">
+              <StepperTrigger>
+                <StepperIndicator>
+                  <Check v-if="step.status === 'completed'" class="h-5 w-5" />
+                  <component v-else :is="step.icon" class="h-5 w-5" />
+                </StepperIndicator>
+                <div class="flex flex-col text-left">
+                  <StepperTitle class="font-semibold">{{ step.title }}</StepperTitle>
+                  <StepperDescription class="text-xs">{{ step.description }}</StepperDescription>
+                </div>
+              </StepperTrigger>
+            </StepperItem>
+            <StepperSeparator v-if="index < steps.length - 1" />
+          </template>
+        </Stepper>
+        
+        <!-- Current step content -->
+        <div class="bg-card border border-border rounded-lg p-6">
+          <div class="flex items-center gap-3 mb-4">
+            <component :is="currentStepData.icon" class="h-6 w-6 text-primary" />
+            <div>
+              <h3 class="text-xl font-semibold">{{ currentStepData.title }}</h3>
+              <p class="text-sm text-muted-foreground">{{ currentStepData.description }}</p>
+            </div>
+          </div>
+          
+          <div class="space-y-4">
+            <div v-for="field in currentStepData.fields" :key="field" class="space-y-2">
+              <label class="text-sm font-medium">{{ field }}</label>
+              <input 
+                class="w-full px-3 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20" 
+                :placeholder="\`Enter your \${field.toLowerCase()}\`"
+              />
+            </div>
+          </div>
+          
+          <div class="flex justify-between mt-6 pt-4 border-t border-border">
+            <button class="px-6 py-2 text-sm border border-border rounded-md hover:bg-muted">
+              Previous
+            </button>
+            <button class="px-6 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
+              Continue
+            </button>
+          </div>
+        </div>
+      </div>
+    `,
+  }),
+}
