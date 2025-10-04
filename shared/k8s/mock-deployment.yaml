@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-camera-api
+  namespace: tddc88-2025-company2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-camera-api
+  template:
+    metadata:
+      labels:
+        app: mock-camera-api
+    spec:
+      containers:
+        - name: mock-camera-api
+          image: docker.io/pogge/mock-camera-api:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10

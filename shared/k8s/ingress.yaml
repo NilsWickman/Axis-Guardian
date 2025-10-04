@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: comms-api-public
+  namespace: tddc88-2025-company2
+  labels:
+    app: company2
+    component: comms-api
+spec:
+  ingressClassName: nginx-public
+  rules:
+    - host: tddc88-2025-company2.kubernetes-public.it.liu.se
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: comms-api
+                port:
+                  number: 80

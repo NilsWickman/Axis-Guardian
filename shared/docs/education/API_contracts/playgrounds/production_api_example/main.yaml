@@ -1,0 +1,31 @@
+openapi: 3.0.3
+info:
+  title: Multi-File Camera API
+  version: 1.0.0
+  description: |
+    **Minimal example** showing how to organize API contracts across multiple files.
+
+    **Learning Goals:**
+    - Using `$ref` to reference external files
+    - Domain-based file organization
+    - Sharing common schemas
+
+  contact:
+    name: Workshop Team
+    email: workshop@example.com
+
+servers:
+  - url: http://localhost:4010
+    description: Mock server
+
+tags:
+  - name: Cameras
+    description: Camera management
+
+paths:
+  # Camera endpoints (in separate file)
+  /cameras:
+    $ref: './paths/cameras.yaml#/paths/~1cameras'
+
+  /cameras/{cameraId}:
+    $ref: './paths/cameras.yaml#/paths/~1cameras~1{cameraId}'

@@ -1,0 +1,100 @@
+openapi: 3.0.3
+info:
+  title: Camera Paths
+  version: 1.0.0
+  description: Camera management endpoints
+
+paths:
+  /cameras:
+    get:
+      tags:
+        - Cameras
+      summary: List cameras
+      operationId: listCameras
+      description: Get all cameras
+      responses:
+        '200':
+          description: List of cameras
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '../schemas/camera-models.yaml#/components/schemas/Camera'
+
+    post:
+      tags:
+        - Cameras
+      summary: Create camera
+      operationId: createCamera
+      description: Register a new camera
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../schemas/camera-models.yaml#/components/schemas/CameraCreate'
+      responses:
+        '201':
+          description: Camera created
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas/camera-models.yaml#/components/schemas/Camera'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas/common.yaml#/components/schemas/Error'
+
+  /cameras/{cameraId}:
+    get:
+      tags:
+        - Cameras
+      summary: Get camera by ID
+      operationId: getCameraById
+      description: Retrieve camera details
+      parameters:
+        - name: cameraId
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "cam-001"
+      responses:
+        '200':
+          description: Camera details
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas/camera-models.yaml#/components/schemas/Camera'
+        '404':
+          description: Camera not found
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas/common.yaml#/components/schemas/Error'
+
+    delete:
+      tags:
+        - Cameras
+      summary: Delete camera
+      operationId: deleteCamera
+      description: Remove a camera
+      parameters:
+        - name: cameraId
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "cam-001"
+      responses:
+        '204':
+          description: Camera deleted
+        '404':
+          description: Camera not found
+          content:
+            application/json:
+              schema:
+                $ref: '../schemas/common.yaml#/components/schemas/Error'

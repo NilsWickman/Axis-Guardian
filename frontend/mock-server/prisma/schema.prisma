@@ -1,0 +1,132 @@
+// Prisma schema based on OpenAPI contracts (SQLite compatible)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// User and Authentication
+model User {
+  id          String   @id @default(uuid())
+  username    String   @unique
+  email       String?
+  passwordHash String
+  role        String   @default("VIEWER") // ADMIN, OPERATOR, VIEWER
+  permissions String  // JSON string of permissions array
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  acknowledgedAlarms Alarm[] @relation("AlarmAcknowledgedBy")
+
+  @@map("users")
+}
+
+// Camera Management
+model Camera {
+  id         String          @id
+  name       String
+  rtspUrl    String
+  status     String          @default("OFFLINE") // ONLINE, OFFLINE, ERROR
+  position   String?         // JSON string of Position object
+  capabilities String?       // JSON string of CameraCapabilities object
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  // Relations
+  detections Detection[]
+  alarms     Alarm[]         @relation("AlarmSourceCamera")
+  streams    Stream[]
+
+  @@map("cameras")
+}
+
+// Detection and Tracking
+model Detection {
+  id         String       @id @default(uuid())
+  timestamp  DateTime     @default(now())
+  cameraId   String
+  type       String       // PERSON, VEHICLE, ANIMAL, UNKNOWN
+  confidence Float        // 0.0 to 1.0
+  bbox       String       // JSON string of BoundingBox object
+  attributes String?      // JSON string of additional attributes
+  createdAt  DateTime     @default(now())
+
+  // Relations
+  camera Camera  @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+  track  Track?  @relation(fields: [trackId], references: [trackId])
+  trackId String?
+
+  @@map("detections")
+}
+
+model Track {
+  trackId           String     @id @default(uuid())
+  startTime         DateTime   @default(now())
+  lastUpdate        DateTime   @updatedAt
+  predictedPosition String?    // JSON string of Position object
+  velocity          String?    // JSON string of Velocity object
+  active            Boolean    @default(true)
+
+  // Relations
+  detections Detection[]
+
+  @@map("tracks")
+}
+
+// Alarm Management
+model Alarm {
+  id              String      @id @default(uuid())
+  timestamp       DateTime    @default(now())
+  type            String      // INTRUSION, LOITERING, LINE_CROSSING, ZONE_VIOLATION, ABANDONED_OBJECT
+  severity        String      // LOW, MEDIUM, HIGH, CRITICAL
+  source          String      // JSON string of AlarmSource object
+  acknowledged    Boolean     @default(false)
+  acknowledgedBy  String?
+  acknowledgedAt  DateTime?
+  createdAt       DateTime    @default(now())
+
+  // Relations
+  camera          Camera?     @relation("AlarmSourceCamera", fields: [cameraId], references: [id])
+  cameraId        String?
+  acknowledgedByUser User?    @relation("AlarmAcknowledgedBy", fields: [acknowledgedBy], references: [username])
+
+  @@map("alarms")
+}
+
+// Zone Management
+model Zone {
+  id       String    @id
+  name     String
+  type     String    // RESTRICTED, MONITORED, ENTRY, EXIT
+  polygon  String    // JSON string of Position array
+  rules    String?   // JSON string of Rule array
+  active   Boolean   @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("zones")
+}
+
+// Streaming
+model Stream {
+  id         String       @id @default(uuid())
+  cameraId   String
+  sessionId  String?
+  url        String
+  protocol   String       // RTSP, HLS, WEBRTC
+  quality    String       // LOW, MEDIUM, HIGH, SOURCE
+  analytics  Boolean      @default(false)
+  active     Boolean      @default(true)
+  startedAt  DateTime     @default(now())
+  endedAt    DateTime?
+
+  // Relations
+  camera Camera @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+
+  @@map("streams")
+}

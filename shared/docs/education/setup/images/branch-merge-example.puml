@@ -1,0 +1,100 @@
+@startuml branch-merge-example
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam activity {
+  BackgroundColor #4A90E2
+  BorderColor #2E5C8A
+  FontColor #FFFFFF
+}
+
+skinparam swimlane {
+  BorderColor #000000
+  BorderThickness 2
+}
+
+title Git Branch Workflow - Three Developers Working on Same File
+
+|#F5F5F5|main|
+start
+:Initial commit
+**File state:**
+Line 1: The
+Line 2: Git
+Line 3: Three;
+note right
+  🚀 **Starting point**
+  All branches diverge from here
+end note
+
+split
+  |#E8F5E9|feature/alice|
+  :Branch created;
+  note right
+    **Alice's branch**
+    Modifying Line 1 only
+  end note
+  :Commit: L1: The quick;
+  :Commit: L1: The quick brown;
+  :Commit: L1: The quick brown fox;
+split again
+  |#E3F2FD|feature/bob|
+  :Branch created;
+  note right
+    **Bob's branch**
+    Modifying Line 2 only
+  end note
+  :Commit: L2: Git makes;
+  :Commit: L2: Git makes teamwork;
+  :Commit: L2: Git makes teamwork easy;
+split again
+  |#FFF3E0|feature/charlie|
+  :Branch created;
+  note right
+    **Charlie's branch**
+    Modifying Line 3 only
+  end note
+  :Commit: L3: Three developers;
+  :Commit: L3: Three developers working;
+  :Commit: L3: Three developers working together;
+end split
+
+|#F5F5F5|main|
+:Merge feature/alice ⬅;
+note right
+  ✅ **No conflicts**
+  Different line modified (L1)
+end note
+:File state:
+Line 1: The quick brown fox
+Line 2: Git
+Line 3: Three;
+
+:Merge feature/bob ⬅;
+note right
+  ✅ **No conflicts**
+  Different line modified (L2)
+end note
+:File state:
+Line 1: The quick brown fox
+Line 2: Git makes teamwork easy
+Line 3: Three;
+
+:Merge feature/charlie ⬅;
+note right
+  ✅ **No conflicts**
+  Different line modified (L3)
+
+  **Key takeaway:**
+  All merges succeed because
+  each developer modified
+  different lines of the file
+end note
+:Final file state:
+Line 1: The quick brown fox
+Line 2: Git makes teamwork easy
+Line 3: Three developers working together;
+
+stop
+
+@enduml
