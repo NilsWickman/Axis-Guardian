@@ -95,6 +95,10 @@ shared/docs/api-contracts/generated/
 shared/generated/
 shared/dist/
 shared/axis_shared.egg-info/
+backend/services/*/dist/
+backend/services/*/build/
+backend/python/*/dist/
+backend/python/*/build/
 
 # Dependencies
 shared/node_modules/

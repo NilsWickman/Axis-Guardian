@@ -144,53 +144,22 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { DetectionApiClient } from '../api/clients/detections'
 import type { Alarm } from '../types/generated'
+import { useAlarmStore } from '../stores/alarms'
 
-const alarms = ref<Alarm[]>([])
-const loading = ref(true)
-const error = ref<string | null>(null)
+// Use alarm store
+const alarmStore = useAlarmStore()
 
-const filters = ref({
-  type: '',
-  severity: '',
-  acknowledged: ''
+const loading = computed(() => alarmStore.loading)
+const error = computed(() => alarmStore.error)
+const alarms = computed(() => alarmStore.alarms)
+const filteredAlarms = computed(() => alarmStore.filteredAlarms)
+const unacknowledgedAlarms = computed(() => alarmStore.unacknowledgedCount)
+const hasFilters = computed(() => alarmStore.hasFilters)
+const filters = computed({
+  get: () => alarmStore.filters,
+  set: (value) => alarmStore.setFilters(value),
 })
-
-const detectionClient = new DetectionApiClient()
-
-const filteredAlarms = computed(() => {
-  let result = [...alarms.value]
-
-  if (filters.value.type) {
-    result = result.filter(alarm => alarm.type === filters.value.type)
-  }
-
-  if (filters.value.severity) {
-    result = result.filter(alarm => alarm.severity === filters.value.severity)
-  }
-
-  if (filters.value.acknowledged !== '') {
-    const isAcknowledged = filters.value.acknowledged === 'true'
-    result = result.filter(alarm => alarm.acknowledged === isAcknowledged)
-  }
-
-  return result.sort((a, b) => {
-    // Sort by acknowledgment status first (unacknowledged first), then by timestamp (newest first)
-    if (a.acknowledged !== b.acknowledged) {
-      return a.acknowledged ? 1 : -1
-    }
-    return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  })
-})
-
-const unacknowledgedAlarms = computed(() =>
-  alarms.value.filter(alarm => !alarm.acknowledged).length
-)
-
-const hasFilters = computed(() =>
-  filters.value.type || filters.value.severity || filters.value.acknowledged
-)
 
 const getSeverityBorderColor = (severity: string) => {
   switch (severity) {
@@ -227,18 +196,11 @@ const formatTime = (timestamp: string) => {
 }
 
 const refreshAlarms = async () => {
-  loading.value = true
-  error.value = null
-
   try {
-    const data = await detectionClient.getAlarms({ limit: 50 })
-    alarms.value = data
-    console.log('Loaded alarms:', data)
+    await alarmStore.fetchAlarms({ limit: 50 })
+    console.log('Loaded alarms:', alarms.value)
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Unknown error occurred'
     console.error('Failed to load alarms:', err)
-  } finally {
-    loading.value = false
   }
 }
 
@@ -247,29 +209,13 @@ const applyFilters = () => {
 }
 
 const clearFilters = () => {
-  filters.value = {
-    type: '',
-    severity: '',
-    acknowledged: ''
-  }
+  alarmStore.clearFilters()
 }
 
 const acknowledgeAlarm = async (alarm: Alarm) => {
   try {
     const currentUser = 'operator' // TODO: Get actual authenticated user
-    await detectionClient.acknowledgeAlarm(alarm.id, currentUser)
-
-    // Update the alarm in the local list
-    const index = alarms.value.findIndex(a => a.id === alarm.id)
-    if (index !== -1) {
-      alarms.value[index] = {
-        ...alarms.value[index],
-        acknowledged: true,
-        acknowledgedBy: currentUser,
-        acknowledgedAt: new Date().toISOString()
-      }
-    }
-
+    await alarmStore.acknowledgeAlarm(alarm.id, currentUser)
     console.log('Alarm acknowledged:', alarm.id)
   } catch (err) {
     console.error('Failed to acknowledge alarm:', err)

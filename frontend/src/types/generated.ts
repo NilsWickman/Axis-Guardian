@@ -120,8 +120,31 @@ export interface User {
   username: string
   email?: string
   role: 'admin' | 'operator' | 'viewer'
-  permissions?: string[]
 }
+
+// Role-based access control
+export interface Role {
+  id: string
+  name: 'admin' | 'operator' | 'viewer'
+  description: string
+  permissions: Permission[]
+}
+
+export type Permission =
+  | 'cameras:view'
+  | 'cameras:control'
+  | 'cameras:manage'
+  | 'detections:view'
+  | 'alarms:view'
+  | 'alarms:acknowledge'
+  | 'alarms:manage'
+  | 'zones:view'
+  | 'zones:manage'
+  | 'users:view'
+  | 'users:manage'
+  | 'analytics:view'
+  | 'settings:view'
+  | 'settings:manage'
 
 // Camera Control Types
 export interface StreamRequest {

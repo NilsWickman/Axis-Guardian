@@ -4,18 +4,30 @@ import type { RouteRecordRaw } from 'vue-router'
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
-    name: 'Dashboard',
-    component: () => import('@/views/Dashboard.vue'),
+    redirect: '/cameras/focus',
+  },
+  {
+    path: '/cameras/focus',
+    name: 'FocusView',
+    component: () => import('@/views/camera-views/FocusView.vue'),
     meta: {
-      title: 'Dashboard',
+      title: 'Camera View',
     },
   },
   {
-    path: '/cameras',
-    name: 'Cameras',
-    component: () => import('@/views/CameraGrid.vue'),
+    path: '/cameras/timeline',
+    name: 'TimelineView',
+    component: () => import('@/views/camera-views/TimelineView.vue'),
     meta: {
-      title: 'Camera Grid',
+      title: 'Timeline',
+    },
+  },
+  {
+    path: '/cameras/manage',
+    name: 'CameraManagement',
+    component: () => import('@/views/camera-views/CameraManagement.vue'),
+    meta: {
+      title: 'Manage Cameras',
     },
   },
   {
@@ -36,10 +48,18 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/site-config',
-    name: 'SiteConfig',
-    component: () => import('@/views/SiteConfiguration.vue'),
+    name: 'SiteMapViewer',
+    component: () => import('@/views/SiteMapViewer.vue'),
     meta: {
-      title: 'Site Configuration',
+      title: 'Site Maps',
+    },
+  },
+  {
+    path: '/site-config/editor',
+    name: 'SiteMapEditor',
+    component: () => import('@/views/SiteMapEditor.vue'),
+    meta: {
+      title: 'Site Map Editor',
     },
   },
   {
@@ -88,12 +108,6 @@ router.beforeEach((to, _from, next) => {
     document.title = `${to.meta.title} | AXIS Surveillance`
   }
 
-  // Handle authentication if needed
-  if (to.meta.requiresAuth) {
-    // TODO: Add authentication logic here
-    // console.log('Route requires authentication')
-  }
-
   next()
 })
 
@@ -101,7 +115,6 @@ router.beforeEach((to, _from, next) => {
 declare module 'vue-router' {
   interface RouteMeta {
     title?: string
-    requiresAuth?: boolean
     roles?: string[]
   }
 }

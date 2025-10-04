@@ -11,7 +11,7 @@ export class CameraApiClient {
 
     const response = await fetch(`${this.baseUrl}/cameras?${params}`, {
       headers: {
-        'Authorization': `Bearer ${this.getStoredToken()}`,
+        Authorization: `Bearer ${this.getStoredToken()}`,
       },
     })
 
@@ -25,7 +25,7 @@ export class CameraApiClient {
   async getCamera(cameraId: string): Promise<Camera> {
     const response = await fetch(`${this.baseUrl}/cameras/${cameraId}`, {
       headers: {
-        'Authorization': `Bearer ${this.getStoredToken()}`,
+        Authorization: `Bearer ${this.getStoredToken()}`,
       },
     })
 
@@ -41,7 +41,7 @@ export class CameraApiClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.getStoredToken()}`,
+        Authorization: `Bearer ${this.getStoredToken()}`,
       },
       body: JSON.stringify(request),
     })
@@ -58,7 +58,7 @@ export class CameraApiClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.getStoredToken()}`,
+        Authorization: `Bearer ${this.getStoredToken()}`,
       },
       body: JSON.stringify(command),
     })
@@ -71,7 +71,7 @@ export class CameraApiClient {
   async getSnapshot(cameraId: string): Promise<Blob> {
     const response = await fetch(`${this.baseUrl}/cameras/${cameraId}/snapshot`, {
       headers: {
-        'Authorization': `Bearer ${this.getStoredToken()}`,
+        Authorization: `Bearer ${this.getStoredToken()}`,
       },
     })
 

@@ -1,0 +1,28 @@
+{
+  "name": "surveillance-system",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend/services/*",
+    "shared/types"
+  ],
+  "scripts": {
+    "dev": "npm-run-all --parallel dev:*",
+    "dev:frontend": "npm --workspace frontend run dev",
+    "dev:api-gateway": "npm --workspace api-gateway run dev",
+    "dev:alarm-service": "npm --workspace alarm-service run dev",
+    "dev:control-service": "npm --workspace control-service run dev",
+    "dev:config-service": "npm --workspace config-service run dev",
+    "dev:auth-service": "npm --workspace auth-service run dev",
+    "dev:heatmap-service": "npm --workspace heatmap-service run dev",
+    "dev:webrtc-signaling": "npm --workspace webrtc-signaling run dev",
+    "build": "npm run build --workspaces --if-present",
+    "type-check": "npm run type-check --workspaces --if-present",
+    "generate:types": "node scripts/generate-types.js",
+    "generate:openapi": "node scripts/generate-openapi.js"
+  },
+  "devDependencies": {
+    "npm-run-all": "^4.1.5"
+  }
+}
