@@ -7,21 +7,8 @@
       </div>
     </div>
 
-    <!-- Loading State -->
-    <div v-if="loading" class="flex-1 space-y-2 px-4">
-      <div v-for="i in 6" :key="i" class="bg-card border rounded p-2 animate-pulse">
-        <div class="flex justify-between items-center">
-          <div class="space-y-1.5 flex-1">
-            <div class="h-3 bg-muted rounded w-1/4"></div>
-            <div class="h-2 bg-muted rounded w-1/3"></div>
-          </div>
-          <div class="h-6 w-16 bg-muted rounded"></div>
-        </div>
-      </div>
-    </div>
-
     <!-- Users Table -->
-    <div v-else class="flex-1 bg-card border-x border-b overflow-auto">
+    <div class="flex-1 bg-card border-x border-b overflow-auto">
       <table class="w-full text-sm">
         <thead class="bg-muted/30 sticky top-0">
           <tr class="border-b">
@@ -32,27 +19,27 @@
           </tr>
         </thead>
         <tbody>
-          <tr
-            v-for="user in users"
-            :key="user.id"
-            class="border-b last:border-b-0 hover:bg-muted/20 transition-colors"
-          >
-            <td class="px-3 py-2">
-              <div class="font-medium text-sm">{{ user.username }}</div>
-            </td>
-            <td class="px-3 py-2 text-sm text-muted-foreground">
-              {{ user.email || 'N/A' }}
-            </td>
-            <td class="px-3 py-2">
-              <span
-                :class="getRoleBadgeColor(user.role)"
-                class="px-2 py-0.5 text-xs font-medium rounded uppercase"
-              >
-                {{ user.role }}
-              </span>
-            </td>
-            <td class="px-3 py-2">
-              <div class="flex gap-1 justify-end">
+          <!-- Skeleton row when saving this user -->
+          <template v-for="user in users" :key="user.id">
+            <tr v-if="savingUserId === user.id" class="border-b last:border-b-0">
+              <td colspan="4" class="px-3 py-2">
+                <div class="flex justify-between items-center">
+                  <div class="space-y-2 flex-1">
+                    <Skeleton class="h-4 w-1/4" />
+                    <Skeleton class="h-3 w-1/3" />
+                  </div>
+                  <Skeleton class="h-8 w-20" />
+                </div>
+              </td>
+            </tr>
+
+            <!-- Normal row -->
+            <UserTableRow
+              v-else
+              :user="user"
+              :get-role-badge-color="getRoleBadgeColor"
+            >
+              <template #actions="{ user }">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -60,29 +47,31 @@
                   title="Edit user"
                   :disabled="!canEdit(user)"
                 >
-                  <Pencil class="h-4 w-4" />
+                  <SquarePen class="h-3.5 w-3.5" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
                   @click="deleteUser(user)"
                   title="Delete user"
-                  :disabled="!canEdit(user)"
+                  :disabled="!canEdit(user) || deletingUserId === user.id"
                 >
-                  <Trash2 class="h-4 w-4" />
+                  <Loader2 v-if="deletingUserId === user.id" class="h-3.5 w-3.5 animate-spin" />
+                  <Trash2 v-else class="h-3.5 w-3.5" />
                 </Button>
-              </div>
-            </td>
-          </tr>
+              </template>
+            </UserTableRow>
+          </template>
         </tbody>
       </table>
 
       <!-- Empty State -->
-      <div v-if="users.length === 0" class="text-center py-16">
-        <div class="text-3xl mb-3">👥</div>
-        <h3 class="text-lg font-medium mb-1">No Users Found</h3>
-        <p class="text-sm text-muted-foreground">No users have been added yet.</p>
-      </div>
+      <EmptyState
+        v-if="users.length === 0"
+        icon="👥"
+        title="No Users Found"
+        description="No users have been added yet."
+      />
     </div>
 
     <!-- Error Display -->
@@ -99,29 +88,14 @@
             Update user information and role
           </DialogDescription>
         </DialogHeader>
-        <div v-if="editingUser" class="space-y-4 py-4">
-          <div class="space-y-2">
-            <label class="text-sm font-medium">Username</label>
-            <Input v-model="editingUser.username" placeholder="Username" />
-          </div>
-          <div class="space-y-2">
-            <label class="text-sm font-medium">Email</label>
-            <Input v-model="editingUser.email" type="email" placeholder="Email" />
-          </div>
-          <div class="space-y-2">
-            <label class="text-sm font-medium">Role</label>
-            <Select v-model="editingUser.role">
-              <SelectTrigger>
-                <SelectValue placeholder="Select role" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="operator">Operator</SelectItem>
-                <SelectItem value="viewer">Viewer</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+        <UserEditForm
+          :user="editingUser"
+          v-model:new-password="newPassword"
+          v-model:repeat-password="repeatPassword"
+          :password-error="passwordError"
+          :can-change-role="canChangeRole"
+          can-change-role-message="Cannot change role - you are the only admin"
+        />
         <DialogFooter>
           <Button variant="outline" @click="editDialogOpen = false">Cancel</Button>
           <Button @click="saveUser" :disabled="loading">
@@ -153,10 +127,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { Pencil, Trash2 } from 'lucide-vue-next'
+import { computed, onMounted, ref, watch } from 'vue'
+import { SquarePen, Trash2, Loader2 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
   DialogContent,
@@ -184,6 +159,9 @@ import {
 } from '@/components/ui/select'
 import type { User } from '../types/generated'
 import { useAuthStore } from '../stores/auth'
+import UserTableRow from '@/components/features/user/UserTableRow.vue'
+import UserEditForm from '@/components/features/user/UserEditForm.vue'
+import EmptyState from '@/components/layout/EmptyState.vue'
 
 const authStore = useAuthStore()
 
@@ -195,10 +173,17 @@ const currentUser = computed(() => authStore.currentUser)
 // Edit dialog state
 const editDialogOpen = ref(false)
 const editingUser = ref<User | null>(null)
+const newPassword = ref('')
+const repeatPassword = ref('')
+const passwordError = ref('')
 
 // Delete dialog state
 const deleteDialogOpen = ref(false)
 const deletingUser = ref<User | null>(null)
+
+// Per-row loading states
+const deletingUserId = ref<string | null>(null)
+const savingUserId = ref<string | null>(null)
 
 const getRoleBadgeColor = (role: string) => {
   switch (role) {
@@ -222,32 +207,76 @@ const refreshUsers = async () => {
 }
 
 const canEdit = (user: User): boolean => {
-  // Only admins can edit users, and they can't edit themselves in this demo
-  return authStore.isAdmin && currentUser.value?.id !== user.id
+  // Only admins can edit users (including themselves)
+  return authStore.isAdmin
 }
 
 const getUserPermissions = (user: User) => {
   return authStore.getRolePermissions(user.role)
 }
 
+const isOnlyAdmin = computed(() => {
+  const adminCount = users.value.filter((u) => u.role === 'admin').length
+  return adminCount === 1
+})
+
+const isEditingSelf = computed(() => {
+  return editingUser.value?.id === currentUser.value?.id
+})
+
+const canChangeRole = computed(() => {
+  // Can't change role if editing self and is the only admin
+  return !(isEditingSelf.value && isOnlyAdmin.value && editingUser.value?.role === 'admin')
+})
+
 const editUser = (user: User) => {
   editingUser.value = { ...user }
+  newPassword.value = ''
+  repeatPassword.value = ''
+  passwordError.value = ''
   editDialogOpen.value = true
 }
 
 const saveUser = async () => {
   if (!editingUser.value) return
 
+  // Validate passwords if provided
+  if (newPassword.value || repeatPassword.value) {
+    if (newPassword.value !== repeatPassword.value) {
+      passwordError.value = 'Passwords do not match'
+      return
+    }
+    if (newPassword.value.length < 6) {
+      passwordError.value = 'Password must be at least 6 characters'
+      return
+    }
+  }
+
+  passwordError.value = ''
+
   try {
-    await authStore.updateUser(editingUser.value.id, {
+    savingUserId.value = editingUser.value.id
+    editDialogOpen.value = false
+
+    const updateData: any = {
       username: editingUser.value.username,
       email: editingUser.value.email,
       role: editingUser.value.role,
-    })
-    editDialogOpen.value = false
+    }
+
+    // Only include password if it's being changed
+    if (newPassword.value) {
+      updateData.password = newPassword.value
+    }
+
+    await authStore.updateUser(editingUser.value.id, updateData)
     editingUser.value = null
+    newPassword.value = ''
+    repeatPassword.value = ''
   } catch (err) {
     console.error('Failed to update user:', err)
+  } finally {
+    savingUserId.value = null
   }
 }
 
@@ -260,13 +289,24 @@ const confirmDelete = async () => {
   if (!deletingUser.value) return
 
   try {
-    await authStore.deleteUser(deletingUser.value.id)
+    deletingUserId.value = deletingUser.value.id
     deleteDialogOpen.value = false
+
+    await authStore.deleteUser(deletingUser.value.id)
     deletingUser.value = null
   } catch (err) {
     console.error('Failed to delete user:', err)
+  } finally {
+    deletingUserId.value = null
   }
 }
+
+// Clear password error when user types
+watch([newPassword, repeatPassword], () => {
+  if (passwordError.value) {
+    passwordError.value = ''
+  }
+})
 
 onMounted(() => {
   refreshUsers()

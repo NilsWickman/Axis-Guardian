@@ -1,33 +1,54 @@
 <template>
-  <div class="flex gap-2">
+  <div class="flex gap-2 flex-wrap">
     <!-- View Controls -->
     <button
       @click="$emit('toggleGrid')"
-      class="px-3 py-1.5 border rounded-lg hover:bg-accent text-sm transition-colors"
+      class="px-3 py-1.5 border rounded-lg hover:bg-accent text-xs transition-colors"
       :class="showGrid ? 'bg-accent' : ''"
       title="Toggle Grid (G)"
     >
-      {{ showGrid ? '✓' : '' }} Grid
-    </button>
-
-    <button
-      @click="$emit('toggleScale')"
-      class="px-3 py-1.5 border rounded-lg hover:bg-accent text-sm transition-colors"
-      :class="showScaleReference ? 'bg-accent' : ''"
-      title="Toggle Scale Reference (S)"
-    >
-      {{ showScaleReference ? '✓' : '' }} Scale
+      Grid
     </button>
 
     <button
       v-if="showLabelsToggle"
       @click="$emit('toggleLabels')"
-      class="px-3 py-1.5 border rounded-lg hover:bg-accent text-sm transition-colors"
+      class="px-3 py-1.5 border rounded-lg hover:bg-accent text-xs transition-colors"
       :class="showLabels ? 'bg-accent' : ''"
       title="Toggle Camera Labels (L)"
     >
-      {{ showLabels ? '✓' : '' }} Labels
+      Labels
     </button>
+
+    <!-- Zoom Controls -->
+    <template v-if="showZoomControls">
+      <div class="w-px bg-border"></div>
+
+      <button
+        @click="$emit('zoomOut')"
+        class="px-3 py-1.5 border rounded-lg hover:bg-accent text-sm transition-colors"
+        title="Zoom Out (-)"
+      >
+        −
+      </button>
+
+      <button
+        @click="$emit('zoomIn')"
+        class="px-3 py-1.5 border rounded-lg hover:bg-accent text-sm transition-colors"
+        title="Zoom In (+)"
+      >
+        +
+      </button>
+
+      <button
+        v-if="showResetZoom"
+        @click="$emit('resetZoom')"
+        class="px-3 py-1.5 border rounded-lg hover:bg-accent text-sm transition-colors"
+        title="Reset Zoom (0)"
+      >
+        100%
+      </button>
+    </template>
 
     <!-- Undo/Redo (only in editor mode) -->
     <template v-if="showHistory">
@@ -98,6 +119,8 @@ interface Props {
   showFitToView?: boolean
   showResetView?: boolean
   showSave?: boolean
+  showZoomControls?: boolean
+  showResetZoom?: boolean
 }
 
 withDefaults(defineProps<Props>(), {
@@ -110,7 +133,9 @@ withDefaults(defineProps<Props>(), {
   canRedo: false,
   showFitToView: false,
   showResetView: false,
-  showSave: false
+  showSave: false,
+  showZoomControls: false,
+  showResetZoom: false
 })
 
 defineEmits<{
@@ -122,5 +147,8 @@ defineEmits<{
   fitToView: []
   resetView: []
   save: []
+  zoomIn: []
+  zoomOut: []
+  resetZoom: []
 }>()
 </script>

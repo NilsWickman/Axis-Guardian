@@ -20,222 +20,136 @@
       </div>
     </div>
 
+    <!-- Search and Filters -->
+    <div class="border-b bg-card p-3 space-y-3">
+      <CameraSearchBar
+        v-model="searchQuery"
+        placeholder="Search by name, IP address, serial number, or model..."
+        :show-clear="hasActiveFilters"
+        @clear="clearFilters"
+      />
+
+      <CameraFilters
+        v-model:status-filter="statusFilter"
+        v-model:model-filter="modelFilter"
+        v-model:sort-by="sortBy"
+        :total-count="cameras.length"
+        :filtered-count="filteredAndSortedCameras.length"
+        :status-counts="statusCounts"
+        :available-models="availableModels"
+        :sort-options="[
+          { value: 'name', label: 'Sort: Name' },
+          { value: 'ip', label: 'Sort: IP Address' },
+          { value: 'status', label: 'Sort: Status' },
+          { value: 'model', label: 'Sort: Model' }
+        ]"
+      />
+    </div>
+
     <!-- Camera List -->
     <div class="flex-1 overflow-auto p-4">
-      <div v-if="cameras.length === 0" class="text-center text-muted-foreground py-12">
-        <Cctv class="w-16 h-16 mx-auto mb-4 opacity-50" />
-        <p class="text-sm">No cameras configured</p>
-        <p class="text-xs mt-2">Click "Discover Network" or "Add Camera" to get started</p>
-      </div>
+      <!-- No cameras at all -->
+      <EmptyState
+        v-if="cameras.length === 0"
+        :icon-component="Cctv"
+        icon-class="w-16 h-16 mx-auto mb-4 opacity-50"
+        title="No cameras configured"
+        description="Click 'Discover Network' or 'Add Camera' to get started"
+      />
 
-      <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div
-          v-for="camera in cameras"
+      <!-- No results from filters -->
+      <EmptyState
+        v-else-if="filteredAndSortedCameras.length === 0"
+        title="No cameras match your filters"
+        description="Try adjusting your search or filter criteria"
+        :action-text="hasActiveFilters ? 'Clear All Filters' : undefined"
+        :action-handler="hasActiveFilters ? clearFilters : undefined"
+      >
+        <template #actions>
+          <svg class="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </template>
+      </EmptyState>
+
+      <!-- Camera Grid -->
+      <div v-else class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+        <CameraCard
+          v-for="camera in filteredAndSortedCameras"
           :key="camera.id"
-          class="border rounded-lg p-4 bg-card hover:shadow-md transition-shadow"
+          :camera="camera"
         >
-          <div class="flex justify-between items-start mb-3">
-            <div class="flex-1">
-              <h3 class="font-semibold text-sm">{{ camera.name }}</h3>
-              <p class="text-xs text-muted-foreground">{{ camera.ipAddress }}</p>
-            </div>
-            <div class="flex items-center space-x-2">
-              <span
-                :class="camera.status === 'online' ? 'bg-status-online' : camera.status === 'offline' ? 'bg-status-offline' : 'bg-status-configuring'"
-                class="px-2 py-0.5 rounded text-white text-[10px] uppercase"
-              >
-                {{ camera.status }}
-              </span>
-              <button
-                @click="editCamera(camera)"
-                class="p-1 hover:bg-accent rounded"
-                title="Edit"
-              >
-                <Settings class="w-4 h-4" />
-              </button>
-              <button
-                @click="removeCamera(camera.id)"
-                class="p-1 hover:bg-destructive/10 text-destructive rounded"
-                title="Remove"
-              >
-                <Trash2 class="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          <div class="space-y-2 text-xs">
-            <div class="flex justify-between">
-              <span class="text-muted-foreground">Model:</span>
-              <span>{{ camera.model || 'Unknown' }}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-muted-foreground">Serial:</span>
-              <span class="font-mono">{{ camera.serialNumber || 'N/A' }}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-muted-foreground">Firmware:</span>
-              <span>{{ camera.firmwareVersion || 'N/A' }}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-muted-foreground">Stream URL:</span>
-              <span class="font-mono truncate">{{ camera.rtspUrl }}</span>
-            </div>
-          </div>
-
-          <div class="mt-3 flex space-x-2">
+          <template #actions="{ camera }">
             <button
               @click="testConnection(camera)"
               :disabled="testingCamera === camera.id"
-              class="flex-1 px-2 py-1 bg-secondary text-secondary-foreground text-xs rounded hover:bg-secondary/90 transition-colors disabled:opacity-50"
+              class="p-0.5 hover:bg-accent rounded disabled:opacity-50"
+              :title="testingCamera === camera.id ? 'Testing...' : 'Test Connection'"
             >
-              {{ testingCamera === camera.id ? 'Testing...' : 'Test Connection' }}
+              <Activity class="w-3.5 h-3.5" />
             </button>
             <button
               @click="viewLive(camera)"
-              class="flex-1 px-2 py-1 bg-primary text-primary-foreground text-xs rounded hover:bg-primary/90 transition-colors"
+              class="p-0.5 hover:bg-accent rounded"
+              title="View Live Feed"
             >
-              View Live
+              <Play class="w-3.5 h-3.5" />
             </button>
-          </div>
-        </div>
+            <button
+              @click="editCamera(camera)"
+              class="p-0.5 hover:bg-accent rounded"
+              title="Edit Camera"
+            >
+              <Settings class="w-3.5 h-3.5" />
+            </button>
+            <button
+              @click="confirmRemoveCamera(camera)"
+              class="p-0.5 hover:bg-destructive/10 text-destructive rounded"
+              title="Remove Camera"
+            >
+              <Trash2 class="w-3.5 h-3.5" />
+            </button>
+          </template>
+        </CameraCard>
       </div>
     </div>
+
+    <!-- Delete Confirmation Modal -->
+    <ConfirmDialog
+      :open="showDeleteConfirm"
+      title="Remove Camera"
+      :message="`Are you sure you want to remove <strong>${cameraToDelete?.name}</strong>?`"
+      description="This action cannot be undone. The camera will be removed from the system."
+      confirm-text="Remove Camera"
+      cancel-text="Cancel"
+      variant="destructive"
+      @confirm="executeRemoveCamera"
+      @cancel="showDeleteConfirm = false"
+    />
 
     <!-- Add/Edit Camera Dialog -->
-    <div
-      v-if="showAddDialog || editingCamera"
-      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      @click.self="closeDialog"
-    >
-      <div class="bg-card rounded-lg shadow-xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
-        <div class="p-4 border-b flex justify-between items-center">
-          <h2 class="font-bold text-sm">{{ editingCamera ? 'Edit Camera' : 'Add Camera' }}</h2>
-          <button @click="closeDialog" class="p-1 hover:bg-accent rounded">
-            <X class="w-4 h-4" />
-          </button>
-        </div>
-
-        <form @submit.prevent="saveCamera" class="p-4 space-y-4">
-          <!-- Camera Name -->
-          <div>
-            <label class="block text-xs font-medium mb-1">Camera Name *</label>
-            <input
-              v-model="cameraForm.name"
-              type="text"
-              required
-              placeholder="e.g., Front Entrance"
-              class="w-full px-3 py-2 text-xs border rounded bg-background"
-            />
-          </div>
-
-          <!-- IP Address -->
-          <div>
-            <label class="block text-xs font-medium mb-1">IP Address / Hostname *</label>
-            <input
-              v-model="cameraForm.ipAddress"
-              type="text"
-              required
-              placeholder="192.168.1.100 or camera.local"
-              class="w-full px-3 py-2 text-xs border rounded bg-background"
-            />
-          </div>
-
-          <!-- Port -->
-          <div>
-            <label class="block text-xs font-medium mb-1">HTTP Port</label>
-            <input
-              v-model="cameraForm.port"
-              type="number"
-              min="1"
-              max="65535"
-              placeholder="80"
-              class="w-full px-3 py-2 text-xs border rounded bg-background"
-            />
-          </div>
-
-          <!-- Authentication -->
-          <div class="pt-2 border-t">
-            <h3 class="text-xs font-semibold mb-2">Authentication</h3>
-            <div class="space-y-3">
-              <div>
-                <label class="block text-xs font-medium mb-1">Username *</label>
-                <input
-                  v-model="cameraForm.username"
-                  type="text"
-                  required
-                  placeholder="root"
-                  autocomplete="username"
-                  class="w-full px-3 py-2 text-xs border rounded bg-background"
-                />
-              </div>
-              <div>
-                <label class="block text-xs font-medium mb-1">Password *</label>
-                <input
-                  v-model="cameraForm.password"
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  autocomplete="current-password"
-                  class="w-full px-3 py-2 text-xs border rounded bg-background"
-                />
-              </div>
-            </div>
-          </div>
-
-          <!-- RTSP Configuration -->
-          <div class="pt-2 border-t">
-            <h3 class="text-xs font-semibold mb-2">Stream Configuration</h3>
-            <div class="space-y-3">
-              <div>
-                <label class="block text-xs font-medium mb-1">RTSP Port</label>
-                <input
-                  v-model="cameraForm.rtspPort"
-                  type="number"
-                  min="1"
-                  max="65535"
-                  placeholder="554"
-                  class="w-full px-3 py-2 text-xs border rounded bg-background"
-                />
-              </div>
-              <div>
-                <label class="block text-xs font-medium mb-1">Stream Path</label>
-                <input
-                  v-model="cameraForm.streamPath"
-                  type="text"
-                  placeholder="/axis-media/media.amp"
-                  class="w-full px-3 py-2 text-xs border rounded bg-background"
-                />
-              </div>
-            </div>
-          </div>
-
-          <!-- Actions -->
-          <div class="flex space-x-2 pt-2">
-            <button
-              type="button"
-              @click="closeDialog"
-              class="flex-1 px-3 py-2 text-xs border rounded hover:bg-accent transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              class="flex-1 px-3 py-2 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
-            >
-              {{ editingCamera ? 'Save Changes' : 'Add Camera' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <CameraForm
+      :open="showAddDialog || !!editingCamera"
+      :initial-data="editingCamera ? cameraForm : undefined"
+      :title="editingCamera ? 'Edit Camera' : 'Add Camera'"
+      :submit-text="editingCamera ? 'Save Changes' : 'Add Camera'"
+      @close="closeDialog"
+      @submit="saveCamera"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { Cctv, Settings, Trash2, X } from 'lucide-vue-next'
+import { Cctv, Settings, Trash2, Play, Activity } from 'lucide-vue-next'
 import { useToast } from '@/composables/useToast'
+import CameraSearchBar from '@/components/features/camera/CameraSearchBar.vue'
+import CameraFilters from '@/components/features/camera/CameraFilters.vue'
+import CameraCard from '@/components/features/camera/CameraCard.vue'
+import CameraForm from '@/components/features/camera/CameraForm.vue'
+import EmptyState from '@/components/layout/EmptyState.vue'
+import ConfirmDialog from '@/components/layout/ConfirmDialog.vue'
 
 interface ManagedCamera {
   id: string
@@ -259,7 +173,7 @@ const toast = useToast()
 const cameras = ref<ManagedCamera[]>([
   {
     id: 'cam-demo-1',
-    name: 'Demo Camera 1',
+    name: 'Front Entrance Camera',
     ipAddress: '192.168.1.100',
     port: 80,
     username: 'root',
@@ -272,6 +186,80 @@ const cameras = ref<ManagedCamera[]>([
     firmwareVersion: '11.4.63',
     rtspUrl: 'rtsp://192.168.1.100:554/axis-media/media.amp',
   },
+  {
+    id: 'cam-demo-2',
+    name: 'Warehouse Camera A',
+    ipAddress: '192.168.1.101',
+    port: 80,
+    username: 'root',
+    password: '',
+    rtspPort: 554,
+    streamPath: '/axis-media/media.amp',
+    status: 'online',
+    model: 'AXIS M3068-P',
+    serialNumber: 'ACCC8E234567',
+    firmwareVersion: '11.5.12',
+    rtspUrl: 'rtsp://192.168.1.101:554/axis-media/media.amp',
+  },
+  {
+    id: 'cam-demo-3',
+    name: 'Back Entrance',
+    ipAddress: '192.168.1.102',
+    port: 80,
+    username: 'root',
+    password: '',
+    rtspPort: 554,
+    streamPath: '/axis-media/media.amp',
+    status: 'offline',
+    model: 'AXIS Q6075-E',
+    serialNumber: 'ACCC8E345678',
+    firmwareVersion: '11.3.45',
+    rtspUrl: 'rtsp://192.168.1.102:554/axis-media/media.amp',
+  },
+  {
+    id: 'cam-demo-4',
+    name: 'Parking Lot Camera 1',
+    ipAddress: '192.168.1.103',
+    port: 80,
+    username: 'root',
+    password: '',
+    rtspPort: 554,
+    streamPath: '/axis-media/media.amp',
+    status: 'online',
+    model: 'AXIS P1375',
+    serialNumber: 'ACCC8E456789',
+    firmwareVersion: '11.4.63',
+    rtspUrl: 'rtsp://192.168.1.103:554/axis-media/media.amp',
+  },
+  {
+    id: 'cam-demo-5',
+    name: 'Warehouse Camera B',
+    ipAddress: '192.168.1.104',
+    port: 80,
+    username: 'root',
+    password: '',
+    rtspPort: 554,
+    streamPath: '/axis-media/media.amp',
+    status: 'configuring',
+    model: 'AXIS M3068-P',
+    serialNumber: 'ACCC8E567890',
+    rtspUrl: 'rtsp://192.168.1.104:554/axis-media/media.amp',
+  },
+  {
+    id: 'cam-demo-6',
+    name: 'Loading Dock',
+    ipAddress: '192.168.1.105',
+    port: 80,
+    username: 'root',
+    password: '',
+    rtspPort: 554,
+    streamPath: '/axis-media/media.amp',
+    status: 'online',
+    model: 'AXIS Q6075-E',
+    serialNumber: 'ACCC8E678901',
+    firmwareVersion: '11.3.45',
+    rtspUrl: 'rtsp://192.168.1.105:554/axis-media/media.amp',
+  },
 ])
 
 const isDiscovering = ref(false)
@@ -279,15 +267,98 @@ const showAddDialog = ref(false)
 const editingCamera = ref<ManagedCamera | null>(null)
 const testingCamera = ref<string | null>(null)
 
+// Delete confirmation state
+const showDeleteConfirm = ref(false)
+const cameraToDelete = ref<ManagedCamera | null>(null)
+const lastDeletionTime = ref<number | null>(null)
+
+// Search and filter state
+const searchQuery = ref('')
+const statusFilter = ref<'all' | 'online' | 'offline' | 'configuring'>('all')
+const modelFilter = ref('all')
+const sortBy = ref<'name' | 'ip' | 'status' | 'model'>('name')
+
 const cameraForm = ref({
   name: '',
   ipAddress: '',
   port: 80,
-  username: 'root',
-  password: '',
   rtspPort: 554,
   streamPath: '/axis-media/media.amp',
 })
+
+// Computed - Status counts
+const statusCounts = computed(() => ({
+  online: cameras.value.filter(c => c.status === 'online').length,
+  offline: cameras.value.filter(c => c.status === 'offline').length,
+  configuring: cameras.value.filter(c => c.status === 'configuring').length,
+}))
+
+// Computed - Available models for filter dropdown
+const availableModels = computed(() => {
+  const models = new Set<string>()
+  cameras.value.forEach(camera => {
+    if (camera.model) {
+      models.add(camera.model)
+    }
+  })
+  return Array.from(models).sort()
+})
+
+// Computed - Has active filters
+const hasActiveFilters = computed(() => {
+  return searchQuery.value !== '' || statusFilter.value !== 'all' || modelFilter.value !== 'all'
+})
+
+// Computed - Filtered and sorted cameras
+const filteredAndSortedCameras = computed(() => {
+  let filtered = cameras.value
+
+  // Apply search filter
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase()
+    filtered = filtered.filter(camera =>
+      camera.name.toLowerCase().includes(query) ||
+      camera.ipAddress.toLowerCase().includes(query) ||
+      camera.model?.toLowerCase().includes(query) ||
+      camera.serialNumber?.toLowerCase().includes(query)
+    )
+  }
+
+  // Apply status filter
+  if (statusFilter.value !== 'all') {
+    filtered = filtered.filter(camera => camera.status === statusFilter.value)
+  }
+
+  // Apply model filter
+  if (modelFilter.value !== 'all') {
+    filtered = filtered.filter(camera => camera.model === modelFilter.value)
+  }
+
+  // Sort
+  const sorted = [...filtered].sort((a, b) => {
+    switch (sortBy.value) {
+      case 'name':
+        return a.name.localeCompare(b.name)
+      case 'ip':
+        return a.ipAddress.localeCompare(b.ipAddress)
+      case 'status':
+        return a.status.localeCompare(b.status)
+      case 'model':
+        return (a.model || '').localeCompare(b.model || '')
+      default:
+        return 0
+    }
+  })
+
+  return sorted
+})
+
+// Filter actions
+const clearFilters = () => {
+  searchQuery.value = ''
+  statusFilter.value = 'all'
+  modelFilter.value = 'all'
+}
 
 const discoverCameras = async () => {
   isDiscovering.value = true
@@ -335,8 +406,6 @@ const editCamera = (camera: ManagedCamera) => {
     name: camera.name,
     ipAddress: camera.ipAddress,
     port: camera.port,
-    username: camera.username,
-    password: camera.password,
     rtspPort: camera.rtspPort,
     streamPath: camera.streamPath,
   }
@@ -349,47 +418,43 @@ const closeDialog = () => {
     name: '',
     ipAddress: '',
     port: 80,
-    username: 'root',
-    password: '',
     rtspPort: 554,
     streamPath: '/axis-media/media.amp',
   }
 }
 
-const saveCamera = () => {
+const saveCamera = (data: typeof cameraForm.value) => {
   if (editingCamera.value) {
     // Update existing camera
     const index = cameras.value.findIndex(c => c.id === editingCamera.value!.id)
     if (index !== -1) {
       cameras.value[index] = {
         ...cameras.value[index],
-        name: cameraForm.value.name,
-        ipAddress: cameraForm.value.ipAddress,
-        port: cameraForm.value.port,
-        username: cameraForm.value.username,
-        password: cameraForm.value.password,
-        rtspPort: cameraForm.value.rtspPort,
-        streamPath: cameraForm.value.streamPath,
-        rtspUrl: `rtsp://${cameraForm.value.ipAddress}:${cameraForm.value.rtspPort}${cameraForm.value.streamPath}`,
+        name: data.name,
+        ipAddress: data.ipAddress,
+        port: data.port,
+        rtspPort: data.rtspPort,
+        streamPath: data.streamPath,
+        rtspUrl: `rtsp://${data.ipAddress}:${data.rtspPort}${data.streamPath}`,
       }
-      toast.success(`Camera "${cameraForm.value.name}" updated successfully`)
+      toast.success(`Camera "${data.name}" updated successfully`)
     }
   } else {
     // Add new camera
     const newCamera: ManagedCamera = {
       id: 'cam-' + Date.now(),
-      name: cameraForm.value.name,
-      ipAddress: cameraForm.value.ipAddress,
-      port: cameraForm.value.port,
-      username: cameraForm.value.username,
-      password: cameraForm.value.password,
-      rtspPort: cameraForm.value.rtspPort,
-      streamPath: cameraForm.value.streamPath,
+      name: data.name,
+      ipAddress: data.ipAddress,
+      port: data.port,
+      username: '',
+      password: '',
+      rtspPort: data.rtspPort,
+      streamPath: data.streamPath,
       status: 'configuring',
-      rtspUrl: `rtsp://${cameraForm.value.ipAddress}:${cameraForm.value.rtspPort}${cameraForm.value.streamPath}`,
+      rtspUrl: `rtsp://${data.ipAddress}:${data.rtspPort}${data.streamPath}`,
     }
     cameras.value.push(newCamera)
-    toast.success(`Camera "${cameraForm.value.name}" added successfully`)
+    toast.success(`Camera "${data.name}" added successfully`)
 
     // Simulate device info retrieval
     setTimeout(() => {
@@ -432,14 +497,35 @@ const testConnection = async (camera: ManagedCamera) => {
   }, 1500)
 }
 
-const removeCamera = (id: string) => {
-  if (confirm('Are you sure you want to remove this camera?')) {
-    const camera = cameras.value.find(c => c.id === id)
-    cameras.value = cameras.value.filter(c => c.id !== id)
-    if (camera) {
-      toast.info(`Camera "${camera.name}" removed`)
-    }
+const confirmRemoveCamera = (camera: ManagedCamera) => {
+  const now = Date.now()
+  const oneMinute = 60 * 1000
+
+  // If deleted within the last minute, skip confirmation
+  if (lastDeletionTime.value && (now - lastDeletionTime.value) < oneMinute) {
+    cameraToDelete.value = camera
+    executeRemoveCamera()
+  } else {
+    // Show confirmation modal
+    cameraToDelete.value = camera
+    showDeleteConfirm.value = true
   }
+}
+
+const executeRemoveCamera = () => {
+  if (!cameraToDelete.value) return
+
+  const camera = cameraToDelete.value
+  cameras.value = cameras.value.filter(c => c.id !== camera.id)
+
+  // Update last deletion time
+  lastDeletionTime.value = Date.now()
+
+  toast.info(`Camera "${camera.name}" removed`)
+
+  // Reset state
+  showDeleteConfirm.value = false
+  cameraToDelete.value = null
 }
 
 const viewLive = (camera: ManagedCamera) => {

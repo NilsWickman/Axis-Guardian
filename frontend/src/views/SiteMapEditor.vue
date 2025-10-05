@@ -1,21 +1,21 @@
 <template>
   <div class="h-full w-full bg-background flex">
     <!-- Left Panel - Camera Configuration Form -->
-    <div class="w-80 border-r bg-card p-4 overflow-y-auto">
-      <div class="mb-4">
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="text-xl font-bold">Camera Settings</h2>
-          <button
-            @click="goToViewer"
-            class="px-2 py-1 text-xs bg-secondary text-secondary-foreground rounded hover:bg-secondary/90"
-          >
-            ← Viewer
-          </button>
-        </div>
+    <div class="w-64 border-r bg-card p-4 overflow-y-auto">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-bold">Site Map Editor</h2>
+        <button
+          @click="goToViewer"
+          class="px-2 py-1 text-xs bg-secondary text-secondary-foreground rounded hover:bg-secondary/90"
+        >
+          ← Viewer
+        </button>
+      </div>
 
-        <!-- Site Map Selector -->
-        <div class="mt-3">
-          <label class="block text-xs font-medium mb-1">Editing Site Map:</label>
+      <!-- Site Map Details Form -->
+      <div class="space-y-3 pb-4 border-b mb-4">
+        <div>
+          <label class="block text-[10px] font-medium mb-1">Site Map</label>
           <select
             v-model="selectedSiteMapId"
             @change="onSiteMapChange"
@@ -26,17 +26,60 @@
             </option>
           </select>
         </div>
+
+        <div>
+          <label class="block text-[10px] font-medium mb-1">Name</label>
+          <input
+            v-model="siteMapForm.name"
+            type="text"
+            class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background"
+            placeholder="Site map name"
+          />
+        </div>
+
+        <div>
+          <label class="block text-[10px] font-medium mb-1">Description</label>
+          <textarea
+            v-model="siteMapForm.description"
+            class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background resize-none"
+            rows="2"
+            placeholder="Optional description"
+          ></textarea>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[10px] font-medium mb-1">Width (px)</label>
+            <input
+              v-model.number="siteMapForm.width"
+              type="number"
+              class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background"
+              placeholder="Width"
+            />
+          </div>
+          <div>
+            <label class="block text-[10px] font-medium mb-1">Height (px)</label>
+            <input
+              v-model.number="siteMapForm.height"
+              type="number"
+              class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background"
+              placeholder="Height"
+            />
+          </div>
+        </div>
+
+        <button
+          @click="updateSiteMapDetails"
+          class="w-full px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+        >
+          Update Details
+        </button>
       </div>
 
       <!-- Camera Configuration Form -->
-      <div v-if="!placement.selectedCameraId.value" class="flex items-center justify-center h-40 border rounded-lg bg-muted/30">
-        <p class="text-xs text-muted-foreground text-center px-4">
-          Select a camera from the list<br/>to configure placement
-        </p>
-      </div>
-
-      <CameraConfigForm
-        v-else
+      <div v-if="placement.selectedCameraId.value">
+        <h3 class="text-sm font-semibold mb-3">Camera Configuration</h3>
+        <CameraConfigForm
         :config="placement.cameraConfig.value"
         :camera-name="getCameraName(placement.selectedCameraId.value)"
         :is-updating="placement.isUpdating.value"
@@ -47,7 +90,8 @@
         @update="updateCameraConfig"
         @save="addCameraToMap"
         @remove="removeCameraFromMap"
-      />
+        />
+      </div>
     </div>
 
     <!-- Middle Panel - 2D Map Canvas -->
@@ -59,7 +103,6 @@
 
         <MapControls
           :show-grid="canvasOptions.showGrid"
-          :show-scale-reference="canvasOptions.showScaleReference"
           :show-labels="canvasOptions.showCameraLabels"
           :show-history="true"
           :can-undo="history.canUndo.value"
@@ -67,7 +110,6 @@
           :show-reset-view="true"
           :show-save="true"
           @toggle-grid="canvasOptions.showGrid = !canvasOptions.showGrid"
-          @toggle-scale="canvasOptions.showScaleReference = !canvasOptions.showScaleReference"
           @toggle-labels="canvasOptions.showCameraLabels = !canvasOptions.showCameraLabels"
           @undo="handleUndo"
           @redo="handleRedo"
@@ -123,15 +165,30 @@
       </div>
     </div>
 
-    <!-- Right Panel - Camera List -->
-    <div class="w-64 border-l bg-card p-4 overflow-y-auto">
-      <CameraList
-        :cameras="availableCameras"
-        :selected-camera-id="placement.selectedCameraId.value"
-        :placed-camera-ids="placedCameras.map(c => c.cameraId)"
-        :show-counter="true"
-        @select="selectCamera"
-      />
+    <!-- Right Panel - Available Cameras -->
+    <div class="w-80 border-l bg-card p-4 overflow-y-auto">
+      <h2 class="text-sm font-semibold mb-3">Available Cameras</h2>
+      <div class="space-y-2">
+        <button
+          v-for="camera in availableCameras"
+          :key="camera.id"
+          @click="selectCamera(camera.id)"
+          class="w-full text-left px-3 py-2 rounded-lg border transition-colors hover:bg-accent"
+          :class="placement.selectedCameraId.value === camera.id ? 'bg-accent border-primary' : 'border-border'"
+        >
+          <div class="font-medium text-sm">{{ camera.name }}</div>
+          <div class="text-xs text-muted-foreground mt-0.5">{{ camera.id }}</div>
+          <div class="flex items-center gap-1 mt-1">
+            <div
+              class="h-1.5 w-1.5 rounded-full"
+              :class="camera.status === 'online' ? 'bg-green-500' : 'bg-red-500'"
+            ></div>
+            <span class="text-xs" :class="camera.status === 'online' ? 'text-green-600' : 'text-red-600'">
+              {{ camera.status }}
+            </span>
+          </div>
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -146,7 +203,6 @@ import { useCameraPlacement } from '../composables/useCameraPlacement'
 import { useCanvasInteraction } from '../composables/useCanvasInteraction'
 import { useConfigHistory } from '../composables/useConfigHistory'
 import { useToast } from '../composables/useToast'
-import CameraList from '../components/features/site-map/CameraList.vue'
 import CameraConfigForm from '../components/features/site-map/CameraConfigForm.vue'
 import MapControls from '../components/features/site-map/MapControls.vue'
 
@@ -164,12 +220,20 @@ const currentSiteMap = computed(() => siteMaps.value.find(m => m.id === selected
 const availableCameras = computed(() => cameraStore.cameras)
 const placedCameras = ref<CameraPlacement[]>([])
 
+// Site map form
+const siteMapForm = reactive({
+  name: '',
+  description: '',
+  width: 0,
+  height: 0,
+})
+
 // Canvas
 const mapCanvas = ref<HTMLCanvasElement | null>(null)
 const canvasContainer = ref<HTMLDivElement | null>(null)
 const canvasOptions = reactive<CanvasRenderOptions>({
   showGrid: true,
-  showScaleReference: true,
+  showScaleReference: false,
   showCameraLabels: true,
   pixelsPerMeter: PIXELS_PER_METER
 })
@@ -231,8 +295,6 @@ const handleKeyDown = (e: KeyboardEvent) => {
     drawMap()
   } else if (e.key === 'g') {
     canvasOptions.showGrid = !canvasOptions.showGrid
-  } else if (e.key === 's' && !e.ctrlKey && !e.metaKey) {
-    canvasOptions.showScaleReference = !canvasOptions.showScaleReference
   } else if (e.key === 'l') {
     canvasOptions.showCameraLabels = !canvasOptions.showCameraLabels
   }
@@ -242,6 +304,37 @@ const handleKeyDown = (e: KeyboardEvent) => {
 const getCameraName = (cameraId: string): string => {
   const camera = availableCameras.value.find(c => c.id === cameraId)
   return camera ? camera.name : cameraId
+}
+
+const getCameraStatus = (cameraId: string): string => {
+  const camera = availableCameras.value.find(c => c.id === cameraId)
+  return camera?.status || 'offline'
+}
+
+const TAILWIND_COLOR_MAP: Record<string, string> = {
+  'red-400': '#f87171', 'red-500': '#ef4444',
+  'orange-400': '#fb923c', 'orange-500': '#f97316',
+  'amber-400': '#fbbf24', 'amber-500': '#f59e0b',
+  'yellow-400': '#facc15', 'yellow-500': '#eab308',
+  'lime-400': '#a3e635', 'lime-500': '#84cc16',
+  'green-400': '#4ade80', 'green-500': '#22c55e',
+  'emerald-400': '#34d399', 'emerald-500': '#10b981',
+  'teal-400': '#2dd4bf', 'teal-500': '#14b8a6',
+  'cyan-400': '#22d3ee', 'cyan-500': '#06b6d4',
+  'sky-400': '#38bdf8', 'sky-500': '#0ea5e9',
+  'blue-400': '#60a5fa', 'blue-500': '#3b82f6',
+  'indigo-400': '#818cf8', 'indigo-500': '#6366f1',
+  'violet-400': '#a78bfa', 'violet-500': '#8b5cf6',
+  'purple-400': '#c084fc', 'purple-500': '#a855f7',
+  'fuchsia-400': '#e879f9', 'fuchsia-500': '#d946ef',
+  'pink-400': '#f472b6', 'pink-500': '#ec4899',
+  'rose-400': '#fb7185', 'rose-500': '#f43f5e',
+}
+
+const getColorHex = (color: string): string => {
+  if (color.startsWith('#')) return color
+  const cleanColor = color.replace(/^bg-/, '')
+  return TAILWIND_COLOR_MAP[cleanColor] || '#6366f1'
 }
 
 const selectCamera = (cameraId: string) => {
@@ -432,6 +525,27 @@ const loadSiteMapCameras = () => {
     placedCameras.value = [...currentSiteMap.value.cameras]
     placement.resetConfig()
     history.initialize([...placedCameras.value])
+
+    // Update form with current site map details
+    siteMapForm.name = currentSiteMap.value.name
+    siteMapForm.description = currentSiteMap.value.description || ''
+    siteMapForm.width = currentSiteMap.value.width
+    siteMapForm.height = currentSiteMap.value.height
+
+    resizeCanvas()
+    setTimeout(fitToView, 100)
+  }
+}
+
+const updateSiteMapDetails = () => {
+  if (currentSiteMap.value) {
+    siteMapStore.updateSiteMap(currentSiteMap.value.id, {
+      name: siteMapForm.name,
+      description: siteMapForm.description,
+      width: siteMapForm.width,
+      height: siteMapForm.height,
+    })
+    toast.success('Site map details updated!')
     resizeCanvas()
     setTimeout(fitToView, 100)
   }
@@ -481,7 +595,6 @@ const resizeCanvas = () => {
 // Watchers
 watch([
   () => canvasOptions.showGrid,
-  () => canvasOptions.showScaleReference,
   () => canvasOptions.showCameraLabels
 ], () => {
   canvas.requestRedraw(drawMap)

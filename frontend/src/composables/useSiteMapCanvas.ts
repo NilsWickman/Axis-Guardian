@@ -9,6 +9,73 @@ export interface CanvasRenderOptions {
   pixelsPerMeter: number
 }
 
+// Tailwind color map for canvas rendering
+const TAILWIND_COLORS: Record<string, string> = {
+  'red-400': '#f87171',
+  'red-500': '#ef4444',
+  'red-600': '#dc2626',
+  'orange-400': '#fb923c',
+  'orange-500': '#f97316',
+  'orange-600': '#ea580c',
+  'amber-400': '#fbbf24',
+  'amber-500': '#f59e0b',
+  'amber-600': '#d97706',
+  'yellow-400': '#facc15',
+  'yellow-500': '#eab308',
+  'yellow-600': '#ca8a04',
+  'lime-400': '#a3e635',
+  'lime-500': '#84cc16',
+  'lime-600': '#65a30d',
+  'green-400': '#4ade80',
+  'green-500': '#22c55e',
+  'green-600': '#16a34a',
+  'emerald-400': '#34d399',
+  'emerald-500': '#10b981',
+  'emerald-600': '#059669',
+  'teal-400': '#2dd4bf',
+  'teal-500': '#14b8a6',
+  'teal-600': '#0d9488',
+  'cyan-400': '#22d3ee',
+  'cyan-500': '#06b6d4',
+  'cyan-600': '#0891b2',
+  'sky-400': '#38bdf8',
+  'sky-500': '#0ea5e9',
+  'sky-600': '#0284c7',
+  'blue-400': '#60a5fa',
+  'blue-500': '#3b82f6',
+  'blue-600': '#2563eb',
+  'indigo-400': '#818cf8',
+  'indigo-500': '#6366f1',
+  'indigo-600': '#4f46e5',
+  'violet-400': '#a78bfa',
+  'violet-500': '#8b5cf6',
+  'violet-600': '#7c3aed',
+  'purple-400': '#c084fc',
+  'purple-500': '#a855f7',
+  'purple-600': '#9333ea',
+  'fuchsia-400': '#e879f9',
+  'fuchsia-500': '#d946ef',
+  'fuchsia-600': '#c026d3',
+  'pink-400': '#f472b6',
+  'pink-500': '#ec4899',
+  'pink-600': '#db2777',
+  'rose-400': '#fb7185',
+  'rose-500': '#f43f5e',
+  'rose-600': '#e11d48',
+}
+
+// Convert Tailwind color class to hex color
+const tailwindColorToHex = (color: string): string => {
+  // If already a hex color, return as is
+  if (color.startsWith('#')) return color
+
+  // Remove 'bg-' prefix if present
+  const cleanColor = color.replace(/^bg-/, '')
+
+  // Look up in color map
+  return TAILWIND_COLORS[cleanColor] || '#6366f1' // default to indigo-500
+}
+
 export function useSiteMapCanvas(
   canvasRef: Ref<HTMLCanvasElement | null>,
   options: Ref<CanvasRenderOptions>
@@ -16,6 +83,8 @@ export function useSiteMapCanvas(
   const ctx = ref<CanvasRenderingContext2D | null>(null)
   const hoveredCameraId = ref<string | null>(null)
   const animationFrameId = ref<number | null>(null)
+  const backgroundImage = ref<HTMLImageElement | null>(null)
+  const imageLoaded = ref(false)
 
   const initCanvas = () => {
     const canvas = canvasRef.value
@@ -38,6 +107,44 @@ export function useSiteMapCanvas(
     if (!canvas || !ctx.value) return
 
     ctx.value.clearRect(0, 0, canvas.width, canvas.height)
+  }
+
+  const loadBackgroundImage = (imagePath?: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (!imagePath) {
+        backgroundImage.value = null
+        imageLoaded.value = false
+        resolve()
+        return
+      }
+
+      const img = new Image()
+      img.onload = () => {
+        backgroundImage.value = img
+        imageLoaded.value = true
+        resolve()
+      }
+      img.onerror = () => {
+        console.error(`Failed to load floorplan image: ${imagePath}`)
+        backgroundImage.value = null
+        imageLoaded.value = false
+        reject(new Error(`Failed to load image: ${imagePath}`))
+      }
+      img.src = imagePath
+    })
+  }
+
+  const drawBackgroundImage = () => {
+    const canvas = canvasRef.value
+    if (!canvas || !ctx.value || !backgroundImage.value || !imageLoaded.value) return
+
+    const context = ctx.value
+
+    // Draw the background image to fit the canvas
+    context.save()
+    context.globalAlpha = 0.7 // Make it semi-transparent so overlays are visible
+    context.drawImage(backgroundImage.value, 0, 0, canvas.width, canvas.height)
+    context.restore()
   }
 
   const drawGrid = () => {
@@ -105,107 +212,54 @@ export function useSiteMapCanvas(
 
     context.save()
 
-    const startX = canvas.width - 220
-    const startY = canvas.height - 120
+    // Calculate total width in meters
+    const totalWidthMeters = canvas.width / pixelsPerMeter
+    const barHeight = 40
+    const barY = canvas.height - barHeight
 
-    // Background panel
-    context.fillStyle = 'rgba(0, 0, 0, 0.7)'
-    context.fillRect(startX - 10, startY - 10, 210, 110)
-    context.strokeStyle = '#4ecca3'
-    context.lineWidth = 2
-    context.strokeRect(startX - 10, startY - 10, 210, 110)
-
-    // Title
-    context.fillStyle = '#ffffff'
-    context.font = 'bold 12px monospace'
-    context.textAlign = 'left'
-    context.fillText('SCALE REFERENCE', startX, startY + 5)
-
-    // Scale ruler
-    const rulerY = startY + 25
-    const rulerLength = 5 * pixelsPerMeter
-
+    // Top border - white
     context.strokeStyle = '#ffffff'
     context.lineWidth = 2
     context.beginPath()
-    context.moveTo(startX, rulerY)
-    context.lineTo(startX + rulerLength, rulerY)
+    context.moveTo(0, barY)
+    context.lineTo(canvas.width, barY)
     context.stroke()
 
-    // Ruler ticks
-    for (let i = 0; i <= 5; i++) {
-      const tickX = startX + i * pixelsPerMeter
+    // Calculate appropriate tick spacing
+    let meterInterval = 1
+    const numTicks = totalWidthMeters / meterInterval
+
+    // Adjust interval for better readability based on total width
+    if (numTicks > 40) meterInterval = 5
+    else if (numTicks > 20) meterInterval = 2
+    else if (numTicks < 5) meterInterval = 0.5
+
+    // Draw ticks and labels - white
+    context.strokeStyle = '#ffffff'
+    context.fillStyle = '#ffffff'
+    context.font = '11px monospace'
+    context.textAlign = 'center'
+    context.lineWidth = 1.5
+
+    for (let meters = 0; meters <= totalWidthMeters; meters += meterInterval) {
+      const x = meters * pixelsPerMeter
+
+      // Determine tick height - longer for major intervals
+      const isMajorTick = meters % (meterInterval * 5) === 0 || meters === 0
+      const tickHeight = isMajorTick ? 15 : 10
+
+      // Draw tick
       context.beginPath()
-      context.moveTo(tickX, rulerY - 5)
-      context.lineTo(tickX, rulerY + 5)
+      context.moveTo(x, barY)
+      context.lineTo(x, barY + tickHeight)
       context.stroke()
 
-      context.fillStyle = '#ffffff'
-      context.font = '10px monospace'
-      context.textAlign = 'center'
-      context.fillText(`${i}m`, tickX, rulerY + 18)
+      // Draw label for major ticks
+      if (isMajorTick) {
+        const label = meters % 1 === 0 ? `${meters}m` : `${meters.toFixed(1)}m`
+        context.fillText(label, x, barY + 28)
+      }
     }
-
-    // Human figure (1.75m)
-    const humanX = startX + 20
-    const humanY = startY + 50
-
-    context.strokeStyle = '#60a5fa'
-    context.lineWidth = 2
-
-    // Head
-    context.beginPath()
-    context.arc(humanX, humanY, 5, 0, Math.PI * 2)
-    context.stroke()
-
-    // Body
-    context.beginPath()
-    context.moveTo(humanX, humanY + 5)
-    context.lineTo(humanX, humanY + 25)
-    context.stroke()
-
-    // Arms
-    context.beginPath()
-    context.moveTo(humanX - 8, humanY + 12)
-    context.lineTo(humanX + 8, humanY + 12)
-    context.stroke()
-
-    // Legs
-    context.beginPath()
-    context.moveTo(humanX, humanY + 25)
-    context.lineTo(humanX - 6, humanY + 38)
-    context.moveTo(humanX, humanY + 25)
-    context.lineTo(humanX + 6, humanY + 38)
-    context.stroke()
-
-    // Label
-    context.fillStyle = '#60a5fa'
-    context.font = '10px monospace'
-    context.textAlign = 'center'
-    context.fillText('1.75m', humanX, humanY + 52)
-
-    // Car silhouette
-    const carX = startX + 80
-    const carY = startY + 75
-
-    context.fillStyle = '#f87171'
-    context.strokeStyle = '#f87171'
-    context.lineWidth = 2
-
-    context.fillRect(carX, carY - 8, 45, 12)
-    context.fillRect(carX + 10, carY - 15, 25, 7)
-
-    // Wheels
-    context.beginPath()
-    context.arc(carX + 8, carY + 4, 3, 0, Math.PI * 2)
-    context.arc(carX + 37, carY + 4, 3, 0, Math.PI * 2)
-    context.fill()
-
-    // Label
-    context.fillStyle = '#f87171'
-    context.font = '10px monospace'
-    context.textAlign = 'center'
-    context.fillText('~4.5m', carX + 22, carY + 18)
 
     context.restore()
   }
@@ -269,6 +323,9 @@ export function useSiteMapCanvas(
     const { x, y, rotation, angle, fov, viewDistance, color } = placement
     const isHovered = hoveredCameraId.value === placement.cameraId
 
+    // Convert Tailwind color to hex
+    const hexColor = tailwindColorToHex(color)
+
     // Convert walls to line segments for ray-casting
     const wallSegments: LineSegment[] = walls.map(wall => ({
       start: wall.start,
@@ -286,12 +343,12 @@ export function useSiteMapCanvas(
 
     // Draw FOV cone with wall occlusion
     const fillStyle = isPreview
-      ? `${color}40`
+      ? `${hexColor}40`
       : isSelected
-        ? `${color}50`
-        : `${color}30`
+        ? `${hexColor}50`
+        : `${hexColor}30`
 
-    const strokeStyle = isSelected || isHovered ? '#ffffff' : `${color}cc`
+    const strokeStyle = isSelected || isHovered ? '#ffffff' : `${hexColor}cc`
     const lineWidth = isSelected ? 3 : isHovered ? 2.5 : 2
 
     drawPolygon(context, visiblePolygon, fillStyle, strokeStyle, lineWidth)
@@ -304,7 +361,7 @@ export function useSiteMapCanvas(
     // Camera body
     context.beginPath()
     context.rect(-15, -10, 30, 20)
-    context.fillStyle = color
+    context.fillStyle = hexColor
     context.fill()
     context.strokeStyle = isSelected || isHovered ? '#ffff00' : '#ffffff'
     context.lineWidth = isSelected ? 3 : isHovered ? 2.5 : 2
@@ -392,9 +449,12 @@ export function useSiteMapCanvas(
   return {
     ctx,
     hoveredCameraId,
+    imageLoaded,
     initCanvas,
     resizeCanvas,
     clearCanvas,
+    loadBackgroundImage,
+    drawBackgroundImage,
     drawGrid,
     drawScaleReference,
     drawWalls,

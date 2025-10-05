@@ -31,22 +31,6 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
-    path: '/detections',
-    name: 'Detections',
-    component: () => import('@/views/DetectionHistory.vue'),
-    meta: {
-      title: 'Detection History',
-    },
-  },
-  {
-    path: '/alarms',
-    name: 'Alarms',
-    component: () => import('@/views/AlarmCenter.vue'),
-    meta: {
-      title: 'Alarm Center',
-    },
-  },
-  {
     path: '/site-config',
     name: 'SiteMapViewer',
     component: () => import('@/views/SiteMapViewer.vue'),
@@ -55,11 +39,11 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
-    path: '/site-config/editor',
+    path: '/site-config/edit/:mapId',
     name: 'SiteMapEditor',
     component: () => import('@/views/SiteMapEditor.vue'),
     meta: {
-      title: 'Site Map Editor',
+      title: 'Edit Site Map',
     },
   },
   {
@@ -68,22 +52,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/UserManagement.vue'),
     meta: {
       title: 'User Management',
-    },
-  },
-  {
-    path: '/analytics',
-    name: 'Analytics',
-    component: () => import('@/views/Analytics.vue'),
-    meta: {
-      title: 'Analytics',
-    },
-  },
-  {
-    path: '/settings',
-    name: 'Settings',
-    component: () => import('@/views/Placeholder.vue'),
-    meta: {
-      title: 'Settings',
     },
   },
 ]

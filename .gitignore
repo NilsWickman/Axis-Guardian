@@ -157,3 +157,18 @@ AGENTS.md
 GEMINI.md
 .claude/
 .cursor/
+
+# API Contract artefacts
+shared/contracts/
+shared/schemas/
+shared/models/
+shared/clients/
+shared/docs/api-contracts/generated/
+shared/generated/
+shared/types/
+shared/dist/
+shared/axis_shared.egg-info/
+frontend/src/types/generated/
+frontend/src/api/generated/
+frontend/src/api/websocket/
+frontend/src/api/generated/
