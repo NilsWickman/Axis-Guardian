@@ -87,19 +87,35 @@ dev-all: ## Start all development servers (frontend + all backend services)
 	@npm run dev
 
 .PHONY: api-contract
-api-contract: ## Validate API contracts and generate types/clients
-	@echo "$(BLUE)Validating API contracts...$(NC)"
-	@if [ -d "shared/schemas" ] && [ -n "$$(ls -A shared/schemas/*.json 2>/dev/null || ls -A shared/schemas/*.yaml 2>/dev/null)" ]; then \
+api-contract: ## Validate API contracts and generate types/clients (OpenAPI + AsyncAPI → TS + Python)
+	@echo "$(BLUE)Processing API contracts...$(NC)"
+	@if [ -d "shared/schemas" ] && [ -n "$$(ls -A shared/schemas/*.yaml 2>/dev/null || ls -A shared/schemas/*.yml 2>/dev/null || ls -A shared/schemas/*.json 2>/dev/null)" ]; then \
 		echo "$(YELLOW)Validating OpenAPI schemas...$(NC)"; \
+		npm run validate:schemas || true; \
+		echo ""; \
+		echo "$(YELLOW)Generating types and clients (REST + WebSocket)...$(NC)"; \
+		npm run generate:all; \
 	else \
-		echo "$(YELLOW)No API schemas found in shared/schemas/$(NC)"; \
-		echo "$(YELLOW)Add your OpenAPI specs to shared/schemas/ directory$(NC)"; \
+		echo "$(YELLOW)⚠ No API schemas found in shared/schemas/$(NC)"; \
+		echo "$(YELLOW)Add OpenAPI/AsyncAPI specs to shared/schemas/ directory$(NC)"; \
+		echo "$(YELLOW)Example: shared/schemas/auth-service.openapi.yaml$(NC)"; \
+		exit 1; \
 	fi
 	@echo ""
-	@echo "$(YELLOW)Generating TypeScript types and clients...$(NC)"
-	@npm run generate:openapi
-	@echo ""
 	@echo "$(GREEN)✓ API contracts processed$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Generated files:$(NC)"
+	@echo "  TypeScript:"
+	@echo "    - shared/types/generated/*.types.ts (REST API types)"
+	@echo "    - shared/clients/typescript/*/ (REST clients)"
+	@echo "    - shared/clients/typescript/websocket/*.ts (WebSocket clients)"
+	@echo "    - frontend/src/types/generated/*.types.ts"
+	@echo "    - frontend/src/api/generated/*/"
+	@echo "    - frontend/src/api/websocket/*.ts"
+	@echo "  Python:"
+	@echo "    - shared/types/python/*_models.py (Pydantic models)"
+	@echo "    - shared/clients/python/*/ (REST clients)"
+	@echo "    - shared/clients/python/websocket/*_client.py (WebSocket clients)"
 
 .PHONY: quality
 quality: ## Check code quality (formatting and linting)

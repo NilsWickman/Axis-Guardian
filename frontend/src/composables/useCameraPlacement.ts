@@ -18,12 +18,12 @@ const DEFAULT_CONFIG: CameraConfig = {
   x: 400,
   y: 300,
   rotation: 0,
-  angle: 45,
-  height: 3.0,
+  angle: 35,
+  height: 2.4,
   fov: 90,
   viewDistance: 200,
   autoCalculateDistance: true,
-  color: '#4ecca3',
+  color: 'blue-500',
   notes: ''
 }
 
