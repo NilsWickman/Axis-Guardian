@@ -1,7 +1,7 @@
 <template>
   <div class="h-full w-full bg-background flex flex-col">
     <!-- Header -->
-    <div class="flex justify-between items-center p-3 border-b">
+    <div class="flex justify-between items-center p-4 border-b border-sidebar-border">
       <h1 class="text-base font-bold text-foreground">Focus View</h1>
       <div class="flex items-center space-x-3">
         <span class="text-xs text-muted-foreground">
@@ -38,43 +38,18 @@
       <div class="flex-1 p-4">
         <CameraFeedDisplay
           :camera="selectedCamera"
-          :stream-ready="selectedCamera ? streamReady[selectedCamera.id] : false"
+          @video-ready="onVideoReady"
         >
           <template #overlays>
-            <!-- Alert Indicators -->
-            <CameraAlerts
-              v-if="selectedCamera"
-              :alerts="activeAlerts[selectedCamera.id]"
-            />
-
-            <!-- Bitrate/Latency Display (Top Right) -->
-            <StreamStats
-              v-if="selectedCamera && !compactMode"
-              :stats="streamStats[selectedCamera.id]"
+            <PersonOverlay
+              v-for="overlay in currentOverlays"
+              :key="overlay.id"
+              :overlay="overlay"
+              :container-width="containerWidth"
+              :container-height="containerHeight"
             />
           </template>
         </CameraFeedDisplay>
-
-        <!-- Metadata Panel (Collapsible) -->
-        <CameraMetadataPanel
-          v-if="selectedCamera && selectedCamera.capabilities?.analytics && !compactMode"
-          v-model:open="metadataPanelOpen"
-          :metadata="cameraMetadata[selectedCamera.id]"
-        />
-
-        <!-- Clip Creator (Collapsible) -->
-        <ClipCreator
-          v-if="selectedCamera && !compactMode"
-          v-model:open="clipCreatorOpen"
-          :is-recording="isRecording"
-          :recording-duration="recordingDuration"
-          :markers="clipMarkers"
-          @start-recording="startRecording"
-          @stop-recording="stopRecording"
-          @save-clip="saveClip"
-          @add-marker="addClipMarker"
-          @clear-markers="clipMarkers = []"
-        />
       </div>
 
       <!-- Thumbnail Strip -->
@@ -86,7 +61,6 @@
             :key="camera.id"
             :camera="camera"
             :is-selected="selectedCamera?.id === camera.id"
-            :stream-ready="streamReady[camera.id]"
             @select="selectCamera"
           />
         </div>
@@ -100,192 +74,65 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import type { Camera } from '../../types/generated'
 import CameraFeedDisplay from '@/components/features/camera/CameraFeedDisplay.vue'
 import CameraThumbnail from '@/components/features/camera/CameraThumbnail.vue'
-import CameraAlerts from '@/components/features/camera/CameraAlerts.vue'
-import StreamStats from '@/components/features/camera/StreamStats.vue'
-import CameraMetadataPanel from '@/components/features/camera/CameraMetadataPanel.vue'
-import ClipCreator from '@/components/features/camera/ClipCreator.vue'
+import PersonOverlay from '@/components/features/camera/PersonOverlay.vue'
+import { useCameraOverlays } from '@/composables/useCameraOverlays'
 
-const cameras = ref<Camera[]>([
-  {
-    id: 'cam-01',
-    name: 'Front Entrance',
-    rtspUrl: 'rtsp://camera1.local/stream',
-    status: 'online',
-    capabilities: { ptz: true, audio: true, analytics: true, resolution: '1920x1080', fps: 30 },
-  },
-  {
-    id: 'cam-02',
-    name: 'Parking Lot',
-    rtspUrl: 'rtsp://camera2.local/stream',
-    status: 'online',
-    capabilities: { ptz: false, audio: false, analytics: true, resolution: '1920x1080', fps: 25 },
-  },
-  {
-    id: 'cam-03',
-    name: 'Warehouse',
-    rtspUrl: 'rtsp://camera3.local/stream',
-    status: 'online',
-    capabilities: { ptz: true, audio: false, analytics: true, resolution: '2560x1440', fps: 30 },
-  },
-  {
-    id: 'cam-04',
-    name: 'Loading Dock',
-    rtspUrl: 'rtsp://camera4.local/stream',
-    status: 'online',
-    capabilities: { ptz: false, audio: true, analytics: false, resolution: '1920x1080', fps: 30 },
-  },
-  {
-    id: 'cam-05',
-    name: 'Back Entrance',
-    rtspUrl: 'rtsp://camera5.local/stream',
-    status: 'online',
-    capabilities: { ptz: true, audio: false, analytics: true, resolution: '1920x1080', fps: 30 },
-  },
-  {
-    id: 'cam-06',
-    name: 'Perimeter North',
-    rtspUrl: 'rtsp://camera6.local/stream',
-    status: 'online',
-    capabilities: { ptz: false, audio: false, analytics: true, resolution: '1920x1080', fps: 25 },
-  },
-])
+const cameras = ref<Camera[]>([])
 
 const selectedCamera = ref<Camera | null>(null)
+
+// Video refs for pop-out functionality
 const videoRefs = ref<Record<string, HTMLVideoElement>>({})
-const streamReady = ref<Record<string, boolean>>({})
-const peerConnections = ref<Record<string, RTCPeerConnection>>({})
 
 // UI State
 const compactMode = ref(false)
-const metadataPanelOpen = ref(false)
-const clipCreatorOpen = ref(false)
 
-// Recording State
-const isRecording = ref(false)
-const recordingDuration = ref('00:00')
-const recordingStartTime = ref<number | null>(null)
-const recordingInterval = ref<number | null>(null)
-const clipMarkers = ref<number[]>([])
+// Camera overlays
+const { getOverlays } = useCameraOverlays()
 
-// Analytics & Alerts
-const activeAlerts = ref<Record<string, Array<{ id: string; type: string; message: string }>>>({})
-const streamStats = ref<Record<string, { bitrate: string; latency: number }>>({})
-const cameraMetadata = ref<Record<string, {
-  peopleCount: number
-  vehicleCount: number
-  motionLevel: string
-  detections: Array<{ id: string; object: string; confidence: number }>
-}>>({})
+// Container dimensions for overlay positioning
+const containerWidth = ref(1920)
+const containerHeight = ref(1080)
 
 const onlineCameras = computed(() => cameras.value.filter(c => c.status === 'online').length)
+
+const currentOverlays = computed(() => {
+  if (!selectedCamera.value) return []
+  return getOverlays(selectedCamera.value.id)
+})
 
 const selectCamera = (camera: Camera) => {
   selectedCamera.value = camera
 }
 
-// Watch for camera selection and ensure stream is ready
-watch(selectedCamera, async (newCamera) => {
-  if (newCamera) {
-    console.log('Selected camera changed to:', newCamera.name)
-    // Wait for video element to be in DOM
-    await new Promise(resolve => setTimeout(resolve, 150))
-    setupMockWebRTC(newCamera)
-  }
-}, { immediate: false })
+const onVideoReady = (cameraId: string, videoElement: HTMLVideoElement) => {
+  videoRefs.value[cameraId] = videoElement
+}
 
-const setupMockWebRTC = async (camera: Camera) => {
+// Fetch cameras from the mock server
+const fetchCameras = async () => {
   try {
-    console.log('Setting up WebRTC for:', camera.name, camera.id)
+    const response = await fetch('http://localhost:8000/axis-cgi/cameras/list')
+    if (response.ok) {
+      const camerasData = await response.json()
+      cameras.value = camerasData
+      console.log('Loaded cameras:', camerasData)
 
-    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
-    peerConnections.value[camera.id] = pc
-
-    const canvas = document.createElement('canvas')
-    canvas.width = 1920
-    canvas.height = 1080
-    const ctx = canvas.getContext('2d')!
-
-    const animate = () => {
-      ctx.fillStyle = '#1a1a2e'
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-      ctx.strokeStyle = '#16213e'
-      ctx.lineWidth = 2
-      for (let i = 0; i < canvas.width; i += 100) {
-        ctx.beginPath()
-        ctx.moveTo(i, 0)
-        ctx.lineTo(i, canvas.height)
-        ctx.stroke()
+      // Auto-select first camera if none selected
+      if (!selectedCamera.value && camerasData.length > 0) {
+        selectedCamera.value = camerasData[0]
       }
-      for (let i = 0; i < canvas.height; i += 100) {
-        ctx.beginPath()
-        ctx.moveTo(0, i)
-        ctx.lineTo(canvas.width, i)
-        ctx.stroke()
-      }
-
-      const time = Date.now() / 1000
-      const x = (Math.sin(time * 0.5) * 0.4 + 0.5) * canvas.width
-      const y = (Math.cos(time * 0.3) * 0.3 + 0.5) * canvas.height
-
-      ctx.fillStyle = '#4ecca3'
-      ctx.beginPath()
-      ctx.arc(x, y, 30, 0, Math.PI * 2)
-      ctx.fill()
-
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
-      ctx.fillRect(20, 20, 300, 120)
-
-      ctx.fillStyle = '#ffffff'
-      ctx.font = 'bold 24px monospace'
-      ctx.fillText(camera.name, 40, 55)
-
-      ctx.font = '16px monospace'
-      ctx.fillStyle = '#4ecca3'
-      ctx.fillText(`CAM ID: ${camera.id}`, 40, 85)
-      ctx.fillText(`FPS: ${camera.capabilities?.fps || 30}`, 40, 110)
-
-      const now = new Date()
-      ctx.fillText(now.toLocaleTimeString(), 40, 135)
-
-      if (Math.floor(time * 2) % 2 === 0) {
-        ctx.fillStyle = '#ff0000'
-        ctx.beginPath()
-        ctx.arc(canvas.width - 40, 40, 10, 0, Math.PI * 2)
-        ctx.fill()
-      }
-
-      if (peerConnections.value[camera.id]) {
-        requestAnimationFrame(animate)
-      }
-    }
-
-    animate()
-
-    const stream = canvas.captureStream(camera.capabilities?.fps || 30)
-    stream.getTracks().forEach(track => pc.addTrack(track, stream))
-
-    const videoElement = videoRefs.value[camera.id]
-    console.log('Video element for', camera.id, ':', videoElement)
-
-    if (videoElement) {
-      videoElement.srcObject = stream
-      streamReady.value[camera.id] = true
-      console.log('Stream set for', camera.id, 'streamReady:', streamReady.value[camera.id])
     } else {
-      console.warn('Video element not found for', camera.id)
+      console.error('Failed to fetch cameras:', response.statusText)
     }
-  } catch (err) {
-    console.error(`Failed to setup WebRTC for ${camera.name}:`, err)
+  } catch (error) {
+    console.error('Error fetching cameras:', error)
   }
 }
 
 const refreshCameras = () => {
-  cameras.value.forEach(camera => {
-    if (camera.status === 'online') {
-      setupMockWebRTC(camera)
-    }
-  })
+  // Reload cameras from server
+  fetchCameras()
 }
 
 const takeSnapshot = () => {
@@ -373,171 +220,8 @@ const popOutCamera = () => {
   }
 }
 
-const startRecording = () => {
-  isRecording.value = true
-  recordingStartTime.value = Date.now()
-
-  recordingInterval.value = window.setInterval(() => {
-    if (recordingStartTime.value) {
-      const elapsed = Math.floor((Date.now() - recordingStartTime.value) / 1000)
-      const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0')
-      const seconds = (elapsed % 60).toString().padStart(2, '0')
-      recordingDuration.value = `${minutes}:${seconds}`
-    }
-  }, 1000)
-
-  console.log('Recording started for:', selectedCamera.value?.name)
-}
-
-const stopRecording = () => {
-  isRecording.value = false
-  if (recordingInterval.value) {
-    clearInterval(recordingInterval.value)
-    recordingInterval.value = null
-  }
-  console.log('Recording stopped. Duration:', recordingDuration.value)
-  recordingDuration.value = '00:00'
-  recordingStartTime.value = null
-}
-
-const addClipMarker = (percentage: number) => {
-  if (clipMarkers.value.length >= 2) {
-    clipMarkers.value = []
-  }
-
-  clipMarkers.value.push(percentage)
-  clipMarkers.value.sort((a, b) => a - b)
-}
-
-const saveClip = () => {
-  if (clipMarkers.value.length !== 2) return
-
-  const startTime = Math.round(clipMarkers.value[0] * 0.6)
-  const endTime = Math.round(clipMarkers.value[1] * 0.6)
-  const duration = endTime - startTime
-
-  console.log(`Saving clip: ${startTime}s to ${endTime}s (${duration}s duration)`)
-  alert(`Clip saved: ${duration}s from ${selectedCamera.value?.name}`)
-  clipMarkers.value = []
-}
-
-// Mock data generators
-const generateMockAlerts = () => {
-  const alertTypes = [
-    { type: 'Motion Detected', message: 'Zone A' },
-    { type: 'Person Detected', message: 'Entrance area' },
-    { type: 'Vehicle Detected', message: 'Parking lot' },
-  ]
-
-  cameras.value.forEach(camera => {
-    if (Math.random() > 0.85 && camera.capabilities?.analytics) {
-      const alert = alertTypes[Math.floor(Math.random() * alertTypes.length)]
-      if (!activeAlerts.value[camera.id]) {
-        activeAlerts.value[camera.id] = []
-      }
-      activeAlerts.value[camera.id].push({
-        id: `alert-${Date.now()}`,
-        ...alert
-      })
-
-      // Auto-dismiss after 5 seconds
-      setTimeout(() => {
-        if (activeAlerts.value[camera.id]) {
-          activeAlerts.value[camera.id] = activeAlerts.value[camera.id].filter(
-            a => a.id !== `alert-${Date.now()}`
-          )
-        }
-      }, 5000)
-    }
-  })
-}
-
-const generateMockMetadata = () => {
-  cameras.value.forEach(camera => {
-    if (camera.capabilities?.analytics) {
-      const peopleCount = Math.floor(Math.random() * 8)
-      const vehicleCount = Math.floor(Math.random() * 5)
-      const motionLevels = ['Low', 'Medium', 'High']
-
-      const detections = []
-      if (peopleCount > 0) {
-        detections.push({
-          id: `det-p-${Date.now()}`,
-          object: 'Person',
-          confidence: Math.floor(85 + Math.random() * 15)
-        })
-      }
-      if (vehicleCount > 0) {
-        detections.push({
-          id: `det-v-${Date.now()}`,
-          object: 'Vehicle',
-          confidence: Math.floor(80 + Math.random() * 20)
-        })
-      }
-
-      cameraMetadata.value[camera.id] = {
-        peopleCount,
-        vehicleCount,
-        motionLevel: motionLevels[Math.floor(Math.random() * motionLevels.length)],
-        detections: detections.slice(0, 3)
-      }
-    }
-  })
-}
-
-const generateMockStreamStats = () => {
-  cameras.value.forEach(camera => {
-    streamStats.value[camera.id] = {
-      bitrate: (2.0 + Math.random() * 1.5).toFixed(1),
-      latency: Math.floor(30 + Math.random() * 80)
-    }
-  })
-}
-
-onMounted(() => {
-  setTimeout(() => {
-    cameras.value.forEach(camera => {
-      if (camera.status === 'online') {
-        setupMockWebRTC(camera)
-      }
-    })
-    // Auto-select first camera
-    if (cameras.value.length > 0) {
-      selectedCamera.value = cameras.value[0]
-    }
-  }, 100)
-
-  // Generate initial mock data
-  generateMockStreamStats()
-  generateMockMetadata()
-
-  // Update mock data periodically
-  const metadataInterval = setInterval(() => {
-    generateMockMetadata()
-  }, 3000)
-
-  const alertsInterval = setInterval(() => {
-    generateMockAlerts()
-  }, 8000)
-
-  const statsInterval = setInterval(() => {
-    generateMockStreamStats()
-  }, 2000)
-
-  // Cleanup
-  onUnmounted(() => {
-    clearInterval(metadataInterval)
-    clearInterval(alertsInterval)
-    clearInterval(statsInterval)
-  })
-})
-
-onUnmounted(() => {
-  Object.values(peerConnections.value).forEach(pc => pc.close())
-  peerConnections.value = {}
-
-  if (recordingInterval.value) {
-    clearInterval(recordingInterval.value)
-  }
+onMounted(async () => {
+  // Fetch cameras from server
+  await fetchCameras()
 })
 </script>

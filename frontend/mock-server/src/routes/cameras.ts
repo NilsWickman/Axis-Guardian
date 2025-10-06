@@ -120,48 +120,6 @@ router.post('/:cameraId/stream', async (req, res) => {
   }
 })
 
-// POST /cameras/:cameraId/ptz
-router.post('/:cameraId/ptz', async (req, res) => {
-  try {
-    const { cameraId } = req.params
-    const { action, value, speed, preset } = req.body
-
-    // Verify camera exists and has PTZ capability
-    const camera = await prisma.camera.findUnique({
-      where: { id: cameraId }
-    })
-
-    if (!camera) {
-      return res.status(404).json({
-        error: 'CAMERA_NOT_FOUND',
-        message: `Camera ${cameraId} not found`,
-        timestamp: new Date().toISOString()
-      })
-    }
-
-    const capabilities = camera.capabilities ? JSON.parse(camera.capabilities) : {}
-    if (!capabilities?.ptz) {
-      return res.status(400).json({
-        error: 'PTZ_NOT_SUPPORTED',
-        message: `Camera ${cameraId} does not support PTZ`,
-        timestamp: new Date().toISOString()
-      })
-    }
-
-    // Log PTZ command (in real system, would control camera)
-    console.log(`📹 PTZ Command for ${cameraId}:`, { action, value, speed, preset })
-
-    res.status(204).send()
-  } catch (error) {
-    console.error('PTZ control error:', error)
-    res.status(500).json({
-      error: 'INTERNAL_ERROR',
-      message: 'PTZ control failed',
-      timestamp: new Date().toISOString()
-    })
-  }
-})
-
 // GET /cameras/:cameraId/snapshot
 router.get('/:cameraId/snapshot', async (req, res) => {
   try {

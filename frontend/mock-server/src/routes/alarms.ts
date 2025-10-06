@@ -185,4 +185,142 @@ router.post('/', async (req, res) => {
   }
 })
 
+// GET /alarms/statistics
+router.get('/statistics', async (req, res) => {
+  try {
+    const total = await prisma.alarm.count()
+    const unacknowledged = await prisma.alarm.count({
+      where: { acknowledged: false }
+    })
+
+    // Get counts by severity
+    const criticalCount = await prisma.alarm.count({
+      where: { severity: 'CRITICAL' }
+    })
+    const highCount = await prisma.alarm.count({
+      where: { severity: 'HIGH' }
+    })
+    const mediumCount = await prisma.alarm.count({
+      where: { severity: 'MEDIUM' }
+    })
+    const lowCount = await prisma.alarm.count({
+      where: { severity: 'LOW' }
+    })
+
+    // Get counts by type
+    const intrusionCount = await prisma.alarm.count({
+      where: { type: 'INTRUSION' }
+    })
+    const loiteringCount = await prisma.alarm.count({
+      where: { type: 'LOITERING' }
+    })
+    const lineCrossingCount = await prisma.alarm.count({
+      where: { type: 'LINE_CROSSING' }
+    })
+    const zoneViolationCount = await prisma.alarm.count({
+      where: { type: 'ZONE_VIOLATION' }
+    })
+    const abandonedObjectCount = await prisma.alarm.count({
+      where: { type: 'ABANDONED_OBJECT' }
+    })
+
+    res.json({
+      total,
+      unacknowledged,
+      bySeverity: {
+        critical: criticalCount,
+        high: highCount,
+        medium: mediumCount,
+        low: lowCount
+      },
+      byType: {
+        intrusion: intrusionCount,
+        loitering: loiteringCount,
+        line_crossing: lineCrossingCount,
+        zone_violation: zoneViolationCount,
+        abandoned_object: abandonedObjectCount
+      }
+    })
+  } catch (error) {
+    console.error('Get alarm statistics error:', error)
+    res.status(500).json({
+      error: 'INTERNAL_ERROR',
+      message: 'Failed to fetch alarm statistics',
+      timestamp: new Date().toISOString()
+    })
+  }
+})
+
+// POST /alarms/:alarmId/archive
+router.post('/:alarmId/archive', async (req, res) => {
+  try {
+    const { alarmId } = req.params
+    const { archivedBy } = req.body
+
+    const alarm = await prisma.alarm.findUnique({
+      where: { id: alarmId }
+    })
+
+    if (!alarm) {
+      return res.status(404).json({
+        error: 'ALARM_NOT_FOUND',
+        message: `Alarm ${alarmId} not found`,
+        timestamp: new Date().toISOString()
+      })
+    }
+
+    // Note: This would need a database migration to add archivedBy and archivedAt fields
+    // For now, we'll simulate it with the source field or a custom JSON field
+    console.log(`📦 Alarm ${alarmId} archived by ${archivedBy}`)
+
+    res.json({
+      id: alarm.id,
+      archived: true,
+      archivedBy,
+      archivedAt: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Archive alarm error:', error)
+    res.status(500).json({
+      error: 'INTERNAL_ERROR',
+      message: 'Failed to archive alarm',
+      timestamp: new Date().toISOString()
+    })
+  }
+})
+
+// POST /alarms/:alarmId/unarchive
+router.post('/:alarmId/unarchive', async (req, res) => {
+  try {
+    const { alarmId } = req.params
+
+    const alarm = await prisma.alarm.findUnique({
+      where: { id: alarmId }
+    })
+
+    if (!alarm) {
+      return res.status(404).json({
+        error: 'ALARM_NOT_FOUND',
+        message: `Alarm ${alarmId} not found`,
+        timestamp: new Date().toISOString()
+      })
+    }
+
+    console.log(`📤 Alarm ${alarmId} unarchived`)
+
+    res.json({
+      id: alarm.id,
+      archived: false,
+      unarchivedAt: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('Unarchive alarm error:', error)
+    res.status(500).json({
+      error: 'INTERNAL_ERROR',
+      message: 'Failed to unarchive alarm',
+      timestamp: new Date().toISOString()
+    })
+  }
+})
+
 export default router

@@ -6,11 +6,14 @@
   >
     <video
       :ref="el => videoRef = el as HTMLVideoElement"
+      :src="camera.rtspUrl"
       class="w-full object-cover"
       :class="videoClass"
       autoplay
       muted
       playsinline
+      loop
+      @loadeddata="isLoaded = true"
     ></video>
 
     <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-2">
@@ -28,7 +31,7 @@
     </div>
 
     <div
-      v-if="!streamReady"
+      v-if="!isLoaded"
       class="absolute inset-0 flex items-center justify-center bg-gray-900"
     >
       <div class="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
@@ -56,6 +59,7 @@ const emit = defineEmits<{
 }>()
 
 const videoRef = ref<HTMLVideoElement | null>(null)
+const isLoaded = ref(false)
 
 const statusClass = computed(() => {
   return props.camera.status === 'online' ? 'bg-status-online' : 'bg-status-offline'

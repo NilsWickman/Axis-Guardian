@@ -274,6 +274,45 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function createUser(newUser: Omit<User, 'id' | 'createdAt' | 'updatedAt'>) {
+    loading.value = true
+    error.value = null
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 400))
+
+      // Check if username already exists
+      if (mockUsers.some((u) => u.username === newUser.username)) {
+        throw new Error('Username already exists')
+      }
+
+      // Check if email already exists
+      if (newUser.email && mockUsers.some((u) => u.email === newUser.email)) {
+        throw new Error('Email already exists')
+      }
+
+      // Create new user
+      const user: User = {
+        id: `user-${Date.now()}`,
+        ...newUser,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+
+      // Add to mock data
+      mockUsers.push(user)
+
+      // Add to allUsers
+      allUsers.value.push(user)
+
+      return user
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to create user'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     // State
     currentUser,
@@ -301,5 +340,6 @@ export const useAuthStore = defineStore('auth', () => {
     fetchUsers,
     updateUser,
     deleteUser,
+    createUser,
   }
 })

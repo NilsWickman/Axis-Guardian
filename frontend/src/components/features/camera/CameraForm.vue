@@ -51,27 +51,27 @@
         </div>
 
         <!-- RTSP Configuration -->
-        <div class="space-y-3">
-            <div>
-              <label class="block text-xs font-medium mb-1">RTSP Port</label>
-              <input
-                v-model="formData.rtspPort"
-                type="number"
-                min="1"
-                max="65535"
-                placeholder="554"
-                class="w-full px-3 py-2 text-xs border rounded bg-background"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium mb-1">Stream Path</label>
-              <input
-                v-model="formData.streamPath"
-                type="text"
-                placeholder="/axis-media/media.amp"
-                class="w-full px-3 py-2 text-xs border rounded bg-background"
-              />
-            </div>
+        <div class="space-y-3 border-t pt-3">
+          <h3 class="text-xs font-semibold">RTSP Configuration</h3>
+          <div>
+            <label class="block text-xs font-medium mb-1">RTSP Port</label>
+            <input
+              v-model="formData.rtspPort"
+              type="number"
+              min="1"
+              max="65535"
+              placeholder="554"
+              class="w-full px-3 py-2 text-xs border rounded bg-background"
+            />
+          </div>
+          <div>
+            <label class="block text-xs font-medium mb-1">Stream Path</label>
+            <input
+              v-model="formData.streamPath"
+              type="text"
+              placeholder="/axis-media/media.amp"
+              class="w-full px-3 py-2 text-xs border rounded bg-background"
+            />
           </div>
         </div>
 

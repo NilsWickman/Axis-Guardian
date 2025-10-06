@@ -2,9 +2,6 @@
   import { computed, ref } from 'vue'
   import { useRouter, useRoute } from 'vue-router'
   import {
-    Camera,
-    Map,
-    UserIcon,
     LogOut as LogOutIcon,
     Sun,
     Moon,
@@ -14,15 +11,25 @@
     Palette,
     Cctv,
     Users,
+    BarChart3,
+    Map,
+    Bell,
+    Wrench,
+    Settings,
+    Archive,
   } from 'lucide-vue-next'
   import { useTheme } from '@/composables/useTheme'
   import { useAuthStore } from '@/stores/auth'
+  import { useCameraOverlays } from '@/composables/useCameraOverlays'
 
   const router = useRouter()
   const route = useRoute()
   const authStore = useAuthStore()
   const { currentTheme, setTheme, themes } = useTheme()
+  const { addRandomPersonOverlay } = useCameraOverlays()
   const isThemeMenuOpen = ref(false)
+  const isDevToolsMenuOpen = ref(false)
+  const expandedMenus = ref<Set<string>>(new Set())
 
   const user = computed(() => authStore.currentUser)
 
@@ -43,37 +50,98 @@
     return user.value.role.charAt(0).toUpperCase() + user.value.role.slice(1)
   })
 
-  const navigationItems = [
-    {
-      name: 'Camera View',
-      path: '/cameras/focus',
-      icon: Focus,
-    },
-    {
-      name: 'Timeline',
-      path: '/cameras/timeline',
-      icon: Clock,
-    },
-    {
-      name: 'Manage Cameras',
-      path: '/cameras/manage',
-      icon: Cctv,
-    },
-    {
-      name: 'Site Map',
-      path: '/site-config',
-      icon: Map,
-    },
-    {
-      name: 'Users',
-      path: '/users',
-      icon: Users,
-    },
-  ]
+  interface NavigationItem {
+    name: string
+    path?: string
+    icon: any
+    children?: NavigationItem[]
+  }
+
+  const navigationItems = computed<NavigationItem[]>(() => {
+    const items: NavigationItem[] = [
+      {
+        name: 'Camera View',
+        path: '/cameras/focus',
+        icon: Focus,
+      },
+      {
+        name: 'Timeline',
+        path: '/cameras/timeline',
+        icon: Clock,
+      },
+      {
+        name: 'Manage Cameras',
+        path: '/cameras/manage',
+        icon: Cctv,
+      },
+      {
+        name: 'Site Map',
+        path: '/site-config',
+        icon: Map,
+      },
+      {
+        name: 'Alarms',
+        path: '/alarms',
+        icon: Bell,
+      },
+      {
+        name: 'Users',
+        path: '/users',
+        icon: Users,
+      },
+    ]
+
+    // Add Dashboard for admins only
+    if (authStore.isAdmin) {
+      items.splice(1, 0, {
+        name: 'Dashboard',
+        path: '/dashboard',
+        icon: BarChart3,
+      })
+    }
+
+    // Add Archive for admins only
+    if (authStore.isAdmin) {
+      items.push({
+        name: 'Archive',
+        path: '/archive',
+        icon: Archive,
+      })
+    }
+
+    // Add Settings for admins only
+    if (authStore.isAdmin) {
+      items.push({
+        name: 'Settings',
+        path: '/settings',
+        icon: Settings,
+      })
+    }
+
+    return items
+  })
+
+  const toggleMenu = (itemName: string) => {
+    if (expandedMenus.value.has(itemName)) {
+      expandedMenus.value.delete(itemName)
+    } else {
+      expandedMenus.value.add(itemName)
+    }
+  }
 
   const isActiveRoute = (path: string): boolean => {
     if (path === '/' && route.path === '/') return true
     if (path !== '/' && route.path.startsWith(path)) return true
+    return false
+  }
+
+  const isMenuActive = (item: NavigationItem): boolean => {
+    if (item.path) {
+      return isActiveRoute(item.path)
+    }
+    if (item.children) {
+      return item.children.some(child => child.path && isActiveRoute(child.path))
+    }
     return false
   }
 
@@ -93,9 +161,18 @@
     isThemeMenuOpen.value = !isThemeMenuOpen.value
   }
 
+  const toggleDevToolsMenu = () => {
+    isDevToolsMenuOpen.value = !isDevToolsMenuOpen.value
+  }
+
   const selectTheme = (theme: typeof currentTheme.value) => {
     setTheme(theme)
     isThemeMenuOpen.value = false
+  }
+
+  const addPersonToNewSite = () => {
+    // "New Site" camera has ID cam-02 (Camera 2)
+    addRandomPersonOverlay('cam-02')
   }
 </script>
 <template>
@@ -111,11 +188,56 @@
     <nav class="flex-1 p-4 overflow-y-auto">
       <ul class="space-y-2">
         <li v-for="item in navigationItems" :key="item.name">
+          <!-- Item with children (expandable) -->
+          <template v-if="item.children">
+            <button
+              @click="toggleMenu(item.name)"
+              class="w-full flex items-center justify-between px-3 py-2 text-xs font-medium rounded-lg transition-colors"
+              :class="
+                isMenuActive(item)
+                  ? 'bg-accent text-accent-foreground border border-accent'
+                  : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground border border-transparent'
+              "
+            >
+              <div class="flex items-center">
+                <component :is="item.icon" class="w-5 h-5 mr-3" />
+                {{ item.name }}
+              </div>
+              <ChevronDown
+                class="w-4 h-4 transition-transform"
+                :class="{ 'rotate-180': expandedMenus.has(item.name) }"
+              />
+            </button>
+
+            <!-- Children -->
+            <ul
+              v-show="expandedMenus.has(item.name)"
+              class="mt-1 ml-4 space-y-1 border-l border-border pl-2"
+            >
+              <li v-for="child in item.children" :key="child.name">
+                <router-link
+                  :to="child.path!"
+                  class="flex items-center px-3 py-2 text-xs font-medium rounded-lg transition-colors"
+                  :class="
+                    isActiveRoute(child.path!)
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground'
+                  "
+                >
+                  <component :is="child.icon" class="w-4 h-4 mr-2" />
+                  {{ child.name }}
+                </router-link>
+              </li>
+            </ul>
+          </template>
+
+          <!-- Item without children (regular link) -->
           <router-link
-            :to="item.path"
+            v-else
+            :to="item.path!"
             class="flex items-center px-3 py-2 text-xs font-medium rounded-lg transition-colors"
             :class="
-              isActiveRoute(item.path)
+              isActiveRoute(item.path!)
                 ? 'bg-accent text-accent-foreground border border-accent'
                 : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground border border-transparent'
             "
@@ -126,6 +248,40 @@
         </li>
       </ul>
     </nav>
+
+    <!-- DevTools -->
+    <div class="px-4 pb-4 relative">
+      <button
+        @click="toggleDevToolsMenu"
+        class="w-full flex items-center justify-between px-3 py-2 text-xs font-medium rounded-lg transition-colors text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
+        title="DevTools"
+      >
+        <div class="flex items-center">
+          <Wrench class="w-4 h-4 mr-2" />
+          DevTools
+        </div>
+        <ChevronDown
+          class="w-4 h-4 transition-transform"
+          :class="{ 'rotate-180': isDevToolsMenuOpen }"
+        />
+      </button>
+
+      <!-- DevTools Dropdown -->
+      <div
+        v-show="isDevToolsMenuOpen"
+        class="absolute bottom-full left-4 right-4 mb-2 bg-popover border border-border rounded-lg shadow-lg overflow-hidden"
+      >
+        <div class="p-3 space-y-2">
+          <p class="text-xs font-semibold text-popover-foreground">Camera Overlays</p>
+          <button
+            @click="addPersonToNewSite"
+            class="w-full px-3 py-2 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            Add Random Person (New Site)
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Theme Switcher -->
     <div class="px-4 pb-4 relative">

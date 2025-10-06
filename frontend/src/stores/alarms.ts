@@ -12,7 +12,6 @@ export const useAlarmStore = defineStore('alarms', () => {
 
   // Filters
   const filters = ref({
-    type: '' as Alarm['type'] | '',
     severity: '' as Alarm['severity'] | '',
     acknowledged: '' as 'true' | 'false' | '',
   })
@@ -25,10 +24,6 @@ export const useAlarmStore = defineStore('alarms', () => {
 
   const filteredAlarms = computed(() => {
     let result = [...alarms.value]
-
-    if (filters.value.type) {
-      result = result.filter((alarm) => alarm.type === filters.value.type)
-    }
 
     if (filters.value.severity) {
       result = result.filter((alarm) => alarm.severity === filters.value.severity)
@@ -49,7 +44,7 @@ export const useAlarmStore = defineStore('alarms', () => {
   })
 
   const hasFilters = computed(
-    () => filters.value.type || filters.value.severity || filters.value.acknowledged
+    () => filters.value.severity || filters.value.acknowledged
   )
 
   // Actions
@@ -82,6 +77,9 @@ export const useAlarmStore = defineStore('alarms', () => {
         alarm.acknowledged = true
         alarm.acknowledgedBy = acknowledgedBy
         alarm.acknowledgedAt = new Date().toISOString()
+        if (alarm.status === 'pending') {
+          alarm.status = 'acknowledged'
+        }
       }
 
       // Also update in mock data
@@ -92,13 +90,135 @@ export const useAlarmStore = defineStore('alarms', () => {
     }
   }
 
+  async function confirmAlarm(
+    alarmId: string,
+    confirmedBy: string,
+    data: {
+      notes?: string
+      outcomeCategory?: string
+      createIncident?: boolean
+    }
+  ) {
+    try {
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      const alarm = alarms.value.find((a) => a.id === alarmId)
+      if (alarm) {
+        alarm.status = 'confirmed'
+        alarm.confirmedBy = confirmedBy
+        alarm.confirmedAt = new Date().toISOString()
+        if (data.outcomeCategory) {
+          alarm.outcomeCategory = data.outcomeCategory as any
+        }
+        if (data.notes) {
+          alarm.closureNotes = data.notes
+        }
+        if (data.createIncident !== false) {
+          alarm.incidentId = `incident-${Date.now()}`
+        }
+      }
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to confirm alarm'
+      throw err
+    }
+  }
+
+  async function dismissAlarm(
+    alarmId: string,
+    dismissedBy: string,
+    data: {
+      reason: string
+      outcomeCategory?: string
+      closureNotes?: string
+    }
+  ) {
+    try {
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      const alarm = alarms.value.find((a) => a.id === alarmId)
+      if (alarm) {
+        alarm.status = 'dismissed'
+        alarm.dismissedBy = dismissedBy
+        alarm.dismissedAt = new Date().toISOString()
+        alarm.dismissalReason = data.reason
+        if (data.outcomeCategory) {
+          alarm.outcomeCategory = data.outcomeCategory as any
+        }
+        if (data.closureNotes) {
+          alarm.closureNotes = data.closureNotes
+        }
+      }
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to dismiss alarm'
+      throw err
+    }
+  }
+
+  async function addTags(alarmId: string, tags: string[]) {
+    try {
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      const alarm = alarms.value.find((a) => a.id === alarmId)
+      if (alarm) {
+        if (!alarm.tags) {
+          alarm.tags = []
+        }
+        tags.forEach(tag => {
+          if (!alarm.tags!.includes(tag)) {
+            alarm.tags!.push(tag)
+          }
+        })
+      }
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to add tags'
+      throw err
+    }
+  }
+
+  async function archiveAlarm(alarmId: string, archivedBy: string) {
+    try {
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      const alarm = alarms.value.find((a) => a.id === alarmId)
+      if (alarm) {
+        alarm.status = 'archived'
+        ;(alarm as any).archivedBy = archivedBy
+        ;(alarm as any).archivedAt = new Date().toISOString()
+      }
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to archive alarm'
+      throw err
+    }
+  }
+
+  async function unarchiveAlarm(alarmId: string) {
+    try {
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      const alarm = alarms.value.find((a) => a.id === alarmId)
+      if (alarm) {
+        // Restore to previous status or default to acknowledged
+        alarm.status = alarm.dismissedAt ? 'dismissed' : alarm.confirmedAt ? 'confirmed' : 'acknowledged'
+        ;(alarm as any).archivedBy = undefined
+        ;(alarm as any).archivedAt = undefined
+      }
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to unarchive alarm'
+      throw err
+    }
+  }
+
   function setFilters(newFilters: Partial<typeof filters.value>) {
     filters.value = { ...filters.value, ...newFilters }
   }
 
   function clearFilters() {
     filters.value = {
-      type: '',
       severity: '',
       acknowledged: '',
     }
@@ -124,6 +244,11 @@ export const useAlarmStore = defineStore('alarms', () => {
     // Actions
     fetchAlarms,
     acknowledgeAlarm,
+    confirmAlarm,
+    dismissAlarm,
+    addTags,
+    archiveAlarm,
+    unarchiveAlarm,
     setFilters,
     clearFilters,
     getAlarmById,
