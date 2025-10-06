@@ -1,7 +1,9 @@
 <template>
   <div class="h-full w-full bg-background flex">
-    <!-- Left Panel - Site Map Selector -->
+    <!-- Left Panel - Changes based on mode -->
+    <!-- Viewer Mode: Site Map Selector -->
     <SiteMapSelector
+      v-if="!isEditingMode"
       :site-maps="siteMaps"
       :selected-map-id="selectedMapId"
       @select="selectMap"
@@ -20,12 +22,101 @@
       </template>
     </SiteMapSelector>
 
+    <!-- Editor Mode: Site Map Details Form -->
+    <div v-else class="w-64 border-r bg-card overflow-y-auto flex flex-col">
+      <div class="p-4 border-b flex items-center justify-between gap-2">
+        <div class="flex-1 min-w-0">
+          <h2 class="text-base font-bold">Site Map Editor</h2>
+          <p class="text-xs text-muted-foreground mt-1">Configure cameras and walls</p>
+        </div>
+        <!-- Back Button -->
+        <button
+          @click="exitEditMode"
+          type="button"
+          class="px-2 py-1 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+          title="Back to Viewer"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m12 19-7-7 7-7"/>
+            <path d="M19 12H5"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Map Controls -->
+      <div class="p-3 border-b">
+        <MapControls
+          :show-grid="canvasOptions.showGrid"
+          :show-labels="canvasOptions.showCameraLabels"
+          :show-save="hasUnsavedChanges"
+          @toggle-grid="canvasOptions.showGrid = !canvasOptions.showGrid"
+          @toggle-labels="canvasOptions.showCameraLabels = !canvasOptions.showCameraLabels"
+          @save="saveConfiguration"
+        />
+      </div>
+
+      <!-- Site Map Details Form -->
+      <div class="p-4">
+        <div class="space-y-3">
+          <div>
+            <label class="block text-[10px] font-medium mb-1">Name</label>
+            <input
+              v-model="siteMapForm.name"
+              type="text"
+              class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background"
+              placeholder="Site map name"
+              @input="markAsChanged"
+            />
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-medium mb-1">Description</label>
+            <textarea
+              v-model="siteMapForm.description"
+              class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background resize-none"
+              rows="2"
+              placeholder="Optional description"
+              @input="markAsChanged"
+            ></textarea>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[10px] font-medium mb-1">Width (px)</label>
+              <input
+                v-model.number="siteMapForm.width"
+                type="number"
+                class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background"
+                placeholder="Width"
+                @input="markAsChanged"
+              />
+            </div>
+            <div>
+              <label class="block text-[10px] font-medium mb-1">Height (px)</label>
+              <input
+                v-model.number="siteMapForm.height"
+                type="number"
+                class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background"
+                placeholder="Height"
+                @input="markAsChanged"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Main Content - Site Map Display -->
     <div class="flex-1 flex overflow-hidden">
       <!-- Map Canvas Area -->
       <div class="flex-1 p-4 flex flex-col">
         <!-- Canvas Container -->
-        <div class="flex-1 border rounded-lg bg-gray-900 relative overflow-hidden" ref="canvasContainer">
+        <div
+          class="flex-1 border rounded-lg bg-gray-900 relative overflow-hidden"
+          ref="canvasContainer"
+          @dragover="onCanvasDragOver"
+          @drop="onCanvasDrop"
+        >
           <canvas
             ref="mapCanvas"
             @mousedown="handleMouseDown"
@@ -71,43 +162,98 @@
               <p class="text-sm text-gray-300">{{ currentMap ? 'Click "Configure Maps" to add cameras' : 'Select a site map from the list' }}</p>
             </div>
           </CanvasOverlay>
+
+          <!-- Wall Toolbar (Editor Mode Only) -->
+          <WallToolbar
+            v-if="isEditingMode"
+            :is-active="wallEditor.isActive.value"
+            :mode="wallEditor.mode.value"
+            :wall-type="wallEditor.drawState.value.wallType"
+            :selected-wall="wallEditor.selectedWall.value"
+            :show-grid="canvasOptions.showGrid"
+            :can-undo="false"
+            :can-redo="false"
+            @set-mode="wallEditor.setMode($event)"
+            @set-wall-type="wallEditor.setWallType($event)"
+            @delete-wall="deleteSelectedWall"
+            @toggle-grid="canvasOptions.showGrid = !canvasOptions.showGrid"
+            @undo="() => {}"
+            @redo="() => {}"
+            @zoom-in="zoomIn"
+            @zoom-out="zoomOut"
+            @reset-view="fitToView"
+          />
         </div>
       </div>
 
-      <!-- Right Panel - Camera Info -->
+      <!-- Right Panel - Changes based on mode -->
       <div class="w-80 border-l bg-card p-4 overflow-y-auto">
-        <h2 class="text-sm font-semibold mb-3">Cameras</h2>
+        <!-- Viewer Mode: Camera Info -->
+        <template v-if="!isEditingMode">
+          <h2 class="text-sm font-semibold mb-3">Cameras</h2>
 
-        <!-- Camera List -->
-        <CameraList
-          v-if="currentMap && currentMap.cameras.length > 0"
-          :cameras="currentMap.cameras"
-          :selected-camera-id="selectedCamera?.cameraId || null"
-          :get-camera-name="getCameraName"
-          :get-camera-status="getCameraStatus"
-          :get-color-hex="getColorHex"
-          @select="selectCameraById"
-        />
+          <!-- Camera List -->
+          <CameraList
+            v-if="currentMap && currentMap.cameras.length > 0"
+            :cameras="currentMap.cameras"
+            :selected-camera-id="selectedCamera?.cameraId || null"
+            :get-camera-name="getCameraName"
+            :get-camera-status="getCameraStatus"
+            :get-color-hex="getColorHex"
+            @select="selectCameraById"
+          />
 
-        <!-- Camera Details -->
-        <CameraDetailsPanel
-          :camera="selectedCamera"
-          :get-camera-name="getCameraName"
-          :get-camera-status="getCameraStatus"
-          :get-color-badge-class="getColorBadgeClass"
-          :get-color-badge-text="getColorBadgeText"
-          :scale="currentMap?.scale || 50"
-          @view-live="viewCameraLive"
-        >
-          <template #actions>
-            <button
-              @click="viewCameraLive"
-              class="w-full mt-3 px-3 py-1.5 bg-primary text-primary-foreground text-xs rounded-lg hover:bg-primary/90 transition-colors"
+          <!-- Camera Details -->
+          <CameraDetailsPanel
+            :camera="selectedCamera"
+            :get-camera-name="getCameraName"
+            :get-camera-status="getCameraStatus"
+            :get-color-badge-class="getColorBadgeClass"
+            :get-color-badge-text="getColorBadgeText"
+            :scale="currentMap?.scale || 50"
+            @view-live="viewCameraLive"
+          >
+            <template #actions>
+              <button
+                @click="viewCameraLive"
+                class="w-full mt-3 px-3 py-1.5 bg-primary text-primary-foreground text-xs rounded-lg hover:bg-primary/90 transition-colors"
+              >
+                View Live Feed
+              </button>
+            </template>
+          </CameraDetailsPanel>
+        </template>
+
+        <!-- Editor Mode: Available Cameras -->
+        <template v-else>
+          <h2 class="text-sm font-semibold mb-3">Available Cameras</h2>
+          <p class="text-xs text-muted-foreground mb-3">Drag cameras onto the map</p>
+
+          <!-- Available Cameras List -->
+          <div class="space-y-2">
+            <div
+              v-for="camera in availableCameras"
+              :key="camera.id"
+              draggable="true"
+              @dragstart="onCameraDragStart($event, camera)"
+              @dragend="onCameraDragEnd"
+              class="p-3 border rounded-lg cursor-move hover:bg-accent transition-colors"
             >
-              View Live Feed
-            </button>
-          </template>
-        </CameraDetailsPanel>
+              <div class="flex items-center gap-2 mb-1">
+                <div
+                  class="w-2 h-2 rounded-full shrink-0"
+                  :class="camera.status === 'online' ? 'bg-green-500' : 'bg-red-500'"
+                ></div>
+                <span class="font-medium text-sm">{{ camera.name }}</span>
+              </div>
+              <p class="text-xs text-muted-foreground">{{ camera.id }}</p>
+            </div>
+
+            <p v-if="availableCameras.length === 0" class="text-xs text-muted-foreground text-center py-4">
+              All cameras are placed on the map
+            </p>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -134,134 +280,6 @@
       </DialogContent>
     </Dialog>
 
-    <!-- Add New Site Map Modal -->
-    <Dialog :open="showAddMapDialog" @update:open="(open) => !open && closeAddMapDialog()">
-      <DialogContent class="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Add New Site Map</DialogTitle>
-          <DialogDescription>
-            Upload a floor plan image to create a new site map. You can configure cameras later.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div class="space-y-4 py-4">
-          <!-- Name Input -->
-          <div class="space-y-2">
-            <label for="map-name" class="text-sm font-medium">Name *</label>
-            <input
-              id="map-name"
-              v-model="newMapForm.name"
-              type="text"
-              placeholder="e.g., Building A - Floor 1"
-              class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-            />
-          </div>
-
-          <!-- Description Input -->
-          <div class="space-y-2">
-            <label for="map-description" class="text-sm font-medium">Description</label>
-            <textarea
-              id="map-description"
-              v-model="newMapForm.description"
-              placeholder="Optional description of this site map"
-              rows="3"
-              class="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-            ></textarea>
-          </div>
-
-          <!-- Floor Plan Upload -->
-          <div class="space-y-2">
-            <label for="floor-plan" class="text-sm font-medium">Floor Plan Image *</label>
-            <div class="border-2 border-dashed border-input rounded-lg p-6 hover:border-primary/50 transition-colors">
-              <input
-                id="floor-plan"
-                ref="fileInputRef"
-                type="file"
-                accept="image/*"
-                @change="handleFileSelect"
-                class="hidden"
-              />
-
-              <div v-if="!newMapForm.floorPlanFile" class="text-center">
-                <svg
-                  class="mx-auto h-12 w-12 text-muted-foreground"
-                  stroke="currentColor"
-                  fill="none"
-                  viewBox="0 0 48 48"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-                <div class="mt-4">
-                  <button
-                    type="button"
-                    @click="fileInputRef?.click()"
-                    class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors text-sm font-medium"
-                  >
-                    Choose File
-                  </button>
-                  <p class="mt-2 text-xs text-muted-foreground">
-                    PNG, JPG, GIF up to 10MB
-                  </p>
-                </div>
-              </div>
-
-              <div v-else class="flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                  <div class="h-16 w-16 rounded border overflow-hidden bg-muted">
-                    <img
-                      v-if="newMapForm.floorPlanPreview"
-                      :src="newMapForm.floorPlanPreview"
-                      :alt="newMapForm.floorPlanFile.name"
-                      class="h-full w-full object-cover"
-                    />
-                  </div>
-                  <div>
-                    <p class="text-sm font-medium">{{ newMapForm.floorPlanFile.name }}</p>
-                    <p class="text-xs text-muted-foreground">
-                      {{ formatFileSize(newMapForm.floorPlanFile.size) }}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  @click="clearFile"
-                  class="text-sm text-destructive hover:text-destructive/90"
-                >
-                  Remove
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <DialogFooter>
-          <button
-            type="button"
-            @click="closeAddMapDialog"
-            class="px-4 py-2 border rounded-md hover:bg-accent text-sm transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            @click.prevent="handleAddMap"
-            :disabled="!canSubmitNewMap"
-            class="px-4 py-2 rounded-md text-sm transition-colors"
-            :class="canSubmitNewMap
-              ? 'bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer'
-              : 'bg-muted text-muted-foreground cursor-not-allowed'"
-          >
-            Add Site Map
-          </button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   </div>
 </template>
 
@@ -272,19 +290,18 @@ import { useSiteMapStore } from '../stores/siteMaps'
 import { useCameraStore } from '../stores/cameras'
 import { useSiteMapCanvas, type CanvasRenderOptions } from '../composables/useSiteMapCanvas'
 import { useCanvasInteraction } from '../composables/useCanvasInteraction'
+import { useWallEditor } from '../composables/useWallEditor'
 import type { CameraPlacement } from '../stores/siteMaps'
+import type { Camera } from '../types/generated'
 import MapControls from '../components/features/site-map/MapControls.vue'
 import SiteMapSelector from '../components/features/site-map/SiteMapSelector.vue'
 import CameraList from '../components/features/camera/CameraList.vue'
 import CameraDetailsPanel from '../components/features/camera/CameraDetailsPanel.vue'
 import CanvasOverlay from '../components/layout/CanvasOverlay.vue'
+import WallToolbar from '../components/features/site-map/WallToolbar.vue'
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
 } from '../components/ui/dialog'
 import { useToast } from '@/composables/useToast'
 
@@ -293,9 +310,25 @@ const siteMapStore = useSiteMapStore()
 const cameraStore = useCameraStore()
 const { success: showSuccessToast, error: showErrorToast } = useToast()
 
+// Edit mode state
+const isEditingMode = ref(false)
+const editingMapId = ref<string | null>(null)
+
 const siteMaps = computed(() => siteMapStore.siteMaps)
 const selectedMapId = ref(siteMapStore.activeSiteMapId.value)
 const currentMap = computed(() => siteMaps.value.find(m => m.id === selectedMapId.value))
+
+// Track if initial render is complete to prevent visual snap
+const isInitialRenderComplete = ref(false)
+
+// Editor state
+const hasUnsavedChanges = ref(false)
+const siteMapForm = reactive({
+  name: '',
+  description: '',
+  width: 0,
+  height: 0,
+})
 
 const mapCanvas = ref<HTMLCanvasElement | null>(null)
 const canvasContainer = ref<HTMLDivElement | null>(null)
@@ -315,23 +348,22 @@ const feedVideoRef = ref<HTMLVideoElement | null>(null)
 const streamReady = ref(false)
 const activePeerConnection = ref<RTCPeerConnection | null>(null)
 
-// Add new site map modal
-const showAddMapDialog = ref(false)
-const fileInputRef = ref<HTMLInputElement | null>(null)
-const newMapForm = reactive({
-  name: '',
-  description: '',
-  floorPlanFile: null as File | null,
-  floorPlanPreview: null as string | null,
-})
-
-const canSubmitNewMap = computed(() => {
-  return newMapForm.name.trim() !== ''
-})
 
 // Composables
 const canvas = useSiteMapCanvas(mapCanvas, ref(canvasOptions))
 const interaction = useCanvasInteraction(mapCanvas, canvas.findCameraAtPoint)
+const wallEditor = useWallEditor()
+
+// Camera drag state
+const draggedCamera = ref<Camera | null>(null)
+
+// Available cameras (not yet placed on map)
+const availableCameras = computed(() => {
+  if (!currentMap.value) return cameraStore.cameras
+
+  const placedCameraIds = new Set(currentMap.value.cameras.map(c => c.cameraId))
+  return cameraStore.cameras.filter(c => !placedCameraIds.has(c.id))
+})
 
 // Canvas scaling and panning
 const scale = ref(1)
@@ -350,6 +382,8 @@ const canvasStyle = computed(() => ({
   top: `${offsetY.value}px`,
   transform: `scale(${scale.value})`,
   transformOrigin: 'top left',
+  opacity: isInitialRenderComplete.value ? 1 : 0,
+  transition: isInitialRenderComplete.value ? 'none' : 'opacity 0.1s',
 }))
 
 // Hovered camera
@@ -366,6 +400,7 @@ const hoveredCamera = computed(() => {
 
 const selectMap = async (mapId: string) => {
   console.log('[selectMap] START - mapId:', mapId)
+  console.log('[selectMap] isEditingMode:', isEditingMode.value)
 
   selectedMapId.value = mapId
   siteMapStore.setActiveSiteMap(mapId)
@@ -373,10 +408,58 @@ const selectMap = async (mapId: string) => {
 
   // Note: resizeCanvas() and fitToView() are handled by the watch on currentMap
   console.log('[selectMap] Map changed, watch will handle resize/fit')
+  console.log('[selectMap] Current scale/offset:', { scale: scale.value, offsetX: offsetX.value, offsetY: offsetY.value })
 }
 
 const editMap = (mapId: string) => {
-  router.push({ name: 'SiteMapEditor', params: { mapId } })
+  console.log('[editMap] Entering edit mode for mapId:', mapId)
+  isEditingMode.value = true
+  editingMapId.value = mapId
+
+  // Load site map details into form
+  if (currentMap.value) {
+    siteMapForm.name = currentMap.value.name
+    siteMapForm.description = currentMap.value.description || ''
+    siteMapForm.width = currentMap.value.width
+    siteMapForm.height = currentMap.value.height
+  }
+
+  // Reset flags and initialize wall editor
+  hasUnsavedChanges.value = false
+  wallEditor.setMode('draw')
+
+  // Redraw the canvas in edit mode
+  console.log('[editMap] Redrawing canvas for edit mode')
+  drawMap()
+  isInitialRenderComplete.value = true
+}
+
+const markAsChanged = () => {
+  hasUnsavedChanges.value = true
+}
+
+const saveConfiguration = () => {
+  if (currentMap.value) {
+    siteMapStore.updateSiteMap(currentMap.value.id, {
+      name: siteMapForm.name,
+      description: siteMapForm.description,
+      width: siteMapForm.width,
+      height: siteMapForm.height,
+    })
+    hasUnsavedChanges.value = false
+    showSuccessToast('Configuration saved successfully!')
+  }
+}
+
+const exitEditMode = () => {
+  console.log('[exitEditMode] START')
+  isEditingMode.value = false
+  editingMapId.value = null
+  wallEditor.setMode('none')
+
+  // Canvas stays mounted, just redraw
+  console.log('[exitEditMode] Redrawing canvas in viewer mode')
+  drawMap()
 }
 
 const getCameraName = (cameraId: string): string => {
@@ -492,49 +575,183 @@ const handleMouseDown = (event: MouseEvent) => {
   // Only start drag on left click
   if (event.button !== 0) return
 
-  isDragging.value = true
-  dragStart.value = {
-    x: event.clientX,
-    y: event.clientY,
-    offsetX: offsetX.value,
-    offsetY: offsetY.value
+  if (!isEditingMode.value) {
+    // Viewer mode: pan the canvas
+    isDragging.value = true
+    dragStart.value = {
+      x: event.clientX,
+      y: event.clientY,
+      offsetX: offsetX.value,
+      offsetY: offsetY.value
+    }
+    return
+  }
+
+  // Editor mode: wall drawing/editing
+  const canvasX = (event.clientX - canvasContainer.value!.getBoundingClientRect().left - offsetX.value) / scale.value
+  const canvasY = (event.clientY - canvasContainer.value!.getBoundingClientRect().top - offsetY.value) / scale.value
+
+  if (wallEditor.mode.value === 'draw') {
+    const snapped = wallEditor.snapPoint(canvasX, canvasY, currentMap.value?.walls || [])
+    wallEditor.startDrawing(snapped.x, snapped.y)
+    drawMap()
+  } else if (wallEditor.mode.value === 'edit' && currentMap.value) {
+    const wall = wallEditor.findWallAtPoint(canvasX, canvasY, currentMap.value.walls)
+    if (wall) {
+      const endpoint = wallEditor.findEndpointAtPoint(canvasX, canvasY, wall)
+      if (endpoint) {
+        wallEditor.startDraggingEndpoint(wall, endpoint)
+      } else {
+        wallEditor.selectWall(wall)
+      }
+    }
+  } else if (wallEditor.mode.value === 'delete' && currentMap.value) {
+    const wall = wallEditor.findWallAtPoint(canvasX, canvasY, currentMap.value.walls)
+    if (wall && currentMap.value) {
+      siteMapStore.removeWallFromSiteMap(currentMap.value.id, wall.id)
+      markAsChanged()
+      drawMap()
+    }
   }
 }
 
 const handleMouseMove = (event: MouseEvent) => {
   interaction.onMouseMove(event)
 
-  // Handle panning
-  if (isDragging.value) {
-    const dx = event.clientX - dragStart.value.x
-    const dy = event.clientY - dragStart.value.y
-    offsetX.value = dragStart.value.offsetX + dx
-    offsetY.value = dragStart.value.offsetY + dy
-    drawMap()
+  if (!isEditingMode.value) {
+    // Viewer mode: handle panning and hover
+    if (isDragging.value) {
+      const dx = event.clientX - dragStart.value.x
+      const dy = event.clientY - dragStart.value.y
+      offsetX.value = dragStart.value.offsetX + dx
+      offsetY.value = dragStart.value.offsetY + dy
+      drawMap()
+      return
+    }
+
+    // Handle hover detection
+    if (currentMap.value) {
+      const canvasX = (interaction.mouseX.value - offsetX.value) / scale.value
+      const canvasY = (interaction.mouseY.value - offsetY.value) / scale.value
+      const hovered = canvas.findCameraAtPoint(
+        canvasX,
+        canvasY,
+        currentMap.value.cameras
+      )
+      canvas.hoveredCameraId.value = hovered?.cameraId || null
+    }
+
+    canvas.requestRedraw(drawMap)
     return
   }
 
-  // Handle hover detection
-  if (currentMap.value) {
-    const canvasX = (interaction.mouseX.value - offsetX.value) / scale.value
-    const canvasY = (interaction.mouseY.value - offsetY.value) / scale.value
-    const hovered = canvas.findCameraAtPoint(
-      canvasX,
-      canvasY,
-      currentMap.value.cameras
-    )
-    canvas.hoveredCameraId.value = hovered?.cameraId || null
-  }
+  // Editor mode: wall drawing/editing
+  const canvasX = (event.clientX - canvasContainer.value!.getBoundingClientRect().left - offsetX.value) / scale.value
+  const canvasY = (event.clientY - canvasContainer.value!.getBoundingClientRect().top - offsetY.value) / scale.value
 
-  canvas.requestRedraw(drawMap)
+  if (wallEditor.drawState.value.isDrawing) {
+    const snapped = wallEditor.snapPoint(canvasX, canvasY, currentMap.value?.walls || [])
+    wallEditor.updateDrawing(snapped.x, snapped.y)
+    drawMap()
+  } else if (wallEditor.dragState.value.isDragging && currentMap.value) {
+    const updatedWall = wallEditor.updateDraggingEndpoint(canvasX, canvasY, currentMap.value.walls)
+    if (updatedWall) {
+      siteMapStore.updateWallInSiteMap(currentMap.value.id, updatedWall)
+      drawMap()
+    }
+  } else if (currentMap.value) {
+    wallEditor.updateHoverState(canvasX, canvasY, currentMap.value.walls, wallEditor.mode.value === 'edit')
+    drawMap()
+  }
 }
 
 const handleMouseUp = () => {
+  if (!isEditingMode.value) {
+    isDragging.value = false
+    return
+  }
+
+  // Editor mode: finish wall drawing/editing
+  if (wallEditor.drawState.value.isDrawing && currentMap.value) {
+    const newWall = wallEditor.finishDrawing()
+    if (newWall) {
+      siteMapStore.addWallToSiteMap(currentMap.value.id, newWall)
+      markAsChanged()
+      drawMap()
+    }
+  } else if (wallEditor.dragState.value.isDragging && currentMap.value) {
+    const wall = wallEditor.finishDraggingEndpoint()
+    if (wall) {
+      markAsChanged()
+      drawMap()
+    }
+  }
+
   isDragging.value = false
 }
 
 const handleMouseLeave = () => {
   isDragging.value = false
+  if (isEditingMode.value) {
+    wallEditor.resetDrawing()
+    wallEditor.clearHoverState()
+  }
+}
+
+// Wall operations
+const deleteSelectedWall = () => {
+  if (wallEditor.selectedWall.value && currentMap.value) {
+    siteMapStore.removeWallFromSiteMap(currentMap.value.id, wallEditor.selectedWall.value.id)
+    wallEditor.selectWall(null)
+    markAsChanged()
+    drawMap()
+  }
+}
+
+// Camera drag and drop
+const onCameraDragStart = (event: DragEvent, camera: Camera) => {
+  draggedCamera.value = camera
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('application/json', JSON.stringify(camera))
+  }
+}
+
+const onCameraDragEnd = () => {
+  draggedCamera.value = null
+}
+
+const onCanvasDragOver = (event: DragEvent) => {
+  if (!draggedCamera.value || !isEditingMode.value) return
+  event.preventDefault()
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move'
+  }
+}
+
+const onCanvasDrop = (event: DragEvent) => {
+  event.preventDefault()
+  if (!draggedCamera.value || !currentMap.value || !canvasContainer.value) return
+
+  const rect = canvasContainer.value.getBoundingClientRect()
+  const canvasX = (event.clientX - rect.left - offsetX.value) / scale.value
+  const canvasY = (event.clientY - rect.top - offsetY.value) / scale.value
+
+  // Add camera to map
+  const newPlacement: CameraPlacement = {
+    cameraId: draggedCamera.value.id,
+    x: Math.round(canvasX),
+    y: Math.round(canvasY),
+    rotation: 0,
+    fieldOfView: 90,
+    viewDistance: 200,
+    color: 'blue-500'
+  }
+
+  siteMapStore.addCameraToSiteMap(currentMap.value.id, newPlacement)
+  markAsChanged()
+  drawMap()
+  draggedCamera.value = null
 }
 
 const handleWheel = (event: WheelEvent) => {
@@ -623,12 +840,37 @@ const resetZoom = () => {
 
 const drawMap = () => {
   console.log('[drawMap] Called - scale/offset:', { scale: scale.value, offsetX: offsetX.value, offsetY: offsetY.value })
-  if (!currentMap.value) return
+  console.log('[drawMap] isEditingMode:', isEditingMode.value)
+
+  if (!currentMap.value) {
+    console.log('[drawMap] Skipping - no current map')
+    return
+  }
 
   canvas.clearCanvas()
   canvas.drawGrid()
   canvas.drawScaleReference()
   canvas.drawWalls(currentMap.value.walls)
+
+  // Draw wall preview in edit mode
+  if (isEditingMode.value && wallEditor.drawState.value.isDrawing) {
+    const start = wallEditor.drawState.value.startPoint
+    const current = wallEditor.drawState.value.currentPoint
+    if (start && current) {
+      const ctx = mapCanvas.value?.getContext('2d')
+      if (ctx) {
+        ctx.save()
+        ctx.strokeStyle = '#fbbf24' // Yellow preview
+        ctx.lineWidth = wallEditor.drawState.value.thickness
+        ctx.setLineDash([5, 5])
+        ctx.beginPath()
+        ctx.moveTo(start.x, start.y)
+        ctx.lineTo(current.x, current.y)
+        ctx.stroke()
+        ctx.restore()
+      }
+    }
+  }
 
   currentMap.value.cameras.forEach(camera => {
     const isSelected = selectedCamera.value?.cameraId === camera.cameraId
@@ -644,6 +886,8 @@ const resetCanvasTransform = () => {
 
 const fitToView = () => {
   console.log('[fitToView] START')
+  console.log('[fitToView] isEditingMode:', isEditingMode.value)
+
   const canvasEl = mapCanvas.value
   const container = canvasContainer.value
   if (!canvasEl || !container || !currentMap.value) {
@@ -787,114 +1031,29 @@ const closeCameraModal = () => {
 }
 
 const openAddMapDialog = () => {
-  showAddMapDialog.value = true
-}
+  console.log('[openAddMapDialog] Creating new site map')
+  // Create a new blank site map
+  const newMap = siteMapStore.addSiteMap({
+    name: 'New Site Map',
+    description: '',
+    imagePath: undefined,
+    width: 1000,
+    height: 800,
+    scale: 50, // Default scale: 50 pixels per meter
+    cameras: [],
+    walls: [],
+  })
 
-const closeAddMapDialog = () => {
-  showAddMapDialog.value = false
-  // Reset form
-  newMapForm.name = ''
-  newMapForm.description = ''
-  newMapForm.floorPlanFile = null
-  newMapForm.floorPlanPreview = null
-  if (fileInputRef.value) {
-    fileInputRef.value.value = ''
-  }
-}
-
-const handleFileSelect = (event: Event) => {
-  const target = event.target as HTMLInputElement
-  const file = target.files?.[0]
-
-  if (file) {
-    // Validate file size (10MB max)
-    const maxSize = 10 * 1024 * 1024
-    if (file.size > maxSize) {
-      showErrorToast('File size must be less than 10MB')
-      return
-    }
-
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      showErrorToast('Please select an image file')
-      return
-    }
-
-    newMapForm.floorPlanFile = file
-
-    // Create preview
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      newMapForm.floorPlanPreview = e.target?.result as string
-    }
-    reader.readAsDataURL(file)
-  }
-}
-
-const clearFile = () => {
-  newMapForm.floorPlanFile = null
-  newMapForm.floorPlanPreview = null
-  if (fileInputRef.value) {
-    fileInputRef.value.value = ''
-  }
-}
-
-const formatFileSize = (bytes: number): string => {
-  if (bytes === 0) return '0 Bytes'
-  const k = 1024
-  const sizes = ['Bytes', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
-}
-
-const handleAddMap = async () => {
-  if (!canSubmitNewMap.value) return
-
-  try {
-    let width = 1000
-    let height = 800
-    let imagePath: string | undefined = undefined
-
-    // If floor plan is provided, get its dimensions
-    if (newMapForm.floorPlanFile && newMapForm.floorPlanPreview) {
-      const img = new Image()
-      await new Promise((resolve, reject) => {
-        img.onload = () => {
-          width = img.width
-          height = img.height
-          resolve(null)
-        }
-        img.onerror = reject
-        img.src = newMapForm.floorPlanPreview!
-      })
-      imagePath = newMapForm.floorPlanPreview
-    }
-
-    // Create the new site map
-    const newMap = siteMapStore.addSiteMap({
-      name: newMapForm.name,
-      description: newMapForm.description || undefined,
-      imagePath,
-      width,
-      height,
-      scale: 50, // Default scale: 50 pixels per meter
-      cameras: [],
-      walls: [],
-    })
-
-    // Select the newly created map
-    selectMap(newMap.id)
-
-    showSuccessToast(`Site map "${newMapForm.name}" created successfully!`)
-    closeAddMapDialog()
-  } catch (error) {
-    console.error('Failed to create site map:', error)
-    showErrorToast('Failed to create site map. Please try again.')
-  }
+  console.log('[openAddMapDialog] New map created with id:', newMap.id)
+  // Enter edit mode with the new site map
+  isEditingMode.value = true
+  editingMapId.value = newMap.id
 }
 
 const resizeCanvas = () => {
   console.log('[resizeCanvas] START')
+  console.log('[resizeCanvas] isEditingMode:', isEditingMode.value)
+
   const canvasEl = mapCanvas.value
   if (!canvasEl || !currentMap.value) {
     console.log('[resizeCanvas] EARLY EXIT - missing elements')
@@ -905,7 +1064,19 @@ const resizeCanvas = () => {
   canvas.resizeCanvas(currentMap.value.width, currentMap.value.height)
   console.log('[resizeCanvas] Calling drawMap()')
   drawMap()
+
+  // Mark initial render as complete after first successful draw
+  if (!isInitialRenderComplete.value) {
+    console.log('[resizeCanvas] Marking initial render complete')
+    setTimeout(() => {
+      isInitialRenderComplete.value = true
+    }, 50)
+  }
 }
+
+watch(isEditingMode, (newValue, oldValue) => {
+  console.log('[watch isEditingMode] Changed from', oldValue, 'to', newValue)
+})
 
 watch([
   () => canvasOptions.showGrid,
@@ -915,39 +1086,108 @@ watch([
   canvas.requestRedraw(drawMap)
 })
 
-watch(currentMap, async (newMap) => {
-  console.log('[watch currentMap] Map changed')
+watch(currentMap, async (newMap, oldMap) => {
+  console.log('[watch currentMap] Map changed from', oldMap?.id, 'to', newMap?.id)
+  console.log('[watch currentMap] isEditingMode:', isEditingMode.value)
+
   if (newMap) {
+    console.log('[watch currentMap] Waiting for nextTick')
     // Wait for DOM to update, then set zoom/position before drawing
     await nextTick()
+    console.log('[watch currentMap] Calling fitToView and resizeCanvas')
+    // Important: Call fitToView FIRST to set transform, THEN resize which will draw
     fitToView()
+    // Small delay to ensure transform is applied before drawing
+    await nextTick()
     resizeCanvas()
   }
 })
 
+// Real-time camera status update interval
+let statusUpdateInterval: number | null = null
+
+// Resize handler
+const handleResize = () => {
+  resizeCanvas()
+  fitToView()
+}
+
 onMounted(() => {
-  if (!canvas.initCanvas()) return
+  console.log('[SiteMapViewer onMounted] START')
+  console.log('[SiteMapViewer onMounted] isEditingMode:', isEditingMode.value)
+
+  if (!canvas.initCanvas()) {
+    console.log('[SiteMapViewer onMounted] Failed to init canvas')
+    return
+  }
+
+  console.log('[SiteMapViewer onMounted] Canvas initialized')
+  console.log('[SiteMapViewer onMounted] selectedMapId:', selectedMapId.value)
+  console.log('[SiteMapViewer onMounted] currentMap:', currentMap.value?.id)
 
   // Auto-select first site map if none is currently selected or valid
   if ((!selectedMapId.value || !currentMap.value) && siteMaps.value.length > 0) {
+    console.log('[SiteMapViewer onMounted] Auto-selecting first map')
     selectMap(siteMaps.value[0].id)
   } else if (currentMap.value) {
+    console.log('[SiteMapViewer onMounted] Map already selected, rendering')
     // Map is already selected, render it
     resizeCanvas()
     drawMap()
-    setTimeout(fitToView, 100)
+    setTimeout(() => {
+      console.log('[SiteMapViewer onMounted] Fitting to view after 100ms')
+      fitToView()
+    }, 100)
   }
 
-  window.addEventListener('resize', () => {
-    resizeCanvas()
-    fitToView()
-  })
+  window.addEventListener('resize', handleResize)
+
+  // Set up real-time camera status updates
+  // In real implementation, this would use WebSocket or SSE for live updates
+  // Here we simulate it by periodically checking status and updating the display
+  statusUpdateInterval = window.setInterval(() => {
+    // Skip if in edit mode
+    if (isEditingMode.value) {
+      return
+    }
+
+    // Simulate random status changes for demonstration
+    // In production, this would fetch real status from backend
+    const cameras = cameraStore.cameras
+    let hasChanges = false
+
+    cameras.forEach(camera => {
+      // 5% chance of status change per update cycle
+      if (Math.random() < 0.05) {
+        const currentStatus = camera.status
+        const newStatus = currentStatus === 'online' ? 'offline' : 'online'
+
+        // Update the camera status in the store
+        // This simulates receiving a status update from the backend
+        camera.status = newStatus
+        hasChanges = true
+      }
+    })
+
+    // Redraw the map if there were any status changes
+    if (hasChanges && currentMap.value) {
+      drawMap()
+    }
+  }, 3000) // Update every 3 seconds
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', resizeCanvas)
+  console.log('[SiteMapViewer onUnmounted] Cleaning up')
+  window.removeEventListener('resize', handleResize)
+
   if (activePeerConnection.value) {
     activePeerConnection.value.close()
+  }
+
+  // Clear the status update interval
+  if (statusUpdateInterval !== null) {
+    clearInterval(statusUpdateInterval)
+    statusUpdateInterval = null
   }
 })
 </script>

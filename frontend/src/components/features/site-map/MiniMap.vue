@@ -78,8 +78,8 @@ const drawMiniMap = () => {
   ctx.lineWidth = 1
   props.siteMap.walls.forEach(wall => {
     ctx.beginPath()
-    ctx.moveTo(offsetXMini + wall.x1 * miniScale, offsetYMini + wall.y1 * miniScale)
-    ctx.lineTo(offsetXMini + wall.x2 * miniScale, offsetYMini + wall.y2 * miniScale)
+    ctx.moveTo(offsetXMini + wall.start.x * miniScale, offsetYMini + wall.start.y * miniScale)
+    ctx.lineTo(offsetXMini + wall.end.x * miniScale, offsetYMini + wall.end.y * miniScale)
     ctx.stroke()
   })
 

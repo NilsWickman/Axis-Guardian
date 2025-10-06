@@ -1,9 +1,10 @@
 <template>
   <div class="h-full flex flex-col">
-    <div class="flex justify-between items-center mb-3 px-4 pt-4">
-      <h1 class="text-xl font-semibold text-foreground">Users</h1>
+    <div class="flex justify-between items-center p-4 border-b border-sidebar-border">
+      <h1 class="text-base font-bold text-foreground">Users</h1>
       <div class="flex gap-2">
-        <Button size="sm" @click="refreshUsers">Refresh</Button>
+        <Button size="sm" variant="outline" @click="refreshUsers">Refresh</Button>
+        <Button size="sm" @click="openAddUserDialog">Add User</Button>
       </div>
     </div>
 
@@ -123,6 +124,58 @@
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+
+    <!-- Add User Dialog -->
+    <Dialog v-model:open="addDialogOpen">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add New User</DialogTitle>
+          <DialogDescription>
+            Create a new user account
+          </DialogDescription>
+        </DialogHeader>
+        <div class="space-y-4">
+          <div class="space-y-2">
+            <label class="text-sm font-medium">Username</label>
+            <Input v-model="newUserForm.username" placeholder="Enter username" />
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium">Email</label>
+            <Input v-model="newUserForm.email" type="email" placeholder="Enter email" />
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium">Password</label>
+            <Input v-model="newUserForm.password" type="password" placeholder="Enter password" />
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium">Confirm Password</label>
+            <Input v-model="newUserForm.confirmPassword" type="password" placeholder="Confirm password" />
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium">Role</label>
+            <Select v-model="newUserForm.role">
+              <SelectTrigger>
+                <SelectValue placeholder="Select role" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="operator">Operator</SelectItem>
+                <SelectItem value="viewer">Viewer</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div v-if="addUserError" class="p-3 bg-destructive/10 border border-destructive/20 rounded text-sm">
+            <p class="text-destructive font-medium">{{ addUserError }}</p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="addDialogOpen = false">Cancel</Button>
+          <Button @click="createNewUser" :disabled="loading">
+            {{ loading ? 'Creating...' : 'Create User' }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 
@@ -180,6 +233,17 @@ const passwordError = ref('')
 // Delete dialog state
 const deleteDialogOpen = ref(false)
 const deletingUser = ref<User | null>(null)
+
+// Add user dialog state
+const addDialogOpen = ref(false)
+const newUserForm = ref({
+  username: '',
+  email: '',
+  password: '',
+  confirmPassword: '',
+  role: 'viewer' as 'admin' | 'operator' | 'viewer'
+})
+const addUserError = ref('')
 
 // Per-row loading states
 const deletingUserId = ref<string | null>(null)
@@ -301,12 +365,82 @@ const confirmDelete = async () => {
   }
 }
 
+const openAddUserDialog = () => {
+  newUserForm.value = {
+    username: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    role: 'viewer'
+  }
+  addUserError.value = ''
+  addDialogOpen.value = true
+}
+
+const createNewUser = async () => {
+  addUserError.value = ''
+
+  // Validate form
+  if (!newUserForm.value.username.trim()) {
+    addUserError.value = 'Username is required'
+    return
+  }
+
+  if (!newUserForm.value.email.trim()) {
+    addUserError.value = 'Email is required'
+    return
+  }
+
+  if (!newUserForm.value.password) {
+    addUserError.value = 'Password is required'
+    return
+  }
+
+  if (newUserForm.value.password.length < 6) {
+    addUserError.value = 'Password must be at least 6 characters'
+    return
+  }
+
+  if (newUserForm.value.password !== newUserForm.value.confirmPassword) {
+    addUserError.value = 'Passwords do not match'
+    return
+  }
+
+  try {
+    await authStore.createUser({
+      username: newUserForm.value.username,
+      email: newUserForm.value.email,
+      password: newUserForm.value.password,
+      role: newUserForm.value.role
+    })
+
+    addDialogOpen.value = false
+    newUserForm.value = {
+      username: '',
+      email: '',
+      password: '',
+      confirmPassword: '',
+      role: 'viewer'
+    }
+  } catch (err) {
+    addUserError.value = err instanceof Error ? err.message : 'Failed to create user'
+    console.error('Failed to create user:', err)
+  }
+}
+
 // Clear password error when user types
 watch([newPassword, repeatPassword], () => {
   if (passwordError.value) {
     passwordError.value = ''
   }
 })
+
+// Clear add user error when user types
+watch(() => newUserForm.value, () => {
+  if (addUserError.value) {
+    addUserError.value = ''
+  }
+}, { deep: true })
 
 onMounted(() => {
   refreshUsers()

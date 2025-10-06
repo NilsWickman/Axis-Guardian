@@ -20,6 +20,16 @@
       Labels
     </button>
 
+    <button
+      v-if="showSnapToggle"
+      @click="$emit('toggleSnap')"
+      class="px-3 py-1.5 border rounded-lg hover:bg-accent text-xs transition-colors"
+      :class="snapToGrid ? 'bg-accent' : ''"
+      title="Toggle Snap to Grid (S)"
+    >
+      🧲 Snap
+    </button>
+
     <!-- Zoom Controls -->
     <template v-if="showZoomControls">
       <div class="w-px bg-border"></div>
@@ -99,10 +109,10 @@
     <button
       v-if="showSave"
       @click="$emit('save')"
-      class="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-sm"
+      class="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-xs font-medium"
       title="Save Configuration (Ctrl+S)"
     >
-      Save Configuration
+      Save
     </button>
   </div>
 </template>
@@ -113,6 +123,8 @@ interface Props {
   showScaleReference?: boolean
   showLabels?: boolean
   showLabelsToggle?: boolean
+  snapToGrid?: boolean
+  showSnapToggle?: boolean
   showHistory?: boolean
   canUndo?: boolean
   canRedo?: boolean
@@ -128,6 +140,8 @@ withDefaults(defineProps<Props>(), {
   showScaleReference: true,
   showLabels: true,
   showLabelsToggle: true,
+  snapToGrid: false,
+  showSnapToggle: false,
   showHistory: false,
   canUndo: false,
   canRedo: false,
@@ -142,6 +156,7 @@ defineEmits<{
   toggleGrid: []
   toggleScale: []
   toggleLabels: []
+  toggleSnap: []
   undo: []
   redo: []
   fitToView: []

@@ -1,31 +1,41 @@
 <template>
   <div class="h-full w-full bg-background flex">
     <!-- Left Panel - Camera Configuration Form -->
-    <div class="w-64 border-r bg-card p-4 overflow-y-auto">
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="text-lg font-bold">Site Map Editor</h2>
+    <div class="w-64 border-r bg-card overflow-y-auto flex flex-col">
+      <div class="p-4 border-b flex items-center justify-between gap-2">
+        <div class="flex-1 min-w-0">
+          <h2 class="text-base font-bold">Site Map Editor</h2>
+          <p class="text-xs text-muted-foreground mt-1">Configure cameras and walls</p>
+        </div>
+        <!-- Back Button -->
         <button
           @click="goToViewer"
-          class="px-2 py-1 text-xs bg-secondary text-secondary-foreground rounded hover:bg-secondary/90"
+          type="button"
+          class="px-2 py-1 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+          title="Back to Viewer"
         >
-          ← Viewer
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m12 19-7-7 7-7"/>
+            <path d="M19 12H5"/>
+          </svg>
         </button>
       </div>
 
+      <!-- Map Controls -->
+      <div class="p-3 border-b">
+        <MapControls
+          :show-grid="canvasOptions.showGrid"
+          :show-labels="canvasOptions.showCameraLabels"
+          :show-save="hasUnsavedChanges"
+          @toggle-grid="canvasOptions.showGrid = !canvasOptions.showGrid; interaction.snapToGrid.value = canvasOptions.showGrid; wallEditor.setSnapOptions({ snapToGrid: canvasOptions.showGrid }); drawMap()"
+          @toggle-labels="canvasOptions.showCameraLabels = !canvasOptions.showCameraLabels"
+          @save="saveConfiguration"
+        />
+      </div>
+
       <!-- Site Map Details Form -->
-      <div class="space-y-3 pb-4 border-b mb-4">
-        <div>
-          <label class="block text-[10px] font-medium mb-1">Site Map</label>
-          <select
-            v-model="selectedSiteMapId"
-            @change="onSiteMapChange"
-            class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background"
-          >
-            <option v-for="map in siteMaps" :key="map.id" :value="map.id">
-              {{ map.name }}
-            </option>
-          </select>
-        </div>
+      <div class="p-4">
+        <div class="space-y-3 pb-4 border-b mb-4">
 
         <div>
           <label class="block text-[10px] font-medium mb-1">Name</label>
@@ -34,6 +44,7 @@
             type="text"
             class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background"
             placeholder="Site map name"
+            @input="markAsChanged"
           />
         </div>
 
@@ -44,6 +55,7 @@
             class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background resize-none"
             rows="2"
             placeholder="Optional description"
+            @input="markAsChanged"
           ></textarea>
         </div>
 
@@ -55,6 +67,7 @@
               type="number"
               class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background"
               placeholder="Width"
+              @input="markAsChanged"
             />
           </div>
           <div>
@@ -64,20 +77,35 @@
               type="number"
               class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background"
               placeholder="Height"
+              @input="markAsChanged"
             />
           </div>
         </div>
 
-        <button
-          @click="updateSiteMapDetails"
-          class="w-full px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
-        >
-          Update Details
-        </button>
+        <!-- Background Image Upload -->
+        <div>
+          <label class="block text-[10px] font-medium mb-1">Background Image</label>
+          <input
+            type="file"
+            accept="image/*"
+            @change="handleBackgroundImageUpload"
+            class="w-full px-2 py-1.5 text-xs border rounded-lg bg-background file:mr-2 file:px-2 file:py-1 file:rounded file:border-0 file:bg-secondary file:text-secondary-foreground"
+          />
+        </div>
       </div>
 
+      <!-- Bulk Edit Panel -->
+      <BulkEditPanel
+        v-if="cameraSelection.hasSelection() && !placement.selectedCameraId.value"
+        :selected-count="cameraSelection.getSelectedCount()"
+        @apply-field="handleBulkApplyField"
+        @apply-all="handleBulkApplyAll"
+        @delete-selected="handleDeleteSelected"
+        @clear-selection="cameraSelection.clearSelection(); drawMap()"
+      />
+
       <!-- Camera Configuration Form -->
-      <div v-if="placement.selectedCameraId.value">
+      <div v-if="placement.selectedCameraId.value && !wallEditor.isActive.value && !cameraSelection.hasSelection()">
         <h3 class="text-sm font-semibold mb-3">Camera Configuration</h3>
         <CameraConfigForm
         :config="placement.cameraConfig.value"
@@ -92,32 +120,12 @@
         @remove="removeCameraFromMap"
         />
       </div>
+      </div>
+
     </div>
 
     <!-- Middle Panel - 2D Map Canvas -->
     <div class="flex-1 p-4 flex flex-col">
-      <div class="flex justify-between items-center mb-4">
-        <h2 class="text-lg font-bold">
-          {{ currentSiteMap?.name || 'Site Map' }}
-        </h2>
-
-        <MapControls
-          :show-grid="canvasOptions.showGrid"
-          :show-labels="canvasOptions.showCameraLabels"
-          :show-history="true"
-          :can-undo="history.canUndo.value"
-          :can-redo="history.canRedo.value"
-          :show-reset-view="true"
-          :show-save="true"
-          @toggle-grid="canvasOptions.showGrid = !canvasOptions.showGrid"
-          @toggle-labels="canvasOptions.showCameraLabels = !canvasOptions.showCameraLabels"
-          @undo="handleUndo"
-          @redo="handleRedo"
-          @reset-view="drawMap"
-          @save="saveConfiguration"
-        />
-      </div>
-
       <!-- Canvas Container -->
       <div class="flex-1 border rounded-lg bg-gray-900 relative overflow-hidden" ref="canvasContainer">
         <canvas
@@ -127,13 +135,38 @@
           @mouseup="handleMouseUp"
           @mouseleave="handleMouseUp"
           @click="handleCanvasClick"
-          :class="interaction.dragState.value.isDragging ? 'cursor-grabbing' : 'cursor-crosshair'"
+          @wheel="handleWheel"
+          :class="getCanvasCursor()"
           :style="canvasStyle"
         ></canvas>
 
+        <!-- Wall Toolbar -->
+        <WallToolbar
+          :is-active="wallEditor.isActive.value"
+          :mode="wallEditor.mode.value"
+          :wall-type="wallEditor.drawState.value.wallType"
+          :selected-wall="wallEditor.selectedWall.value"
+          :show-grid="canvasOptions.showGrid"
+          :can-undo="history.canUndo.value"
+          :can-redo="history.canRedo.value"
+          @set-mode="(mode) => { wallEditor.setMode(mode); drawMap() }"
+          @set-wall-type="(type) => { wallEditor.setWallType(type); drawMap() }"
+          @delete-wall="handleDeleteWall"
+          @toggle-grid="canvasOptions.showGrid = !canvasOptions.showGrid; interaction.snapToGrid.value = canvasOptions.showGrid; wallEditor.setSnapOptions({ snapToGrid: canvasOptions.showGrid }); drawMap()"
+          @undo="handleUndo"
+          @redo="handleRedo"
+          @zoom-in="interaction.handleZoom(1, (canvasContainer?.clientWidth || 0) / 2, (canvasContainer?.clientHeight || 0) / 2); drawMap()"
+          @zoom-out="interaction.handleZoom(-1, (canvasContainer?.clientWidth || 0) / 2, (canvasContainer?.clientHeight || 0) / 2); drawMap()"
+          @reset-view="fitToView(); drawMap()"
+        />
+
         <!-- Coordinates Display -->
         <div class="absolute bottom-4 left-4 bg-black/70 text-white px-3 py-1.5 rounded text-sm font-mono">
-          Mouse: ({{ Math.round((interaction.mouseX.value - offsetX) / scale) }}, {{ Math.round((interaction.mouseY.value - offsetY) / scale) }})
+          <div>Mouse: ({{ Math.round(interaction.mouseX.value / interaction.scale.value) }}, {{ Math.round(interaction.mouseY.value / interaction.scale.value) }}) px</div>
+          <div class="text-[10px] text-gray-300">
+            {{ (interaction.mouseX.value / interaction.scale.value / PIXELS_PER_METER).toFixed(2) }}m,
+            {{ (interaction.mouseY.value / interaction.scale.value / PIXELS_PER_METER).toFixed(2) }}m
+          </div>
         </div>
 
         <!-- Hover Tooltip -->
@@ -173,10 +206,19 @@
           v-for="camera in availableCameras"
           :key="camera.id"
           @click="selectCamera(camera.id)"
-          class="w-full text-left px-3 py-2 rounded-lg border transition-colors hover:bg-accent"
+          class="w-full text-left px-3 py-2 rounded-lg border transition-colors hover:bg-accent relative"
           :class="placement.selectedCameraId.value === camera.id ? 'bg-accent border-primary' : 'border-border'"
         >
-          <div class="font-medium text-sm">{{ camera.name }}</div>
+          <div class="font-medium text-sm flex items-center gap-2">
+            {{ camera.name }}
+            <span
+              v-if="cameraWarnings.has(camera.id)"
+              class="text-yellow-500"
+              :title="cameraWarnings.get(camera.id)?.map(w => w.message).join('\n')"
+            >
+              ⚠️
+            </span>
+          </div>
           <div class="text-xs text-muted-foreground mt-0.5">{{ camera.id }}</div>
           <div class="flex items-center gap-1 mt-1">
             <div
@@ -187,6 +229,17 @@
               {{ camera.status }}
             </span>
           </div>
+          <!-- Show warnings if any -->
+          <div v-if="cameraWarnings.has(camera.id)" class="mt-1 space-y-0.5">
+            <div
+              v-for="(warning, idx) in cameraWarnings.get(camera.id)"
+              :key="idx"
+              class="text-[10px] text-yellow-600 flex items-start gap-1"
+            >
+              <span>•</span>
+              <span>{{ warning.message }}</span>
+            </div>
+          </div>
         </button>
       </div>
     </div>
@@ -195,18 +248,30 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, reactive } from 'vue'
-import { useRouter } from 'vue-router'
 import { useCameraStore } from '../stores/cameras'
-import { useSiteMapStore, type CameraPlacement } from '../stores/siteMaps'
+import { useSiteMapStore, type CameraPlacement, type Wall } from '../stores/siteMaps'
+
+interface Props {
+  mapId: string
+}
+
+const props = defineProps<Props>()
+const emit = defineEmits<{
+  back: []
+}>()
 import { useSiteMapCanvas, type CanvasRenderOptions } from '../composables/useSiteMapCanvas'
 import { useCameraPlacement } from '../composables/useCameraPlacement'
 import { useCanvasInteraction } from '../composables/useCanvasInteraction'
 import { useConfigHistory } from '../composables/useConfigHistory'
 import { useToast } from '../composables/useToast'
+import { useWallEditor } from '../composables/useWallEditor'
+import { useCameraSelection } from '../composables/useCameraSelection'
+import { useCameraValidation } from '../composables/useCameraValidation'
 import CameraConfigForm from '../components/features/site-map/CameraConfigForm.vue'
 import MapControls from '../components/features/site-map/MapControls.vue'
+import WallToolbar from '../components/features/site-map/WallToolbar.vue'
+import BulkEditPanel from '../components/features/site-map/BulkEditPanel.vue'
 
-const router = useRouter()
 const siteMapStore = useSiteMapStore()
 const cameraStore = useCameraStore()
 const toast = useToast()
@@ -215,10 +280,12 @@ const PIXELS_PER_METER = 50
 
 // Data
 const siteMaps = computed(() => siteMapStore.siteMaps)
-const selectedSiteMapId = ref(siteMapStore.activeSiteMapId.value)
+// Use prop mapId
+const selectedSiteMapId = ref(props.mapId)
 const currentSiteMap = computed(() => siteMaps.value.find(m => m.id === selectedSiteMapId.value))
 const availableCameras = computed(() => cameraStore.cameras)
 const placedCameras = ref<CameraPlacement[]>([])
+const hasUnsavedChanges = ref(false)
 
 // Site map form
 const siteMapForm = reactive({
@@ -238,16 +305,11 @@ const canvasOptions = reactive<CanvasRenderOptions>({
   pixelsPerMeter: PIXELS_PER_METER
 })
 
-// Canvas scaling
-const scale = ref(1)
-const offsetX = ref(0)
-const offsetY = ref(0)
-
 const canvasStyle = computed(() => ({
   position: 'absolute' as const,
-  left: `${offsetX.value}px`,
-  top: `${offsetY.value}px`,
-  transform: `scale(${scale.value})`,
+  left: `${interaction.offsetX.value}px`,
+  top: `${interaction.offsetY.value}px`,
+  transform: `scale(${interaction.scale.value})`,
   transformOrigin: 'top left',
 }))
 
@@ -256,6 +318,27 @@ const canvas = useSiteMapCanvas(mapCanvas, ref(canvasOptions))
 const placement = useCameraPlacement(PIXELS_PER_METER)
 const interaction = useCanvasInteraction(mapCanvas, canvas.findCameraAtPoint)
 const history = useConfigHistory<CameraPlacement[]>()
+const wallEditor = useWallEditor()
+const cameraSelection = useCameraSelection()
+const cameraValidation = useCameraValidation()
+
+// Set grid size from pixels per meter
+interaction.gridSize.value = PIXELS_PER_METER
+wallEditor.setSnapOptions({ gridSize: PIXELS_PER_METER })
+
+// Camera warnings
+const cameraWarnings = computed(() => {
+  if (!currentSiteMap.value) return new Map()
+
+  const warnings = new Map<string, ReturnType<typeof cameraValidation.validateCamera>>()
+  placedCameras.value.forEach(camera => {
+    const cameraWarnings = cameraValidation.validateCamera(camera, currentSiteMap.value.walls)
+    if (cameraWarnings.length > 0) {
+      warnings.set(camera.cameraId, cameraWarnings)
+    }
+  })
+  return warnings
+})
 
 // Validation
 const validation = computed(() => placement.validateConfig())
@@ -272,6 +355,30 @@ const hoveredCamera = computed(() => {
   )
 })
 
+// Get cursor style based on current state
+const getCanvasCursor = () => {
+  if (interaction.panState.value.isPanning) return 'cursor-grabbing'
+  if (interaction.dragState.value.isDragging) return 'cursor-move'
+
+  if (wallEditor.isActive.value && wallEditor.mode.value === 'edit') {
+    const hoveredPart = wallEditor.hoverState.value.hoveredPart
+    if (hoveredPart === 'start' || hoveredPart === 'end') {
+      return 'cursor-move' // Show move cursor for endpoints
+    } else if (hoveredPart === 'body') {
+      return 'cursor-pointer' // Show pointer for wall body
+    }
+  }
+
+  if (wallEditor.isActive.value) return 'cursor-crosshair'
+
+  return 'cursor-default'
+}
+
+// Mark as changed
+const markAsChanged = () => {
+  hasUnsavedChanges.value = true
+}
+
 // Keyboard shortcuts
 const handleKeyDown = (e: KeyboardEvent) => {
   if (e.ctrlKey || e.metaKey) {
@@ -284,19 +391,89 @@ const handleKeyDown = (e: KeyboardEvent) => {
     } else if (e.key === 's') {
       e.preventDefault()
       saveConfiguration()
+    } else if (e.key === 'c') {
+      // Copy camera config
+      if (placement.selectedCameraId.value && placement.isUpdating.value) {
+        e.preventDefault()
+        const camera = placedCameras.value.find(c => c.cameraId === placement.selectedCameraId.value)
+        if (camera) {
+          cameraSelection.copyCameraConfig(camera)
+          toast.success('Camera configuration copied')
+        }
+      }
+    } else if (e.key === 'v') {
+      // Paste camera config
+      if (placement.selectedCameraId.value && placement.isUpdating.value && cameraSelection.hasCopiedConfig()) {
+        e.preventDefault()
+        const camera = placedCameras.value.find(c => c.cameraId === placement.selectedCameraId.value)
+        if (camera) {
+          const updated = cameraSelection.pasteCameraConfig(camera)
+          placement.loadPlacedCamera(updated)
+          toast.success('Camera configuration pasted')
+          drawMap()
+        }
+      }
+    } else if (e.key === 'a') {
+      // Select all cameras
+      e.preventDefault()
+      cameraSelection.selectAll(placedCameras.value.map(c => c.cameraId))
+      toast.success(`Selected ${placedCameras.value.length} cameras`)
     }
   } else if (e.key === 'Delete' || e.key === 'Backspace') {
-    if (placement.selectedCameraId.value && placement.isUpdating.value) {
+    if (cameraSelection.hasSelection()) {
+      e.preventDefault()
+      handleDeleteSelected()
+    } else if (placement.selectedCameraId.value && placement.isUpdating.value) {
       e.preventDefault()
       removeCameraFromMap()
+    } else if (wallEditor.selectedWall.value) {
+      e.preventDefault()
+      handleDeleteWall()
     }
   } else if (e.key === 'Escape') {
-    placement.resetConfig()
+    if (wallEditor.isActive.value) {
+      wallEditor.setMode('none')
+    } else {
+      cameraSelection.clearSelection()
+      placement.resetConfig()
+    }
     drawMap()
   } else if (e.key === 'g') {
     canvasOptions.showGrid = !canvasOptions.showGrid
   } else if (e.key === 'l') {
     canvasOptions.showCameraLabels = !canvasOptions.showCameraLabels
+  } else if (e.key === 's') {
+    interaction.toggleSnapToGrid()
+    toast.success(`Snap to grid ${interaction.snapToGrid.value ? 'enabled' : 'disabled'}`)
+  } else if (e.key === 'w') {
+    // Toggle wall editor
+    if (wallEditor.isActive.value) {
+      wallEditor.setMode('none')
+    } else {
+      wallEditor.setMode('draw')
+    }
+    drawMap()
+  } else if (e.key === 'd' && wallEditor.isActive.value) {
+    // Draw mode (only when wall editor is active)
+    wallEditor.setMode('draw')
+    drawMap()
+  } else if (e.key === 'e' && wallEditor.isActive.value) {
+    // Edit mode (only when wall editor is active)
+    wallEditor.setMode('edit')
+    drawMap()
+  } else if (e.key === 'x' && wallEditor.isActive.value) {
+    // Delete mode (only when wall editor is active)
+    wallEditor.setMode('delete')
+    drawMap()
+  } else if (e.key === '1' && wallEditor.isActive.value) {
+    // Internal wall type
+    wallEditor.setWallType('internal')
+  } else if (e.key === '2' && wallEditor.isActive.value) {
+    // External wall type
+    wallEditor.setWallType('external')
+  } else if (e.key === '3' && wallEditor.isActive.value) {
+    // Door wall type
+    wallEditor.setWallType('door')
   }
 }
 
@@ -380,6 +557,7 @@ const addCameraToMap = () => {
   // Switch to edit mode
   placement.loadPlacedCamera(newPlacement)
 
+  markAsChanged()
   toast.success('Camera placed successfully')
   drawMap()
 }
@@ -393,6 +571,7 @@ const removeCameraFromMap = () => {
     history.addToHistory([...placedCameras.value])
 
     placement.resetConfig()
+    markAsChanged()
     toast.success('Camera removed from map')
     drawMap()
   }
@@ -418,57 +597,273 @@ const handleRedo = () => {
   }
 }
 
+// Wall editor handlers
+const handleActivateWallEditor = () => {
+  console.log('Activating wall editor')
+  wallEditor.setMode('draw')
+  console.log('Wall editor mode set to:', wallEditor.mode.value, 'isActive:', wallEditor.isActive.value)
+  drawMap()
+}
+
+const handleDeleteWall = () => {
+  if (!currentSiteMap.value || !wallEditor.selectedWall.value) return
+
+  siteMapStore.updateSiteMap(currentSiteMap.value.id, {
+    walls: currentSiteMap.value.walls.filter(w => w.id !== wallEditor.selectedWall.value?.id)
+  })
+  wallEditor.selectWall(null)
+  markAsChanged()
+  toast.success('Wall deleted')
+  drawMap()
+}
+
+// Camera selection handlers
+const handleDeleteSelected = () => {
+  if (!cameraSelection.hasSelection()) return
+
+  const selectedIds = cameraSelection.getSelectedIds()
+  placedCameras.value = placedCameras.value.filter(c => !selectedIds.includes(c.cameraId))
+
+  history.addToHistory([...placedCameras.value])
+  cameraSelection.clearSelection()
+
+  toast.success(`Deleted ${selectedIds.length} camera(s)`)
+  drawMap()
+}
+
+const handleBulkApplyField = (field: string, value: any) => {
+  if (!cameraSelection.hasSelection()) return
+
+  const selectedIds = cameraSelection.getSelectedIds()
+  placedCameras.value = placedCameras.value.map(camera => {
+    if (selectedIds.includes(camera.cameraId)) {
+      return { ...camera, [field]: value }
+    }
+    return camera
+  })
+
+  history.addToHistory([...placedCameras.value])
+  toast.success(`Updated ${field} for ${selectedIds.length} camera(s)`)
+  drawMap()
+}
+
+const handleBulkApplyAll = (config: any) => {
+  if (!cameraSelection.hasSelection()) return
+
+  const selectedIds = cameraSelection.getSelectedIds()
+  placedCameras.value = placedCameras.value.map(camera => {
+    if (selectedIds.includes(camera.cameraId)) {
+      return { ...camera, ...config }
+    }
+    return camera
+  })
+
+  history.addToHistory([...placedCameras.value])
+  toast.success(`Updated ${selectedIds.length} camera(s)`)
+  drawMap()
+}
+
 // Canvas interaction handlers
 const handleMouseDown = (event: MouseEvent) => {
-  // Convert to canvas coordinates
   const coords = interaction.getCanvasCoordinates(event)
-  const canvasX = (coords.x - offsetX.value) / scale.value
-  const canvasY = (coords.y - offsetY.value) / scale.value
+  // getCanvasCoordinates already accounts for canvas position, just need to account for scale
+  const canvasX = coords.x / interaction.scale.value
+  const canvasY = coords.y / interaction.scale.value
 
+  console.log('MouseDown - Wall editor active:', wallEditor.isActive.value, 'Mode:', wallEditor.mode.value, 'Coords:', canvasX, canvasY)
+
+  // Wall editor mode - but allow camera interaction in edit mode
+  if (wallEditor.isActive.value) {
+    console.log('Wall editor is active, handling wall interaction')
+    if (wallEditor.mode.value === 'draw') {
+      const walls = currentSiteMap.value?.walls || []
+      const snapped = wallEditor.snapPoint(canvasX, canvasY, walls)
+      console.log('Starting to draw wall at', snapped.x, snapped.y)
+      wallEditor.startDrawing(snapped.x, snapped.y)
+      return
+    } else if (wallEditor.mode.value === 'delete') {
+      if (!currentSiteMap.value) return
+      const wall = wallEditor.findWallAtPoint(canvasX, canvasY, currentSiteMap.value.walls)
+      if (wall) {
+        siteMapStore.updateSiteMap(currentSiteMap.value.id, {
+          walls: currentSiteMap.value.walls.filter(w => w.id !== wall.id)
+        })
+        markAsChanged()
+        toast.success('Wall deleted')
+        drawMap()
+      }
+      return
+    } else if (wallEditor.mode.value === 'edit') {
+      // In edit mode, first check for walls, then allow camera interaction
+      if (!currentSiteMap.value) return
+      const wall = wallEditor.findWallAtPoint(canvasX, canvasY, currentSiteMap.value.walls)
+      if (wall) {
+        // Edit mode - check if clicking on an endpoint
+        const endpoint = wallEditor.findEndpointAtPoint(canvasX, canvasY, wall)
+        if (endpoint) {
+          wallEditor.startDraggingEndpoint(wall, endpoint)
+        } else {
+          wallEditor.selectWall(wall)
+        }
+        drawMap()
+        return
+      }
+      // If no wall was clicked, fall through to allow camera interaction
+    }
+  }
+
+  // Pan mode with Space or middle mouse button
+  if (event.button === 1 || event.shiftKey) {
+    interaction.startPan(event.clientX, event.clientY)
+    return
+  }
+
+  // Camera interaction
   const camera = canvas.findCameraAtPoint(canvasX, canvasY, placedCameras.value)
   if (camera) {
-    interaction.startDrag(camera, coords.x, coords.y)
-    placement.loadPlacedCamera(camera)
+    // Multi-select with Ctrl/Cmd
+    if (event.ctrlKey || event.metaKey) {
+      cameraSelection.toggleSelection(camera.cameraId, true)
+    } else {
+      cameraSelection.clearSelection()
+      interaction.startDrag(camera, coords.x, coords.y)
+      placement.loadPlacedCamera(camera)
+    }
     canvas.requestRedraw(drawMap)
+  } else {
+    // Deselect if clicking on empty space
+    if (!event.ctrlKey && !event.metaKey) {
+      cameraSelection.clearSelection()
+      canvas.requestRedraw(drawMap)
+    }
   }
 }
 
 const handleMouseMove = (event: MouseEvent) => {
   interaction.onMouseMove(event)
 
-  // Convert screen coordinates to canvas coordinates accounting for scale
   const screenX = interaction.mouseX.value
   const screenY = interaction.mouseY.value
-  const canvasX = (screenX - offsetX.value) / scale.value
-  const canvasY = (screenY - offsetY.value) / scale.value
+  // mouseX/mouseY are already relative to canvas, just need to account for scale
+  const canvasX = screenX / interaction.scale.value
+  const canvasY = screenY / interaction.scale.value
 
-  // Update hovered camera using canvas coordinates
-  const hovered = canvas.findCameraAtPoint(
-    canvasX,
-    canvasY,
-    placedCameras.value
-  )
+  // Handle panning
+  if (interaction.panState.value.isPanning) {
+    interaction.updatePan(event.clientX, event.clientY)
+    canvas.requestRedraw(drawMap)
+    return
+  }
+
+  // Handle wall drawing
+  if (wallEditor.drawState.value.isDrawing) {
+    const walls = currentSiteMap.value?.walls || []
+    const snapped = wallEditor.snapPoint(canvasX, canvasY, walls)
+    console.log('Updating wall drawing position to', snapped.x, snapped.y)
+    wallEditor.updateDrawing(snapped.x, snapped.y)
+    canvas.requestRedraw(drawMap)
+    return
+  }
+
+  // Handle wall endpoint dragging
+  if (wallEditor.dragState.value.isDragging) {
+    const walls = currentSiteMap.value?.walls || []
+    const updatedWall = wallEditor.updateDraggingEndpoint(canvasX, canvasY, walls)
+    if (updatedWall) {
+      wallEditor.dragState.value.draggedWall = updatedWall
+      canvas.requestRedraw(drawMap)
+    }
+    return
+  }
+
+  // Update wall hover state when in edit mode
+  if (wallEditor.isActive.value && wallEditor.mode.value === 'edit' && currentSiteMap.value) {
+    wallEditor.updateHoverState(canvasX, canvasY, currentSiteMap.value.walls, true)
+  } else {
+    wallEditor.clearHoverState()
+  }
+
+  // Update hovered camera
+  const hovered = canvas.findCameraAtPoint(canvasX, canvasY, placedCameras.value)
   canvas.hoveredCameraId.value = hovered?.cameraId || null
 
   // Handle dragging
   if (interaction.dragState.value.isDragging && placement.selectedCameraId.value) {
     const newPos = interaction.onDragMove(event)
     if (newPos) {
-      const adjustedX = (newPos.x - offsetX.value) / scale.value
-      const adjustedY = (newPos.y - offsetY.value) / scale.value
+      let adjustedX = (newPos.x - interaction.offsetX.value) / interaction.scale.value
+      let adjustedY = (newPos.y - interaction.offsetY.value) / interaction.scale.value
+
+      // Apply snap to grid
+      if (interaction.snapToGrid.value) {
+        const snapped = interaction.snapToGridPoint(adjustedX, adjustedY)
+        adjustedX = snapped.x
+        adjustedY = snapped.y
+      }
+
       placement.updatePosition(adjustedX, adjustedY)
     }
   }
 
   // Handle preview (new placement mode)
   if (placement.selectedCameraId.value && !placement.isUpdating.value) {
-    placement.updatePosition(canvasX, canvasY)
+    let previewX = canvasX
+    let previewY = canvasY
+
+    // Apply snap to grid
+    if (interaction.snapToGrid.value) {
+      const snapped = interaction.snapToGridPoint(canvasX, canvasY)
+      previewX = snapped.x
+      previewY = snapped.y
+    }
+
+    placement.updatePosition(previewX, previewY)
   }
 
   canvas.requestRedraw(drawMap)
 }
 
 const handleMouseUp = () => {
+  // End panning
+  if (interaction.panState.value.isPanning) {
+    interaction.endPan()
+    return
+  }
+
+  // Finish wall drawing
+  if (wallEditor.drawState.value.isDrawing) {
+    console.log('Finishing wall drawing')
+    const newWall = wallEditor.finishDrawing()
+    console.log('New wall created:', newWall)
+    if (newWall && currentSiteMap.value) {
+      console.log('Adding wall to site map')
+      siteMapStore.updateSiteMap(currentSiteMap.value.id, {
+        walls: [...currentSiteMap.value.walls, newWall]
+      })
+      markAsChanged()
+      toast.success('Wall added')
+      drawMap()
+    }
+    return
+  }
+
+  // Finish wall endpoint dragging
+  if (wallEditor.dragState.value.isDragging) {
+    const draggedWall = wallEditor.finishDraggingEndpoint()
+    if (draggedWall && currentSiteMap.value) {
+      const updatedWalls = currentSiteMap.value.walls.map(w =>
+        w.id === draggedWall.id ? draggedWall : w
+      )
+      siteMapStore.updateSiteMap(currentSiteMap.value.id, {
+        walls: updatedWalls
+      })
+      markAsChanged()
+      toast.success('Wall endpoint updated')
+      drawMap()
+    }
+    return
+  }
+
   const { wasDragging } = interaction.onMouseUp()
 
   if (wasDragging && placement.selectedCameraId.value && placement.isUpdating.value) {
@@ -481,11 +876,29 @@ const handleCanvasClick = (event: MouseEvent) => {
   // Only place on click if in new placement mode (not updating/editing)
   if (placement.selectedCameraId.value && !placement.isUpdating.value) {
     const coords = interaction.getCanvasCoordinates(event)
-    const canvasX = (coords.x - offsetX.value) / scale.value
-    const canvasY = (coords.y - offsetY.value) / scale.value
+    let canvasX = coords.x / interaction.scale.value
+    let canvasY = coords.y / interaction.scale.value
+
+    // Apply snap to grid
+    if (interaction.snapToGrid.value) {
+      const snapped = interaction.snapToGridPoint(canvasX, canvasY)
+      canvasX = snapped.x
+      canvasY = snapped.y
+    }
+
     placement.updatePosition(canvasX, canvasY)
     addCameraToMap()
   }
+}
+
+const handleWheel = (event: WheelEvent) => {
+  event.preventDefault()
+
+  const mouseX = event.clientX - (canvasContainer.value?.getBoundingClientRect().left || 0)
+  const mouseY = event.clientY - (canvasContainer.value?.getBoundingClientRect().top || 0)
+
+  interaction.handleZoom(event.deltaY > 0 ? -1 : 1, mouseX, mouseY)
+  canvas.requestRedraw(drawMap)
 }
 
 // Drawing
@@ -493,21 +906,60 @@ const drawMap = () => {
   if (!currentSiteMap.value) return
 
   canvas.clearCanvas()
+
+  // Draw background image if loaded
+  canvas.drawBackgroundImage()
+
   canvas.drawGrid()
   canvas.drawScaleReference()
-  canvas.drawWalls(currentSiteMap.value.walls)
+
+  // Draw walls with selection, but use the dragged wall if dragging
+  const wallsToDraw = wallEditor.dragState.value.isDragging && wallEditor.dragState.value.draggedWall
+    ? currentSiteMap.value.walls.map(w =>
+        w.id === wallEditor.dragState.value.draggedWall?.id ? wallEditor.dragState.value.draggedWall : w
+      )
+    : currentSiteMap.value.walls
+  canvas.drawWalls(
+    wallsToDraw,
+    wallEditor.selectedWall.value?.id,
+    wallEditor.hoverState.value.hoveredWall?.id,
+    wallEditor.hoverState.value.hoveredPart
+  )
+
+  // Draw wall preview if drawing
+  if (wallEditor.drawState.value.isDrawing && wallEditor.drawState.value.startPoint && wallEditor.drawState.value.currentPoint) {
+    console.log('Drawing wall preview from', wallEditor.drawState.value.startPoint, 'to', wallEditor.drawState.value.currentPoint)
+    canvas.drawPreviewWall(
+      wallEditor.drawState.value.startPoint,
+      wallEditor.drawState.value.currentPoint,
+      wallEditor.drawState.value.wallType,
+      wallEditor.drawState.value.thickness
+    )
+    // Draw measurements for wall being drawn
+    canvas.drawWallMeasurements(
+      wallEditor.drawState.value.startPoint,
+      wallEditor.drawState.value.currentPoint,
+      PIXELS_PER_METER
+    )
+  }
+
+  // Draw measurements when dragging wall endpoint
+  if (wallEditor.dragState.value.isDragging && wallEditor.dragState.value.draggedWall) {
+    const wall = wallEditor.dragState.value.draggedWall
+    canvas.drawWallMeasurements(wall.start, wall.end, PIXELS_PER_METER)
+  }
 
   // Draw all placed cameras except the one being edited
   placedCameras.value.forEach(camera => {
     if (placement.isUpdating.value && placement.selectedPlacedCamera.value?.cameraId === camera.cameraId) {
       return
     }
-    const isSelected = false
+    const isSelected = cameraSelection.isSelected(camera.cameraId)
     canvas.drawCamera(camera, getCameraName, isSelected, false, currentSiteMap.value.walls)
   })
 
-  // Draw preview or editing camera
-  if (placement.selectedCameraId.value) {
+  // Draw preview or editing camera (allow in edit mode)
+  if (placement.selectedCameraId.value && (!wallEditor.isActive.value || wallEditor.mode.value === 'edit')) {
     const preview = placement.createPlacement()
     const isPreview = !placement.isUpdating.value
     canvas.drawCamera(preview, getCameraName, true, isPreview, currentSiteMap.value.walls)
@@ -533,7 +985,10 @@ const loadSiteMapCameras = () => {
     siteMapForm.height = currentSiteMap.value.height
 
     resizeCanvas()
-    setTimeout(fitToView, 100)
+    setTimeout(() => {
+      fitToView()
+      drawMap()
+    }, 100)
   }
 }
 
@@ -554,14 +1009,19 @@ const updateSiteMapDetails = () => {
 const saveConfiguration = () => {
   if (currentSiteMap.value) {
     siteMapStore.updateSiteMap(currentSiteMap.value.id, {
-      cameras: placedCameras.value
+      cameras: placedCameras.value,
+      name: siteMapForm.name,
+      description: siteMapForm.description,
+      width: siteMapForm.width,
+      height: siteMapForm.height,
     })
+    hasUnsavedChanges.value = false
     toast.success('Configuration saved successfully!')
   }
 }
 
 const goToViewer = () => {
-  router.push('/site-config')
+  emit('back')
 }
 
 const fitToView = () => {
@@ -569,19 +1029,49 @@ const fitToView = () => {
   const container = canvasContainer.value
   if (!canvasEl || !container || !currentSiteMap.value) return
 
-  const containerWidth = container.clientWidth
-  const containerHeight = container.clientHeight
-  const mapWidth = currentSiteMap.value.width
-  const mapHeight = currentSiteMap.value.height
+  interaction.resetView(
+    currentSiteMap.value.width,
+    currentSiteMap.value.height,
+    container.clientWidth,
+    container.clientHeight
+  )
+}
 
-  const padding = 40
-  const scaleX = (containerWidth - padding * 2) / mapWidth
-  const scaleY = (containerHeight - padding * 2) / mapHeight
-  const newScale = Math.min(scaleX, scaleY, 1)
+const handleDeleteSiteMap = () => {
+  if (!currentSiteMap.value) return
 
-  scale.value = newScale
-  offsetX.value = (containerWidth - mapWidth * newScale) / 2
-  offsetY.value = (containerHeight - mapHeight * newScale) / 2
+  if (confirm(`Are you sure you want to delete "${currentSiteMap.value.name}"? This cannot be undone.`)) {
+    siteMapStore.deleteSiteMap(currentSiteMap.value.id)
+    toast.success('Site map deleted')
+    // Go back to viewer
+    emit('back')
+  }
+}
+
+const handleBackgroundImageUpload = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  if (!input.files || !input.files[0]) return
+
+  const file = input.files[0]
+  const reader = new FileReader()
+
+  reader.onload = async (e) => {
+    const imagePath = e.target?.result as string
+    if (!currentSiteMap.value) return
+
+    try {
+      await canvas.loadBackgroundImage(imagePath)
+      siteMapStore.updateSiteMap(currentSiteMap.value.id, {
+        imagePath
+      })
+      toast.success('Background image uploaded')
+      drawMap()
+    } catch (error) {
+      toast.error('Failed to load background image')
+    }
+  }
+
+  reader.readAsDataURL(file)
 }
 
 const resizeCanvas = () => {
@@ -600,9 +1090,29 @@ watch([
   canvas.requestRedraw(drawMap)
 })
 
+// Watch for mapId changes
+watch(() => props.mapId, (newMapId) => {
+  selectedSiteMapId.value = newMapId
+  loadSiteMapCameras()
+})
+
 // Lifecycle
-onMounted(() => {
+onMounted(async () => {
   if (!canvas.initCanvas()) return
+
+  // Set the active site map in the store
+  if (selectedSiteMapId.value) {
+    siteMapStore.setActiveSiteMap(selectedSiteMapId.value)
+  }
+
+  // Load background image if exists
+  if (currentSiteMap.value?.imagePath) {
+    try {
+      await canvas.loadBackgroundImage(currentSiteMap.value.imagePath)
+    } catch (error) {
+      console.error('Failed to load background image:', error)
+    }
+  }
 
   loadSiteMapCameras()
 
@@ -612,7 +1122,8 @@ onMounted(() => {
   })
   window.addEventListener('keydown', handleKeyDown)
 
-  drawMap()
+  // Activate wall editor by default
+  wallEditor.setMode('draw')
 })
 
 onUnmounted(() => {

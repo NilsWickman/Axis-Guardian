@@ -1,4 +1,4 @@
-import { ref, computed, type Ref } from 'vue'
+import { ref, type Ref } from 'vue'
 import type { CameraPlacement, Wall } from '../stores/siteMaps'
 import { calculateVisibleFOV, drawPolygon, type LineSegment } from './useGeometry'
 
@@ -264,7 +264,12 @@ export function useSiteMapCanvas(
     context.restore()
   }
 
-  const drawWalls = (walls: Wall[]) => {
+  const drawWalls = (
+    walls: Wall[],
+    selectedWallId?: string | null,
+    hoveredWallId?: string | null,
+    hoveredPart?: 'start' | 'end' | 'body' | null
+  ) => {
     if (!ctx.value || !walls || walls.length === 0) return
 
     const context = ctx.value
@@ -272,7 +277,9 @@ export function useSiteMapCanvas(
     context.save()
 
     walls.forEach((wall) => {
-      const { start, end, type = 'internal', thickness = 4 } = wall
+      const { start, end, type = 'internal', thickness = 4, id } = wall
+      const isSelected = selectedWallId === id
+      const isHovered = hoveredWallId === id
 
       // Wall styling based on type
       const wallStyles = {
@@ -283,15 +290,27 @@ export function useSiteMapCanvas(
 
       const style = wallStyles[type] || wallStyles.internal
 
-      context.strokeStyle = style.color
-      context.lineWidth = style.width
+      // Highlight selected or hovered wall
+      if (isSelected) {
+        context.strokeStyle = '#06b6d4' // cyan-500
+        context.lineWidth = style.width + 4
+      } else if (isHovered) {
+        context.strokeStyle = '#f59e0b' // amber-500 for hover
+        context.lineWidth = style.width + 3
+      } else {
+        context.strokeStyle = style.color
+        context.lineWidth = style.width
+      }
+
       context.lineCap = 'round'
 
       // Draw door differently (with a gap or arc)
       if (type === 'door') {
         // Draw door as a dashed line
         context.setLineDash([8, 6])
-        context.strokeStyle = '#60a5fa'
+        if (!isSelected && !isHovered) {
+          context.strokeStyle = '#60a5fa'
+        }
       } else {
         context.setLineDash([])
       }
@@ -302,7 +321,166 @@ export function useSiteMapCanvas(
       context.stroke()
 
       context.setLineDash([])
+
+      // Draw handles for selected wall
+      if (isSelected) {
+        // Draw larger endpoint handles
+        context.strokeStyle = '#1e293b' // slate-800
+        context.lineWidth = 2
+        context.fillStyle = '#06b6d4' // cyan-500
+
+        // Start endpoint
+        context.beginPath()
+        context.arc(start.x, start.y, 7, 0, Math.PI * 2)
+        context.fill()
+        context.stroke()
+
+        // End endpoint
+        context.beginPath()
+        context.arc(end.x, end.y, 7, 0, Math.PI * 2)
+        context.fill()
+        context.stroke()
+      }
+
+      // Draw hover feedback for endpoints when in edit mode
+      if (isHovered && hoveredPart) {
+        context.fillStyle = 'rgba(245, 158, 11, 0.5)' // Semi-transparent amber-500
+
+        if (hoveredPart === 'start') {
+          // Highlight start endpoint
+          context.beginPath()
+          context.arc(start.x, start.y, 10, 0, Math.PI * 2)
+          context.fill()
+
+          // Draw label
+          context.fillStyle = '#ffffff'
+          context.font = 'bold 11px sans-serif'
+          context.textAlign = 'center'
+          context.textBaseline = 'middle'
+          context.fillText('DRAG', start.x, start.y - 18)
+        } else if (hoveredPart === 'end') {
+          // Highlight end endpoint
+          context.beginPath()
+          context.arc(end.x, end.y, 10, 0, Math.PI * 2)
+          context.fill()
+
+          // Draw label
+          context.fillStyle = '#ffffff'
+          context.font = 'bold 11px sans-serif'
+          context.textAlign = 'center'
+          context.textBaseline = 'middle'
+          context.fillText('DRAG', end.x, end.y - 18)
+        } else if (hoveredPart === 'body') {
+          // Show that the whole wall can be moved (future feature)
+          // For now, just show a subtle highlight
+        }
+      }
     })
+
+    context.restore()
+  }
+
+  const drawPreviewWall = (start: { x: number; y: number }, end: { x: number; y: number }, wallType: 'external' | 'internal' | 'door', thickness: number) => {
+    if (!ctx.value) return
+
+    const context = ctx.value
+
+    context.save()
+
+    const wallStyles = {
+      external: { color: '#ffffff', width: thickness + 2 },
+      internal: { color: '#cccccc', width: thickness },
+      door: { color: '#60a5fa', width: thickness - 1 },
+    }
+
+    const style = wallStyles[wallType] || wallStyles.internal
+
+    context.strokeStyle = style.color
+    context.globalAlpha = 0.6
+    context.lineWidth = style.width
+    context.lineCap = 'round'
+
+    if (wallType === 'door') {
+      context.setLineDash([8, 6])
+    }
+
+    context.beginPath()
+    context.moveTo(start.x, start.y)
+    context.lineTo(end.x, end.y)
+    context.stroke()
+
+    context.setLineDash([])
+
+    // Draw endpoints
+    context.fillStyle = style.color
+    context.beginPath()
+    context.arc(start.x, start.y, 4, 0, Math.PI * 2)
+    context.fill()
+    context.beginPath()
+    context.arc(end.x, end.y, 4, 0, Math.PI * 2)
+    context.fill()
+
+    context.restore()
+  }
+
+  const drawWallMeasurements = (start: { x: number; y: number }, end: { x: number; y: number }, pixelsPerMeter: number = 50) => {
+    if (!ctx.value) return
+
+    const context = ctx.value
+    context.save()
+
+    // Calculate distance and angle
+    const dx = end.x - start.x
+    const dy = end.y - start.y
+    const distancePixels = Math.sqrt(dx * dx + dy * dy)
+    const distanceMeters = distancePixels / pixelsPerMeter
+    const angleDegrees = Math.atan2(dy, dx) * (180 / Math.PI)
+
+    // Calculate midpoint
+    const midX = (start.x + end.x) / 2
+    const midY = (start.y + end.y) / 2
+
+    // Draw distance label
+    context.font = 'bold 12px monospace'
+    context.fillStyle = '#ffffff'
+    context.strokeStyle = '#000000'
+    context.lineWidth = 3
+    context.textAlign = 'center'
+    context.textBaseline = 'middle'
+
+    const distanceText = `${distanceMeters.toFixed(2)}m`
+
+    // Draw background for text
+    const metrics = context.measureText(distanceText)
+    const padding = 4
+    context.fillStyle = 'rgba(0, 0, 0, 0.7)'
+    context.fillRect(
+      midX - metrics.width / 2 - padding,
+      midY - 20 - 8,
+      metrics.width + padding * 2,
+      16
+    )
+
+    // Draw text with stroke for better visibility
+    context.strokeText(distanceText, midX, midY - 20)
+    context.fillStyle = '#ffffff'
+    context.fillText(distanceText, midX, midY - 20)
+
+    // Draw angle label
+    const angleText = `${angleDegrees.toFixed(1)}°`
+    const angleMetrics = context.measureText(angleText)
+
+    context.fillStyle = 'rgba(0, 0, 0, 0.7)'
+    context.fillRect(
+      midX - angleMetrics.width / 2 - padding,
+      midY + 4,
+      angleMetrics.width + padding * 2,
+      16
+    )
+
+    context.strokeText(angleText, midX, midY + 12)
+    context.fillStyle = '#ffdd57'
+    context.fillText(angleText, midX, midY + 12)
 
     context.restore()
   }
@@ -458,6 +636,8 @@ export function useSiteMapCanvas(
     drawGrid,
     drawScaleReference,
     drawWalls,
+    drawPreviewWall,
+    drawWallMeasurements,
     drawCamera,
     findCameraAtPoint,
     requestRedraw

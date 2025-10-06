@@ -38,6 +38,8 @@ setup: ## Install dependencies and initialize database
 	@echo ""
 	@$(MAKE) database
 	@echo ""
+	@$(MAKE) mock-videos
+	@echo ""
 	@echo "$(GREEN)✓ Setup complete!$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Next steps:$(NC)"
@@ -74,8 +76,18 @@ database: ## Setup database (stops existing, starts fresh, applies migrations, s
 	@echo "  MQTT:        localhost:1883"
 	@echo "  MinIO:       localhost:9000 (console: localhost:9090)"
 
+.PHONY: mock-videos
+mock-videos: ## Prepare mock videos (copy from shared/mock/camera-feeds and convert AVI to MP4)
+	@echo "$(BLUE)Preparing mock videos...$(NC)"
+	@echo "$(YELLOW)Copying videos from shared/mock/camera-feeds/ to mock-server/videos/...$(NC)"
+	@mkdir -p frontend/mock-server/videos
+	@cp shared/mock/camera-feeds/* frontend/mock-server/videos/ 2>/dev/null || true
+	@echo "$(YELLOW)Converting AVI files to MP4...$(NC)"
+	@cd frontend/mock-server && node convert-videos.js 2>/dev/null || echo "$(YELLOW)  No AVI files to convert$(NC)"
+	@echo "$(GREEN)✓ Mock videos ready$(NC)"
+
 .PHONY: dev
-dev: ## Start frontend with mock server
+dev: mock-videos ## Start frontend with mock server
 	@echo "$(BLUE)Starting frontend with mock server...$(NC)"
 	@npm --workspace frontend run dev
 

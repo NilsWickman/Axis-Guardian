@@ -23,6 +23,15 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/dashboard',
+    name: 'Dashboard',
+    component: () => import('@/views/timeline/AnalyticsDashboard.vue'),
+    meta: {
+      title: 'Dashboard',
+      roles: ['admin'],
+    },
+  },
+  {
     path: '/cameras/manage',
     name: 'CameraManagement',
     component: () => import('@/views/camera-views/CameraManagement.vue'),
@@ -35,15 +44,7 @@ const routes: RouteRecordRaw[] = [
     name: 'SiteMapViewer',
     component: () => import('@/views/SiteMapViewer.vue'),
     meta: {
-      title: 'Site Maps',
-    },
-  },
-  {
-    path: '/site-config/edit/:mapId',
-    name: 'SiteMapEditor',
-    component: () => import('@/views/SiteMapEditor.vue'),
-    meta: {
-      title: 'Edit Site Map',
+      title: 'Site Configuration',
     },
   },
   {
@@ -52,6 +53,42 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/UserManagement.vue'),
     meta: {
       title: 'User Management',
+    },
+  },
+  // Alarms
+  {
+    path: '/alarms',
+    name: 'Alarms',
+    component: () => import('@/views/alarms/AlarmKanbanBySiteMap.vue'),
+    meta: {
+      title: 'Alarms',
+    },
+  },
+  {
+    path: '/alarms/:alarmId',
+    name: 'AlarmDetail',
+    component: () => import('@/views/alarms/AlarmDetail.vue'),
+    meta: {
+      title: 'Alarm Details',
+    },
+  },
+  {
+    path: '/archive',
+    name: 'Archive',
+    component: () => import('@/views/alarms/AlarmArchive.vue'),
+    meta: {
+      title: 'Alarm Archive',
+      roles: ['admin'],
+    },
+  },
+  // Settings
+  {
+    path: '/settings',
+    name: 'Settings',
+    component: () => import('@/views/Settings.vue'),
+    meta: {
+      title: 'System Settings',
+      roles: ['admin'],
     },
   },
 ]
@@ -76,7 +113,23 @@ router.beforeEach((to, _from, next) => {
     document.title = `${to.meta.title} | AXIS Surveillance`
   }
 
-  next()
+  // Check role-based access
+  if (to.meta.roles) {
+    // Import auth store dynamically to avoid circular dependencies
+    import('@/stores/auth').then(({ useAuthStore }) => {
+      const authStore = useAuthStore()
+      const userRole = authStore.userRole
+
+      if (!userRole || !to.meta.roles?.includes(userRole)) {
+        // User doesn't have required role, redirect to home
+        next({ path: '/cameras/focus' })
+      } else {
+        next()
+      }
+    })
+  } else {
+    next()
+  }
 })
 
 // TypeScript module augmentation for route meta

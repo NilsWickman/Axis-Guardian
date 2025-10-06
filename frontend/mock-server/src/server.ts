@@ -7,20 +7,62 @@ import authRoutes from './routes/auth.js'
 import cameraRoutes from './routes/cameras.js'
 import detectionRoutes from './routes/detections.js'
 import alarmRoutes from './routes/alarms.js'
+import settingsRoutes from './routes/settings.js'
+import vapixRoutes, { publicRouter as vapixPublicRoutes } from './routes/vapix.js'
+import paramRoutes from './routes/param.js'
+import basicDeviceInfoRoutes from './routes/basicdeviceinfo.js'
+import imagingRoutes from './routes/imaging.js'
+import analyticsMetadataConfigRoutes from './routes/analyticsmetadataconfig.js'
+import streamStatusRoutes from './routes/streamstatus.js'
+import { digestAuth, basicAuth } from './middleware/digestAuth.js'
 
 const app = express()
 const port = 8000
 const prisma = new PrismaClient()
 
+// Mock users for authentication
+const mockUsers = {
+  'root': 'pass',
+  'admin': 'admin',
+  'operator': 'operator',
+  'viewer': 'viewer'
+}
+
 // Middleware
 app.use(cors())
 app.use(express.json())
 
-// Routes
+// Serve static files for demo
+app.use('/demo', express.static('public'))
+
+// Routes without auth
 app.use('/auth', authRoutes)
 app.use('/cameras', cameraRoutes)
 app.use('/detections', detectionRoutes)
 app.use('/alarms', alarmRoutes)
+app.use('/settings', settingsRoutes)
+
+// VAPIX public routes (no auth)
+app.use('/axis-cgi', vapixPublicRoutes)
+
+// VAPIX API routes - basicdeviceinfo first (has conditional auth)
+app.use('/axis-cgi', basicDeviceInfoRoutes)
+
+// Apply auth to other VAPIX endpoints
+// Use basic auth (simpler for mock server, uncomment digest below for Axis-compliant auth)
+app.use('/axis-cgi', basicAuth(mockUsers))
+
+// Use digest auth for VAPIX endpoints (Axis standard - more complex, less compatible with some tools)
+// app.use('/axis-cgi', digestAuth({
+//   realm: 'AXIS Mock Server',
+//   users: mockUsers
+// }))
+
+app.use('/axis-cgi', vapixRoutes)
+app.use('/axis-cgi', paramRoutes)
+app.use('/axis-cgi', imagingRoutes)
+app.use('/axis-cgi', analyticsMetadataConfigRoutes)
+app.use('/axis-cgi', streamStatusRoutes)
 
 // Health check
 app.get('/health', (req, res) => {

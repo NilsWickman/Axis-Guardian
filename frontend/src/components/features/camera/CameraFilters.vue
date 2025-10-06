@@ -1,54 +1,59 @@
 <template>
   <div class="flex gap-2 flex-wrap items-center">
-    <!-- Status Filters -->
-    <div class="flex gap-1">
-      <button
-        v-for="status in statusOptions"
-        :key="status.value"
-        @click="emit('update:statusFilter', status.value)"
-        :class="statusFilter === status.value ? status.activeClass : 'hover:bg-accent'"
-        class="px-2 py-1 text-[10px] border rounded transition-colors"
-      >
-        {{ status.label }} ({{ status.count }})
-      </button>
-    </div>
+    <!-- Status Filters (only show when > 25 cameras) -->
+    <template v-if="showStatusFilters">
+      <div class="flex gap-1">
+        <button
+          v-for="status in statusOptions"
+          :key="status.value"
+          @click="emit('update:statusFilter', status.value)"
+          :class="statusFilter === status.value ? status.activeClass : 'hover:bg-accent'"
+          class="px-2 py-1 text-[10px] border rounded transition-colors"
+        >
+          {{ status.label }} {{ status.count }}
+        </button>
+      </div>
 
-    <div class="w-px h-6 bg-border"></div>
+      <div class="w-px h-6 bg-border"></div>
+    </template>
 
-    <!-- Model Filter -->
-    <select
-      :value="modelFilter"
-      @change="emit('update:modelFilter', ($event.target as HTMLSelectElement).value)"
-      class="px-2 py-1 text-[10px] border rounded bg-background cursor-pointer"
+    <!-- Model Filter (only show when > 25 cameras) -->
+    <Select
+      v-if="showModelFilter"
+      :model-value="modelFilter"
+      @update:model-value="emit('update:modelFilter', $event)"
     >
-      <option value="all">All Models</option>
-      <option v-for="model in availableModels" :key="model" :value="model">
-        {{ model }}
-      </option>
-    </select>
+      <SelectTrigger class="w-36 h-[30px] text-xs">
+        <SelectValue placeholder="All Models" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">All Models</SelectItem>
+        <SelectItem v-for="model in availableModels" :key="model" :value="model">
+          {{ model }}
+        </SelectItem>
+      </SelectContent>
+    </Select>
 
     <!-- Sort -->
-    <select
-      :value="sortBy"
-      @change="emit('update:sortBy', ($event.target as HTMLSelectElement).value)"
-      class="px-2 py-1 text-[10px] border rounded bg-background cursor-pointer"
+    <Select
+      :model-value="sortBy"
+      @update:model-value="emit('update:sortBy', $event)"
     >
-      <option v-for="option in sortOptions" :key="option.value" :value="option.value">
-        {{ option.label }}
-      </option>
-    </select>
-
-    <div class="flex-1"></div>
-
-    <!-- Results Count -->
-    <span class="text-[10px] text-muted-foreground">
-      {{ resultsText }}
-    </span>
+      <SelectTrigger class="w-36 h-[30px] text-xs">
+        <SelectValue placeholder="Sort by" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem v-for="option in sortOptions" :key="option.value" :value="option.value">
+          {{ option.label }}
+        </SelectItem>
+      </SelectContent>
+    </Select>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 const props = defineProps<{
   statusFilter: string
@@ -59,6 +64,8 @@ const props = defineProps<{
   statusCounts: Record<string, number>
   availableModels: string[]
   sortOptions?: Array<{ value: string; label: string }>
+  showStatusFilters?: boolean
+  showModelFilter?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -93,9 +100,4 @@ const statusOptions = computed(() => [
     activeClass: 'bg-yellow-500/20 border-yellow-600'
   }
 ])
-
-const resultsText = computed(() => {
-  const plural = props.totalCount !== 1 ? 's' : ''
-  return `Showing ${props.filteredCount} of ${props.totalCount} camera${plural}`
-})
 </script>

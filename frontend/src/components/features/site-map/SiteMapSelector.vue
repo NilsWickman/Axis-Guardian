@@ -9,13 +9,10 @@
       <button
         @click.stop="emit('addNew')"
         type="button"
-        class="px-2 py-1 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+        class="px-3 py-1.5 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors flex items-center justify-center shrink-0 cursor-pointer text-xs font-medium"
         title="Add New Site Map"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M5 12h14"/>
-          <path d="M12 5v14"/>
-        </svg>
+        new site
       </button>
     </div>
 
@@ -37,10 +34,7 @@
             class="p-1 hover:bg-accent rounded transition-colors shrink-0"
             title="Edit Site Map"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
-              <path d="m15 5 4 4"/>
-            </svg>
+            <SquarePen class="h-3.5 w-3.5" />
           </button>
         </div>
 
@@ -64,6 +58,7 @@
 </template>
 
 <script setup lang="ts">
+import { SquarePen } from 'lucide-vue-next'
 import type { SiteMap } from '@/stores/siteMaps'
 
 withDefaults(defineProps<{
