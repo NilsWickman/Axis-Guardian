@@ -135,8 +135,36 @@ class WebRTCSignalingServer:
                 pc.addTrack(video_track)
                 logger.info(f"Added new video track for {camera_id}")
 
-            # Create answer
+            # Create answer with codec preferences
             answer = await pc.createAnswer()
+
+            # Modify SDP for low-latency H.264
+            sdp_lines = answer.sdp.split('\r\n')
+            modified_sdp = []
+
+            for line in sdp_lines:
+                modified_sdp.append(line)
+
+                # Add H.264 baseline profile and low-latency parameters
+                if line.startswith('a=rtpmap:') and 'H264' in line:
+                    # Extract payload type
+                    payload_type = line.split(':')[1].split(' ')[0]
+
+                    # Add format parameters for low-latency streaming
+                    modified_sdp.append(
+                        f'a=fmtp:{payload_type} '
+                        'level-asymmetry-allowed=1;'
+                        'packetization-mode=1;'
+                        'profile-level-id=42e01f'  # Baseline profile, level 3.1
+                    )
+
+                    # Add bitrate constraints (1-3 Mbps)
+                    modified_sdp.append(f'a=fmtp:{payload_type} x-google-min-bitrate=1000')
+                    modified_sdp.append(f'a=fmtp:{payload_type} x-google-max-bitrate=3000')
+                    modified_sdp.append(f'a=fmtp:{payload_type} x-google-start-bitrate=1500')
+
+            answer.sdp = '\r\n'.join(modified_sdp)
+
             await pc.setLocalDescription(answer)
 
             logger.info(f"Created answer for {camera_id}")

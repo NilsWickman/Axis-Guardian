@@ -14,6 +14,7 @@ export interface DetectionMetadata {
   timestamp: number
   detection_count: number
   detections: Detection[]
+  detection_frame?: number // Original frame where detection ran
 }
 
 export interface WebRTCDetectionOptions {
@@ -52,13 +53,22 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
   const detectionCount = ref(0)
   const totalDetections = ref(0)
 
+  // Frame synchronization
+  const maxFrameAge = 5 // Maximum frames old before discarding
+  const detectionQueue = ref<Map<number, DetectionMetadata>>(new Map())
+
   // Stats
   const stats = ref({
     framesReceived: 0,
     detectionsReceived: 0,
     avgDetectionsPerFrame: 0,
-    lastUpdateTime: 0
+    lastUpdateTime: 0,
+    droppedStaleDetections: 0,
+    latencyMs: 0
   })
+
+  // Callback for detection updates
+  let onDetectionUpdate: ((metadata: DetectionMetadata) => void) | null = null
 
   /**
    * Initialize WebRTC peer connection
@@ -79,9 +89,12 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
       videoElement.value = videoEl
 
-      // Create peer connection
+      // Create peer connection with bandwidth constraints
       peerConnection.value = new RTCPeerConnection({
-        iceServers: opts.iceServers
+        iceServers: opts.iceServers,
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require',
+        iceTransportPolicy: 'all'
       })
 
       const pc = peerConnection.value
@@ -124,11 +137,76 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
         setupDataChannel(event.channel)
       }
 
-      // Add a recvonly transceiver for video so server can send video
-      pc.addTransceiver('video', { direction: 'recvonly' })
+      // Add a recvonly transceiver for video with codec preferences
+      const transceiver = pc.addTransceiver('video', {
+        direction: 'recvonly'
+      })
+
+      // Set codec preferences - prioritize H.264 for low latency
+      if ('setCodecPreferences' in transceiver) {
+        const codecs = RTCRtpReceiver.getCapabilities('video')?.codecs || []
+
+        // Prioritize H.264 baseline profile
+        const preferredCodecs = codecs.filter(codec => {
+          const mimeType = codec.mimeType.toLowerCase()
+          // Prefer H.264 baseline
+          if (mimeType === 'video/h264') {
+            const sdpFmtpLine = codec.sdpFmtpLine || ''
+            return sdpFmtpLine.includes('42e01f') || sdpFmtpLine.includes('baseline')
+          }
+          return false
+        })
+
+        // Add other H.264 profiles as fallback
+        const h264Codecs = codecs.filter(c => c.mimeType.toLowerCase() === 'video/h264')
+        const otherCodecs = codecs.filter(c => c.mimeType.toLowerCase() !== 'video/h264')
+
+        const orderedCodecs = [...preferredCodecs, ...h264Codecs, ...otherCodecs]
+
+        if (orderedCodecs.length > 0) {
+          transceiver.setCodecPreferences(orderedCodecs)
+        }
+      }
 
       // Create offer
       const offer = await pc.createOffer()
+
+      // Modify SDP to add bandwidth constraints
+      const sdpLines = offer.sdp.split('\r\n')
+      const modifiedSdp: string[] = []
+
+      for (let i = 0; i < sdpLines.length; i++) {
+        const line = sdpLines[i]
+        modifiedSdp.push(line)
+
+        // Add bandwidth limit after video media line
+        if (line.startsWith('m=video')) {
+          // Add TIAS bandwidth (3 Mbps = 3000 kbps)
+          modifiedSdp.push('b=TIAS:3000000')
+          modifiedSdp.push('b=AS:3000')
+
+          // Add frame rate constraint (30 fps max)
+          modifiedSdp.push('a=framerate:30')
+        }
+
+        // Enable low-latency extensions
+        if (line.startsWith('a=rtpmap:') && line.includes('H264')) {
+          const payloadType = line.split(':')[1].split(' ')[0]
+
+          // Add NACK (negative acknowledgment for packet loss)
+          modifiedSdp.push(`a=rtcp-fb:${payloadType} nack`)
+          modifiedSdp.push(`a=rtcp-fb:${payloadType} nack pli`)
+
+          // Add FEC (forward error correction)
+          modifiedSdp.push(`a=rtcp-fb:${payloadType} goog-remb`)
+
+          // Transport-wide congestion control
+          modifiedSdp.push(`a=rtcp-fb:${payloadType} transport-cc`)
+        }
+      }
+
+      offer.sdp = modifiedSdp.join('\r\n')
+
       await pc.setLocalDescription(offer)
 
       // Send offer to signaling server
@@ -184,8 +262,25 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     channel.onmessage = (event) => {
       try {
         const metadata: DetectionMetadata = JSON.parse(event.data)
+        const now = performance.now()
 
-        // Update state
+        // Filter out stale detections (too old)
+        const currentFrame = frameNumber.value
+        const frameDiff = metadata.frame_number - currentFrame
+
+        if (frameDiff < -maxFrameAge) {
+          stats.value.droppedStaleDetections++
+          console.warn(
+            `[WebRTC] Dropped stale detection: frame ${metadata.frame_number} (current: ${currentFrame})`
+          )
+          return
+        }
+
+        // Calculate latency
+        const latency = now - (metadata.timestamp * 1000)
+        stats.value.latencyMs = latency
+
+        // Update state immediately (reactive)
         currentMetadata.value = metadata
         currentDetections.value = metadata.detections
         frameNumber.value = metadata.frame_number
@@ -199,9 +294,14 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
           stats.value.detectionsReceived / stats.value.framesReceived
         stats.value.lastUpdateTime = metadata.timestamp
 
+        // Trigger callback for immediate UI updates
+        if (onDetectionUpdate) {
+          onDetectionUpdate(metadata)
+        }
+
         if (metadata.detection_count > 0) {
           console.log(
-            `[WebRTC] Frame ${metadata.frame_number}: ${metadata.detection_count} detections`
+            `[WebRTC] Frame ${metadata.frame_number}: ${metadata.detection_count} detections (latency: ${latency.toFixed(1)}ms)`
           )
         }
       } catch (error) {
@@ -298,6 +398,13 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     disconnect()
   })
 
+  /**
+   * Set callback for detection updates
+   */
+  function setDetectionCallback(callback: (metadata: DetectionMetadata) => void): void {
+    onDetectionUpdate = callback
+  }
+
   return {
     // State
     isConnected,
@@ -318,6 +425,7 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     // Methods
     connect,
     disconnect,
-    getDetectionsByClass
+    getDetectionsByClass,
+    setDetectionCallback
   }
 }
