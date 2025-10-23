@@ -4,6 +4,7 @@ import asyncio
 import json
 from typing import Dict, Set
 from aiohttp import web
+import aiohttp_cors
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
 from loguru import logger
 
@@ -21,9 +22,23 @@ class WebRTCSignalingServer:
         self.pcs: Set[RTCPeerConnection] = set()
         self.detector = ObjectDetector()
 
+        # Configure CORS
+        cors = aiohttp_cors.setup(self.app, defaults={
+            "http://localhost:5173": aiohttp_cors.ResourceOptions(
+                allow_credentials=True,
+                expose_headers="*",
+                allow_headers="*",
+                allow_methods=["GET", "POST", "OPTIONS"]
+            )
+        })
+
         # Configure routes
-        self.app.router.add_post("/offer", self.handle_offer)
-        self.app.router.add_get("/health", self.health_check)
+        offer_route = self.app.router.add_post("/offer", self.handle_offer)
+        health_route = self.app.router.add_get("/health", self.health_check)
+
+        # Add CORS to routes
+        cors.add(offer_route)
+        cors.add(health_route)
 
         # ICE servers configuration
         ice_servers = [RTCIceServer(urls=[settings.stun_server])]
@@ -39,7 +54,7 @@ class WebRTCSignalingServer:
 
         self.rtc_configuration = RTCConfiguration(iceServers=ice_servers)
 
-        logger.info("WebRTC Signaling Server initialized")
+        logger.info("WebRTC Signaling Server initialized with CORS enabled")
 
     async def handle_offer(self, request: web.Request) -> web.Response:
         """
@@ -71,16 +86,8 @@ class WebRTCSignalingServer:
                     await pc.close()
                     self.pcs.discard(pc)
 
-            # Create data channel for detections
-            data_channel = pc.createDataChannel("detections")
-
-            @data_channel.on("open")
-            def on_open():
-                logger.info(f"Data channel opened for {camera_id}")
-
-            @data_channel.on("close")
-            def on_close():
-                logger.info(f"Data channel closed for {camera_id}")
+            # Set remote description (offer) FIRST
+            await pc.setRemoteDescription(offer)
 
             # Get camera RTSP URL
             camera_urls = {
@@ -90,19 +97,43 @@ class WebRTCSignalingServer:
             }
             rtsp_url = camera_urls.get(camera_id, settings.camera1_url)
 
-            # Create detection video track
+            # Create detection video track (data channel will be set when received from client)
             video_track = DetectionVideoTrack(
                 rtsp_url=rtsp_url,
                 camera_id=camera_id,
                 detector=self.detector,
-                data_channel=data_channel,
+                data_channel=None,
             )
 
-            # Add video track to peer connection
-            pc.addTrack(video_track)
+            # Handle data channel from client
+            @pc.on("datachannel")
+            def on_datachannel(channel):
+                logger.info(f"Data channel received: {channel.label}")
+                video_track.data_channel = channel
 
-            # Set remote description (offer)
-            await pc.setRemoteDescription(offer)
+                @channel.on("open")
+                def on_open():
+                    logger.info(f"Data channel opened for {camera_id}")
+
+                @channel.on("close")
+                def on_close():
+                    logger.info(f"Data channel closed for {camera_id}")
+
+            # Find the recvonly video transceiver created by the client
+            # and add our sending track to it
+            for transceiver in pc.getTransceivers():
+                if transceiver.kind == "video" and transceiver.direction == "recvonly":
+                    # Change direction to sendrecv so we can send video
+                    transceiver.direction = "sendrecv"
+                    # Replace the track
+                    if transceiver.sender:
+                        transceiver.sender.replaceTrack(video_track)
+                    logger.info(f"Added video track to transceiver for {camera_id}, direction: {transceiver.direction}")
+                    break
+            else:
+                # Fallback: add track if no suitable transceiver found
+                pc.addTrack(video_track)
+                logger.info(f"Added new video track for {camera_id}")
 
             # Create answer
             answer = await pc.createAnswer()
@@ -119,7 +150,7 @@ class WebRTCSignalingServer:
             )
 
         except Exception as e:
-            logger.error(f"Error handling offer: {e}")
+            logger.exception(f"Error handling offer for {camera_id}: {e}")
             return web.json_response({"error": str(e)}, status=500)
 
     async def health_check(self, request: web.Request) -> web.Response:

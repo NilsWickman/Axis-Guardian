@@ -307,6 +307,9 @@ function drawDetections(cameraId: string) {
   })
 }
 
+// Track update intervals for cleanup
+const updateIntervals = ref<Record<string, number>>({})
+
 // Initialize WebRTC connections for each camera
 async function initializeWebRTC() {
   for (const camera of cameras) {
@@ -345,8 +348,8 @@ async function initializeWebRTC() {
         cameraStats[camera.id] = connection.stats.value
       }, 50) // Update UI at 20 FPS
 
-      // Cleanup on unmount
-      onUnmounted(() => clearInterval(updateInterval))
+      // Store interval ID for cleanup
+      updateIntervals.value[camera.id] = updateInterval
 
       console.log(`WebRTC initialized for ${camera.id}`)
     } catch (error) {
@@ -363,6 +366,9 @@ onMounted(async () => {
 onUnmounted(() => {
   // Cancel all animation frames
   Object.values(animationFrames.value).forEach(id => cancelAnimationFrame(id))
+
+  // Clear all update intervals
+  Object.values(updateIntervals.value).forEach(id => clearInterval(id))
 
   // Disconnect all WebRTC connections
   Object.values(webrtcConnections).forEach(conn => {

@@ -42,6 +42,8 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
   const isConnected = ref(false)
   const isDataChannelOpen = ref(false)
   const connectionState = ref<RTCPeerConnectionState>('new')
+  const isReconnecting = ref(false)
+  const reconnectTimer = ref<number | null>(null)
 
   // Detection data
   const currentDetections = ref<Detection[]>([])
@@ -63,6 +65,18 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
    */
   async function connect(videoEl: HTMLVideoElement): Promise<void> {
     try {
+      // Prevent multiple simultaneous connections
+      if (peerConnection.value || isReconnecting.value) {
+        console.log('[WebRTC] Already connecting or connected, aborting')
+        return
+      }
+
+      // Clear any pending reconnect timer
+      if (reconnectTimer.value !== null) {
+        clearTimeout(reconnectTimer.value)
+        reconnectTimer.value = null
+      }
+
       videoElement.value = videoEl
 
       // Create peer connection
@@ -100,11 +114,18 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
         }
       }
 
-      // Handle data channel from server
+      // Create data channel (client-initiated)
+      const channel = pc.createDataChannel('detections')
+      setupDataChannel(channel)
+
+      // Handle data channel from server (fallback)
       pc.ondatachannel = (event) => {
-        console.log('[WebRTC] Data channel received:', event.channel.label)
+        console.log('[WebRTC] Data channel received from server:', event.channel.label)
         setupDataChannel(event.channel)
       }
+
+      // Add a recvonly transceiver for video so server can send video
+      pc.addTransceiver('video', { direction: 'recvonly' })
 
       // Create offer
       const offer = await pc.createOffer()
@@ -196,11 +217,29 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     isConnected.value = false
     isDataChannelOpen.value = false
 
-    if (opts.autoReconnect && videoElement.value) {
+    // Clean up peer connection
+    if (dataChannel.value) {
+      dataChannel.value.close()
+      dataChannel.value = null
+    }
+
+    if (peerConnection.value) {
+      peerConnection.value.close()
+      peerConnection.value = null
+    }
+
+    // Auto-reconnect logic
+    if (opts.autoReconnect && videoElement.value && !isReconnecting.value) {
+      isReconnecting.value = true
       console.log(`[WebRTC] Reconnecting in ${opts.reconnectDelay}ms...`)
-      setTimeout(() => {
+
+      reconnectTimer.value = window.setTimeout(() => {
         if (videoElement.value) {
-          connect(videoElement.value)
+          isReconnecting.value = false
+          connect(videoElement.value).catch(err => {
+            console.error('[WebRTC] Reconnect failed:', err)
+            isReconnecting.value = false
+          })
         }
       }, opts.reconnectDelay)
     }
@@ -211,6 +250,14 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
    */
   function disconnect(): void {
     console.log('[WebRTC] Disconnecting...')
+
+    // Clear reconnect timer
+    if (reconnectTimer.value !== null) {
+      clearTimeout(reconnectTimer.value)
+      reconnectTimer.value = null
+    }
+
+    isReconnecting.value = false
 
     if (dataChannel.value) {
       dataChannel.value.close()

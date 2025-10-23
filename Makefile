@@ -189,47 +189,6 @@ cameras: ## Stream mock camera feeds to MediaMTX (requires FFmpeg)
 	@echo ""
 	@bash infrastructure/scripts/stream-mock-cameras.sh all
 
-.PHONY: cameras-persistent
-cameras-persistent: ## Stream cameras continuously with auto-restart (production mode)
-	@echo "$(BLUE)Starting persistent camera streams...$(NC)"
-	@if ! which ffmpeg > /dev/null 2>&1; then \
-		echo "$(RED)Error: FFmpeg is not installed$(NC)"; \
-		echo "$(YELLOW)Install with: sudo apt-get install ffmpeg$(NC)"; \
-		exit 1; \
-	fi
-	@echo "$(YELLOW)Features:$(NC)"
-	@echo "  • Infinite video looping"
-	@echo "  • Auto-restart on failure"
-	@echo "  • Restart statistics tracking"
-	@echo ""
-	@echo "$(YELLOW)Stream URLs:$(NC)"
-	@echo "  RTSP:   rtsp://localhost:8554/camera1"
-	@echo "  HLS:    http://localhost:8888/camera1"
-	@echo "  WebRTC: http://localhost:8889/camera1"
-	@echo ""
-	@bash infrastructure/scripts/stream-cameras-persistent.sh all
-
-.PHONY: camera-status
-camera-status: ## Check MediaMTX status and active streams
-	@echo "$(BLUE)MediaMTX Status$(NC)"
-	@echo ""
-	@if curl -s http://localhost:9997/v3/config/global/get > /dev/null 2>&1; then \
-		echo "$(GREEN)✓ MediaMTX is running$(NC)"; \
-		echo ""; \
-		echo "$(YELLOW)Active streams:$(NC)"; \
-		curl -s http://localhost:9997/v3/paths/list | grep -o '"name":"[^"]*"' | cut -d'"' -f4 | while read path; do \
-			echo "  - $$path"; \
-		done || echo "  No active streams"; \
-		echo ""; \
-		echo "$(YELLOW)Endpoints:$(NC)"; \
-		echo "  RTSP:   rtsp://localhost:8554/<stream_name>"; \
-		echo "  HLS:    http://localhost:8888/<stream_name>"; \
-		echo "  WebRTC: http://localhost:8889/<stream_name>"; \
-		echo "  API:    http://localhost:9997/v3/"; \
-	else \
-		echo "$(RED)✗ MediaMTX is not running$(NC)"; \
-		echo "$(YELLOW)Start with: make database$(NC)"; \
-	fi
 
 .PHONY: detect-install
 detect-install: ## Install object detection service dependencies
@@ -271,8 +230,6 @@ detect: ## Run object detection service with camera streams
 	@echo "  Camera Streams:  rtsp://localhost:8554/camera1, camera2"
 	@echo "  Detection Topic: surveillance/detections/#"
 	@echo ""
-	@echo "$(YELLOW)View detections:$(NC)"
-	@echo "  make detect-viewer    (or open http://localhost:8080/detection-viewer.html)"
 	@echo ""
 	@cd backend/python/object-detection-service && \
 		if [ ! -f ".env" ]; then \
@@ -281,48 +238,6 @@ detect: ## Run object detection service with camera streams
 		fi && \
 		. venv/bin/activate && \
 		python src/main.py
-
-.PHONY: detect-viewer
-detect-viewer: ## Open detection viewer in browser (starts HTTP server)
-	@echo "$(BLUE)Starting Detection Viewer$(NC)"
-	@echo ""
-	@if pgrep -f "python.*http.server.*8080" > /dev/null; then \
-		echo "$(GREEN)✓ HTTP server already running on port 8080$(NC)"; \
-	else \
-		echo "$(YELLOW)Starting HTTP server on port 8080...$(NC)"; \
-		python3 -m http.server 8080 > /dev/null 2>&1 & \
-		sleep 2; \
-		echo "$(GREEN)✓ HTTP server started$(NC)"; \
-	fi
-	@echo ""
-	@echo "$(GREEN)Detection viewer available at:$(NC)"
-	@echo "  http://localhost:8080/detection-viewer.html"
-	@echo ""
-	@echo "$(YELLOW)Opening in browser...$(NC)"
-	@if command -v xdg-open > /dev/null 2>&1; then \
-		xdg-open http://localhost:8080/detection-viewer.html 2>/dev/null || true; \
-	elif command -v open > /dev/null 2>&1; then \
-		open http://localhost:8080/detection-viewer.html 2>/dev/null || true; \
-	else \
-		echo "$(YELLOW)Please open manually: http://localhost:8080/detection-viewer.html$(NC)"; \
-	fi
-	@echo ""
-	@echo "$(YELLOW)Note: HTTP server is running in background. To stop:$(NC)"
-	@echo "  pkill -f 'python.*http.server.*8080'"
-
-.PHONY: surveillance
-surveillance: ## Start complete surveillance system (cameras + detection with looping)
-	@echo "$(BLUE)Starting Complete Surveillance System$(NC)"
-	@echo ""
-	@bash infrastructure/scripts/start-surveillance-system.sh all
-
-.PHONY: surveillance-cameras
-surveillance-cameras: ## Start only camera streams (with looping)
-	@bash infrastructure/scripts/start-surveillance-system.sh cameras
-
-.PHONY: surveillance-detection
-surveillance-detection: ## Start only detection service
-	@bash infrastructure/scripts/start-surveillance-system.sh detection
 
 .PHONY: webrtc-detect-install
 webrtc-detect-install: ## Install WebRTC detection service dependencies
@@ -370,22 +285,3 @@ webrtc-detect: ## Run WebRTC detection service with data channels
 		. venv/bin/activate && \
 		python src/main.py
 
-.PHONY: webrtc-detect-docker
-webrtc-detect-docker: ## Run WebRTC detection service in Docker
-	@echo "$(BLUE)Starting WebRTC Detection Service in Docker$(NC)"
-	@echo ""
-	@cd backend/python/webrtc-detection-service && \
-		docker compose up --build
-
-.PHONY: webrtc-detect-status
-webrtc-detect-status: ## Check WebRTC detection service health
-	@echo "$(BLUE)WebRTC Detection Service Status$(NC)"
-	@echo ""
-	@if curl -s http://localhost:8080/health > /dev/null 2>&1; then \
-		echo "$(GREEN)✓ Service is running$(NC)"; \
-		echo ""; \
-		curl -s http://localhost:8080/health | python3 -m json.tool; \
-	else \
-		echo "$(RED)✗ Service is not running$(NC)"; \
-		echo "$(YELLOW)Start with: make webrtc-detect$(NC)"; \
-	fi
