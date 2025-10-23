@@ -36,6 +36,15 @@ class Settings(BaseSettings):
     max_fps: int = Field(
         default=30, ge=1, le=60, description="Maximum processing FPS"
     )
+    detection_resolution: int = Field(
+        default=640, ge=320, le=1280, description="Resolution for YOLO inference (width)"
+    )
+    auto_scale_detection: bool = Field(
+        default=True, description="Automatically scale down high-res frames for detection"
+    )
+    draw_on_frame: bool = Field(
+        default=True, description="Draw bounding boxes directly on video frames"
+    )
 
     # Camera sources
     camera1_url: str = Field(
