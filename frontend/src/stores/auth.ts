@@ -180,6 +180,25 @@ export const useAuthStore = defineStore('auth', () => {
         console.error('Failed to restore session:', err)
         logout()
       }
+    } else if (import.meta.env.DEV) {
+      // AUTO-LOGIN AS ADMIN FOR DEVELOPMENT
+      // If no session exists, automatically log in as admin (dev only)
+      const adminUser = mockUsers.find((u) => u.username === 'admin')
+      if (adminUser) {
+        console.log('🔓 Auto-login as admin (development mode)')
+        const mockAccessToken = generateMockJWT(adminUser, 3600)
+        const mockRefreshToken = generateMockJWT(adminUser, 604800)
+
+        currentUser.value = adminUser
+        accessToken.value = mockAccessToken
+        refreshToken.value = mockRefreshToken
+        isAuthenticated.value = true
+
+        // Store in localStorage
+        localStorage.setItem('accessToken', mockAccessToken)
+        localStorage.setItem('refreshToken', mockRefreshToken)
+        localStorage.setItem('currentUser', JSON.stringify(adminUser))
+      }
     }
   }
 

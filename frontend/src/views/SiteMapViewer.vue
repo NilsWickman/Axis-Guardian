@@ -26,8 +26,21 @@
     <div v-else class="w-64 border-r bg-card overflow-y-auto flex flex-col">
       <div class="p-4 border-b flex items-center justify-between gap-2">
         <div class="flex-1 min-w-0">
-          <h2 class="text-base font-bold">Site Map Editor</h2>
-          <p class="text-xs text-muted-foreground mt-1">Configure cameras and walls</p>
+          <h2 class="text-base font-bold text-foreground mb-2">Site Map Editor</h2>
+          <div class="flex items-center gap-3 flex-wrap">
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-muted-foreground">Cameras:</span>
+              <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-muted text-muted-foreground">
+                {{ localCameras.length }}
+              </span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-muted-foreground">Walls:</span>
+              <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-muted text-muted-foreground">
+                {{ localWalls.length }}
+              </span>
+            </div>
+          </div>
         </div>
         <!-- Back Button -->
         <button
@@ -65,7 +78,6 @@
               type="text"
               class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background"
               placeholder="Site map name"
-              @input="markAsChanged"
             />
           </div>
 
@@ -76,7 +88,6 @@
               class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background resize-none"
               rows="2"
               placeholder="Optional description"
-              @input="markAsChanged"
             ></textarea>
           </div>
 
@@ -88,7 +99,6 @@
                 type="number"
                 class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background"
                 placeholder="Width"
-                @input="markAsChanged"
               />
             </div>
             <div>
@@ -98,7 +108,6 @@
                 type="number"
                 class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background"
                 placeholder="Height"
-                @input="markAsChanged"
               />
             </div>
           </div>
@@ -125,7 +134,7 @@
             @mouseleave="handleMouseLeave"
             @wheel="handleWheel"
             @click="onCameraClick"
-            :class="isDragging ? 'cursor-grabbing' : (hoveredCamera ? 'cursor-pointer' : 'cursor-grab')"
+            :class="canvasCursorClass"
             :style="canvasStyle"
           ></canvas>
 
@@ -170,18 +179,24 @@
             :mode="wallEditor.mode.value"
             :wall-type="wallEditor.drawState.value.wallType"
             :selected-wall="wallEditor.selectedWall.value"
-            :show-grid="canvasOptions.showGrid"
-            :can-undo="false"
-            :can-redo="false"
+            :can-undo="canUndo"
+            :can-redo="canRedo"
             @set-mode="wallEditor.setMode($event)"
             @set-wall-type="wallEditor.setWallType($event)"
-            @delete-wall="deleteSelectedWall"
-            @toggle-grid="canvasOptions.showGrid = !canvasOptions.showGrid"
-            @undo="() => {}"
-            @redo="() => {}"
+            @undo="undo"
+            @redo="redo"
             @zoom-in="zoomIn"
             @zoom-out="zoomOut"
-            @reset-view="fitToView"
+          />
+
+          <!-- Camera Configuration Popup -->
+          <CameraConfigPopup
+            :visible="showConfigPopup"
+            :position="configPopupPosition"
+            :camera-name="pendingCameraPlacement ? getCameraName(pendingCameraPlacement.camera.id) : ''"
+            :config="cameraConfigDefaults"
+            @confirm="handleCameraConfigConfirm"
+            @cancel="handleCameraConfigCancel"
           />
         </div>
       </div>
@@ -291,7 +306,7 @@ import { useCameraStore } from '../stores/cameras'
 import { useSiteMapCanvas, type CanvasRenderOptions } from '../composables/useSiteMapCanvas'
 import { useCanvasInteraction } from '../composables/useCanvasInteraction'
 import { useWallEditor } from '../composables/useWallEditor'
-import type { CameraPlacement } from '../stores/siteMaps'
+import type { CameraPlacement, Wall } from '../stores/siteMaps'
 import type { Camera } from '../types/generated'
 import MapControls from '../components/features/site-map/MapControls.vue'
 import SiteMapSelector from '../components/features/site-map/SiteMapSelector.vue'
@@ -299,6 +314,7 @@ import CameraList from '../components/features/camera/CameraList.vue'
 import CameraDetailsPanel from '../components/features/camera/CameraDetailsPanel.vue'
 import CanvasOverlay from '../components/layout/CanvasOverlay.vue'
 import WallToolbar from '../components/features/site-map/WallToolbar.vue'
+import CameraConfigPopup from '../components/features/site-map/CameraConfigPopup.vue'
 import {
   Dialog,
   DialogContent,
@@ -330,6 +346,24 @@ const siteMapForm = reactive({
   height: 0,
 })
 
+// Local working copies for editing (not saved to store until user clicks Save)
+const localWalls = ref<Wall[]>([])
+const localCameras = ref<CameraPlacement[]>([])
+
+// Original values to compare against for change detection
+const originalData = ref({
+  name: '',
+  description: '',
+  width: 0,
+  height: 0,
+  walls: [] as Wall[],
+  cameras: [] as CameraPlacement[]
+})
+
+// Computed to get the current working data (local copy in edit mode, store data in viewer mode)
+const workingWalls = computed(() => isEditingMode.value ? localWalls.value : currentMap.value?.walls || [])
+const workingCameras = computed(() => isEditingMode.value ? localCameras.value : currentMap.value?.cameras || [])
+
 const mapCanvas = ref<HTMLCanvasElement | null>(null)
 const canvasContainer = ref<HTMLDivElement | null>(null)
 const selectedCamera = ref<CameraPlacement | null>(null)
@@ -357,11 +391,21 @@ const wallEditor = useWallEditor()
 // Camera drag state
 const draggedCamera = ref<Camera | null>(null)
 
+// Camera config popup state
+const showConfigPopup = ref(false)
+const configPopupPosition = ref({ x: 0, y: 0 })
+const pendingCameraPlacement = ref<{ camera: Camera; x: number; y: number } | null>(null)
+const cameraConfigDefaults = ref({
+  height: 2.4,
+  angle: 35,
+  rotation: 0
+})
+
 // Available cameras (not yet placed on map)
 const availableCameras = computed(() => {
-  if (!currentMap.value) return cameraStore.cameras
-
-  const placedCameraIds = new Set(currentMap.value.cameras.map(c => c.cameraId))
+  // In edit mode, use local working copy; in viewer mode, use store data
+  const cameras = isEditingMode.value ? workingCameras.value : currentMap.value?.cameras || []
+  const placedCameraIds = new Set(cameras.map(c => c.cameraId))
   return cameraStore.cameras.filter(c => !placedCameraIds.has(c.id))
 })
 
@@ -398,67 +442,196 @@ const hoveredCamera = computed(() => {
   )
 })
 
-const selectMap = async (mapId: string) => {
-  console.log('[selectMap] START - mapId:', mapId)
-  console.log('[selectMap] isEditingMode:', isEditingMode.value)
+// Cursor class based on mode and hover state
+const canvasCursorClass = computed(() => {
+  if (!isEditingMode.value) {
+    // Viewer mode
+    if (isDragging.value) return 'cursor-grabbing'
+    if (hoveredCamera.value) return 'cursor-pointer'
+    return 'cursor-grab'
+  }
 
+  // Editor mode
+  if (isDragging.value) return 'cursor-grabbing'
+
+  if (wallEditor.mode.value === 'draw') {
+    return 'cursor-crosshair'
+  } else if (wallEditor.mode.value === 'edit') {
+    // Check if hovering over a wall endpoint or body
+    if (wallEditor.hoverState.value.hoveredWall) {
+      if (wallEditor.hoverState.value.hoveredPart === 'start' || wallEditor.hoverState.value.hoveredPart === 'end') {
+        return 'cursor-move'
+      }
+      return 'cursor-move'
+    }
+    return 'cursor-default'
+  }
+
+  return 'cursor-default'
+})
+
+// Undo/Redo state
+interface HistoryState {
+  walls: Wall[]
+  cameras: CameraPlacement[]
+}
+
+const history = ref<HistoryState[]>([])
+const historyIndex = ref(-1)
+
+const canUndo = computed(() => historyIndex.value > 0)
+const canRedo = computed(() => historyIndex.value < history.value.length - 1)
+
+const saveHistoryState = () => {
+  if (!isEditingMode.value) return
+
+  // Remove any future states if we're not at the end
+  if (historyIndex.value < history.value.length - 1) {
+    history.value = history.value.slice(0, historyIndex.value + 1)
+  }
+
+  // Add current state (from local working copies)
+  history.value.push({
+    walls: JSON.parse(JSON.stringify(localWalls.value)),
+    cameras: JSON.parse(JSON.stringify(localCameras.value))
+  })
+
+  historyIndex.value = history.value.length - 1
+
+  // Limit history to 50 states
+  if (history.value.length > 50) {
+    history.value.shift()
+    historyIndex.value--
+  }
+}
+
+const undo = () => {
+  if (!canUndo.value || !isEditingMode.value) return
+
+  historyIndex.value--
+  const state = history.value[historyIndex.value]
+
+  // Update local working copies, not the store
+  localWalls.value = JSON.parse(JSON.stringify(state.walls))
+  localCameras.value = JSON.parse(JSON.stringify(state.cameras))
+
+  drawMap()
+}
+
+const redo = () => {
+  if (!canRedo.value || !isEditingMode.value) return
+
+  historyIndex.value++
+  const state = history.value[historyIndex.value]
+
+  // Update local working copies, not the store
+  localWalls.value = JSON.parse(JSON.stringify(state.walls))
+  localCameras.value = JSON.parse(JSON.stringify(state.cameras))
+
+  drawMap()
+}
+
+const selectMap = async (mapId: string) => {
   selectedMapId.value = mapId
   siteMapStore.setActiveSiteMap(mapId)
   selectedCamera.value = null
-
-  // Note: resizeCanvas() and fitToView() are handled by the watch on currentMap
-  console.log('[selectMap] Map changed, watch will handle resize/fit')
-  console.log('[selectMap] Current scale/offset:', { scale: scale.value, offsetX: offsetX.value, offsetY: offsetY.value })
 }
 
 const editMap = (mapId: string) => {
-  console.log('[editMap] Entering edit mode for mapId:', mapId)
+  // Select the map if not already selected
+  if (selectedMapId.value !== mapId) {
+    selectedMapId.value = mapId
+    siteMapStore.setActiveSiteMap(mapId)
+  }
+
   isEditingMode.value = true
   editingMapId.value = mapId
 
-  // Load site map details into form
-  if (currentMap.value) {
-    siteMapForm.name = currentMap.value.name
-    siteMapForm.description = currentMap.value.description || ''
-    siteMapForm.width = currentMap.value.width
-    siteMapForm.height = currentMap.value.height
-  }
+  // Wait for currentMap to be set
+  nextTick(() => {
+    // Load site map details into form
+    if (currentMap.value) {
+      siteMapForm.name = currentMap.value.name
+      siteMapForm.description = currentMap.value.description || ''
+      siteMapForm.width = currentMap.value.width
+      siteMapForm.height = currentMap.value.height
 
-  // Reset flags and initialize wall editor
-  hasUnsavedChanges.value = false
-  wallEditor.setMode('draw')
+      // Create local working copies (deep clone)
+      localWalls.value = JSON.parse(JSON.stringify(currentMap.value.walls))
+      localCameras.value = JSON.parse(JSON.stringify(currentMap.value.cameras))
 
-  // Redraw the canvas in edit mode
-  console.log('[editMap] Redrawing canvas for edit mode')
-  drawMap()
-  isInitialRenderComplete.value = true
-}
+      // Store original values for change detection
+      originalData.value = {
+        name: currentMap.value.name,
+        description: currentMap.value.description || '',
+        width: currentMap.value.width,
+        height: currentMap.value.height,
+        walls: JSON.parse(JSON.stringify(currentMap.value.walls)),
+        cameras: JSON.parse(JSON.stringify(currentMap.value.cameras))
+      }
 
-const markAsChanged = () => {
-  hasUnsavedChanges.value = true
+      // Initialize history with current state
+      history.value = []
+      historyIndex.value = -1
+      saveHistoryState()
+    }
+
+    // Reset flags and initialize wall editor
+    hasUnsavedChanges.value = false
+    wallEditor.setMode('draw')
+
+    // Redraw the canvas in edit mode
+    drawMap()
+    isInitialRenderComplete.value = true
+  })
 }
 
 const saveConfiguration = () => {
   if (currentMap.value) {
+    // Save all changes (form data, walls, and cameras) to the store
     siteMapStore.updateSiteMap(currentMap.value.id, {
       name: siteMapForm.name,
       description: siteMapForm.description,
       width: siteMapForm.width,
       height: siteMapForm.height,
+      walls: JSON.parse(JSON.stringify(localWalls.value)),
+      cameras: JSON.parse(JSON.stringify(localCameras.value)),
     })
+
+    // Update original data to current values since we just saved
+    originalData.value = {
+      name: siteMapForm.name,
+      description: siteMapForm.description,
+      width: siteMapForm.width,
+      height: siteMapForm.height,
+      walls: JSON.parse(JSON.stringify(localWalls.value)),
+      cameras: JSON.parse(JSON.stringify(localCameras.value))
+    }
+
     hasUnsavedChanges.value = false
     showSuccessToast('Configuration saved successfully!')
   }
 }
 
 const exitEditMode = () => {
-  console.log('[exitEditMode] START')
+  // Check for unsaved changes and confirm with user
+  if (hasUnsavedChanges.value) {
+    const confirmed = window.confirm('You have unsaved changes. Are you sure you want to exit without saving?')
+    if (!confirmed) {
+      return
+    }
+  }
+
   isEditingMode.value = false
   editingMapId.value = null
   wallEditor.setMode('none')
+  hasUnsavedChanges.value = false
+
+  // Clear local working copies
+  localWalls.value = []
+  localCameras.value = []
 
   // Canvas stays mounted, just redraw
-  console.log('[exitEditMode] Redrawing canvas in viewer mode')
   drawMap()
 }
 
@@ -592,11 +765,11 @@ const handleMouseDown = (event: MouseEvent) => {
   const canvasY = (event.clientY - canvasContainer.value!.getBoundingClientRect().top - offsetY.value) / scale.value
 
   if (wallEditor.mode.value === 'draw') {
-    const snapped = wallEditor.snapPoint(canvasX, canvasY, currentMap.value?.walls || [])
+    const snapped = wallEditor.snapPoint(canvasX, canvasY, localWalls.value)
     wallEditor.startDrawing(snapped.x, snapped.y)
     drawMap()
-  } else if (wallEditor.mode.value === 'edit' && currentMap.value) {
-    const wall = wallEditor.findWallAtPoint(canvasX, canvasY, currentMap.value.walls)
+  } else if (wallEditor.mode.value === 'edit') {
+    const wall = wallEditor.findWallAtPoint(canvasX, canvasY, localWalls.value)
     if (wall) {
       const endpoint = wallEditor.findEndpointAtPoint(canvasX, canvasY, wall)
       if (endpoint) {
@@ -604,13 +777,8 @@ const handleMouseDown = (event: MouseEvent) => {
       } else {
         wallEditor.selectWall(wall)
       }
-    }
-  } else if (wallEditor.mode.value === 'delete' && currentMap.value) {
-    const wall = wallEditor.findWallAtPoint(canvasX, canvasY, currentMap.value.walls)
-    if (wall && currentMap.value) {
-      siteMapStore.removeWallFromSiteMap(currentMap.value.id, wall.id)
-      markAsChanged()
-      drawMap()
+    } else {
+      wallEditor.selectWall(null)
     }
   }
 }
@@ -650,17 +818,21 @@ const handleMouseMove = (event: MouseEvent) => {
   const canvasY = (event.clientY - canvasContainer.value!.getBoundingClientRect().top - offsetY.value) / scale.value
 
   if (wallEditor.drawState.value.isDrawing) {
-    const snapped = wallEditor.snapPoint(canvasX, canvasY, currentMap.value?.walls || [])
+    const snapped = wallEditor.snapPoint(canvasX, canvasY, localWalls.value)
     wallEditor.updateDrawing(snapped.x, snapped.y)
     drawMap()
-  } else if (wallEditor.dragState.value.isDragging && currentMap.value) {
-    const updatedWall = wallEditor.updateDraggingEndpoint(canvasX, canvasY, currentMap.value.walls)
+  } else if (wallEditor.dragState.value.isDragging) {
+    const updatedWall = wallEditor.updateDraggingEndpoint(canvasX, canvasY, localWalls.value)
     if (updatedWall) {
-      siteMapStore.updateWallInSiteMap(currentMap.value.id, updatedWall)
+      // Update local working copy, not the store
+      const wallIndex = localWalls.value.findIndex(w => w.id === updatedWall.id)
+      if (wallIndex !== -1) {
+        localWalls.value[wallIndex] = updatedWall
+      }
       drawMap()
     }
-  } else if (currentMap.value) {
-    wallEditor.updateHoverState(canvasX, canvasY, currentMap.value.walls, wallEditor.mode.value === 'edit')
+  } else {
+    wallEditor.updateHoverState(canvasX, canvasY, localWalls.value, wallEditor.mode.value === 'edit')
     drawMap()
   }
 }
@@ -672,17 +844,18 @@ const handleMouseUp = () => {
   }
 
   // Editor mode: finish wall drawing/editing
-  if (wallEditor.drawState.value.isDrawing && currentMap.value) {
+  if (wallEditor.drawState.value.isDrawing) {
     const newWall = wallEditor.finishDrawing()
     if (newWall) {
-      siteMapStore.addWallToSiteMap(currentMap.value.id, newWall)
-      markAsChanged()
+      saveHistoryState()
+      // Add to local working copy, not the store
+      localWalls.value.push(newWall)
       drawMap()
     }
-  } else if (wallEditor.dragState.value.isDragging && currentMap.value) {
+  } else if (wallEditor.dragState.value.isDragging) {
     const wall = wallEditor.finishDraggingEndpoint()
     if (wall) {
-      markAsChanged()
+      saveHistoryState()
       drawMap()
     }
   }
@@ -698,13 +871,33 @@ const handleMouseLeave = () => {
   }
 }
 
-// Wall operations
-const deleteSelectedWall = () => {
-  if (wallEditor.selectedWall.value && currentMap.value) {
-    siteMapStore.removeWallFromSiteMap(currentMap.value.id, wallEditor.selectedWall.value.id)
-    wallEditor.selectWall(null)
-    markAsChanged()
-    drawMap()
+// Keyboard event handler
+const handleKeyDown = (event: KeyboardEvent) => {
+  if (!isEditingMode.value) return
+
+  // Delete key - delete selected wall
+  if (event.key === 'Delete' || event.key === 'Backspace') {
+    if (wallEditor.selectedWall.value) {
+      event.preventDefault()
+      saveHistoryState()
+      // Remove from local working copy, not the store
+      localWalls.value = localWalls.value.filter(w => w.id !== wallEditor.selectedWall.value?.id)
+      wallEditor.selectWall(null)
+      drawMap()
+    }
+  }
+
+  // Ctrl+Z / Cmd+Z - Undo
+  if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
+    event.preventDefault()
+    undo()
+  }
+
+  // Ctrl+Y / Ctrl+Shift+Z / Cmd+Shift+Z - Redo
+  if (((event.ctrlKey || event.metaKey) && event.key === 'y') ||
+      ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'z')) {
+    event.preventDefault()
+    redo()
   }
 }
 
@@ -731,27 +924,65 @@ const onCanvasDragOver = (event: DragEvent) => {
 
 const onCanvasDrop = (event: DragEvent) => {
   event.preventDefault()
-  if (!draggedCamera.value || !currentMap.value || !canvasContainer.value) return
+  if (!draggedCamera.value || !canvasContainer.value || !isEditingMode.value) return
 
   const rect = canvasContainer.value.getBoundingClientRect()
   const canvasX = (event.clientX - rect.left - offsetX.value) / scale.value
   const canvasY = (event.clientY - rect.top - offsetY.value) / scale.value
 
-  // Add camera to map
-  const newPlacement: CameraPlacement = {
-    cameraId: draggedCamera.value.id,
+  // Store pending camera placement
+  pendingCameraPlacement.value = {
+    camera: draggedCamera.value,
     x: Math.round(canvasX),
-    y: Math.round(canvasY),
-    rotation: 0,
-    fieldOfView: 90,
+    y: Math.round(canvasY)
+  }
+
+  // Position the popup near the drop location but offset to avoid covering the camera
+  // Convert canvas coordinates to screen coordinates
+  const screenX = canvasX * scale.value + offsetX.value
+  const screenY = canvasY * scale.value + offsetY.value
+
+  configPopupPosition.value = {
+    x: event.clientX - rect.left + 20, // Offset to the right
+    y: event.clientY - rect.top - 100  // Offset upwards
+  }
+
+  // Show the configuration popup
+  showConfigPopup.value = true
+  draggedCamera.value = null
+}
+
+const handleCameraConfigConfirm = (config: { height: number; angle: number; rotation: number }) => {
+  if (!pendingCameraPlacement.value) return
+
+  const newPlacement: CameraPlacement = {
+    cameraId: pendingCameraPlacement.value.camera.id,
+    x: pendingCameraPlacement.value.x,
+    y: pendingCameraPlacement.value.y,
+    rotation: config.rotation,
+    angle: config.angle,
+    height: config.height,
+    fov: 90,
     viewDistance: 200,
+    autoCalculateDistance: true,
     color: 'blue-500'
   }
 
-  siteMapStore.addCameraToSiteMap(currentMap.value.id, newPlacement)
-  markAsChanged()
+  saveHistoryState()
+  // Add to local working copy, not the store
+  localCameras.value.push(newPlacement)
   drawMap()
-  draggedCamera.value = null
+
+  // Close popup and clear pending placement
+  showConfigPopup.value = false
+  pendingCameraPlacement.value = null
+
+  showSuccessToast('Camera placed successfully!')
+}
+
+const handleCameraConfigCancel = () => {
+  showConfigPopup.value = false
+  pendingCameraPlacement.value = null
 }
 
 const handleWheel = (event: WheelEvent) => {
@@ -839,18 +1070,14 @@ const resetZoom = () => {
 }
 
 const drawMap = () => {
-  console.log('[drawMap] Called - scale/offset:', { scale: scale.value, offsetX: offsetX.value, offsetY: offsetY.value })
-  console.log('[drawMap] isEditingMode:', isEditingMode.value)
-
-  if (!currentMap.value) {
-    console.log('[drawMap] Skipping - no current map')
-    return
-  }
+  if (!currentMap.value) return
 
   canvas.clearCanvas()
   canvas.drawGrid()
   canvas.drawScaleReference()
-  canvas.drawWalls(currentMap.value.walls)
+
+  // Use working data (local copies in edit mode, store data in viewer mode)
+  canvas.drawWalls(workingWalls.value)
 
   // Draw wall preview in edit mode
   if (isEditingMode.value && wallEditor.drawState.value.isDrawing) {
@@ -872,9 +1099,9 @@ const drawMap = () => {
     }
   }
 
-  currentMap.value.cameras.forEach(camera => {
+  workingCameras.value.forEach(camera => {
     const isSelected = selectedCamera.value?.cameraId === camera.cameraId
-    canvas.drawCamera(camera, getCameraName, isSelected, false, currentMap.value.walls)
+    canvas.drawCamera(camera, getCameraName, isSelected, false, workingWalls.value)
   })
 }
 
@@ -885,36 +1112,27 @@ const resetCanvasTransform = () => {
 }
 
 const fitToView = () => {
-  console.log('[fitToView] START')
-  console.log('[fitToView] isEditingMode:', isEditingMode.value)
-
   const canvasEl = mapCanvas.value
   const container = canvasContainer.value
-  if (!canvasEl || !container || !currentMap.value) {
-    console.log('[fitToView] EARLY EXIT - missing elements')
-    return
-  }
+  if (!canvasEl || !container || !currentMap.value) return
 
   const containerWidth = container.clientWidth
   const containerHeight = container.clientHeight
   const mapWidth = currentMap.value.width
   const mapHeight = currentMap.value.height
 
-  console.log('[fitToView] Container:', { containerWidth, containerHeight })
-  console.log('[fitToView] Map:', { mapWidth, mapHeight })
+  // Skip if container is too small (not ready yet)
+  if (containerWidth < 100 || containerHeight < 100) return
 
   const padding = 40
   const scaleX = (containerWidth - padding * 2) / mapWidth
   const scaleY = (containerHeight - padding * 2) / mapHeight
-  const newScale = Math.min(scaleX, scaleY, 1)
-
-  console.log('[fitToView] Calculated:', { scaleX, scaleY, newScale })
+  // Ensure scale is always positive and within bounds
+  const newScale = Math.max(minScale, Math.min(scaleX, scaleY, 1))
 
   scale.value = newScale
   offsetX.value = (containerWidth - mapWidth * newScale) / 2
   offsetY.value = (containerHeight - mapHeight * newScale) / 2
-
-  console.log('[fitToView] Set values:', { scale: scale.value, offsetX: offsetX.value, offsetY: offsetY.value })
 }
 
 const setupMockWebRTC = async () => {
@@ -1031,7 +1249,6 @@ const closeCameraModal = () => {
 }
 
 const openAddMapDialog = () => {
-  console.log('[openAddMapDialog] Creating new site map')
   // Create a new blank site map
   const newMap = siteMapStore.addSiteMap({
     name: 'New Site Map',
@@ -1044,39 +1261,25 @@ const openAddMapDialog = () => {
     walls: [],
   })
 
-  console.log('[openAddMapDialog] New map created with id:', newMap.id)
-  // Enter edit mode with the new site map
-  isEditingMode.value = true
-  editingMapId.value = newMap.id
+  // Enter edit mode with the new site map using editMap
+  editMap(newMap.id)
 }
 
 const resizeCanvas = () => {
-  console.log('[resizeCanvas] START')
-  console.log('[resizeCanvas] isEditingMode:', isEditingMode.value)
-
   const canvasEl = mapCanvas.value
-  if (!canvasEl || !currentMap.value) {
-    console.log('[resizeCanvas] EARLY EXIT - missing elements')
-    return
-  }
+  if (!canvasEl || !currentMap.value) return
 
-  console.log('[resizeCanvas] Resizing to:', { width: currentMap.value.width, height: currentMap.value.height })
   canvas.resizeCanvas(currentMap.value.width, currentMap.value.height)
-  console.log('[resizeCanvas] Calling drawMap()')
   drawMap()
 
   // Mark initial render as complete after first successful draw
   if (!isInitialRenderComplete.value) {
-    console.log('[resizeCanvas] Marking initial render complete')
     setTimeout(() => {
       isInitialRenderComplete.value = true
     }, 50)
   }
 }
 
-watch(isEditingMode, (newValue, oldValue) => {
-  console.log('[watch isEditingMode] Changed from', oldValue, 'to', newValue)
-})
 
 watch([
   () => canvasOptions.showGrid,
@@ -1086,15 +1289,39 @@ watch([
   canvas.requestRedraw(drawMap)
 })
 
+// Watch for changes in edit mode to automatically update hasUnsavedChanges
+watch([
+  () => siteMapForm.name,
+  () => siteMapForm.description,
+  () => siteMapForm.width,
+  () => siteMapForm.height,
+  () => localWalls.value.length,
+  () => localCameras.value.length,
+  localWalls,
+  localCameras
+], () => {
+  if (!isEditingMode.value) return
+
+  // Check if anything has changed from original
+  const formChanged =
+    siteMapForm.name !== originalData.value.name ||
+    siteMapForm.description !== originalData.value.description ||
+    siteMapForm.width !== originalData.value.width ||
+    siteMapForm.height !== originalData.value.height
+
+  const wallsChanged = JSON.stringify(localWalls.value) !== JSON.stringify(originalData.value.walls)
+  const camerasChanged = JSON.stringify(localCameras.value) !== JSON.stringify(originalData.value.cameras)
+
+  hasUnsavedChanges.value = formChanged || wallsChanged || camerasChanged
+}, { deep: true })
+
 watch(currentMap, async (newMap, oldMap) => {
-  console.log('[watch currentMap] Map changed from', oldMap?.id, 'to', newMap?.id)
-  console.log('[watch currentMap] isEditingMode:', isEditingMode.value)
+  // Skip if the map ID hasn't actually changed (just switching modes)
+  if (oldMap?.id === newMap?.id) return
 
   if (newMap) {
-    console.log('[watch currentMap] Waiting for nextTick')
     // Wait for DOM to update, then set zoom/position before drawing
     await nextTick()
-    console.log('[watch currentMap] Calling fitToView and resizeCanvas')
     // Important: Call fitToView FIRST to set transform, THEN resize which will draw
     fitToView()
     // Small delay to ensure transform is applied before drawing
@@ -1113,43 +1340,34 @@ const handleResize = () => {
 }
 
 onMounted(() => {
-  console.log('[SiteMapViewer onMounted] START')
-  console.log('[SiteMapViewer onMounted] isEditingMode:', isEditingMode.value)
-
-  if (!canvas.initCanvas()) {
-    console.log('[SiteMapViewer onMounted] Failed to init canvas')
-    return
-  }
-
-  console.log('[SiteMapViewer onMounted] Canvas initialized')
-  console.log('[SiteMapViewer onMounted] selectedMapId:', selectedMapId.value)
-  console.log('[SiteMapViewer onMounted] currentMap:', currentMap.value?.id)
+  if (!canvas.initCanvas()) return
 
   // Auto-select first site map if none is currently selected or valid
   if ((!selectedMapId.value || !currentMap.value) && siteMaps.value.length > 0) {
-    console.log('[SiteMapViewer onMounted] Auto-selecting first map')
     selectMap(siteMaps.value[0].id)
   } else if (currentMap.value) {
-    console.log('[SiteMapViewer onMounted] Map already selected, rendering')
     // Map is already selected, render it
     resizeCanvas()
     drawMap()
     setTimeout(() => {
-      console.log('[SiteMapViewer onMounted] Fitting to view after 100ms')
       fitToView()
     }, 100)
   }
 
   window.addEventListener('resize', handleResize)
+  window.addEventListener('keydown', handleKeyDown)
+
+  // Initialize history with current state
+  if (currentMap.value) {
+    saveHistoryState()
+  }
 
   // Set up real-time camera status updates
   // In real implementation, this would use WebSocket or SSE for live updates
   // Here we simulate it by periodically checking status and updating the display
   statusUpdateInterval = window.setInterval(() => {
     // Skip if in edit mode
-    if (isEditingMode.value) {
-      return
-    }
+    if (isEditingMode.value) return
 
     // Simulate random status changes for demonstration
     // In production, this would fetch real status from backend
@@ -1177,8 +1395,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  console.log('[SiteMapViewer onUnmounted] Cleaning up')
   window.removeEventListener('resize', handleResize)
+  window.removeEventListener('keydown', handleKeyDown)
 
   if (activePeerConnection.value) {
     activePeerConnection.value.close()

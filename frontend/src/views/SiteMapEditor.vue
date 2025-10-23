@@ -4,8 +4,21 @@
     <div class="w-64 border-r bg-card overflow-y-auto flex flex-col">
       <div class="p-4 border-b flex items-center justify-between gap-2">
         <div class="flex-1 min-w-0">
-          <h2 class="text-base font-bold">Site Map Editor</h2>
-          <p class="text-xs text-muted-foreground mt-1">Configure cameras and walls</p>
+          <h2 class="text-base font-bold text-foreground mb-2">Site Map Editor</h2>
+          <div class="flex items-center gap-3 flex-wrap">
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-muted-foreground">Cameras:</span>
+              <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-muted text-muted-foreground">
+                {{ placedCameras.length }}
+              </span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-muted-foreground">Walls:</span>
+              <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-muted text-muted-foreground">
+                {{ currentSiteMap?.walls.length || 0 }}
+              </span>
+            </div>
+          </div>
         </div>
         <!-- Back Button -->
         <button

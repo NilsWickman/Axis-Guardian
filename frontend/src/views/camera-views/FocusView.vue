@@ -40,13 +40,25 @@
           :camera="selectedCamera"
           @video-ready="onVideoReady"
         >
-          <template #overlays>
+          <template #overlays="{ videoWidth, videoHeight, containerWidth: cWidth, containerHeight: cHeight }">
+            <!-- Legacy person overlays -->
             <PersonOverlay
               v-for="overlay in currentOverlays"
               :key="overlay.id"
               :overlay="overlay"
-              :container-width="containerWidth"
-              :container-height="containerHeight"
+              :container-width="cWidth"
+              :container-height="cHeight"
+            />
+
+            <!-- Real-time detection overlays -->
+            <DetectionOverlay
+              :detections="currentDetections"
+              :video-width="videoWidth"
+              :video-height="videoHeight"
+              :container-width="cWidth"
+              :container-height="cHeight"
+              :show-connection-status="true"
+              :is-connected="mqttConnected"
             />
           </template>
         </CameraFeedDisplay>
@@ -75,7 +87,9 @@ import type { Camera } from '../../types/generated'
 import CameraFeedDisplay from '@/components/features/camera/CameraFeedDisplay.vue'
 import CameraThumbnail from '@/components/features/camera/CameraThumbnail.vue'
 import PersonOverlay from '@/components/features/camera/PersonOverlay.vue'
+import DetectionOverlay from '@/components/features/camera/DetectionOverlay.vue'
 import { useCameraOverlays } from '@/composables/useCameraOverlays'
+import { useDetections } from '@/composables/useDetections'
 
 const cameras = ref<Camera[]>([])
 
@@ -87,12 +101,23 @@ const videoRefs = ref<Record<string, HTMLVideoElement>>({})
 // UI State
 const compactMode = ref(false)
 
-// Camera overlays
+// Camera overlays (legacy person overlays)
 const { getOverlays } = useCameraOverlays()
+
+// Detection system integration
+const {
+  isConnected: mqttConnected,
+  subscribe,
+  unsubscribe,
+  getDetections,
+  connect: connectMQTT
+} = useDetections()
 
 // Container dimensions for overlay positioning
 const containerWidth = ref(1920)
 const containerHeight = ref(1080)
+const videoNativeWidth = ref(1920)
+const videoNativeHeight = ref(1080)
 
 const onlineCameras = computed(() => cameras.value.filter(c => c.status === 'online').length)
 
@@ -101,9 +126,28 @@ const currentOverlays = computed(() => {
   return getOverlays(selectedCamera.value.id)
 })
 
+// Get detections for the selected camera
+const currentDetections = computed(() => {
+  if (!selectedCamera.value) return []
+  return getDetections(selectedCamera.value.id).value
+})
+
 const selectCamera = (camera: Camera) => {
   selectedCamera.value = camera
 }
+
+// Watch for camera changes and subscribe to detections
+watch(selectedCamera, async (newCamera, oldCamera) => {
+  // Unsubscribe from old camera
+  if (oldCamera) {
+    unsubscribe(oldCamera.id)
+  }
+
+  // Subscribe to new camera
+  if (newCamera) {
+    await subscribe(newCamera.id)
+  }
+})
 
 const onVideoReady = (cameraId: string, videoElement: HTMLVideoElement) => {
   videoRefs.value[cameraId] = videoElement
@@ -112,7 +156,7 @@ const onVideoReady = (cameraId: string, videoElement: HTMLVideoElement) => {
 // Fetch cameras from the mock server
 const fetchCameras = async () => {
   try {
-    const response = await fetch('http://localhost:8000/axis-cgi/cameras/list')
+    const response = await fetch('http://localhost:8000/cameras')
     if (response.ok) {
       const camerasData = await response.json()
       cameras.value = camerasData
@@ -221,7 +265,22 @@ const popOutCamera = () => {
 }
 
 onMounted(async () => {
+  // Connect to MQTT broker
+  try {
+    await connectMQTT()
+    console.log('Connected to MQTT broker for detections')
+  } catch (error) {
+    console.error('Failed to connect to MQTT broker:', error)
+  }
+
   // Fetch cameras from server
   await fetchCameras()
+})
+
+onUnmounted(() => {
+  // Clean up MQTT subscriptions
+  if (selectedCamera.value) {
+    unsubscribe(selectedCamera.value.id)
+  }
 })
 </script>

@@ -1,0 +1,27 @@
+# Object Detection Service Dependencies
+
+# Computer Vision
+opencv-python==4.9.0.80
+opencv-contrib-python==4.9.0.80
+
+# YOLO Object Detection (YOLOv8)
+ultralytics==8.1.20
+
+# Deep Learning
+torch==2.2.0
+torchvision==0.17.0
+
+# MQTT Client
+paho-mqtt==2.0.0
+
+# Configuration
+python-dotenv==1.0.1
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Utilities
+numpy==1.26.3
+pillow==10.2.0
+
+# Logging
+loguru==0.7.2

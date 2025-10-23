@@ -5,10 +5,27 @@
       <div class="px-6 py-4">
         <div class="flex items-center justify-between">
           <div>
-            <h1 class="text-2xl font-bold">System Settings</h1>
-            <p class="text-sm text-muted-foreground mt-1">
-              Configure system-wide alarm detection and lifecycle management
-            </p>
+            <h1 class="text-base font-bold text-foreground mb-2">System Settings</h1>
+            <div class="flex items-center gap-3">
+              <div class="flex items-center gap-2">
+                <span class="text-sm text-muted-foreground">Object Types:</span>
+                <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-muted text-muted-foreground">
+                  {{ settings.objectTypes?.length || 0 }}
+                </span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-sm text-muted-foreground">Dismissal Reasons:</span>
+                <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-muted text-muted-foreground">
+                  {{ settings.dismissalReasons?.length || 0 }}
+                </span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-sm text-muted-foreground">Outcome Categories:</span>
+                <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-muted text-muted-foreground">
+                  {{ settings.outcomeCategories?.length || 0 }}
+                </span>
+              </div>
+            </div>
           </div>
 
           <div v-if="hasUnsavedChanges" class="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">

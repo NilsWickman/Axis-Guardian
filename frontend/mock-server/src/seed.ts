@@ -52,9 +52,9 @@ async function main() {
   const cameras = await Promise.all([
     prisma.camera.create({
       data: {
-        id: 'camera-1',
-        name: 'Main Entrance',
-        rtspUrl: 'rtsp://camera-1.axis.local/stream',
+        id: 'camera1',
+        name: 'People Detection - Main Entrance',
+        rtspUrl: 'rtsp://localhost:8554/camera1',
         status: 'ONLINE',
         position: JSON.stringify({ x: 100, y: 200, z: 0 }),
         capabilities: JSON.stringify({
@@ -68,26 +68,26 @@ async function main() {
     }),
     prisma.camera.create({
       data: {
-        id: 'camera-2',
-        name: 'Parking Lot',
-        rtspUrl: 'rtsp://camera-2.axis.local/stream',
+        id: 'camera2',
+        name: 'Car Detection - Parking Lot',
+        rtspUrl: 'rtsp://localhost:8554/camera2',
         status: 'ONLINE',
         position: JSON.stringify({ x: 300, y: 150, z: 0 }),
         capabilities: JSON.stringify({
           ptz: false,
           audio: false,
           analytics: true,
-          resolution: '1280x720',
+          resolution: '1920x1080',
           fps: 25
         })
       }
     }),
     prisma.camera.create({
       data: {
-        id: 'camera-3',
-        name: 'Exit Gate',
-        rtspUrl: 'rtsp://camera-3.axis.local/stream',
-        status: 'OFFLINE',
+        id: 'camera3',
+        name: 'Mixed Detection - Exit Gate',
+        rtspUrl: 'rtsp://localhost:8554/camera3',
+        status: 'ONLINE',
         position: JSON.stringify({ x: 500, y: 100, z: 0 }),
         capabilities: JSON.stringify({
           ptz: true,

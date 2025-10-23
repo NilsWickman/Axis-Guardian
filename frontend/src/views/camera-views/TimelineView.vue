@@ -3,7 +3,29 @@
     <!-- Header with Controls -->
     <div class="border-b border-sidebar-border p-4 space-y-4">
       <div class="flex justify-between items-center">
-        <h1 class="text-base font-bold text-foreground">Timeline View</h1>
+        <div>
+          <h1 class="text-base font-bold text-foreground mb-2">Timeline View</h1>
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-muted-foreground">Cameras:</span>
+              <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-muted text-muted-foreground">
+                {{ displayedCameras.length }}
+              </span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-muted-foreground">Events:</span>
+              <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-600">
+                {{ events.length }}
+              </span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-muted-foreground">Duration:</span>
+              <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-muted text-muted-foreground">
+                {{ formatDuration(timelineEnd - timelineStart) }}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Selection Controls -->
@@ -11,12 +33,23 @@
         <!-- Date Selection -->
         <div>
           <label class="text-xs text-muted-foreground mb-1 block">Date</label>
-          <input
-            v-model="selectedDate"
-            type="date"
-            class="w-full px-3 py-1.5 text-xs border rounded bg-background"
-            @change="onDateChange"
-          />
+          <Popover>
+            <PopoverTrigger as-child>
+              <Button
+                variant="outline"
+                :class="cn(
+                  'w-full justify-start text-left font-normal h-[30px] text-xs px-3 py-0',
+                  !selectedDateValue && 'text-muted-foreground',
+                )"
+              >
+                <CalendarIcon class="mr-2 h-3 w-3" />
+                {{ selectedDateValue ? df.format(selectedDateValue.toDate(getLocalTimeZone())) : 'Pick a date' }}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent class="w-auto p-0" align="start">
+              <Calendar v-model="selectedDateValue" @update:model-value="onDateChange" initial-focus />
+            </PopoverContent>
+          </Popover>
         </div>
 
         <!-- Time Range Selection -->
@@ -91,22 +124,6 @@
             class="w-full px-3 py-1.5 text-xs border rounded bg-background"
             @change="onCustomRangeChange"
           />
-        </div>
-      </div>
-
-      <!-- Quick Stats -->
-      <div class="flex items-center space-x-6 text-xs">
-        <div>
-          <span class="text-muted-foreground">Selected:</span>
-          <span class="ml-1 font-semibold">{{ displayedCameras.length }} cameras</span>
-        </div>
-        <div>
-          <span class="text-muted-foreground">Duration:</span>
-          <span class="ml-1 font-semibold">{{ formatDuration(timelineEnd - timelineStart) }}</span>
-        </div>
-        <div>
-          <span class="text-muted-foreground">Events:</span>
-          <span class="ml-1 font-semibold">{{ events.length }}</span>
         </div>
       </div>
     </div>
@@ -282,12 +299,22 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { Play, Pause, SkipBack, SkipForward } from 'lucide-vue-next'
+import type { Ref } from 'vue'
+import { Play, Pause, SkipBack, SkipForward, CalendarIcon } from 'lucide-vue-next'
 import { useCameraStore } from '@/stores/cameras'
 import type { Camera } from '../../types/generated'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Calendar } from '@/components/ui/calendar'
+import { Button } from '@/components/ui/button'
+import { DateFormatter, getLocalTimeZone, today, type DateValue } from '@internationalized/date'
+import { cn } from '@/lib/utils'
 
 const cameraStore = useCameraStore()
+
+const df = new DateFormatter('en-US', {
+  dateStyle: 'medium',
+})
 
 const cameras = computed(() => cameraStore.cameras)
 const videoRefs = ref<Record<string, HTMLVideoElement>>({})
@@ -295,7 +322,7 @@ const streamReady = ref<Record<string, boolean>>({})
 const peerConnections = ref<Record<string, RTCPeerConnection>>({})
 
 // Selection state
-const selectedDate = ref(new Date().toISOString().split('T')[0])
+const selectedDateValue = ref(today(getLocalTimeZone())) as Ref<DateValue>
 const selectedTimeRange = ref('1h')
 const selectedCameraView = ref('all')
 const customStartTime = ref('00:00')
@@ -388,7 +415,8 @@ const onCustomRangeChange = () => {
 }
 
 const updateTimelineRange = () => {
-  const date = new Date(selectedDate.value)
+  // Convert DateValue to JavaScript Date
+  const date = selectedDateValue.value.toDate(getLocalTimeZone())
 
   if (selectedTimeRange.value === 'custom') {
     const [startHour, startMin] = customStartTime.value.split(':').map(Number)

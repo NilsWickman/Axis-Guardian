@@ -38,32 +38,6 @@
         </svg>
         <span>Edit</span>
       </button>
-      <button
-        @click="$emit('set-mode', 'delete')"
-        class="px-3 py-1.5 text-sm rounded transition-colors flex items-center gap-1.5 border-2"
-        :class="mode === 'delete' ? 'border-destructive' : 'border-transparent hover:bg-accent'"
-        title="Delete mode (X)"
-      >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-        </svg>
-        <span>Delete</span>
-      </button>
-    </div>
-
-    <!-- Grid Snap Toggle -->
-    <div class="flex items-center gap-2 border-r pr-2">
-      <button
-        @click="$emit('toggle-grid')"
-        class="px-2 py-1 text-xs rounded transition-colors flex items-center gap-1"
-        :class="showGrid ? 'bg-accent' : 'hover:bg-accent'"
-        :title="`Grid & Snap: ${showGrid ? 'On' : 'Off'}`"
-      >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
-        </svg>
-        Grid
-      </button>
     </div>
 
     <!-- View Controls -->
@@ -72,7 +46,7 @@
         @click="$emit('undo')"
         :disabled="!canUndo"
         class="px-2 py-1 text-xs rounded hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
-        title="Undo"
+        title="Undo (Ctrl+Z)"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
@@ -82,7 +56,7 @@
         @click="$emit('redo')"
         :disabled="!canRedo"
         class="px-2 py-1 text-xs rounded hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
-        title="Redo"
+        title="Redo (Ctrl+Y)"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10h-10a8 8 0 00-8 8v2m18-10l-6 6m6-6l-6-6" />
@@ -106,28 +80,13 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" />
         </svg>
       </button>
-      <button
-        @click="$emit('reset-view')"
-        class="px-2 py-1 text-xs rounded hover:bg-accent"
-        title="Reset View"
-      >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-        </svg>
-      </button>
     </div>
 
-    <!-- Selected Wall Actions -->
-    <div v-if="selectedWall" class="flex items-center gap-2 border-r pr-2">
+    <!-- Selected Wall Info -->
+    <div v-if="selectedWall" class="flex items-center gap-2">
       <span class="text-xs text-muted-foreground">
-        Selected: {{ selectedWall.type || 'internal' }} wall
+        Selected: {{ selectedWall.type || 'internal' }} wall (Press Delete to remove)
       </span>
-      <button
-        @click="$emit('delete-wall')"
-        class="px-2 py-1 text-xs bg-destructive text-destructive-foreground rounded hover:bg-destructive/90"
-      >
-        Delete
-      </button>
     </div>
   </div>
 </template>
@@ -141,7 +100,6 @@ interface Props {
   mode: WallEditorMode
   wallType: 'external' | 'internal' | 'door'
   selectedWall: Wall | null
-  showGrid: boolean
   canUndo: boolean
   canRedo: boolean
 }
@@ -151,12 +109,9 @@ defineProps<Props>()
 defineEmits<{
   'set-mode': [mode: WallEditorMode]
   'set-wall-type': [type: 'external' | 'internal' | 'door']
-  'delete-wall': []
-  'toggle-grid': []
   'undo': []
   'redo': []
   'zoom-in': []
   'zoom-out': []
-  'reset-view': []
 }>()
 </script>

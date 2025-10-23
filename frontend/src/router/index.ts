@@ -4,7 +4,23 @@ import type { RouteRecordRaw } from 'vue-router'
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
-    redirect: '/cameras/focus',
+    redirect: '/cameras/webrtc-detection',
+  },
+  {
+    path: '/cameras/live-detection',
+    name: 'LiveDetectionView',
+    component: () => import('@/views/camera-views/LiveDetectionView.vue'),
+    meta: {
+      title: 'Live Detection (HLS)',
+    },
+  },
+  {
+    path: '/cameras/webrtc-detection',
+    name: 'WebRTCDetectionView',
+    component: () => import('@/views/camera-views/WebRTCDetectionView.vue'),
+    meta: {
+      title: 'Live Detection (WebRTC)',
+    },
   },
   {
     path: '/cameras/focus',
@@ -20,15 +36,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/camera-views/TimelineView.vue'),
     meta: {
       title: 'Timeline',
-    },
-  },
-  {
-    path: '/dashboard',
-    name: 'Dashboard',
-    component: () => import('@/views/timeline/AnalyticsDashboard.vue'),
-    meta: {
-      title: 'Dashboard',
-      roles: ['admin'],
     },
   },
   {
