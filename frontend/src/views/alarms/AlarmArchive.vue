@@ -5,16 +5,27 @@
       <div class="px-6 py-4">
         <div class="flex items-center justify-between">
           <div>
-            <h1 class="text-2xl font-bold">Alarm Archive</h1>
-            <p class="text-sm text-muted-foreground mt-1">
-              View and search archived alarms
-            </p>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <span class="text-sm text-muted-foreground">
-              {{ filteredAlarms.length }} archived alarm{{ filteredAlarms.length !== 1 ? 's' : '' }}
-            </span>
+            <h1 class="text-base font-bold text-foreground mb-2">Alarm Archive</h1>
+            <div class="flex items-center gap-3">
+              <div class="flex items-center gap-2">
+                <span class="text-sm text-muted-foreground">Total:</span>
+                <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-muted text-muted-foreground">
+                  {{ filteredAlarms.length }}
+                </span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-sm text-muted-foreground">Dismissed:</span>
+                <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
+                  {{ filteredAlarms.filter(a => (a as any).status === 'dismissed').length }}
+                </span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-sm text-muted-foreground">Confirmed:</span>
+                <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-600">
+                  {{ filteredAlarms.filter(a => (a as any).status === 'confirmed').length }}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 

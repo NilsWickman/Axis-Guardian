@@ -101,7 +101,7 @@ make setup              # Complete setup (install deps + initialize database)
 make database           # Setup database (stops existing, starts fresh, runs migrations/seeds)
 
 # Development
-make dev                # Start frontend with mock server (Phase 1 development)
+make dev                # Start complete system (frontend + cameras + WebRTC detection)
 make dev-all            # Start ALL servers (frontend + 7 backend services)
 
 # API Contracts
@@ -110,6 +110,11 @@ make api-contract       # Validate OpenAPI schemas and generate types/clients
 # Code Quality & Build
 make quality            # Check formatting and linting
 make build              # Build all compilable services
+
+# Camera Simulation & Detection
+make cameras            # Stream mock camera feeds via RTSP
+make detect             # Run MQTT-based object detection
+make webrtc-detect      # Run WebRTC detection with data channels (RECOMMENDED)
 ```
 
 ## Services
@@ -132,6 +137,8 @@ make build              # Build all compilable services
 - **Device Layer**: `localhost:5000`
 - **Collection Layer**: `localhost:5001`
 - **Analytics Layer**: `localhost:5002`
+- **Object Detection (MQTT)**: Publishes to `surveillance/detections/#`
+- **WebRTC Detection**: `localhost:8080` (signaling + data channels)
 
 ## Environment Variables
 
@@ -193,8 +200,11 @@ make build              # Verify compilation
 
 ## Documentation
 
-- [Architecture Document](shared/docs/architecture/notebook/v2-Architecture-Document.md) - Complete system architecture and design decisions
-- [Software Requirements Specification](shared/docs/project_management/requirements/SRS.md) - User stories and functional requirements
+- [Architecture Document](shared/docs/v2-Architecture-Document.md) - Complete system architecture and design decisions
+- [Software Requirements Specification](shared/docs/SRS.md) - User stories and functional requirements
+- [Object Detection Service](backend/python/object-detection-service/README.md) - MQTT-based detection service
+- [WebRTC Detection Service](backend/python/webrtc-detection-service/README.md) - Ultra-low latency detection with data channels
+- [WebRTC Detection Quickstart](backend/python/webrtc-detection-service/QUICKSTART.md) - 5-minute setup guide
 
 ## Project Status
 

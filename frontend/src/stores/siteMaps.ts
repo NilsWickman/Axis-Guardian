@@ -326,6 +326,41 @@ export const useSiteMapStore = defineStore('siteMaps', () => {
     }
   }
 
+  const addCameraToSiteMap = (mapId: string, placement: CameraPlacement) => {
+    const map = siteMaps.value.find(m => m.id === mapId)
+    if (map) {
+      map.cameras.push(placement)
+      map.updatedAt = new Date()
+    }
+  }
+
+  const addWallToSiteMap = (mapId: string, wall: Wall) => {
+    const map = siteMaps.value.find(m => m.id === mapId)
+    if (map) {
+      map.walls.push(wall)
+      map.updatedAt = new Date()
+    }
+  }
+
+  const updateWallInSiteMap = (mapId: string, wall: Wall) => {
+    const map = siteMaps.value.find(m => m.id === mapId)
+    if (map) {
+      const wallIndex = map.walls.findIndex(w => w.id === wall.id)
+      if (wallIndex !== -1) {
+        map.walls[wallIndex] = wall
+        map.updatedAt = new Date()
+      }
+    }
+  }
+
+  const removeWallFromSiteMap = (mapId: string, wallId: string) => {
+    const map = siteMaps.value.find(m => m.id === mapId)
+    if (map) {
+      map.walls = map.walls.filter(w => w.id !== wallId)
+      map.updatedAt = new Date()
+    }
+  }
+
   return {
     siteMaps,
     activeSiteMapId,
@@ -336,5 +371,9 @@ export const useSiteMapStore = defineStore('siteMaps', () => {
     deleteSiteMap,
     updateCameraPlacement,
     removeCameraPlacement,
+    addCameraToSiteMap,
+    addWallToSiteMap,
+    updateWallInSiteMap,
+    removeWallFromSiteMap,
   }
 })

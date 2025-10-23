@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: dev
       POSTGRES_PASSWORD: dev
     ports:
-      - "5432:5432"
+      - "5433:5432"  # Using 5433 on host to avoid conflict with system PostgreSQL
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -25,6 +25,7 @@ services:
     volumes:
       - mqtt_data:/mosquitto/data
       - mqtt_logs:/mosquitto/log
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "mosquitto_sub -t '$$SYS/#' -C 1 -i healthcheck -W 3"]
       interval: 10s
@@ -49,8 +50,18 @@ services:
       timeout: 5s
       retries: 5
 
+  mediamtx:
+    image: bluenviron/mediamtx:1
+    container_name: surveillance-mediamtx
+    network_mode: "host"
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+      - mediamtx_recordings:/recordings
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   mqtt_data:
   mqtt_logs:
   minio_data:
+  mediamtx_recordings:

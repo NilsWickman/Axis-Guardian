@@ -8,8 +8,14 @@
     "shared/types"
   ],
   "scripts": {
-    "dev": "npm-run-all --parallel dev:*",
+    "dev": "npm-run-all --parallel dev:frontend dev:mock-server dev:cameras dev:webrtc-detection",
     "dev:frontend": "npm --workspace frontend run dev",
+    "dev:mock-server": "cd frontend/mock-server && npm run dev",
+    "dev:cameras": "bash infrastructure/scripts/stream-mock-cameras.sh all",
+    "dev:detection": "bash -c 'cd backend/python/object-detection-service && source venv/bin/activate && python src/main.py'",
+    "dev:webrtc-detection": "bash -c 'cd backend/python/webrtc-detection-service && source venv/bin/activate && python src/main.py'",
+    "dev:phase1": "npm-run-all --parallel dev:frontend dev:mock-server",
+    "dev:surveillance": "npm-run-all --parallel dev:frontend dev:mock-server dev:cameras dev:detection",
     "dev:api-gateway": "npm --workspace api-gateway run dev",
     "dev:alarm-service": "npm --workspace alarm-service run dev",
     "dev:control-service": "npm --workspace control-service run dev",

@@ -157,6 +157,7 @@ AGENTS.md
 GEMINI.md
 .claude/
 .cursor/
+.playwright-mcp/
 
 # API Contract artefacts
 shared/contracts/
@@ -169,6 +170,4 @@ shared/types/
 shared/dist/
 shared/axis_shared.egg-info/
 frontend/src/types/generated/
-frontend/src/api/generated/
-frontend/src/api/websocket/
 frontend/src/api/generated/

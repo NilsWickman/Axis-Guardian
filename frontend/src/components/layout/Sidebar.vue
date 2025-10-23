@@ -11,7 +11,6 @@
     Palette,
     Cctv,
     Users,
-    BarChart3,
     Map,
     Bell,
     Wrench,
@@ -90,15 +89,6 @@
         icon: Users,
       },
     ]
-
-    // Add Dashboard for admins only
-    if (authStore.isAdmin) {
-      items.splice(1, 0, {
-        name: 'Dashboard',
-        path: '/dashboard',
-        icon: BarChart3,
-      })
-    }
 
     // Add Archive for admins only
     if (authStore.isAdmin) {
