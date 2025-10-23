@@ -39,6 +39,8 @@ class ObjectDetector:
         logger.info("YOLOv8 model loaded successfully")
 
         self.frame_number = 0
+        self.last_detections = []  # Cache for frame skipping
+        self.detection_cache = {}  # frame_number -> detections
 
     def detect(
         self, frame: np.ndarray, frame_timestamp: float = None
@@ -58,12 +60,14 @@ class ObjectDetector:
 
         detection_start = time.time()
 
-        # Run YOLOv8 inference
+        # Run YOLOv8 inference with optimizations
         results = self.model.predict(
             frame,
             conf=settings.confidence_threshold,
             iou=settings.iou_threshold,
             verbose=False,
+            half=True,  # Use FP16 for faster inference if GPU available
+            device='cuda' if torch.cuda.is_available() else 'cpu',
         )
 
         detections = []
@@ -107,6 +111,15 @@ class ObjectDetector:
                 detections.append(detection)
 
         processing_latency_ms = (time.time() - detection_start) * 1000
+
+        # Cache detections for this frame
+        self.last_detections = detections
+        self.detection_cache[self.frame_number] = detections
+
+        # Keep cache size reasonable (last 30 frames)
+        if len(self.detection_cache) > 30:
+            oldest_frame = min(self.detection_cache.keys())
+            del self.detection_cache[oldest_frame]
 
         if detections:
             logger.debug(

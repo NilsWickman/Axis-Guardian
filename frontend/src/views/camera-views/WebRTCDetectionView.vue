@@ -253,11 +253,9 @@ function onVideoLoaded(cameraId: string) {
 }
 
 function startDrawing(cameraId: string) {
-  const draw = () => {
-    drawDetections(cameraId)
-    animationFrames.value[cameraId] = requestAnimationFrame(draw)
-  }
-  draw()
+  // No longer using RAF loop - drawing is triggered by detection callbacks
+  // Initial draw to clear canvas
+  drawDetections(cameraId)
 }
 
 function drawDetections(cameraId: string) {
@@ -307,9 +305,6 @@ function drawDetections(cameraId: string) {
   })
 }
 
-// Track update intervals for cleanup
-const updateIntervals = ref<Record<string, number>>({})
-
 // Initialize WebRTC connections for each camera
 async function initializeWebRTC() {
   for (const camera of cameras) {
@@ -321,6 +316,20 @@ async function initializeWebRTC() {
     })
 
     webrtcConnections[camera.id] = connection
+
+    // Set up reactive callback for immediate updates
+    connection.setDetectionCallback((metadata) => {
+      // Update state reactively when detections arrive
+      cameraDetections[camera.id] = metadata.detections
+      frameNumbers[camera.id] = metadata.frame_number
+      detectionCounts[camera.id] = metadata.detection_count
+      cameraTotalDetections[camera.id] = connection.totalDetections.value
+      classCountsByCamera[camera.id] = connection.classCounts.value
+      cameraStats[camera.id] = connection.stats.value
+
+      // Trigger canvas redraw immediately
+      drawDetections(camera.id)
+    })
 
     // Wait for video element to be mounted
     await new Promise(resolve => setTimeout(resolve, 100))
@@ -335,21 +344,14 @@ async function initializeWebRTC() {
       // Connect WebRTC
       await connection.connect(videoEl)
 
-      // Watch for detection updates
-      const updateInterval = setInterval(() => {
-        // Update state from WebRTC connection
-        cameraDetections[camera.id] = connection.currentDetections.value
-        frameNumbers[camera.id] = connection.frameNumber.value
-        detectionCounts[camera.id] = connection.detectionCount.value
-        cameraTotalDetections[camera.id] = connection.totalDetections.value
-        classCountsByCamera[camera.id] = connection.classCounts.value
+      // Update connection states reactively
+      const stateUpdateInterval = setInterval(() => {
         connectionStates[camera.id] = connection.connectionState.value
         dataChannelStates[camera.id] = connection.isDataChannelOpen.value
-        cameraStats[camera.id] = connection.stats.value
-      }, 50) // Update UI at 20 FPS
+      }, 100) // Check connection state at 10 Hz
 
       // Store interval ID for cleanup
-      updateIntervals.value[camera.id] = updateInterval
+      animationFrames.value[camera.id] = stateUpdateInterval
 
       console.log(`WebRTC initialized for ${camera.id}`)
     } catch (error) {
@@ -364,11 +366,8 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  // Cancel all animation frames
-  Object.values(animationFrames.value).forEach(id => cancelAnimationFrame(id))
-
-  // Clear all update intervals
-  Object.values(updateIntervals.value).forEach(id => clearInterval(id))
+  // Clear all state update intervals
+  Object.values(animationFrames.value).forEach(id => clearInterval(id))
 
   // Disconnect all WebRTC connections
   Object.values(webrtcConnections).forEach(conn => {

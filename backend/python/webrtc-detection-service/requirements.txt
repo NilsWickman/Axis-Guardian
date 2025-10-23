@@ -7,3 +7,5 @@ ultralytics==8.1.0
 python-dotenv==1.0.0
 loguru==0.7.2
 paho-mqtt==1.6.1
+pydantic-settings==2.0.3
+torch>=2.0.0
