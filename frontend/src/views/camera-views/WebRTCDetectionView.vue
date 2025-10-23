@@ -177,6 +177,9 @@ const cameras: Camera[] = [
   { id: 'camera3', name: 'Camera 3 - Mixed Detection' }
 ]
 
+// Server-side rendering flag (set to true if backend draws on frames)
+const serverSideRendering = ref(true)
+
 // Class colors
 const CLASS_COLORS: Record<string, string> = {
   person: '#22c55e',
@@ -259,6 +262,9 @@ function startDrawing(cameraId: string) {
 }
 
 function drawDetections(cameraId: string) {
+  // Skip if server-side rendering is enabled
+  if (serverSideRendering.value) return
+
   const canvas = canvasRefs.value[cameraId]
   const video = videoRefs.value[cameraId]
 
@@ -327,8 +333,10 @@ async function initializeWebRTC() {
       classCountsByCamera[camera.id] = connection.classCounts.value
       cameraStats[camera.id] = connection.stats.value
 
-      // Trigger canvas redraw immediately
-      drawDetections(camera.id)
+      // Only trigger canvas redraw if client-side rendering
+      if (!serverSideRendering.value) {
+        drawDetections(camera.id)
+      }
     })
 
     // Wait for video element to be mounted

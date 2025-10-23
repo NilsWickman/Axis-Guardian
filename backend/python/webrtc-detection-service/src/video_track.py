@@ -61,11 +61,22 @@ class DetectionVideoTrack(VideoStreamTrack):
         self.detection_cache = {}  # frame_number -> detections
         self.last_detection_frame = -1
         self.frames_since_detection = 0
+        self.latest_detections = []  # Most recent detections to draw
 
         # Performance tracking
         self.last_frame_time = time.time()
         self.avg_processing_time = 0.033  # Initial estimate: 33ms
         self.dropped_frames = 0
+
+        # Colors for different classes (BGR format)
+        self.class_colors = {
+            'person': (34, 197, 34),      # Green
+            'car': (246, 130, 59),        # Blue
+            'truck': (68, 68, 239),       # Red
+            'bus': (214, 182, 6),         # Cyan
+            'motorbike': (247, 85, 168),  # Purple
+            'bicycle': (8, 179, 234)      # Yellow
+        }
 
         logger.info(f"DetectionVideoTrack initialized for {camera_id}")
 
@@ -74,6 +85,18 @@ class DetectionVideoTrack(VideoStreamTrack):
         try:
             logger.info(f"Connecting to {self.rtsp_url}")
             self.cap = cv2.VideoCapture(self.rtsp_url, cv2.CAP_FFMPEG)
+
+            # Enable hardware acceleration if available
+            # Try different backends: CUDA, DXVA (Windows), VAAPI (Linux), VideoToolbox (macOS)
+            try:
+                self.cap.set(cv2.CAP_PROP_HW_ACCELERATION, cv2.VIDEO_ACCELERATION_ANY)
+                logger.info("Hardware acceleration enabled for video decode")
+            except Exception as e:
+                logger.warning(f"Hardware acceleration not available: {e}")
+
+            # Set timeout values for better error handling
+            self.cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)  # 5 second open timeout
+            self.cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 3000)  # 3 second read timeout
 
             # Optimize buffer size for smoother playback (3-5 frames)
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)
@@ -157,8 +180,11 @@ class DetectionVideoTrack(VideoStreamTrack):
             # Send any ready detection results via data channel
             await self._send_cached_detections(self.frame_count, frame_timestamp)
 
+            # Draw detections on frame before encoding
+            frame_with_detections = self._draw_detections_on_frame(frame)
+
             # Convert BGR to RGB for WebRTC
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame_rgb = cv2.cvtColor(frame_with_detections, cv2.COLOR_BGR2RGB)
 
             # Create VideoFrame
             video_frame = VideoFrame.from_ndarray(frame_rgb, format="rgb24")
@@ -214,6 +240,9 @@ class DetectionVideoTrack(VideoStreamTrack):
                 "timestamp": timestamp,
             }
 
+            # Update latest detections for drawing
+            self.latest_detections = detections
+
             # Keep cache size reasonable (last 10 frames)
             if len(self.detection_cache) > 10:
                 oldest_frame = min(self.detection_cache.keys())
@@ -221,6 +250,76 @@ class DetectionVideoTrack(VideoStreamTrack):
 
         except Exception as e:
             logger.error(f"Error in detection callback: {e}")
+
+    def _draw_detections_on_frame(self, frame: np.ndarray) -> np.ndarray:
+        """
+        Draw bounding boxes and labels directly on the frame.
+
+        Args:
+            frame: BGR frame to draw on
+
+        Returns:
+            Frame with detections drawn
+        """
+        from config import settings
+
+        if not settings.draw_on_frame or not self.latest_detections:
+            return frame
+
+        # Work on a copy to avoid modifying original
+        annotated_frame = frame.copy()
+        frame_height, frame_width = frame.shape[:2]
+
+        for detection in self.latest_detections:
+            bbox = detection['bbox']
+            class_name = detection['class_name']
+            confidence = detection['confidence']
+
+            # Get pixel coordinates
+            x1 = int(bbox['x1'])
+            y1 = int(bbox['y1'])
+            x2 = int(bbox['x2'])
+            y2 = int(bbox['y2'])
+
+            # Get color for this class
+            color = self.class_colors.get(class_name, (180, 163, 148))  # Default gray
+
+            # Draw bounding box (thicker line for better visibility)
+            cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 3)
+
+            # Prepare label
+            label = f"{class_name} {int(confidence * 100)}%"
+
+            # Calculate text size for background
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.6
+            thickness = 2
+            (text_width, text_height), baseline = cv2.getTextSize(
+                label, font, font_scale, thickness
+            )
+
+            # Draw label background
+            cv2.rectangle(
+                annotated_frame,
+                (x1, y1 - text_height - 10),
+                (x1 + text_width + 10, y1),
+                color,
+                -1  # Filled
+            )
+
+            # Draw label text
+            cv2.putText(
+                annotated_frame,
+                label,
+                (x1 + 5, y1 - 5),
+                font,
+                font_scale,
+                (0, 0, 0),  # Black text
+                thickness,
+                cv2.LINE_AA
+            )
+
+        return annotated_frame
 
     async def _send_cached_detections(self, current_frame: int, timestamp: float):
         """Send detection results from cache via data channel."""

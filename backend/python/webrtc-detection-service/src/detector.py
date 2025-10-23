@@ -2,6 +2,7 @@
 
 import time
 from typing import List, Dict, Any
+import cv2
 import numpy as np
 import torch
 from ultralytics import YOLO
@@ -60,9 +61,32 @@ class ObjectDetector:
 
         detection_start = time.time()
 
+        # Get original frame dimensions
+        original_height, original_width = frame.shape[:2]
+
+        # Downscale frame for faster detection if needed
+        inference_frame = frame
+        scale_factor = 1.0
+
+        if settings.auto_scale_detection and original_width > settings.detection_resolution:
+            scale_factor = settings.detection_resolution / original_width
+            new_width = settings.detection_resolution
+            new_height = int(original_height * scale_factor)
+
+            inference_frame = cv2.resize(
+                frame,
+                (new_width, new_height),
+                interpolation=cv2.INTER_LINEAR  # Faster than INTER_CUBIC
+            )
+
+            logger.debug(
+                f"Downscaled frame from {original_width}x{original_height} "
+                f"to {new_width}x{new_height} (scale: {scale_factor:.2f})"
+            )
+
         # Run YOLOv8 inference with optimizations
         results = self.model.predict(
-            frame,
+            inference_frame,
             conf=settings.confidence_threshold,
             iou=settings.iou_threshold,
             verbose=False,
@@ -71,7 +95,7 @@ class ObjectDetector:
         )
 
         detections = []
-        frame_height, frame_width = frame.shape[:2]
+        frame_height, frame_width = original_height, original_width
 
         # Process results
         for result in results:
@@ -80,10 +104,17 @@ class ObjectDetector:
                 continue
 
             for box in boxes:
-                # Get box coordinates (xyxy format)
+                # Get box coordinates (xyxy format) from inference frame
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
 
-                # Convert to VAPIX normalized coordinates (0-1)
+                # Scale coordinates back to original frame size
+                if scale_factor != 1.0:
+                    x1 = x1 / scale_factor
+                    y1 = y1 / scale_factor
+                    x2 = x2 / scale_factor
+                    y2 = y2 / scale_factor
+
+                # Convert to VAPIX normalized coordinates (0-1) using ORIGINAL dimensions
                 left = float(x1 / frame_width)
                 top = float(y1 / frame_height)
                 right = float(x2 / frame_width)

@@ -45,6 +45,8 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
   const connectionState = ref<RTCPeerConnectionState>('new')
   const isReconnecting = ref(false)
   const reconnectTimer = ref<number | null>(null)
+  const reconnectAttempts = ref(0)
+  const maxReconnectAttempts = 10
 
   // Detection data
   const currentDetections = ref<Detection[]>([])
@@ -56,6 +58,8 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
   // Frame synchronization
   const maxFrameAge = 5 // Maximum frames old before discarding
   const detectionQueue = ref<Map<number, DetectionMetadata>>(new Map())
+  const detectionBuffer: DetectionMetadata[] = [] // Buffer for time-based sync
+  const maxBufferSize = 10
 
   // Stats
   const stats = ref({
@@ -66,6 +70,20 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     droppedStaleDetections: 0,
     latencyMs: 0
   })
+
+  // Connection quality stats
+  const connectionQuality = ref({
+    packetLoss: 0,
+    jitter: 0,
+    roundTripTime: 0,
+    bitrate: 0,
+    framesDropped: 0,
+    framesDecoded: 0,
+    timestamp: 0
+  })
+
+  // Stats monitoring interval
+  let statsMonitorInterval: number | null = null
 
   // Callback for detection updates
   let onDetectionUpdate: ((metadata: DetectionMetadata) => void) | null = null
@@ -231,10 +249,95 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
       console.log('[WebRTC] Connection established')
 
+      // Reset reconnect attempts on successful connection
+      reconnectAttempts.value = 0
+
+      // Start monitoring connection quality
+      startQualityMonitoring()
+
     } catch (error) {
       console.error('[WebRTC] Connection error:', error)
       handleDisconnect()
       throw error
+    }
+  }
+
+  /**
+   * Start monitoring connection quality with getStats()
+   */
+  function startQualityMonitoring(): void {
+    // Clear any existing interval
+    if (statsMonitorInterval !== null) {
+      clearInterval(statsMonitorInterval)
+    }
+
+    // Monitor every 2 seconds
+    statsMonitorInterval = window.setInterval(async () => {
+      if (!peerConnection.value || peerConnection.value.connectionState !== 'connected') {
+        return
+      }
+
+      try {
+        const stats = await peerConnection.value.getStats()
+        let inboundRtp: RTCStatsReport | null = null
+        let candidatePair: RTCStatsReport | null = null
+
+        stats.forEach((report: any) => {
+          // Find inbound RTP stats for video
+          if (report.type === 'inbound-rtp' && report.kind === 'video') {
+            inboundRtp = report
+          }
+
+          // Find candidate pair for RTT
+          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+            candidatePair = report
+          }
+        })
+
+        if (inboundRtp) {
+          // Calculate packet loss percentage
+          const packetsLost = inboundRtp.packetsLost || 0
+          const packetsReceived = inboundRtp.packetsReceived || 0
+          const totalPackets = packetsLost + packetsReceived
+          const packetLoss = totalPackets > 0 ? (packetsLost / totalPackets) * 100 : 0
+
+          // Update connection quality stats
+          connectionQuality.value = {
+            packetLoss: Math.round(packetLoss * 100) / 100,
+            jitter: inboundRtp.jitter ? Math.round(inboundRtp.jitter * 1000) : 0, // Convert to ms
+            roundTripTime: candidatePair?.currentRoundTripTime
+              ? Math.round(candidatePair.currentRoundTripTime * 1000)
+              : 0,
+            bitrate: inboundRtp.bytesReceived
+              ? Math.round((inboundRtp.bytesReceived * 8) / 1000)
+              : 0, // kbps
+            framesDropped: inboundRtp.framesDropped || 0,
+            framesDecoded: inboundRtp.framesDecoded || 0,
+            timestamp: Date.now()
+          }
+
+          // Log warnings for poor connection quality
+          if (packetLoss > 5) {
+            console.warn(`[WebRTC] High packet loss: ${packetLoss.toFixed(2)}%`)
+          }
+
+          if (connectionQuality.value.roundTripTime > 200) {
+            console.warn(`[WebRTC] High RTT: ${connectionQuality.value.roundTripTime}ms`)
+          }
+        }
+      } catch (error) {
+        console.error('[WebRTC] Error getting connection stats:', error)
+      }
+    }, 2000)
+  }
+
+  /**
+   * Stop monitoring connection quality
+   */
+  function stopQualityMonitoring(): void {
+    if (statsMonitorInterval !== null) {
+      clearInterval(statsMonitorInterval)
+      statsMonitorInterval = null
     }
   }
 
@@ -264,28 +367,25 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
         const metadata: DetectionMetadata = JSON.parse(event.data)
         const now = performance.now()
 
-        // Filter out stale detections (too old)
-        const currentFrame = frameNumber.value
-        const frameDiff = metadata.frame_number - currentFrame
-
-        if (frameDiff < -maxFrameAge) {
-          stats.value.droppedStaleDetections++
-          console.warn(
-            `[WebRTC] Dropped stale detection: frame ${metadata.frame_number} (current: ${currentFrame})`
-          )
-          return
-        }
-
         // Calculate latency
         const latency = now - (metadata.timestamp * 1000)
         stats.value.latencyMs = latency
 
-        // Update state immediately (reactive)
-        currentMetadata.value = metadata
-        currentDetections.value = metadata.detections
-        frameNumber.value = metadata.frame_number
-        detectionCount.value = metadata.detection_count
-        totalDetections.value += metadata.detection_count
+        // Add to buffer for time-based synchronization
+        detectionBuffer.push(metadata)
+
+        // Keep buffer size manageable
+        if (detectionBuffer.length > maxBufferSize) {
+          detectionBuffer.shift()
+        }
+
+        // Use slightly delayed detections to account for video decode/display lag
+        // Delay by approximately RTT/2 to sync with actual video display
+        const syncDelay = Math.min(connectionQuality.value.roundTripTime / 2, 50)
+
+        setTimeout(() => {
+          processBufferedDetection(metadata)
+        }, syncDelay)
 
         // Update stats
         stats.value.framesReceived++
@@ -294,19 +394,44 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
           stats.value.detectionsReceived / stats.value.framesReceived
         stats.value.lastUpdateTime = metadata.timestamp
 
-        // Trigger callback for immediate UI updates
-        if (onDetectionUpdate) {
-          onDetectionUpdate(metadata)
-        }
-
-        if (metadata.detection_count > 0) {
-          console.log(
-            `[WebRTC] Frame ${metadata.frame_number}: ${metadata.detection_count} detections (latency: ${latency.toFixed(1)}ms)`
-          )
-        }
       } catch (error) {
         console.error('[WebRTC] Error parsing metadata:', error)
       }
+    }
+  }
+
+  /**
+   * Process buffered detection with synchronization
+   */
+  function processBufferedDetection(metadata: DetectionMetadata): void {
+    // Filter out stale detections (too old)
+    const currentFrame = frameNumber.value
+    const frameDiff = metadata.frame_number - currentFrame
+
+    if (frameDiff < -maxFrameAge) {
+      stats.value.droppedStaleDetections++
+      console.warn(
+        `[WebRTC] Dropped stale detection: frame ${metadata.frame_number} (current: ${currentFrame})`
+      )
+      return
+    }
+
+    // Update state (reactive)
+    currentMetadata.value = metadata
+    currentDetections.value = metadata.detections
+    frameNumber.value = metadata.frame_number
+    detectionCount.value = metadata.detection_count
+    totalDetections.value += metadata.detection_count
+
+    // Trigger callback for UI updates
+    if (onDetectionUpdate) {
+      onDetectionUpdate(metadata)
+    }
+
+    if (metadata.detection_count > 0) {
+      console.log(
+        `[WebRTC] Frame ${metadata.frame_number}: ${metadata.detection_count} detections (latency: ${stats.value.latencyMs.toFixed(1)}ms)`
+      )
     }
   }
 
@@ -316,6 +441,9 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
   function handleDisconnect(): void {
     isConnected.value = false
     isDataChannelOpen.value = false
+
+    // Stop quality monitoring
+    stopQualityMonitoring()
 
     // Clean up peer connection
     if (dataChannel.value) {
@@ -328,10 +456,26 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
       peerConnection.value = null
     }
 
-    // Auto-reconnect logic
+    // Auto-reconnect logic with exponential backoff
     if (opts.autoReconnect && videoElement.value && !isReconnecting.value) {
+      // Check if we've exceeded max attempts
+      if (reconnectAttempts.value >= maxReconnectAttempts) {
+        console.error(
+          `[WebRTC] Max reconnection attempts (${maxReconnectAttempts}) reached. Stopping reconnection.`
+        )
+        return
+      }
+
       isReconnecting.value = true
-      console.log(`[WebRTC] Reconnecting in ${opts.reconnectDelay}ms...`)
+      reconnectAttempts.value++
+
+      // Exponential backoff: delay = baseDelay * 2^(attempts-1), capped at 30 seconds
+      const baseDelay = opts.reconnectDelay || 3000
+      const exponentialDelay = Math.min(baseDelay * Math.pow(2, reconnectAttempts.value - 1), 30000)
+
+      console.log(
+        `[WebRTC] Reconnecting in ${exponentialDelay}ms... (attempt ${reconnectAttempts.value}/${maxReconnectAttempts})`
+      )
 
       reconnectTimer.value = window.setTimeout(() => {
         if (videoElement.value) {
@@ -341,7 +485,7 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
             isReconnecting.value = false
           })
         }
-      }, opts.reconnectDelay)
+      }, exponentialDelay)
     }
   }
 
@@ -358,6 +502,7 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     }
 
     isReconnecting.value = false
+    reconnectAttempts.value = 0 // Reset attempts on manual disconnect
 
     if (dataChannel.value) {
       dataChannel.value.close()
@@ -396,6 +541,7 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
   // Cleanup on unmount
   onUnmounted(() => {
     disconnect()
+    stopQualityMonitoring()
   })
 
   /**
@@ -421,6 +567,7 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
     // Stats
     stats,
+    connectionQuality,
 
     // Methods
     connect,
