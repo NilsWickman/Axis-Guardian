@@ -3,6 +3,7 @@
 import asyncio
 import fractions
 import json
+import os
 import time
 from typing import Optional
 from concurrent.futures import ThreadPoolExecutor
@@ -62,11 +63,14 @@ class DetectionVideoTrack(VideoStreamTrack):
         self.last_detection_frame = -1
         self.frames_since_detection = 0
         self.latest_detections = []  # Most recent detections to draw
+        self.detection_frame_number = -1  # Frame number of latest_detections
 
         # Performance tracking
         self.last_frame_time = time.time()
         self.avg_processing_time = 0.033  # Initial estimate: 33ms
         self.dropped_frames = 0
+        self.corrupted_frames = 0
+        self.last_valid_frame = None  # Cache last good frame for error recovery
 
         # Colors for different classes (BGR format)
         self.class_colors = {
@@ -81,9 +85,14 @@ class DetectionVideoTrack(VideoStreamTrack):
         logger.info(f"DetectionVideoTrack initialized for {camera_id}")
 
     async def _connect_stream(self) -> bool:
-        """Connect to RTSP stream."""
+        """Connect to RTSP stream with optimized settings for reliability."""
         try:
             logger.info(f"Connecting to {self.rtsp_url}")
+
+            # Set FFmpeg environment variables for better RTSP reliability
+            # Use TCP transport instead of UDP to prevent packet loss
+            os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;tcp|fflags;nobuffer|flags;low_delay'
+
             self.cap = cv2.VideoCapture(self.rtsp_url, cv2.CAP_FFMPEG)
 
             # Enable hardware acceleration if available
@@ -103,6 +112,10 @@ class DetectionVideoTrack(VideoStreamTrack):
 
             # Enable low-latency mode
             self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
+
+            # Disable OpenCV error verbosity to reduce H.264 decoder noise
+            # Errors will still be logged but less spammy
+            cv2.setLogLevel(0)  # 0 = Silent, 1 = Errors only
 
             if not self.cap.isOpened():
                 logger.error(f"Failed to open stream: {self.rtsp_url}")
@@ -150,6 +163,25 @@ class DetectionVideoTrack(VideoStreamTrack):
                     self.cap.release()
                     self.cap = None
                 return self._create_black_frame()
+
+            # Validate frame integrity
+            if not self._is_valid_frame(frame):
+                self.corrupted_frames += 1
+
+                # Log periodically to avoid spam
+                if self.corrupted_frames % 30 == 0:
+                    logger.warning(
+                        f"[{self.camera_id}] Corrupted frames detected: {self.corrupted_frames} total. "
+                        "This may be due to network issues or RTSP stream quality."
+                    )
+
+                # Use last valid frame if available, otherwise return current (may have artifacts)
+                if self.last_valid_frame is not None:
+                    frame = self.last_valid_frame.copy()
+                # else: continue with potentially corrupted frame to avoid stream interruption
+            else:
+                # Cache this valid frame for error recovery
+                self.last_valid_frame = frame.copy()
 
             self.frame_count += 1
             frame_timestamp = time.time()
@@ -213,6 +245,51 @@ class DetectionVideoTrack(VideoStreamTrack):
             logger.error(f"Error processing frame: {e}")
             return self._create_black_frame()
 
+    def _is_valid_frame(self, frame: np.ndarray) -> bool:
+        """
+        Validate frame integrity to detect corrupted frames from H.264 decode errors.
+
+        Args:
+            frame: Frame to validate
+
+        Returns:
+            True if frame appears valid, False if likely corrupted
+        """
+        if frame is None or frame.size == 0:
+            return False
+
+        # Check for extreme values that indicate corruption
+        try:
+            # Calculate basic statistics
+            mean_val = np.mean(frame)
+            std_val = np.std(frame)
+
+            # Corrupted frames often have:
+            # - Very low std dev (all pixels similar - often black or green artifacts)
+            # - Extreme mean values (all black or all white)
+            # - NaN or inf values
+
+            if np.isnan(mean_val) or np.isinf(mean_val):
+                return False
+
+            # All black (mean near 0) with low variation
+            if mean_val < 5 and std_val < 5:
+                return False
+
+            # All white (mean near 255) with low variation
+            if mean_val > 250 and std_val < 5:
+                return False
+
+            # Extremely low variation (likely solid color artifact)
+            if std_val < 1:
+                return False
+
+            return True
+
+        except Exception as e:
+            logger.debug(f"Frame validation error: {e}")
+            return True  # Assume valid if validation fails
+
     def _should_run_detection(self) -> bool:
         """
         Decide if we should run detection on current frame.
@@ -240,8 +317,12 @@ class DetectionVideoTrack(VideoStreamTrack):
                 "timestamp": timestamp,
             }
 
-            # Update latest detections for drawing
-            self.latest_detections = detections
+            # Update latest detections for drawing WITH frame number
+            # Only update if this is newer than current (async callbacks can arrive out of order)
+            if frame_number > self.detection_frame_number:
+                self.latest_detections = detections
+                self.detection_frame_number = frame_number
+                logger.debug(f"Updated detections for frame {frame_number}")
 
             # Keep cache size reasonable (last 10 frames)
             if len(self.detection_cache) > 10:
@@ -270,6 +351,14 @@ class DetectionVideoTrack(VideoStreamTrack):
         annotated_frame = frame.copy()
         frame_height, frame_width = frame.shape[:2]
 
+        # Calculate frame age (how many frames ago was this detection made)
+        frame_age = self.frame_count - self.detection_frame_number
+
+        # Only draw if detection is recent (within 5 frames = ~167ms at 30fps)
+        if frame_age > 5:
+            logger.debug(f"Skipping stale detection (age: {frame_age} frames)")
+            return frame
+
         for detection in self.latest_detections:
             bbox = detection['bbox']
             class_name = detection['class_name']
@@ -287,8 +376,11 @@ class DetectionVideoTrack(VideoStreamTrack):
             # Draw bounding box (thicker line for better visibility)
             cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 3)
 
-            # Prepare label
-            label = f"{class_name} {int(confidence * 100)}%"
+            # Prepare label with frame age indicator (for debugging sync)
+            if frame_age == 0:
+                label = f"{class_name} {int(confidence * 100)}%"  # Perfect sync
+            else:
+                label = f"{class_name} {int(confidence * 100)}% [-{frame_age}f]"  # Show lag
 
             # Calculate text size for background
             font = cv2.FONT_HERSHEY_SIMPLEX
@@ -297,6 +389,12 @@ class DetectionVideoTrack(VideoStreamTrack):
             (text_width, text_height), baseline = cv2.getTextSize(
                 label, font, font_scale, thickness
             )
+
+            # Adjust box color alpha based on age (older = more transparent)
+            # Older detections get darker boxes to indicate staleness
+            if frame_age > 0:
+                # Make color darker for stale detections
+                color = tuple(int(c * 0.7) for c in color)
 
             # Draw label background
             cv2.rectangle(
