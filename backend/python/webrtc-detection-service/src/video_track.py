@@ -1,6 +1,7 @@
 """Custom WebRTC video track with detection metadata."""
 
 import asyncio
+import fractions
 import json
 import time
 from typing import Optional
@@ -85,6 +86,8 @@ class DetectionVideoTrack(VideoStreamTrack):
         This is called by WebRTC when it needs a new frame.
         We read from RTSP, run detection, send metadata, and return the frame.
         """
+        logger.debug(f"[{self.camera_id}] recv() called - frame {self.frame_count}")
+
         # Connect on first call
         if self.cap is None:
             connected = await self._connect_stream()
@@ -119,7 +122,7 @@ class DetectionVideoTrack(VideoStreamTrack):
             # Create VideoFrame
             video_frame = VideoFrame.from_ndarray(frame_rgb, format="rgb24")
             video_frame.pts = self.frame_count
-            video_frame.time_base = self.frame_time
+            video_frame.time_base = fractions.Fraction(1, int(self.fps))
 
             # Control frame rate
             await asyncio.sleep(self.frame_time)
@@ -157,7 +160,7 @@ class DetectionVideoTrack(VideoStreamTrack):
         black = np.zeros((480, 640, 3), dtype=np.uint8)
         frame = VideoFrame.from_ndarray(black, format="rgb24")
         frame.pts = self.frame_count
-        frame.time_base = self.frame_time
+        frame.time_base = fractions.Fraction(1, int(self.fps))
         self.frame_count += 1
         return frame
 
