@@ -55,7 +55,7 @@ MediaMTX provides a REST API for management:
 
 The MediaMTX configuration is located at:
 ```
-infrastructure/docker-compose/mediamtx.yml
+simulation/docker-compose/mediamtx.yml
 ```
 
 Key settings:
@@ -67,19 +67,19 @@ Key settings:
 
 The camera streaming script is located at:
 ```
-infrastructure/scripts/stream-mock-cameras.sh
+simulation/scripts/stream-mock-cameras.sh
 ```
 
 Usage:
 ```bash
 # Stream all cameras
-./infrastructure/scripts/stream-mock-cameras.sh all
+./simulation/scripts/stream-mock-cameras.sh all
 
 # Stream specific camera
-./infrastructure/scripts/stream-mock-cameras.sh camera1
+./simulation/scripts/stream-mock-cameras.sh camera1
 
 # Custom MediaMTX host
-MEDIAMTX_HOST=192.168.1.100 ./infrastructure/scripts/stream-mock-cameras.sh all
+MEDIAMTX_HOST=192.168.1.100 ./simulation/scripts/stream-mock-cameras.sh all
 ```
 
 ## Standalone Binary

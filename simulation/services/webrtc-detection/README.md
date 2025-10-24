@@ -385,4 +385,4 @@ Part of the surveillance system project. See main project README for license inf
 
 - [Object Detection Service](../object-detection-service/README.md) - MQTT-based detection
 - [Frontend Integration Guide](../../../shared/docs/SURVEILLANCE_QUICKSTART.md)
-- [MediaMTX Configuration](../../../infrastructure/docker-compose/mediamtx.yml)
+- [MediaMTX Configuration](../../../simulation/docker-compose/mediamtx.yml)

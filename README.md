@@ -131,10 +131,10 @@ The project includes a sophisticated camera simulation system for development an
   - WebRTC: `localhost:8889` (ultra-low latency browser streaming)
   - API: `localhost:9997` (programmatic control)
 - **Recording**: Stores streams to Docker volume `mediamtx_recordings`
-- **Configuration**: `infrastructure/docker-compose/mediamtx.yml`
+- **Configuration**: `simulation/docker-compose/mediamtx.yml`
 
 **3. Stream Publishing**
-- **Script**: `infrastructure/scripts/stream-mock-cameras.sh`
+- **Script**: `simulation/scripts/stream-mock-cameras.sh`
 - **Method**: FFmpeg re-encodes video files in real-time and publishes via RTSP
 - **Settings**:
   - H.264 encoding with `ultrafast` preset for low latency
@@ -259,7 +259,7 @@ make build              # Verify all services compile
 ```bash
 make database           # Reset database completely
 docker ps               # Check container status
-docker compose -f infrastructure/docker-compose/docker-compose.dev.yml logs
+docker compose -f simulation/docker-compose/docker-compose.dev.yml logs
 ```
 
 **Camera streams not working:**
@@ -286,8 +286,8 @@ docker logs surveillance-mqtt
 curl http://localhost:8080/health
 
 # View detection logs
-tail -f backend/python/object-detection-service/logs/*.log
-tail -f backend/python/webrtc-detection-service/logs/*.log
+tail -f simulation/services/object-detection/logs/*.log
+tail -f simulation/services/webrtc-detection/logs/*.log
 ```
 
 **No detections showing:**
@@ -330,9 +330,9 @@ sudo lsof -i :8554
 
 - [Architecture Document](shared/docs/v2-Architecture-Document.md) - Complete system architecture and design decisions
 - [Software Requirements Specification](shared/docs/SRS.md) - User stories and functional requirements
-- [Object Detection Service](backend/python/object-detection-service/README.md) - MQTT-based detection service
-- [WebRTC Detection Service](backend/python/webrtc-detection-service/README.md) - Ultra-low latency detection with data channels
-- [WebRTC Detection Quickstart](backend/python/webrtc-detection-service/QUICKSTART.md) - 5-minute setup guide
+- [Object Detection Service](simulation/services/object-detection/README.md) - MQTT-based detection service
+- [WebRTC Detection Service](simulation/services/webrtc-detection/README.md) - Ultra-low latency detection with data channels
+- [WebRTC Detection Quickstart](simulation/services/webrtc-detection/QUICKSTART.md) - 5-minute setup guide
 
 ## Project Status
 

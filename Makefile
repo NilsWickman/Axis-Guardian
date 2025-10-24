@@ -22,77 +22,84 @@ help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(NC) %s\n", $$1, $$2}'
 
 .PHONY: setup
-setup: ## Install dependencies and initialize database
+setup: ## Install dependencies and initialize infrastructure
 	@echo "$(BLUE)Setting up development environment...$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Installing npm workspaces...$(NC)"
 	npm install
 	@echo ""
 	@echo "$(YELLOW)Setting up Python virtual environments...$(NC)"
-	@for dir in backend/python/*/; do \
+	@for dir in simulation/services/*/; do \
 		if [ -f "$$dir/requirements.txt" ]; then \
 			echo "$(BLUE)Setting up $$dir$(NC)"; \
-			cd "$$dir" && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt && cd -; \
+			(cd "$$dir" && python3 -m venv venv && . venv/bin/activate && pip install -r requirements.txt); \
 		fi \
 	done
 	@echo ""
-	@$(MAKE) database
-	@echo ""
-	@$(MAKE) mock-videos
+	@$(MAKE) infrastructure
 	@echo ""
 	@echo "$(GREEN)✓ Setup complete!$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Next steps:$(NC)"
-	@echo "  1. Start frontend: make dev"
+	@echo "  1. Start surveillance system: make dev"
 	@echo "  2. Define API contracts in shared/schemas/"
 	@echo "  3. Generate types: make api-contract"
 
-.PHONY: database
-database: ## Setup database (stops existing, starts fresh, applies migrations, seeds data)
-	@echo "$(BLUE)Setting up database...$(NC)"
+.PHONY: infrastructure
+infrastructure: ## Start minimal infrastructure (MediaMTX only - required for make dev)
+	@echo "$(BLUE)Starting minimal infrastructure...$(NC)"
 	@echo "$(YELLOW)Stopping existing containers...$(NC)"
-	@docker compose -f infrastructure/docker-compose/docker-compose.dev.yml down -v 2>/dev/null || true
-	@echo "$(YELLOW)Starting fresh database containers...$(NC)"
-	@docker compose -f infrastructure/docker-compose/docker-compose.dev.yml up -d
+	@docker compose -f simulation/docker-compose/docker-compose.minimal.yml down 2>/dev/null || true
+	@docker compose -f simulation/docker-compose/docker-compose.dev.yml down 2>/dev/null || true
+	@echo "$(YELLOW)Starting MediaMTX...$(NC)"
+	@docker compose -f simulation/docker-compose/docker-compose.minimal.yml up -d
+	@sleep 2
+	@echo ""
+	@echo "$(GREEN)✓ Infrastructure ready$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Service:$(NC)"
+	@echo "  MediaMTX RTSP:   rtsp://localhost:8554/camera{1,2,3}"
+	@echo "  MediaMTX HLS:    http://localhost:8888/camera{1,2,3}"
+	@echo "  MediaMTX WebRTC: http://localhost:8889/camera{1,2,3}"
+	@echo "  MediaMTX API:    http://localhost:9997"
+
+.PHONY: database
+database: ## Setup full infrastructure (PostgreSQL, MQTT, MinIO, MediaMTX - for future backend services)
+	@echo "$(BLUE)Setting up full infrastructure...$(NC)"
+	@echo "$(YELLOW)Note: PostgreSQL, MQTT, and MinIO are NOT needed for current development$(NC)"
+	@echo "$(YELLOW)      Use 'make infrastructure' for minimal setup (MediaMTX only)$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Stopping existing containers...$(NC)"
+	@docker compose -f simulation/docker-compose/docker-compose.dev.yml down -v 2>/dev/null || true
+	@docker compose -f simulation/docker-compose/docker-compose.minimal.yml down 2>/dev/null || true
+	@echo "$(YELLOW)Starting all infrastructure containers...$(NC)"
+	@docker compose -f simulation/docker-compose/docker-compose.dev.yml up -d
 	@echo "$(YELLOW)Waiting for PostgreSQL to be ready...$(NC)"
 	@sleep 5
-	@echo "$(YELLOW)Running migrations...$(NC)"
-	@if [ -d "database/migrations" ] && [ -n "$$(ls -A database/migrations 2>/dev/null)" ]; then \
-		echo "  Migrations found, applying..."; \
-	else \
-		echo "  No migrations found yet"; \
-	fi
-	@echo "$(YELLOW)Seeding data...$(NC)"
-	@if [ -d "database/seeds" ] && [ -n "$$(ls -A database/seeds 2>/dev/null)" ]; then \
-		echo "  Seeds found, applying..."; \
-	else \
-		echo "  No seeds found yet"; \
-	fi
 	@echo ""
-	@echo "$(GREEN)✓ Database ready$(NC)"
+	@echo "$(GREEN)✓ Full infrastructure ready$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Services:$(NC)"
-	@echo "  PostgreSQL:  localhost:5433"
-	@echo "  MQTT:        localhost:1883"
-	@echo "  MinIO:       localhost:9000 (console: localhost:9090)"
 	@echo "  MediaMTX:    rtsp://localhost:8554 (WebRTC: localhost:8889, HLS: localhost:8888)"
-
-.PHONY: mock-videos
-mock-videos: ## Prepare mock videos (copy from shared/mock/camera-feeds and convert AVI to MP4)
-	@echo "$(BLUE)Preparing mock videos...$(NC)"
-	@echo "$(YELLOW)Copying videos from shared/mock/camera-feeds/ to mock-server/videos/...$(NC)"
-	@mkdir -p frontend/mock-server/videos
-	@cp shared/mock/camera-feeds/* frontend/mock-server/videos/ 2>/dev/null || true
-	@echo "$(YELLOW)Converting AVI files to MP4...$(NC)"
-	@cd frontend/mock-server && node convert-videos.js 2>/dev/null || echo "$(YELLOW)  No AVI files to convert$(NC)"
-	@echo "$(GREEN)✓ Mock videos ready$(NC)"
+	@echo "  PostgreSQL:  localhost:5433 (user: dev, password: dev) - For future backend services"
+	@echo "  MQTT:        localhost:1883 (WebSocket: 9001) - For async detection service"
+	@echo "  MinIO:       localhost:9000 (console: localhost:9090) - For recording storage"
 
 .PHONY: dev
-dev: mock-videos cleanup-ports ## Start complete surveillance system (frontend + cameras + WebRTC detection)
+dev: cleanup-ports ## Start complete surveillance system (frontend + cameras + WebRTC detection)
 	@echo "$(BLUE)Starting complete surveillance system...$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Checking infrastructure...$(NC)"
+	@if ! docker ps | grep -q surveillance-mediamtx; then \
+		echo "$(YELLOW)MediaMTX not running. Starting infrastructure...$(NC)"; \
+		$(MAKE) infrastructure; \
+		echo ""; \
+	else \
+		echo "$(GREEN)✓ MediaMTX already running$(NC)"; \
+		echo ""; \
+	fi
 	@echo "$(YELLOW)Starting services:$(NC)"
 	@echo "  Frontend:          http://localhost:5173"
-	@echo "  Mock Server:       http://localhost:8000"
 	@echo "  Cameras:           rtsp://localhost:8554/camera{1,2,3}"
 	@echo "  HLS Streams:       http://localhost:8888/camera{1,2,3}"
 	@echo "  WebRTC Detection:  http://localhost:8080 (signaling + data channels)"
@@ -103,10 +110,9 @@ dev: mock-videos cleanup-ports ## Start complete surveillance system (frontend +
 	@npm run dev
 
 .PHONY: cleanup-ports
-cleanup-ports: ## Kill processes on development ports (5173, 8000, 8080)
+cleanup-ports: ## Kill processes on development ports (5173, 8080)
 	@echo "$(YELLOW)Cleaning up ports...$(NC)"
 	@fuser -k 5173/tcp 2>/dev/null || true
-	@fuser -k 8000/tcp 2>/dev/null || true
 	@fuser -k 8080/tcp 2>/dev/null || true
 	@sleep 1
 
@@ -187,13 +193,13 @@ cameras: ## Stream mock camera feeds to MediaMTX (requires FFmpeg)
 	@echo "  HLS:    http://localhost:8888/camera{1,2,3}"
 	@echo "  WebRTC: http://localhost:8889/camera{1,2,3}"
 	@echo ""
-	@bash infrastructure/scripts/stream-mock-cameras.sh all
+	@bash simulation/scripts/stream-mock-cameras.sh all
 
 
 .PHONY: detect-install
 detect-install: ## Install object detection service dependencies
 	@echo "$(BLUE)Installing object detection service dependencies...$(NC)"
-	@cd backend/python/object-detection-service && \
+	@cd simulation/services/object-detection && \
 		if [ ! -d "venv" ]; then \
 			echo "$(YELLOW)Creating virtual environment...$(NC)"; \
 			python3 -m venv venv; \
@@ -231,7 +237,7 @@ detect: ## Run object detection service with camera streams
 	@echo "  Detection Topic: surveillance/detections/#"
 	@echo ""
 	@echo ""
-	@cd backend/python/object-detection-service && \
+	@cd simulation/services/object-detection && \
 		if [ ! -f ".env" ]; then \
 			echo "$(YELLOW)Creating .env file...$(NC)"; \
 			cp .env.example .env; \
@@ -242,7 +248,7 @@ detect: ## Run object detection service with camera streams
 .PHONY: webrtc-detect-install
 webrtc-detect-install: ## Install WebRTC detection service dependencies
 	@echo "$(BLUE)Installing WebRTC detection service dependencies...$(NC)"
-	@cd backend/python/webrtc-detection-service && \
+	@cd simulation/services/webrtc-detection && \
 		if [ ! -d "venv" ]; then \
 			echo "$(YELLOW)Creating virtual environment...$(NC)"; \
 			python3 -m venv venv; \
@@ -277,7 +283,7 @@ webrtc-detect: ## Run WebRTC detection service with data channels
 	@echo "$(YELLOW)Access in frontend:$(NC)"
 	@echo "  Navigate to WebRTC Detection view at: http://localhost:5173"
 	@echo ""
-	@cd backend/python/webrtc-detection-service && \
+	@cd simulation/services/webrtc-detection && \
 		if [ ! -f ".env" ]; then \
 			echo "$(YELLOW)Creating .env file...$(NC)"; \
 			cp .env.example .env; \
