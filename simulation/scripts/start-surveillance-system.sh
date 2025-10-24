@@ -27,7 +27,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-SCRIPTS_DIR="${PROJECT_ROOT}/infrastructure/scripts"
+SCRIPTS_DIR="${PROJECT_ROOT}/simulation/scripts"
 PID_DIR="/tmp/surveillance-system"
 MEDIAMTX_HOST="${MEDIAMTX_HOST:-localhost}"
 MEDIAMTX_PORT="${MEDIAMTX_PORT:-8554}"
@@ -162,7 +162,7 @@ start_detection() {
     echo ""
     echo -e "${GREEN}Starting object detection service...${NC}"
 
-    local detection_dir="${PROJECT_ROOT}/backend/python/object-detection-service"
+    local detection_dir="${PROJECT_ROOT}/simulation/services/object-detection"
 
     if [[ ! -d "$detection_dir" ]]; then
         echo -e "${RED}Error: Detection service not found at ${detection_dir}${NC}"

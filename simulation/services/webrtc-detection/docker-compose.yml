@@ -39,7 +39,7 @@ services:
       - "8889:8889"  # WebRTC
       - "9997:9997"  # API
     volumes:
-      - ../../../infrastructure/docker-compose/mediamtx.yml:/mediamtx.yml
+      - ../../docker-compose/mediamtx.yml:/mediamtx.yml
       - mediamtx_recordings:/recordings
     networks:
       - surveillance-network
