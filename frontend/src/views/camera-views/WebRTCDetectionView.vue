@@ -22,9 +22,17 @@
       <div class="status-item">
         <span>Cameras: <strong>{{ cameras.length }}</strong></span>
       </div>
-      <button @click="showDebugOverlay = !showDebugOverlay" class="debug-toggle">
-        {{ showDebugOverlay ? '🔍 Hide Debug' : '🔍 Show Debug' }}
+      <button
+        class="controls-toggle-button"
+        @click="showControlsPanel = !showControlsPanel"
+      >
+        {{ showControlsPanel ? 'Hide' : 'Show' }} Controls
       </button>
+    </div>
+
+    <!-- Controls Panel -->
+    <div v-if="showControlsPanel" class="controls-panel">
+      <DetectionOverlayControls v-model="overlaySettings" />
     </div>
 
     <!-- Camera Grid -->
@@ -41,17 +49,16 @@
               </span>
             </div>
           </div>
-          <div
-            :class="['connection-badge', { connected: connectionStates[camera.id] === 'connected' }]"
-          >
-            {{ connectionStates[camera.id] || 'disconnected' }}
-          </div>
+          <ConnectionQualityBadge
+            :connection-quality="getConnection(camera.id)?.connection.connectionQuality.value"
+            :connection-state="connectionStates[camera.id]"
+          />
         </div>
 
         <!-- Video Container with Canvas Overlay -->
         <div class="camera-container">
           <video
-            :ref="el => videoRefs[camera.id] = el"
+            :ref="el => videoRefs[camera.id] = el as HTMLVideoElement | null"
             :id="`video-${camera.id}`"
             autoplay
             muted
@@ -62,7 +69,7 @@
 
           <!-- Detection Overlay (Canvas) -->
           <canvas
-            :ref="el => canvasRefs[camera.id] = el"
+            :ref="el => canvasRefs[camera.id] = el as HTMLCanvasElement | null"
             class="canvas-overlay"
           />
 
@@ -71,53 +78,23 @@
             <p>Initializing WebRTC...</p>
           </div>
 
-          <!-- Debug Timing Overlay -->
-          <div v-if="showDebugOverlay" class="debug-overlay">
-            <div class="debug-section-header">WebRTC Data Channel</div>
+          <!-- Video Metrics Overlay -->
+          <VideoMetrics
+            :camera-id="camera.id"
+            :connection-quality="getConnection(camera.id)?.connection.connectionQuality.value"
+            :stats="getConnection(camera.id)?.connection.stats.value"
+            :connection-state="connectionStates[camera.id]"
+          />
 
-            <div class="debug-section">
-              <div class="debug-label">Connection:</div>
-              <div class="debug-value" :class="getConnectionClass(camera.id)">
-                {{ connectionStates[camera.id] || 'new' }}
-              </div>
-            </div>
-
-            <div class="debug-section">
-              <div class="debug-label">Data Channel:</div>
-              <div class="debug-value" :class="{ 'sync-enabled': dataChannelStates[camera.id] }">
-                {{ dataChannelStates[camera.id] ? 'Open' : 'Closed' }}
-              </div>
-            </div>
-
-            <div class="debug-section">
-              <div class="debug-label">Frame Number:</div>
-              <div class="debug-value">{{ frameNumbers[camera.id] || 0 }}</div>
-            </div>
-
-            <div class="debug-section">
-              <div class="debug-label">Frames Received:</div>
-              <div class="debug-value">{{ cameraStats[camera.id]?.framesReceived || 0 }}</div>
-            </div>
-
-            <div class="debug-section">
-              <div class="debug-label">Total Detections:</div>
-              <div class="debug-value">{{ cameraTotalDetections[camera.id] || 0 }}</div>
-            </div>
-
-            <div class="debug-section">
-              <div class="debug-label">Avg/Frame:</div>
-              <div class="debug-value">
-                {{ (cameraStats[camera.id]?.avgDetectionsPerFrame || 0).toFixed(2) }}
-              </div>
-            </div>
-
-            <div class="debug-section">
-              <div class="debug-label">Last Update:</div>
-              <div class="debug-value">
-                {{ formatTimestamp(cameraStats[camera.id]?.lastUpdateTime) }}
-              </div>
-            </div>
-          </div>
+          <!-- Video Controls -->
+          <VideoControls
+            :camera-id="camera.id"
+            :connection-state="connectionStates[camera.id]"
+            :is-reconnecting="false"
+            @toggle-play-pause="handlePlayPause(camera.id, $event)"
+            @retry="handleRetry(camera.id)"
+            @toggle-fullscreen="handleFullscreen(camera.id)"
+          />
         </div>
 
         <!-- Detection Legend -->
@@ -140,10 +117,10 @@
         </div>
 
         <!-- Coordinates Display -->
-        <div class="coordinates-display">
+        <div v-if="overlaySettings.showCoordinates" class="coordinates-display">
           <template v-if="cameraDetections[camera.id]?.length">
             <div
-              v-for="(det, idx) in cameraDetections[camera.id]"
+              v-for="(det, idx) in cameraDetections[camera.id].filter(d => d.confidence >= overlaySettings.confidenceThreshold)"
               :key="idx"
               class="coordinate-item"
             >
@@ -161,23 +138,42 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
-import { useWebRTCDetection } from '@/composables/useWebRTCDetection'
+import { useCameraConnectionManager } from '@/composables/useCameraConnectionManager'
+import VideoMetrics from '@/components/features/camera/VideoMetrics.vue'
+import ConnectionQualityBadge from '@/components/features/camera/ConnectionQualityBadge.vue'
+import VideoControls from '@/components/features/camera/VideoControls.vue'
+import DetectionOverlayControls from '@/components/features/camera/DetectionOverlayControls.vue'
 import type { Detection } from '@/types/detection.types'
+import type { OverlaySettings } from '@/components/features/camera/DetectionOverlayControls.vue'
 
 interface Camera {
   id: string
   name: string
 }
 
-// Cameras configuration
-const cameras: Camera[] = [
-  { id: 'camera1', name: 'Camera 1 - People Detection' },
-  { id: 'camera2', name: 'Camera 2 - Car Detection' },
-  { id: 'camera3', name: 'Camera 3 - Mixed Detection' }
-]
+// Global connection manager
+const {
+  cameras: globalCameras,
+  isInitialized,
+  connectionStatuses,
+  attachToVideoElement,
+  getConnection
+} = useCameraConnectionManager()
 
-// Server-side rendering flag (set to true if backend draws on frames)
-const serverSideRendering = ref(true)
+// Convert to local array format
+const cameras = globalCameras.value as Camera[]
+
+// Overlay settings (shared across all cameras)
+const overlaySettings = ref<OverlaySettings>({
+  overlayMode: 'full',
+  showLabels: true,
+  showConfidence: true,
+  showCoordinates: true,
+  confidenceThreshold: 0.5
+})
+
+// Show controls panel
+const showControlsPanel = ref(false)
 
 // Class colors
 const CLASS_COLORS: Record<string, string> = {
@@ -192,10 +188,6 @@ const CLASS_COLORS: Record<string, string> = {
 // State
 const videoRefs = ref<Record<string, HTMLVideoElement | null>>({})
 const canvasRefs = ref<Record<string, HTMLCanvasElement | null>>({})
-const showDebugOverlay = ref(true)
-
-// Per-camera WebRTC connections
-const webrtcConnections = reactive<Record<string, ReturnType<typeof useWebRTCDetection>>>({})
 
 // Aggregated state
 const videoDimensions = reactive<Record<string, { width: number; height: number }>>({})
@@ -206,21 +198,22 @@ const cameraTotalDetections = reactive<Record<string, number>>({})
 const classCountsByCamera = reactive<Record<string, Record<string, number>>>({})
 const connectionStates = reactive<Record<string, RTCPeerConnectionState>>({})
 const dataChannelStates = reactive<Record<string, boolean>>({})
-const cameraStats = reactive<Record<string, any>>({})
-const animationFrames = ref<Record<string, number>>({})
 
 // Throttle mechanism for debug overlay updates (100ms = 10 Hz max)
 const lastDebugUpdateTime = reactive<Record<string, number>>({})
 const DEBUG_UPDATE_THROTTLE_MS = 100
 
 // Global computed
-const globalConnected = computed(() =>
-  Object.values(connectionStates).some(state => state === 'connected')
-)
+const globalConnected = computed(() => {
+  return Object.values(connectionStatuses.value).some(status => status === true)
+})
 
-const dataChannelConnected = computed(() =>
-  Object.values(dataChannelStates).some(state => state === true)
-)
+const dataChannelConnected = computed(() => {
+  return cameras.some(camera => {
+    const conn = getConnection(camera.id)
+    return conn?.connection.isDataChannelOpen.value === true
+  })
+})
 
 const globalTotalDetections = computed(() =>
   Object.values(cameraTotalDetections).reduce((sum, count) => sum + count, 0)
@@ -229,18 +222,6 @@ const globalTotalDetections = computed(() =>
 // Methods
 function getClassColor(className: string): string {
   return CLASS_COLORS[className] || '#94a3b8'
-}
-
-function getConnectionClass(cameraId: string): string {
-  const state = connectionStates[cameraId]
-  if (state === 'connected') return 'sync-quality-good'
-  if (state === 'connecting') return 'sync-quality-fair'
-  return 'sync-quality-poor'
-}
-
-function formatTimestamp(timestamp: number | undefined): string {
-  if (!timestamp) return 'N/A'
-  return new Date(timestamp * 1000).toLocaleTimeString()
 }
 
 function onVideoLoaded(cameraId: string) {
@@ -264,8 +245,8 @@ function startDrawing(cameraId: string) {
 }
 
 function drawDetections(cameraId: string) {
-  // Skip if server-side rendering is enabled
-  if (serverSideRendering.value) return
+  // Skip if overlay mode is off
+  if (overlaySettings.value.overlayMode === 'off') return
 
   const canvas = canvasRefs.value[cameraId]
   const video = videoRefs.value[cameraId]
@@ -281,8 +262,13 @@ function drawDetections(cameraId: string) {
   const detections = cameraDetections[cameraId]
   if (!detections || detections.length === 0) return
 
+  // Filter by confidence threshold
+  const filteredDetections = detections.filter(
+    d => d.confidence >= overlaySettings.value.confidenceThreshold
+  )
+
   // Draw each detection
-  detections.forEach(detection => {
+  filteredDetections.forEach(detection => {
     const { bbox, class_name, confidence } = detection
 
     // Convert VAPIX normalized coordinates to pixel coordinates
@@ -298,40 +284,117 @@ function drawDetections(cameraId: string) {
     ctx.lineWidth = 3
     ctx.strokeRect(x, y, width, height)
 
-    // Draw label background
-    const label = `${class_name} ${(confidence * 100).toFixed(0)}%`
-    ctx.font = 'bold 14px Arial'
-    const textMetrics = ctx.measureText(label)
-    const textHeight = 20
+    // Draw label (only in 'full' mode)
+    if (overlaySettings.value.overlayMode === 'full') {
+      let label = ''
 
-    ctx.fillStyle = color
-    ctx.fillRect(x, y - textHeight - 5, textMetrics.width + 10, textHeight)
+      if (overlaySettings.value.showLabels) {
+        label += class_name
+      }
 
-    // Draw label text
-    ctx.fillStyle = '#000'
-    ctx.fillText(label, x + 5, y - 8)
+      if (overlaySettings.value.showConfidence) {
+        label += (label ? ' ' : '') + `${(confidence * 100).toFixed(0)}%`
+      }
+
+      if (label) {
+        ctx.font = 'bold 14px Arial'
+        const textMetrics = ctx.measureText(label)
+        const textHeight = 20
+
+        // Draw label background
+        ctx.fillStyle = color
+        ctx.fillRect(x, y - textHeight - 5, textMetrics.width + 10, textHeight)
+
+        // Draw label text
+        ctx.fillStyle = '#000'
+        ctx.fillText(label, x + 5, y - 8)
+      }
+    }
   })
 }
 
-// Initialize WebRTC connections for each camera
-async function initializeWebRTC() {
-  for (const camera of cameras) {
-    // Create WebRTC connection
-    const connection = useWebRTCDetection(camera.id, {
-      signalingUrl: 'http://localhost:8080',
-      autoReconnect: true,
-      reconnectDelay: 3000
-    })
+// Handler functions for video controls
+function handlePlayPause(cameraId: string, isPaused: boolean) {
+  const conn = getConnection(cameraId)
+  if (!conn) return
 
-    webrtcConnections[camera.id] = connection
+  if (isPaused) {
+    conn.connection.pauseVideo()
+  } else {
+    conn.connection.resumeVideo()
+  }
+}
+
+function handleRetry(cameraId: string) {
+  const conn = getConnection(cameraId)
+  if (!conn) return
+
+  conn.connection.retryConnection()
+}
+
+function handleFullscreen(cameraId: string) {
+  const videoEl = videoRefs.value[cameraId]
+  if (!videoEl) return
+
+  if (document.fullscreenElement) {
+    document.exitFullscreen()
+  } else {
+    videoEl.parentElement?.requestFullscreen()
+  }
+}
+
+// Attach video elements to global connections
+async function attachVideosToConnections() {
+  console.log('[WebRTCDetectionView] Attaching videos to global connections...')
+
+  // If connections aren't initialized yet, wait (only happens on first load)
+  if (!isInitialized.value) {
+    console.log('[WebRTCDetectionView] Waiting for connections to initialize...')
+    const maxWait = 10000 // 10 seconds
+    const startTime = Date.now()
+    while (!isInitialized.value && Date.now() - startTime < maxWait) {
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+
+    if (!isInitialized.value) {
+      console.error('[WebRTCDetectionView] Timeout waiting for connections to initialize')
+      return
+    }
+  } else {
+    console.log('[WebRTCDetectionView] Connections already initialized - instant attach!')
+  }
+
+  // Minimal wait for video elements to be in DOM
+  await new Promise(resolve => setTimeout(resolve, 50))
+
+  // Attach each video to its corresponding global connection
+  for (const camera of cameras) {
+    const videoEl = videoRefs.value[camera.id]
+    if (!videoEl) {
+      console.warn(`[WebRTCDetectionView] Video element not found for ${camera.id}`)
+      continue
+    }
+
+    // Attach to global connection (stream already flowing!)
+    const attached = attachToVideoElement(camera.id, videoEl)
+    if (attached) {
+      console.log(`[WebRTCDetectionView] ✓ Instantly attached ${camera.id} (stream was ready)`)
+    }
+
+    // Get connection and set up callbacks
+    const conn = getConnection(camera.id)
+    if (!conn) {
+      console.error(`[WebRTCDetectionView] No connection found for ${camera.id}`)
+      continue
+    }
 
     // Set up reactive callback with throttled debug updates
-    connection.setDetectionCallback((metadata) => {
+    conn.connection.setDetectionCallback((metadata) => {
       // Always update detections for canvas drawing (real-time)
       cameraDetections[camera.id] = metadata.detections
 
-      // Only trigger canvas redraw if client-side rendering
-      if (!serverSideRendering.value) {
+      // Trigger canvas redraw based on overlay settings
+      if (overlaySettings.value.overlayMode !== 'off') {
         drawDetections(camera.id)
       }
 
@@ -343,54 +406,37 @@ async function initializeWebRTC() {
         // Update debug state (causes Vue re-render)
         frameNumbers[camera.id] = metadata.frame_number
         detectionCounts[camera.id] = metadata.detection_count
-        cameraTotalDetections[camera.id] = connection.totalDetections.value
-        classCountsByCamera[camera.id] = connection.classCounts.value
-        cameraStats[camera.id] = connection.stats.value
+        cameraTotalDetections[camera.id] = conn.connection.totalDetections.value
+        classCountsByCamera[camera.id] = conn.connection.classCounts.value
 
         lastDebugUpdateTime[camera.id] = now
       }
     })
-
-    // Wait for video element to be mounted
-    await new Promise(resolve => setTimeout(resolve, 100))
-
-    const videoEl = videoRefs.value[camera.id]
-    if (!videoEl) {
-      console.error(`Video element not found for ${camera.id}`)
-      continue
-    }
-
-    try {
-      // Connect WebRTC
-      await connection.connect(videoEl)
-
-      // Update connection states reactively
-      const stateUpdateInterval = setInterval(() => {
-        connectionStates[camera.id] = connection.connectionState.value
-        dataChannelStates[camera.id] = connection.isDataChannelOpen.value
-      }, 100) // Check connection state at 10 Hz
-
-      // Store interval ID for cleanup
-      animationFrames.value[camera.id] = stateUpdateInterval
-    } catch (error) {
-      console.error(`Failed to initialize WebRTC for ${camera.id}:`, error)
-    }
   }
+
+  // Monitor connection states for all cameras
+  setInterval(() => {
+    cameras.forEach(camera => {
+      const conn = getConnection(camera.id)
+      if (conn) {
+        connectionStates[camera.id] = conn.connection.connectionState.value
+        dataChannelStates[camera.id] = conn.connection.isDataChannelOpen.value
+      }
+    })
+  }, 100)
+
+  console.log('[WebRTCDetectionView] All videos attached')
 }
 
 // Lifecycle
 onMounted(async () => {
-  await initializeWebRTC()
+  await attachVideosToConnections()
 })
 
 onUnmounted(() => {
-  // Clear all state update intervals
-  Object.values(animationFrames.value).forEach(id => clearInterval(id))
-
-  // Disconnect all WebRTC connections
-  Object.values(webrtcConnections).forEach(conn => {
-    conn.disconnect()
-  })
+  // Note: We don't disconnect here because connections are global
+  // They stay active for instant loading on other pages
+  console.log('[WebRTCDetectionView] Unmounting (connections remain active)')
 })
 </script>
 
@@ -441,6 +487,44 @@ h1 {
   align-items: center;
   gap: 8px;
   font-size: 1rem;
+}
+
+.controls-toggle-button {
+  padding: 8px 20px;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.controls-toggle-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.controls-toggle-button:active {
+  transform: translateY(0);
+}
+
+.controls-panel {
+  max-width: 1800px;
+  margin: 0 auto 30px;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .status-indicator {
@@ -615,23 +699,6 @@ video {
   font-size: 0.875rem;
 }
 
-.debug-toggle {
-  background: #1e293b;
-  color: #e2e8f0;
-  border: 2px solid #475569;
-  padding: 8px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 0.875rem;
-  font-weight: 600;
-  transition: all 0.2s;
-}
-
-.debug-toggle:hover {
-  background: #334155;
-  border-color: #64748b;
-}
-
 .coordinates-display {
   padding: 10px 20px;
   background: #0f172a;
@@ -644,83 +711,6 @@ video {
 
 .coordinate-item {
   margin: 2px 0;
-}
-
-.debug-overlay {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background: rgba(15, 23, 42, 0.95);
-  border: 2px solid #334155;
-  border-radius: 8px;
-  padding: 12px;
-  font-family: 'Courier New', monospace;
-  font-size: 0.75rem;
-  color: #e2e8f0;
-  min-width: 200px;
-  backdrop-filter: blur(4px);
-  z-index: 10;
-}
-
-.debug-section {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 6px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid #334155;
-}
-
-.debug-section:last-child {
-  margin-bottom: 0;
-  padding-bottom: 0;
-  border-bottom: none;
-}
-
-.debug-section-header {
-  font-weight: 700;
-  color: #3b82f6;
-  text-align: center;
-  margin-bottom: 8px;
-  font-size: 0.875rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.debug-label {
-  color: #94a3b8;
-  font-weight: 600;
-}
-
-.debug-value {
-  color: #22c55e;
-  font-weight: 700;
-}
-
-.sync-enabled {
-  color: #22c55e !important;
-  font-weight: 700;
-}
-
-.sync-quality-good {
-  color: #22c55e !important;
-  font-weight: 700;
-}
-
-.sync-quality-fair {
-  color: #f59e0b !important;
-  font-weight: 700;
-}
-
-.sync-quality-poor {
-  color: #ef4444 !important;
-  font-weight: 700;
-  animation: pulse-warning 2s infinite;
-}
-
-@keyframes pulse-warning {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
 }
 
 @keyframes pulse {
