@@ -25,7 +25,7 @@ export interface WebRTCDetectionOptions {
 }
 
 const DEFAULT_OPTIONS: WebRTCDetectionOptions = {
-  signalingUrl: 'http://localhost:8080',
+  signalingUrl: import.meta.env.VITE_RTSP_PROXY_URL || 'http://localhost:8081',
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' }
   ],

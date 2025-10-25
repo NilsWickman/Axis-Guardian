@@ -13,21 +13,17 @@
     Users,
     Map,
     Bell,
-    Wrench,
     Settings,
     Archive,
   } from 'lucide-vue-next'
   import { useTheme } from '@/composables/useTheme'
   import { useAuthStore } from '@/stores/auth'
-  import { useCameraOverlays } from '@/composables/useCameraOverlays'
 
   const router = useRouter()
   const route = useRoute()
   const authStore = useAuthStore()
   const { currentTheme, setTheme, themes } = useTheme()
-  const { addRandomPersonOverlay } = useCameraOverlays()
   const isThemeMenuOpen = ref(false)
-  const isDevToolsMenuOpen = ref(false)
   const expandedMenus = ref<Set<string>>(new Set())
 
   const user = computed(() => authStore.currentUser)
@@ -151,18 +147,9 @@
     isThemeMenuOpen.value = !isThemeMenuOpen.value
   }
 
-  const toggleDevToolsMenu = () => {
-    isDevToolsMenuOpen.value = !isDevToolsMenuOpen.value
-  }
-
   const selectTheme = (theme: typeof currentTheme.value) => {
     setTheme(theme)
     isThemeMenuOpen.value = false
-  }
-
-  const addPersonToNewSite = () => {
-    // "New Site" camera has ID cam-02 (Camera 2)
-    addRandomPersonOverlay('cam-02')
   }
 </script>
 <template>
@@ -238,40 +225,6 @@
         </li>
       </ul>
     </nav>
-
-    <!-- DevTools -->
-    <div class="px-4 pb-4 relative">
-      <button
-        @click="toggleDevToolsMenu"
-        class="w-full flex items-center justify-between px-3 py-2 text-xs font-medium rounded-lg transition-colors text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
-        title="DevTools"
-      >
-        <div class="flex items-center">
-          <Wrench class="w-4 h-4 mr-2" />
-          DevTools
-        </div>
-        <ChevronDown
-          class="w-4 h-4 transition-transform"
-          :class="{ 'rotate-180': isDevToolsMenuOpen }"
-        />
-      </button>
-
-      <!-- DevTools Dropdown -->
-      <div
-        v-show="isDevToolsMenuOpen"
-        class="absolute bottom-full left-4 right-4 mb-2 bg-popover border border-border rounded-lg shadow-lg overflow-hidden"
-      >
-        <div class="p-3 space-y-2">
-          <p class="text-xs font-semibold text-popover-foreground">Camera Overlays</p>
-          <button
-            @click="addPersonToNewSite"
-            class="w-full px-3 py-2 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-          >
-            Add Random Person (New Site)
-          </button>
-        </div>
-      </div>
-    </div>
 
     <!-- Theme Switcher -->
     <div class="px-4 pb-4 relative">

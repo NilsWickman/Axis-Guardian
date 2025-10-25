@@ -33,7 +33,7 @@ MEDIAMTX_HOST="${MEDIAMTX_HOST:-localhost}"
 MEDIAMTX_PORT="${MEDIAMTX_PORT:-8554}"
 
 # Video configurations
-VIDEOS_DIR="${PROJECT_ROOT}/shared/mock/camera-feeds/real-footage"
+VIDEOS_DIR="${PROJECT_ROOT}/shared/cameras"
 declare -A CAMERA_VIDEOS=(
     ["camera1"]="people-detection.mp4"
     ["camera2"]="car-detection.mp4"

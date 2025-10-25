@@ -16,21 +16,120 @@ This project uses a **TypeScript/Python stack**:
 
 ### Prerequisites
 
+**Required:**
 - Node.js 22.19.0
 - Python 3.12
-- Docker & Docker Compose (for infrastructure services)
-- FFmpeg (for camera simulation)
-- CUDA
-- Postgres
-- Probably alot more I havent documented yet
+- FFmpeg 7.x (for camera simulation)
+- PostgreSQL 15+ with PostGIS extension
+- MediaMTX 1.x (included in `simulation/mediamtx/`)
+
+**Optional (for GPU acceleration):**
+- CUDA 12.x
+- cuDNN 8.x
+
+**Development Tools:**
+- Make
+- Git
+- Curl
+
+### Native Installation
+
+This project uses **native installations** for all services. Follow the installation guide below for your operating system.
+
+#### 1. Install PostgreSQL with PostGIS
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get update
+sudo apt-get install -y postgresql-15 postgresql-15-postgis-3
+```
+
+**macOS:**
+```bash
+brew install postgresql@15 postgis
+```
+
+**Configuration:**
+```bash
+# Start PostgreSQL
+sudo systemctl start postgresql  # Linux
+brew services start postgresql@15  # macOS
+
+# Create database and user
+sudo -u postgres psql << EOF
+CREATE USER dev WITH PASSWORD 'dev';
+CREATE DATABASE surveillance_dev OWNER dev;
+\c surveillance_dev
+CREATE EXTENSION IF NOT EXISTS postgis;
+GRANT ALL PRIVILEGES ON DATABASE surveillance_dev TO dev;
+EOF
+```
+
+#### 2. Install FFmpeg
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get install -y ffmpeg
+```
+
+**macOS:**
+```bash
+brew install ffmpeg
+```
+
+**Verify installation:**
+```bash
+ffmpeg -version  # Should show 7.x or higher
+```
+
+#### 3. Install Python Dependencies
+
+```bash
+# Create virtual environments for each service
+cd simulation/webrtc-detection
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+deactivate
+
+cd ../object-detection
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+deactivate
+```
+
+#### 4. Install Node.js Dependencies
+
+```bash
+# From project root
+npm install
+```
+
+#### 5. Configure Environment
+
+```bash
+# Copy environment template
+cp .env.example .env
+
+# Edit configuration
+vim .env  # or nano .env
+```
+
+**Key variables to configure:**
+- `POSTGRES_HOST=localhost`
+- `POSTGRES_PORT=5432`
+- `POSTGRES_USER=dev`
+- `POSTGRES_PASSWORD=dev`
+- `POSTGRES_DB=surveillance_dev`
 
 ### Setup
 
 ```bash
-# One-time setup (installs dependencies + initializes database)
+# One-time setup (installs dependencies + builds MediaMTX)
 make setup
 
-# Start frontend development with mock data
+# Start complete surveillance system
 make dev
 ```
 
@@ -38,9 +137,9 @@ make dev
 
 To run the complete camera simulation and detection pipeline:
 
-**Step 1: Start Infrastructure**
+**Step 1: Start MediaMTX Media Server**
 ```bash
-make database           # Starts PostgreSQL, MQTT, MinIO, MediaMTX
+make infrastructure     # Starts MediaMTX on localhost
 ```
 
 **Step 2: Stream Mock Cameras**
@@ -56,21 +155,13 @@ Connect with VLC media player if you want to check it out.
 
 **Step 3: Start Detection Service**
 
-Choose one approach:
-
-*Option A: WebRTC Detection (Recommended for better experience)*
+*WebRTC Detection (Recommended):*
 ```bash
-make webrtc-detect      # Start WebRTC detection service on localhost:8080
-```
-
-*Option B: MQTT Detection (For analytics/recording)*
-```bash
-make detect             # Start MQTT-based object detection
+make webrtc-detect      # Start WebRTC detection service on localhost:8081
 ```
 
 **Step 4: View Results**
 
-For WebRTC detection:
 ```bash
 make dev                # Start frontend at localhost:5173
 # Navigate to WebRTC Detection view in the UI
@@ -78,7 +169,7 @@ make dev                # Start frontend at localhost:5173
 
 **All-in-One Command**
 ```bash
-# Start everything (infrastructure + cameras + WebRTC detection + frontend)
+# Start everything (MediaMTX + cameras + WebRTC detection + frontend)
 make dev
 ```
 
@@ -130,8 +221,8 @@ The project includes a sophisticated camera simulation system for development an
   - HLS: `localhost:8888` (browser-compatible HTTP streaming)
   - WebRTC: `localhost:8889` (ultra-low latency browser streaming)
   - API: `localhost:9997` (programmatic control)
-- **Recording**: Stores streams to Docker volume `mediamtx_recordings`
-- **Configuration**: `simulation/docker-compose/mediamtx.yml`
+- **Recording**: Stores streams to `simulation/mediamtx/recordings/`
+- **Configuration**: `simulation/mediamtx/mediamtx.yml` (or `mediamtx.custom.yml`)
 
 **3. Stream Publishing**
 - **Script**: `simulation/scripts/stream-mock-cameras.sh`
@@ -148,17 +239,7 @@ The project includes a sophisticated camera simulation system for development an
 
 **4. Object Detection Layer**
 
-Two detection service options:
-
-**A. MQTT-based Detection Service** (Traditional):
-- **Technology**: YOLOv8 object detection on RTSP streams
-- **Communication**: Publishes detection events to MQTT broker
-- **Topics**: `surveillance/detections/<camera_id>`
-- **Latency**: 1-3 seconds (video and detections travel separately)
-- **Use Case**: Recording, analytics, alarm generation
-- **Port**: MQTT broker on `localhost:1883`, WebSocket on `localhost:9001`
-
-**B. WebRTC Detection Service** (Recommended):
+**WebRTC Detection Service** (Primary):
 - **Technology**: YOLOv8 with WebRTC video tracks + data channels
 - **Synchronization**: Frame-perfect alignment (detections travel with video frames)
 - **Latency**: ~500ms end-to-end
@@ -167,13 +248,14 @@ Two detection service options:
   - Runs YOLOv8 detection on each frame
   - Sends video track + JSON metadata via WebRTC data channel
   - Frontend receives synchronized video + bounding box coordinates
-- **Port**: `localhost:8080` (signaling server)
+- **Port**: `localhost:8081` (signaling server)
 - **Models**: Configurable YOLOv8n (fast) to YOLOv8l (accurate)
 - **Configuration**:
   - Confidence threshold: `0.5` (adjustable)
   - Frame skip: Process every Nth frame
   - Detection classes: person, car, truck, bus, motorbike, bicycle
 - **Use Case**: Live monitoring with real-time overlays
+- **Setup**: Python virtual environment with dependencies in `simulation/webrtc-detection/`
 
 **Complete Data Flow**:
 ```
@@ -220,12 +302,8 @@ Video Files → FFmpeg → MediaMTX (RTSP) → WebRTC Detection Service → Brow
 |------|---------|----------|---------|
 | 5173 | Frontend | HTTP | Vue.js development server |
 | 8000 | Mock Server | HTTP | Mock backend APIs for frontend development |
-| 8080 | WebRTC Detection | HTTP/WebRTC | Signaling server + detection service |
-| 5433 | PostgreSQL | PostgreSQL | Database (user: dev, password: dev) |
-| 1883 | MQTT | MQTT | Message broker for detection events |
-| 9001 | MQTT | WebSocket | MQTT over WebSocket for browser clients |
-| 9000 | MinIO | HTTP | Object storage API |
-| 9090 | MinIO | HTTP | MinIO web console (admin: minioadmin) |
+| 8081 | WebRTC Detection | HTTP/WebRTC | Signaling server + detection service |
+| 5432 | PostgreSQL | PostgreSQL | Database (user: dev, password: dev) |
 | 8554 | MediaMTX | RTSP | RTSP camera streams |
 | 8888 | MediaMTX | HLS | HTTP Live Streaming (browser-compatible) |
 | 8889 | MediaMTX | WebRTC | WebRTC streaming |
@@ -255,17 +333,24 @@ make build              # Verify all services compile
 
 ### Troubleshooting
 
-**Services won't start:**
+**PostgreSQL connection issues:**
 ```bash
-make database           # Reset database completely
-docker ps               # Check container status
-docker compose -f simulation/docker-compose/docker-compose.dev.yml logs
+# Check if PostgreSQL is running
+sudo systemctl status postgresql  # Linux
+brew services list | grep postgresql  # macOS
+
+# Restart PostgreSQL
+sudo systemctl restart postgresql  # Linux
+brew services restart postgresql@15  # macOS
+
+# Test connection
+psql -h localhost -U dev -d surveillance_dev
 ```
 
 **Camera streams not working:**
 ```bash
 # Check MediaMTX is running
-make camera-status
+ps aux | grep mediamtx
 
 # Verify FFmpeg is installed
 ffmpeg -version
@@ -279,15 +364,16 @@ curl http://localhost:9997/v3/config/global/get
 
 **Detection service issues:**
 ```bash
-# MQTT detection: Check MQTT broker
-docker logs surveillance-mqtt
-
 # WebRTC detection: Check signaling server
-curl http://localhost:8080/health
+curl http://localhost:8081/health
 
 # View detection logs
-tail -f simulation/services/object-detection/logs/*.log
-tail -f simulation/services/webrtc-detection/logs/*.log
+tail -f simulation/webrtc-detection/logs/*.log
+
+# Check Python virtual environment
+cd simulation/webrtc-detection
+source venv/bin/activate
+python -c "import cv2; import torch; print('Dependencies OK')"
 ```
 
 **No detections showing:**
@@ -295,17 +381,26 @@ tail -f simulation/services/webrtc-detection/logs/*.log
 - Check detection classes match video content
 - Ensure video streams are active (`make cameras`)
 - Review logs for errors
+- Verify GPU is available: `python -c "import torch; print(torch.cuda.is_available())"`
 
 **WebRTC connection fails:**
-- Check firewall allows port 8080
+- Check firewall allows port 8081
 - Verify STUN server is accessible
 - Try using `localhost` instead of IP address for local development
 - Check browser console for WebRTC errors
 
 **Dependency issues:**
 ```bash
-rm -rf node_modules frontend/node_modules shared/types/node_modules
-make setup              # Reinstall everything
+# Node.js dependencies
+rm -rf node_modules frontend/node_modules
+npm install
+
+# Python dependencies
+cd simulation/webrtc-detection
+rm -rf venv
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ```
 
 **Type errors after schema changes:**
@@ -317,27 +412,36 @@ make build              # Verify compilation
 **Port conflicts:**
 If you see "port already in use" errors:
 ```bash
-# PostgreSQL conflict (5433)
-sudo lsof -i :5433
+# PostgreSQL conflict (5432)
+sudo lsof -i :5432
 
 # MediaMTX conflicts (8554, 8888, 8889, 9997)
 sudo lsof -i :8554
 
-# Kill conflicting processes or change ports in docker-compose.dev.yml
+# WebRTC Detection conflict (8081)
+sudo lsof -i :8081
+
+# Kill conflicting processes
+kill -9 <PID>
+# Or use the cleanup script
+make cleanup-ports
 ```
 
 ## Documentation
 
+- **[Native Setup Guide](NATIVE_SETUP.md)** - Comprehensive native installation instructions (PostgreSQL, MediaMTX, Python services)
 - [Architecture Document](shared/docs/v2-Architecture-Document.md) - Complete system architecture and design decisions
 - [Software Requirements Specification](shared/docs/SRS.md) - User stories and functional requirements
-- [Object Detection Service](simulation/services/object-detection/README.md) - MQTT-based detection service
-- [WebRTC Detection Service](simulation/services/webrtc-detection/README.md) - Ultra-low latency detection with data channels
-- [WebRTC Detection Quickstart](simulation/services/webrtc-detection/QUICKSTART.md) - 5-minute setup guide
+- [Environment Variables](ENVIRONMENT_VARIABLES.md) - Centralized configuration management
+- [Port Configuration](PORT_CONFIGURATION.md) - Port assignments and how to change them
+- [Object Detection Service](simulation/object-detection/README.md) - MQTT-based detection service
+- [WebRTC Detection Service](simulation/webrtc-detection/README.md) - Ultra-low latency detection with data channels
+- [WebRTC Detection Quickstart](simulation/webrtc-detection/QUICKSTART.md) - 5-minute setup guide
 
 ## Project Status
 
 ### Infrastructure ✅
-- ✅ Docker-based development environment (PostgreSQL, MQTT, MinIO, MediaMTX)
+- ✅ Native development environment (PostgreSQL with PostGIS, MediaMTX)
 - ✅ MediaMTX media server for RTSP/WebRTC camera simulation
 - ✅ Camera simulation pipeline with FFmpeg streaming
 
@@ -361,7 +465,7 @@ sudo lsof -i :8554
 - ✅ TypeScript/Python hybrid architecture defined
 - ✅ Development tooling configured
 - ⏳ API contract definition (Phase 2)
-- ⏳ TypeScript microservices implementation (Phase 4)
+- ⏳ Backend services implementation (Phase 4)
 - ⏳ Python device layer integration
 
 ### Development Workflow ✅

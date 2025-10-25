@@ -13,13 +13,14 @@ MediaMTX is integrated into the surveillance system infrastructure to provide:
 
 ## Usage
 
-### Via Docker Compose (Recommended)
+### Native Binary (Current Setup)
 
-MediaMTX runs automatically when you start the infrastructure:
+MediaMTX runs natively without Docker for better performance and easier debugging:
 
 ```bash
-make database           # Starts all infrastructure including MediaMTX
-make camera-status      # Check if MediaMTX is running
+make infrastructure     # Starts MediaMTX
+make stop-infrastructure # Stops MediaMTX
+make dev                # Starts entire surveillance system (auto-starts MediaMTX)
 ```
 
 ### Stream Mock Cameras
