@@ -28,9 +28,18 @@ MEDIAMTX_HOST="${MEDIAMTX_HOST:-localhost}"
 MEDIAMTX_PORT="${MEDIAMTX_PORT:-8554}"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VIDEOS_DIR="${PROJECT_ROOT}/shared/cameras"
+RENDERED_DIR="${VIDEOS_DIR}/rendered"
 
-# Video file mappings (using real surveillance footage with detections)
+# Video file mappings
+# Priority: Use pre-rendered videos if available, otherwise fall back to source
 declare -A CAMERA_VIDEOS=(
+    ["camera1"]="people-detection-rendered.mp4"
+    ["camera2"]="car-detection-rendered.mp4"
+    ["camera3"]="person-bicycle-car-detection-rendered.mp4"
+)
+
+# Source videos (fallback if rendered not available)
+declare -A SOURCE_VIDEOS=(
     ["camera1"]="people-detection.mp4"
     ["camera2"]="car-detection.mp4"
     ["camera3"]="person-bicycle-car-detection.mp4"
@@ -56,65 +65,100 @@ check_mediamtx() {
     fi
 }
 
-# Function to check if video file exists
-check_video() {
-    local video_file="$1"
-    if [[ ! -f "${VIDEOS_DIR}/${video_file}" ]]; then
-        echo -e "${RED}Error: Video file not found: ${VIDEOS_DIR}/${video_file}${NC}"
-        return 1
+# Function to check if video file exists and get the best version
+get_video_path() {
+    local camera_name="$1"
+    local rendered_file="${CAMERA_VIDEOS[$camera_name]}"
+    local source_file="${SOURCE_VIDEOS[$camera_name]}"
+
+    # Try pre-rendered version first
+    if [[ -f "${RENDERED_DIR}/${rendered_file}" ]]; then
+        echo "${RENDERED_DIR}/${rendered_file}"
+        return 0
     fi
-    return 0
+
+    # Fall back to source video
+    if [[ -f "${VIDEOS_DIR}/${source_file}" ]]; then
+        echo -e "${YELLOW}Warning: Pre-rendered video not found, using source video${NC}" >&2
+        echo -e "${YELLOW}Run 'make prerender-videos' to generate optimized videos${NC}" >&2
+        echo "${VIDEOS_DIR}/${source_file}"
+        return 0
+    fi
+
+    echo -e "${RED}Error: No video found for ${camera_name}${NC}" >&2
+    echo -e "${YELLOW}Expected: ${RENDERED_DIR}/${rendered_file} or ${VIDEOS_DIR}/${source_file}${NC}" >&2
+    return 1
 }
 
 # Function to stream a camera feed
 stream_camera() {
     local camera_name="$1"
-    local video_file="${CAMERA_VIDEOS[$camera_name]}"
 
-    if [[ -z "$video_file" ]]; then
+    if [[ -z "${CAMERA_VIDEOS[$camera_name]}" ]]; then
         echo -e "${RED}Error: Unknown camera: ${camera_name}${NC}"
         echo "Available cameras: ${!CAMERA_VIDEOS[@]}"
         return 1
     fi
 
-    if ! check_video "$video_file"; then
+    # Get the best available video path
+    local video_path
+    video_path=$(get_video_path "$camera_name")
+    if [[ $? -ne 0 ]]; then
         return 1
     fi
 
     local rtsp_url="rtsp://${MEDIAMTX_HOST}:${MEDIAMTX_PORT}/${camera_name}"
-    local video_path="${VIDEOS_DIR}/${video_file}"
+    local video_name=$(basename "$video_path")
+    local is_rendered=false
+
+    if [[ "$video_path" == *"/rendered/"* ]]; then
+        is_rendered=true
+    fi
 
     echo -e "${GREEN}Streaming ${camera_name}${NC}"
-    echo "  Video: ${video_file}"
+    echo "  Video: ${video_name}"
+    if [[ "$is_rendered" == true ]]; then
+        echo -e "  ${GREEN}✓ Using pre-rendered video (optimized)${NC}"
+    else
+        echo -e "  ${YELLOW}⚠ Using source video (not optimized)${NC}"
+    fi
     echo "  RTSP URL: ${rtsp_url}"
     echo "  Press Ctrl+C to stop"
     echo ""
 
     # Stream with FFmpeg
-    # -re: Read input at native frame rate
-    # -stream_loop -1: Loop infinitely
-    # -i: Input file
-    # -c:v libx264: Re-encode with H.264 (can use 'copy' if already H.264)
-    # -preset ultrafast: Fast encoding for low latency
-    # -tune zerolatency: Optimize for low latency streaming
-    # -rtsp_transport tcp: Use TCP for RTSP (required by MediaMTX config)
-    # -f rtsp: Output format
-    ffmpeg \
-        -re \
-        -stream_loop -1 \
-        -i "${video_path}" \
-        -c:v libx264 \
-        -preset ultrafast \
-        -tune zerolatency \
-        -b:v 2M \
-        -maxrate 2M \
-        -bufsize 4M \
-        -g 30 \
-        -c:a aac \
-        -b:a 128k \
-        -rtsp_transport tcp \
-        -f rtsp \
-        "${rtsp_url}"
+    # For pre-rendered videos: Use stream copy for minimal CPU overhead
+    # For source videos: Re-encode for compatibility
+    if [[ "$is_rendered" == true ]]; then
+        # Pre-rendered videos: Direct copy (no re-encoding)
+        ffmpeg \
+            -re \
+            -stream_loop -1 \
+            -i "${video_path}" \
+            -c:v copy \
+            -c:a copy \
+            -rtsp_transport tcp \
+            -f rtsp \
+            "${rtsp_url}"
+    else
+        # Source videos: Re-encode with low latency settings
+        ffmpeg \
+            -re \
+            -stream_loop -1 \
+            -i "${video_path}" \
+            -c:v libx264 \
+            -preset ultrafast \
+            -tune zerolatency \
+            -b:v 2M \
+            -maxrate 2M \
+            -bufsize 4M \
+            -g 30 \
+            -c:a aac \
+            -b:a 128k \
+            -rtsp_transport tcp \
+            -f rtsp \
+            "${rtsp_url}"
+    fi
 }
 
 # Function to stream all cameras in parallel
@@ -154,13 +198,21 @@ show_usage() {
     echo ""
     echo "Options:"
     echo "  all      - Stream all available cameras"
-    echo "  camera1  - Stream camera 1 (people-detection.mp4)"
-    echo "  camera2  - Stream camera 2 (car-detection.mp4)"
-    echo "  camera3  - Stream camera 3 (person-bicycle-car-detection.mp4)"
+    echo "  camera1  - Stream camera 1 (people detection)"
+    echo "  camera2  - Stream camera 2 (car detection)"
+    echo "  camera3  - Stream camera 3 (person, bicycle, car detection)"
     echo ""
     echo "Examples:"
     echo "  $0 all              # Stream all cameras"
     echo "  $0 camera1          # Stream only camera1"
+    echo ""
+    echo "Pre-rendered Videos:"
+    echo "  This script automatically uses pre-rendered videos with baked-in detections"
+    echo "  for optimal performance. If pre-rendered videos are not found, it falls back"
+    echo "  to source videos with real-time re-encoding."
+    echo ""
+    echo "  To generate pre-rendered videos:"
+    echo "    make prerender-videos"
     echo ""
     echo "Environment Variables:"
     echo "  MEDIAMTX_HOST  - MediaMTX hostname (default: localhost)"

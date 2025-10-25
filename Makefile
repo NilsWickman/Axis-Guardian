@@ -191,3 +191,71 @@ clean-venv: ## Remove Python virtual environments (forces rebuild on next setup)
 	@rm -rf simulation/webrtc-detection/venv simulation/object-detection/venv
 	@echo "$(GREEN)✓ Virtual environments removed$(NC)"
 	@echo "$(YELLOW)Run 'make setup' to recreate them$(NC)"
+
+.PHONY: prerender-videos
+prerender-videos: ## Pre-render detection videos for optimized streaming
+	@echo "$(BLUE)Pre-rendering detection videos...$(NC)"
+	@echo ""
+	@if [ ! -d "simulation/webrtc-detection/venv" ]; then \
+		echo "$(YELLOW)Python virtual environment not found. Running setup first...$(NC)"; \
+		$(MAKE) setup; \
+	fi
+	@echo "$(YELLOW)Auto-detecting videos in shared/cameras/$(NC)"
+	@cd simulation/scripts && \
+		../webrtc-detection/venv/bin/python prerender_detections.py --batch-all
+	@echo ""
+	@echo "$(GREEN)✓ Pre-rendering complete!$(NC)"
+	@echo "$(YELLOW)Pre-rendered videos: shared/cameras/rendered/$(NC)"
+	@echo ""
+	@echo "Next steps:"
+	@echo "  1. Start the system: make dev"
+	@echo "  2. Pre-rendered videos will be used automatically"
+	@echo ""
+	@echo "Note: Already rendered videos are skipped. Use 'make prerender-videos-force' to re-render all."
+
+.PHONY: prerender-videos-force
+prerender-videos-force: ## Force re-render all videos (ignore existing)
+	@echo "$(BLUE)Force re-rendering all detection videos...$(NC)"
+	@echo ""
+	@if [ ! -d "simulation/webrtc-detection/venv" ]; then \
+		echo "$(YELLOW)Python virtual environment not found. Running setup first...$(NC)"; \
+		$(MAKE) setup; \
+	fi
+	@echo "$(YELLOW)Auto-detecting videos in shared/cameras/$(NC)"
+	@cd simulation/scripts && \
+		../webrtc-detection/venv/bin/python prerender_detections.py --batch-all --force
+	@echo ""
+	@echo "$(GREEN)✓ Re-rendering complete!$(NC)"
+
+.PHONY: prerender-video
+prerender-video: ## Pre-render a single video (usage: make prerender-video VIDEO=filename.mp4)
+	@echo "$(BLUE)Pre-rendering single video...$(NC)"
+	@if [ -z "$(VIDEO)" ]; then \
+		echo "$(RED)Error: VIDEO parameter required$(NC)"; \
+		echo "Usage: make prerender-video VIDEO=people-detection.mp4"; \
+		exit 1; \
+	fi
+	@if [ ! -d "simulation/webrtc-detection/venv" ]; then \
+		echo "$(YELLOW)Python virtual environment not found. Running setup first...$(NC)"; \
+		$(MAKE) setup; \
+	fi
+	@cd simulation/scripts && \
+		../webrtc-detection/venv/bin/python prerender_detections.py --input $(VIDEO)
+	@echo ""
+	@echo "$(GREEN)✓ Pre-rendering complete!$(NC)"
+
+.PHONY: list-videos
+list-videos: ## List available source videos for pre-rendering
+	@echo "$(BLUE)Available source videos:$(NC)"
+	@if [ -d "shared/cameras" ]; then \
+		find shared/cameras -maxdepth 1 -name "*.mp4" -type f -exec basename {} \; | sort; \
+	else \
+		echo "$(YELLOW)No videos directory found$(NC)"; \
+	fi
+	@echo ""
+	@echo "$(BLUE)Pre-rendered videos:$(NC)"
+	@if [ -d "shared/cameras/rendered" ]; then \
+		find shared/cameras/rendered -name "*.mp4" -type f -exec basename {} \; | sort || echo "None"; \
+	else \
+		echo "None (run 'make prerender-videos' to generate)"; \
+	fi

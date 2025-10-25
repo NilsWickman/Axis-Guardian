@@ -5,7 +5,8 @@ import fractions
 import json
 import os
 import time
-from typing import Optional
+from pathlib import Path
+from typing import Optional, Dict, List, Any
 from concurrent.futures import ThreadPoolExecutor
 from collections import deque
 import cv2
@@ -15,6 +16,8 @@ from aiortc import RTCDataChannel, VideoStreamTrack
 from loguru import logger
 
 from detector import ObjectDetector
+from metrics import metrics
+from video_track_precomputed import load_precomputed_detections, get_detection_for_frame
 
 
 class DetectionVideoTrack(VideoStreamTrack):
@@ -23,15 +26,13 @@ class DetectionVideoTrack(VideoStreamTrack):
     via data channel.
     """
 
-    # Shared thread pool for detection processing
-    _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="detection")
-
     def __init__(
         self,
         rtsp_url: str,
         camera_id: str,
         detector: ObjectDetector,
         data_channel: Optional[RTCDataChannel] = None,
+        precomputed_detections_path: Optional[str] = None,
     ):
         """
         Initialize detection video track.
@@ -41,12 +42,27 @@ class DetectionVideoTrack(VideoStreamTrack):
             camera_id: Camera identifier
             detector: ObjectDetector instance
             data_channel: WebRTC data channel for metadata
+            precomputed_detections_path: Optional path to pre-computed detections JSON
         """
         super().__init__()
         self.rtsp_url = rtsp_url
         self.camera_id = camera_id
         self.detector = detector
         self.data_channel = data_channel
+
+        # Pre-computed detections support
+        self.precomputed_detections: Optional[Dict[int, List[Any]]] = None
+        self.use_precomputed = False
+        if precomputed_detections_path:
+            self.precomputed_detections = load_precomputed_detections(precomputed_detections_path)
+            self.use_precomputed = self.precomputed_detections is not None
+
+        # Per-camera thread pool to avoid cross-camera blocking
+        # Using 1 worker ensures sequential processing for this camera
+        self._executor = ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix=f"detect-{camera_id}"
+        )
 
         self.cap: Optional[cv2.VideoCapture] = None
         self.frame_count = 0
@@ -72,6 +88,16 @@ class DetectionVideoTrack(VideoStreamTrack):
         self.corrupted_frames = 0
         self.last_valid_frame = None  # Cache last good frame for error recovery
 
+        # Adaptive buffer sizing
+        self.buffer_size = 2  # Start with low latency (2 frames)
+        self.frame_loss_count = 0
+        self.total_frames_attempted = 0
+        self.last_buffer_adjustment = time.time()
+        self.buffer_adjustment_interval = 10.0  # Adjust every 10 seconds
+
+        # Frame validation with temporal consistency
+        self.frame_history = deque(maxlen=30)  # Last 30 frames statistics
+
         # Colors for different classes (BGR format)
         self.class_colors = {
             'person': (34, 197, 34),      # Green
@@ -83,6 +109,8 @@ class DetectionVideoTrack(VideoStreamTrack):
         }
 
         logger.info(f"DetectionVideoTrack initialized for {camera_id}")
+        if self.use_precomputed:
+            logger.info(f"  ✓ Using pre-computed detections (optimized mode)")
 
     async def _connect_stream(self) -> bool:
         """Connect to RTSP stream with optimized settings for reliability."""
@@ -107,8 +135,9 @@ class DetectionVideoTrack(VideoStreamTrack):
             self.cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)  # 5 second open timeout
             self.cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 3000)  # 3 second read timeout
 
-            # Optimize buffer size for smoother playback (3-5 frames)
-            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)
+            # Set adaptive buffer size (starts at 2, can grow to 10)
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, self.buffer_size)
+            logger.info(f"RTSP buffer size set to {self.buffer_size} frames")
 
             # Enable low-latency mode
             self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
@@ -155,18 +184,28 @@ class DetectionVideoTrack(VideoStreamTrack):
 
         # Read frame from RTSP
         try:
+            self.total_frames_attempted += 1
             ret, frame = self.cap.read()
 
             if not ret or frame is None:
+                self.frame_loss_count += 1
+                metrics.increment_counter('frames_lost_total', labels={'camera': self.camera_id})
                 logger.warning(f"Lost connection to {self.camera_id}, reconnecting...")
                 if self.cap:
                     self.cap.release()
                     self.cap = None
+
+                # Adjust buffer before reconnecting
+                self._adjust_buffer_size()
                 return self._create_black_frame()
+
+            # Track successful frame reads
+            metrics.increment_counter('frames_read_total', labels={'camera': self.camera_id})
 
             # Validate frame integrity
             if not self._is_valid_frame(frame):
                 self.corrupted_frames += 1
+                metrics.increment_counter('frames_corrupted_total', labels={'camera': self.camera_id})
 
                 # Log periodically to avoid spam
                 if self.corrupted_frames % 30 == 0:
@@ -177,43 +216,92 @@ class DetectionVideoTrack(VideoStreamTrack):
 
                 # Use last valid frame if available, otherwise return current (may have artifacts)
                 if self.last_valid_frame is not None:
-                    frame = self.last_valid_frame.copy()
+                    frame = self.last_valid_frame
                 # else: continue with potentially corrupted frame to avoid stream interruption
             else:
                 # Cache this valid frame for error recovery
-                self.last_valid_frame = frame.copy()
+                # Only copy every 10th frame to reduce memory overhead
+                if self.frame_count % 10 == 0:
+                    self.last_valid_frame = frame.copy()
 
             self.frame_count += 1
             frame_timestamp = time.time()
 
-            # Decide if we should run detection on this frame
-            should_detect = self._should_run_detection()
+            # Handle detections: pre-computed or real-time
+            if self.use_precomputed:
+                # Use pre-computed detections (instant lookup, no processing)
+                detections = get_detection_for_frame(self.precomputed_detections, self.frame_count)
 
-            if should_detect:
-                # Run detection asynchronously in thread pool
-                loop = asyncio.get_event_loop()
-                detection_future = loop.run_in_executor(
-                    self._executor,
-                    self.detector.detect,
-                    frame.copy(),  # Copy frame to avoid race conditions
-                    frame_timestamp
-                )
+                if detections:
+                    # Update latest detections for drawing
+                    self.latest_detections = detections
+                    self.detection_frame_number = self.frame_count
 
-                # Don't await - let detection run in background
-                # Store future for retrieval when ready
-                detection_future.add_done_callback(
-                    lambda f: self._on_detection_complete(f, self.frame_count, frame_timestamp)
-                )
-                self.last_detection_frame = self.frame_count
-                self.frames_since_detection = 0
+                    # Cache for data channel sending
+                    self.detection_cache[self.frame_count] = {
+                        "detections": detections,
+                        "timestamp": frame_timestamp,
+                    }
+
+                    # Keep cache reasonable
+                    if len(self.detection_cache) > 10:
+                        oldest_frame = min(self.detection_cache.keys())
+                        del self.detection_cache[oldest_frame]
+
+                    metrics.increment_counter('detections_precomputed_total', labels={'camera': self.camera_id})
             else:
-                self.frames_since_detection += 1
+                # Real-time detection (original behavior)
+                should_detect = self._should_run_detection()
+
+                if should_detect:
+                    # Track detections initiated
+                    metrics.increment_counter('detections_initiated_total', labels={'camera': self.camera_id})
+
+                    # Run detection asynchronously in thread pool
+                    # Note: We don't copy the frame here since:
+                    # 1. The detector will only read from it (no mutations)
+                    # 2. OpenCV operations are thread-safe for reading
+                    # 3. Detection processing happens before next frame arrives
+                    # 4. This saves ~1MB memory copy per detection on 720p
+                    loop = asyncio.get_event_loop()
+
+                    # Time the detection
+                    detection_start = time.time()
+
+                    def on_complete_with_timing(f):
+                        detection_time = time.time() - detection_start
+                        metrics.observe_histogram(
+                            'detection_latency_seconds',
+                            detection_time,
+                            labels={'camera': self.camera_id}
+                        )
+                        self._on_detection_complete(f, self.frame_count, frame_timestamp)
+
+                    detection_future = loop.run_in_executor(
+                        self._executor,
+                        self.detector.detect,
+                        frame,  # No copy - safe since detector only reads
+                        frame_timestamp
+                    )
+
+                    # Don't await - let detection run in background
+                    # Store future for retrieval when ready
+                    detection_future.add_done_callback(on_complete_with_timing)
+                    self.last_detection_frame = self.frame_count
+                    self.frames_since_detection = 0
+                else:
+                    self.frames_since_detection += 1
+                    metrics.increment_counter('detections_skipped_total', labels={'camera': self.camera_id})
 
             # Send any ready detection results via data channel
             await self._send_cached_detections(self.frame_count, frame_timestamp)
 
-            # Draw detections on frame before encoding
-            frame_with_detections = self._draw_detections_on_frame(frame)
+            # Draw detections on frame before encoding (only if not pre-rendered)
+            # Pre-rendered videos already have boxes drawn, so skip drawing
+            if self.use_precomputed:
+                frame_with_detections = frame  # Already has detections drawn
+            else:
+                frame_with_detections = self._draw_detections_on_frame(frame)
 
             # Convert BGR to RGB for WebRTC
             frame_rgb = cv2.cvtColor(frame_with_detections, cv2.COLOR_BGR2RGB)
@@ -226,6 +314,20 @@ class DetectionVideoTrack(VideoStreamTrack):
             # Adaptive frame timing
             processing_time = time.time() - frame_start
             self.avg_processing_time = 0.8 * self.avg_processing_time + 0.2 * processing_time
+
+            # Track processing time
+            metrics.observe_histogram(
+                'frame_processing_seconds',
+                processing_time,
+                labels={'camera': self.camera_id}
+            )
+
+            # Update gauges
+            metrics.set_gauge('buffer_size', self.buffer_size, labels={'camera': self.camera_id})
+            metrics.set_gauge('avg_processing_time_seconds', self.avg_processing_time, labels={'camera': self.camera_id})
+
+            # Periodic buffer adjustment based on frame loss rate
+            self._adjust_buffer_size()
 
             # Sleep only if we're ahead of schedule
             sleep_time = max(0, self.target_frame_time - processing_time)
@@ -245,9 +347,67 @@ class DetectionVideoTrack(VideoStreamTrack):
             logger.error(f"Error processing frame: {e}")
             return self._create_black_frame()
 
+    def _adjust_buffer_size(self):
+        """
+        Adaptively adjust RTSP buffer size based on frame loss rate.
+
+        - Low frame loss (< 2%): Reduce buffer for lower latency
+        - Medium frame loss (2-5%): Keep current buffer
+        - High frame loss (> 5%): Increase buffer for stability
+        """
+        current_time = time.time()
+        time_since_adjustment = current_time - self.last_buffer_adjustment
+
+        # Only adjust every N seconds to avoid thrashing
+        if time_since_adjustment < self.buffer_adjustment_interval:
+            return
+
+        # Calculate frame loss rate
+        if self.total_frames_attempted > 0:
+            frame_loss_rate = self.frame_loss_count / self.total_frames_attempted
+        else:
+            frame_loss_rate = 0.0
+
+        old_buffer_size = self.buffer_size
+
+        # Adjust buffer based on loss rate
+        if frame_loss_rate > 0.05:  # > 5% loss - increase buffer
+            self.buffer_size = min(10, self.buffer_size + 2)
+            logger.info(
+                f"[{self.camera_id}] High frame loss ({frame_loss_rate*100:.1f}%), "
+                f"increasing buffer: {old_buffer_size} → {self.buffer_size}"
+            )
+        elif frame_loss_rate < 0.02 and self.buffer_size > 2:  # < 2% loss - reduce buffer
+            self.buffer_size = max(2, self.buffer_size - 1)
+            logger.info(
+                f"[{self.camera_id}] Low frame loss ({frame_loss_rate*100:.1f}%), "
+                f"reducing buffer for lower latency: {old_buffer_size} → {self.buffer_size}"
+            )
+        else:
+            # 2-5% loss is acceptable, keep current buffer
+            logger.debug(
+                f"[{self.camera_id}] Frame loss rate: {frame_loss_rate*100:.1f}%, "
+                f"buffer stable at {self.buffer_size}"
+            )
+
+        # Update buffer if it changed and we have an active capture
+        if self.buffer_size != old_buffer_size and self.cap is not None:
+            try:
+                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, self.buffer_size)
+            except Exception as e:
+                logger.warning(f"Failed to update buffer size: {e}")
+
+        # Reset counters
+        self.frame_loss_count = 0
+        self.total_frames_attempted = 0
+        self.last_buffer_adjustment = current_time
+
     def _is_valid_frame(self, frame: np.ndarray) -> bool:
         """
-        Validate frame integrity to detect corrupted frames from H.264 decode errors.
+        Validate frame integrity using temporal consistency to detect corrupted frames.
+
+        Uses historical frame statistics to detect sudden anomalies that indicate
+        H.264 decode errors or transmission corruption.
 
         Args:
             frame: Frame to validate
@@ -258,37 +418,61 @@ class DetectionVideoTrack(VideoStreamTrack):
         if frame is None or frame.size == 0:
             return False
 
-        # Check for extreme values that indicate corruption
         try:
-            # Calculate basic statistics
+            # Calculate frame statistics
             mean_val = np.mean(frame)
             std_val = np.std(frame)
 
-            # Corrupted frames often have:
-            # - Very low std dev (all pixels similar - often black or green artifacts)
-            # - Extreme mean values (all black or all white)
-            # - NaN or inf values
-
+            # Check for NaN or inf values
             if np.isnan(mean_val) or np.isinf(mean_val):
                 return False
 
-            # All black (mean near 0) with low variation
-            if mean_val < 5 and std_val < 5:
-                return False
-
-            # All white (mean near 255) with low variation
-            if mean_val > 250 and std_val < 5:
-                return False
-
-            # Extremely low variation (likely solid color artifact)
+            # Extremely low variation (solid color artifact)
             if std_val < 1:
                 return False
+
+            # Temporal consistency check (if we have history)
+            if len(self.frame_history) >= 5:
+                # Calculate historical averages
+                hist_means = [h['mean'] for h in self.frame_history]
+                hist_stds = [h['std'] for h in self.frame_history]
+
+                avg_mean = np.mean(hist_means)
+                avg_std = np.mean(hist_stds)
+                std_of_means = np.std(hist_means)
+
+                # Detect sudden dramatic changes (likely corruption)
+                # Allow for scene changes but catch decoder errors
+
+                # Sudden jump to all black/white (common corruption pattern)
+                if (mean_val < 5 and avg_mean > 50) or (mean_val > 250 and avg_mean < 200):
+                    return False
+
+                # Dramatic mean change (> 3 standard deviations from history)
+                # But only if the scene has been relatively stable
+                if std_of_means < 20:  # Stable scene
+                    mean_deviation = abs(mean_val - avg_mean)
+                    threshold = 3 * std_of_means + 20  # Add base threshold
+
+                    if mean_deviation > threshold:
+                        return False
+
+                # Sudden std collapse (corruption often creates uniform regions)
+                if std_val < avg_std * 0.3 and avg_std > 10:
+                    return False
+
+            # Store current frame stats for future validation
+            self.frame_history.append({
+                'mean': mean_val,
+                'std': std_val,
+                'timestamp': time.time()
+            })
 
             return True
 
         except Exception as e:
-            logger.debug(f"Frame validation error: {e}")
-            return True  # Assume valid if validation fails
+            # Silently fail - assume valid to avoid blocking stream
+            return True
 
     def _should_run_detection(self) -> bool:
         """
@@ -322,7 +506,6 @@ class DetectionVideoTrack(VideoStreamTrack):
             if frame_number > self.detection_frame_number:
                 self.latest_detections = detections
                 self.detection_frame_number = frame_number
-                logger.debug(f"Updated detections for frame {frame_number}")
 
             # Keep cache size reasonable (last 10 frames)
             if len(self.detection_cache) > 10:
@@ -356,7 +539,6 @@ class DetectionVideoTrack(VideoStreamTrack):
 
         # Only draw if detection is recent (within 5 frames = ~167ms at 30fps)
         if frame_age > 5:
-            logger.debug(f"Skipping stale detection (age: {frame_age} frames)")
             return frame
 
         for detection in self.latest_detections:
@@ -364,11 +546,11 @@ class DetectionVideoTrack(VideoStreamTrack):
             class_name = detection['class_name']
             confidence = detection['confidence']
 
-            # Get pixel coordinates
-            x1 = int(bbox['x1'])
-            y1 = int(bbox['y1'])
-            x2 = int(bbox['x2'])
-            y2 = int(bbox['y2'])
+            # Convert normalized coordinates to pixels
+            x1 = int(bbox['left'] * frame_width)
+            y1 = int(bbox['top'] * frame_height)
+            x2 = int(bbox['right'] * frame_width)
+            y2 = int(bbox['bottom'] * frame_height)
 
             # Get color for this class
             color = self.class_colors.get(class_name, (180, 163, 148))  # Default gray
@@ -447,12 +629,6 @@ class DetectionVideoTrack(VideoStreamTrack):
                 message = json.dumps(metadata)
                 self.data_channel.send(message)
 
-                if cached["detections"]:
-                    logger.debug(
-                        f"Sent {len(cached['detections'])} detections "
-                        f"(from frame {latest_frame}) for frame {current_frame}"
-                    )
-
             except Exception as e:
                 logger.error(f"Error sending cached metadata: {e}")
 
@@ -472,4 +648,10 @@ class DetectionVideoTrack(VideoStreamTrack):
         if self.cap:
             self.cap.release()
             self.cap = None
+
+        # Shutdown the per-camera thread pool
+        if hasattr(self, '_executor'):
+            self._executor.shutdown(wait=True, cancel_futures=True)
+            logger.debug(f"Shutdown thread pool for {self.camera_id}")
+
         logger.info(f"DetectionVideoTrack stopped for {self.camera_id}")
