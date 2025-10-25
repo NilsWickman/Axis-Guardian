@@ -31,6 +31,8 @@ export interface Position {
   x: number
   y: number
   z?: number
+  azimuth?: number // Camera heading in degrees (0-360)
+  elevation?: number // Camera tilt in degrees
 }
 
 export interface Velocity {
@@ -66,6 +68,11 @@ export interface Camera {
   status: 'online' | 'offline' | 'error'
   capabilities?: CameraCapabilities
   position?: Position
+  ipAddress?: string
+  macAddress?: string
+  model?: string
+  serialNumber?: string
+  firmwareVersion?: string
 }
 
 export interface CameraCapabilities {
