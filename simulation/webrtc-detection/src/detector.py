@@ -27,6 +27,13 @@ torch.load = _patched_torch_load
 class ObjectDetector:
     """YOLOv8-based object detector."""
 
+    # COCO class IDs for filtering (only detect these classes)
+    # Set to None to detect all 80 COCO classes
+    ALLOWED_CLASSES = {
+        0: "person",
+        2: "car",
+    }
+
     def __init__(self, model_path: str = None):
         """
         Initialize detector.
@@ -38,6 +45,11 @@ class ObjectDetector:
         logger.info(f"Loading YOLOv8 model from {self.model_path}")
         self.model = YOLO(self.model_path)
         logger.info("YOLOv8 model loaded successfully")
+
+        if self.ALLOWED_CLASSES:
+            logger.info(f"Filtering detections to classes: {list(self.ALLOWED_CLASSES.values())}")
+        else:
+            logger.info("Detecting all 80 COCO classes")
 
         self.frame_number = 0
         self.last_detections = []  # Cache for frame skipping
@@ -99,6 +111,11 @@ class ObjectDetector:
                 continue
 
             for box in boxes:
+                # Filter by class if ALLOWED_CLASSES is set
+                class_id = int(box.cls[0])
+                if self.ALLOWED_CLASSES is not None and class_id not in self.ALLOWED_CLASSES:
+                    continue  # Skip this detection
+
                 # Get box coordinates (xyxy format) from inference frame
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
 
@@ -123,8 +140,8 @@ class ObjectDetector:
                         "bottom": bottom,
                     },
                     "confidence": float(box.conf[0]),
-                    "class_id": int(box.cls[0]),
-                    "class_name": result.names[int(box.cls[0])],
+                    "class_id": class_id,
+                    "class_name": result.names[class_id],
                 }
                 detections.append(detection)
 

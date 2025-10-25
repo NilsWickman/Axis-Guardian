@@ -88,6 +88,13 @@ DEFAULT_COLOR = (180, 163, 148)   # Gray
 class DetectionRenderer:
     """Handles pre-rendering of detection videos."""
 
+    # COCO class IDs for filtering (only detect these classes)
+    # Set to None to detect all 80 COCO classes
+    ALLOWED_CLASSES = {
+        0: "person",
+        2: "car",
+    }
+
     def __init__(
         self,
         model_path: str = None,
@@ -117,6 +124,11 @@ class DetectionRenderer:
         logger.info(f"Confidence threshold: {confidence}")
         logger.info(f"IOU threshold: {iou}")
         logger.info(f"Inference size: {inference_size}px")
+
+        if self.ALLOWED_CLASSES:
+            logger.info(f"Filtering detections to classes: {list(self.ALLOWED_CLASSES.values())}")
+        else:
+            logger.info("Detecting all 80 COCO classes")
 
     def detect_frame(
         self,
@@ -169,6 +181,11 @@ class DetectionRenderer:
                 continue
 
             for box in boxes:
+                # Filter by class if ALLOWED_CLASSES is set
+                class_id = int(box.cls[0])
+                if self.ALLOWED_CLASSES is not None and class_id not in self.ALLOWED_CLASSES:
+                    continue  # Skip this detection
+
                 # Get box coordinates from inference frame
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
 
@@ -186,7 +203,6 @@ class DetectionRenderer:
                 bottom = float(y2 / original_height)
 
                 confidence = float(box.conf[0])
-                class_id = int(box.cls[0])
                 class_name = result.names[class_id]
 
                 detection = {
