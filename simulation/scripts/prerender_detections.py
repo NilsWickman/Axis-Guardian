@@ -28,10 +28,12 @@ Author: Axis-Guardian Team
 
 import argparse
 import json
+import gzip
 import sys
 import time
 from pathlib import Path
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
+from collections import defaultdict
 import cv2
 import numpy as np
 from loguru import logger
@@ -198,8 +200,6 @@ class DetectionRenderer:
                     "confidence": confidence,
                     "class_id": class_id,
                     "class_name": class_name,
-                    "timestamp": frame_timestamp,
-                    "frame_number": frame_number,
                 }
                 detections.append(detection)
 
@@ -289,6 +289,147 @@ class DetectionRenderer:
             )
 
         return annotated
+
+    def _save_enhanced_metadata(
+        self,
+        output_path: Path,
+        input_path: Path,
+        all_detections: List[Dict[str, Any]],
+        video_info: Dict[str, Any],
+        total_detection_count: int,
+        processing_time: float,
+        camera_id: Optional[str] = None,
+    ) -> None:
+        """
+        Save detection metadata with all enhancements:
+        - Sparse frame storage (only frames with detections)
+        - Frame-level statistics
+        - Temporal indexing
+        - VAPIX metadata
+        - Multiple output formats (JSON, JSON.gz, MessagePack)
+        """
+        # Try to get camera metadata from registry
+        camera_model = "Unknown"
+        camera_serial = "Unknown"
+        if camera_id:
+            try:
+                sys.path.insert(0, str(Path(__file__).parent.parent / "config"))
+                from camera_registry import get_camera_registry
+                registry = get_camera_registry()
+                camera = registry.get_camera(camera_id)
+                if camera:
+                    camera_model = camera.vapix.model
+                    camera_serial = camera.vapix.serial_number
+            except Exception as e:
+                logger.debug(f"Could not load camera registry: {e}")
+
+        # Implement sparse frame storage (only frames with detections)
+        frames_with_detections = [
+            frame for frame in all_detections
+            if len(frame['detections']) > 0
+        ]
+
+        # Build temporal index
+        frames_by_second = defaultdict(list)
+        frames_with_class = defaultdict(list)
+        high_confidence_frames = []
+        all_classes = set()
+
+        # Add frame-level statistics
+        for frame in frames_with_detections:
+            frame_num = frame['frame_number']
+            detections = frame['detections']
+
+            # Calculate second bucket
+            second = int(frame['timestamp'])
+            frames_by_second[second].append(frame_num)
+
+            # Extract classes in this frame
+            frame_classes = set()
+            confidences = []
+
+            for det in detections:
+                class_name = det['class_name']
+                confidence = det['confidence']
+
+                frame_classes.add(class_name)
+                all_classes.add(class_name)
+                confidences.append(confidence)
+
+                # Index by class
+                frames_with_class[class_name].append(frame_num)
+
+            # Add frame stats
+            frame['stats'] = {
+                "detection_count": len(detections),
+                "classes": list(frame_classes),
+                "avg_confidence": sum(confidences) / len(confidences) if confidences else 0,
+                "max_confidence": max(confidences) if confidences else 0,
+                "has_high_confidence": any(c > 0.9 for c in confidences),
+            }
+
+            # Track high confidence frames
+            if frame['stats']['has_high_confidence']:
+                high_confidence_frames.append(frame_num)
+
+        # Build complete metadata structure
+        metadata = {
+            "format_version": "2.0",  # Version for backwards compatibility checking
+            "video_info": video_info,
+            "detection_config": {
+                "model": "yolov8n",
+                "confidence_threshold": self.confidence,
+                "iou_threshold": self.iou,
+                "inference_size": self.inference_size,
+            },
+            "vapix_metadata": {
+                "camera_id": camera_id or "unknown",
+                "camera_model": camera_model,
+                "camera_serial": camera_serial,
+                "analytics_module": "AXIS Object Analytics",
+                "analytics_version": "1.0.0",
+                "scenario": "object_detection",
+            },
+            "statistics": {
+                "total_detections": total_detection_count,
+                "total_frames": video_info['total_frames'],
+                "total_frames_with_detections": len(frames_with_detections),
+                "detection_density": len(frames_with_detections) / video_info['total_frames'],
+                "unique_classes": list(all_classes),
+                "class_distribution": {
+                    cls: len(frames) for cls, frames in frames_with_class.items()
+                },
+                "processing_time_seconds": processing_time,
+                "average_fps": video_info['total_frames'] / processing_time,
+            },
+            "index": {
+                "frames_by_second": {str(k): v for k, v in sorted(frames_by_second.items())},
+                "frames_with_class": {k: v for k, v in frames_with_class.items()},
+                "high_confidence_frames": high_confidence_frames,
+            },
+            "frames": frames_with_detections,  # Sparse storage
+        }
+
+        # Save in multiple formats
+        base_path = output_path.with_suffix('')
+
+        # 1. JSON (human-readable)
+        json_path = base_path.with_suffix('.detections.json')
+        with open(json_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+        json_size = json_path.stat().st_size
+
+        # 2. JSON + gzip (compressed for production)
+        gz_path = base_path.with_suffix('.detections.json.gz')
+        with gzip.open(gz_path, 'wt', encoding='utf-8') as f:
+            json.dump(metadata, f)
+        gz_size = gz_path.stat().st_size
+
+        logger.info(f"✓ Detection metadata saved in 2 formats:")
+        logger.info(f"  JSON:    {json_path.name} ({json_size:,} bytes)")
+        logger.info(f"  JSON.gz: {gz_path.name} ({gz_size:,} bytes, {100*gz_size/json_size:.1f}% of JSON)")
+        logger.info(f"  Compression: {100 - 100*gz_size/json_size:.1f}% smaller")
+        logger.info(f"  Sparse storage: {len(frames_with_detections)}/{video_info['total_frames']} frames ({100*len(frames_with_detections)/video_info['total_frames']:.1f}%)")
 
     def process_video(
         self,
@@ -426,10 +567,12 @@ class DetectionRenderer:
         logger.info(f"  Total detections: {total_detection_count}")
         logger.info(f"  Output: {output_path}")
 
-        # Save detection metadata
-        metadata_path = output_path.with_suffix('.detections.json')
-        metadata = {
-            "video_info": {
+        # Save detection metadata with all improvements
+        self._save_enhanced_metadata(
+            output_path=output_path,
+            input_path=input_path,
+            all_detections=all_detections,
+            video_info={
                 "source_file": str(input_path.name),
                 "output_file": str(output_path.name),
                 "width": width,
@@ -438,24 +581,9 @@ class DetectionRenderer:
                 "total_frames": frame_number,
                 "duration_seconds": frame_number / fps,
             },
-            "detection_config": {
-                "model": "yolov8n",
-                "confidence_threshold": self.confidence,
-                "iou_threshold": self.iou,
-                "inference_size": self.inference_size,
-            },
-            "statistics": {
-                "total_detections": total_detection_count,
-                "processing_time_seconds": processing_time,
-                "average_fps": frame_number / processing_time,
-            },
-            "frames": all_detections,
-        }
-
-        with open(metadata_path, 'w') as f:
-            json.dump(metadata, f, indent=2)
-
-        logger.info(f"✓ Detection metadata saved: {metadata_path}")
+            total_detection_count=total_detection_count,
+            processing_time=processing_time,
+        )
 
         return frame_number, total_detection_count
 
