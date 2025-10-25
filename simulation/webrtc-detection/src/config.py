@@ -48,13 +48,16 @@ class Settings(BaseSettings):
 
     # Camera sources
     camera1_url: str = Field(
-        default="rtsp://localhost:8554/camera1", description="Camera 1 RTSP URL"
+        default="rtsp://localhost:8554/camera1", description="Camera 1 RTSP URL (Auditorium HC3)"
     )
     camera2_url: str = Field(
-        default="rtsp://localhost:8554/camera2", description="Camera 2 RTSP URL"
+        default="rtsp://localhost:8554/camera2", description="Camera 2 RTSP URL (Auditorium HC4)"
     )
     camera3_url: str = Field(
-        default="rtsp://localhost:8554/camera3", description="Camera 3 RTSP URL"
+        default="rtsp://localhost:8554/camera3", description="Camera 3 RTSP URL (Auditorium IP2)"
+    )
+    camera4_url: str = Field(
+        default="rtsp://localhost:8554/camera4", description="Camera 4 RTSP URL (Auditorium IP5)"
     )
 
     # Logging
