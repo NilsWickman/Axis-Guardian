@@ -207,7 +207,7 @@ class StreamProcessor:
 
                     # Call callback if detections found
                     if detections and self.detection_callback:
-                        self.detection_callback(self.camera_id, detections, frame)
+                        self.detection_callback(self.camera_id, detections, frame, frame_timestamp)
 
                     # FPS limiting
                     fps_frame_count += 1

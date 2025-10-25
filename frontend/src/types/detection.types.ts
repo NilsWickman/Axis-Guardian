@@ -3,13 +3,13 @@
  */
 
 /**
- * Bounding box coordinates in pixels
+ * Bounding box coordinates in normalized format (0-1 range)
  */
 export interface BoundingBox {
-  x1: number      // Top-left X coordinate
-  y1: number      // Top-left Y coordinate
-  width: number   // Box width in pixels
-  height: number  // Box height in pixels
+  left: number    // Left edge (0-1)
+  top: number     // Top edge (0-1)
+  right: number   // Right edge (0-1)
+  bottom: number  // Bottom edge (0-1)
 }
 
 /**
@@ -18,8 +18,7 @@ export interface BoundingBox {
 export interface Detection {
   class_name: string      // Detected object class (e.g., "person", "car")
   confidence: number      // Detection confidence (0.0 - 1.0)
-  timestamp: number       // Unix timestamp of detection
-  bbox: BoundingBox       // Bounding box coordinates
+  bbox: BoundingBox       // Bounding box coordinates (normalized)
 }
 
 /**

@@ -11,6 +11,8 @@ from loguru import logger
 from config import settings
 from detector import ObjectDetector
 from video_track import DetectionVideoTrack
+from video_track_precomputed import find_detection_json_for_rtsp
+from metrics import metrics
 
 
 class WebRTCSignalingServer:
@@ -35,10 +37,12 @@ class WebRTCSignalingServer:
         # Configure routes
         offer_route = self.app.router.add_post("/offer", self.handle_offer)
         health_route = self.app.router.add_get("/health", self.health_check)
+        metrics_route = self.app.router.add_get("/metrics", self.metrics_endpoint)
 
         # Add CORS to routes
         cors.add(offer_route)
         cors.add(health_route)
+        cors.add(metrics_route)
 
         # ICE servers configuration
         ice_servers = [RTCIceServer(urls=[settings.stun_server])]
@@ -97,12 +101,17 @@ class WebRTCSignalingServer:
             }
             rtsp_url = camera_urls.get(camera_id, settings.camera1_url)
 
+            # Try to find pre-computed detections JSON file
+            detections_json = find_detection_json_for_rtsp(rtsp_url, camera_id)
+
             # Create detection video track (data channel will be set when received from client)
+            # If pre-computed detections are available, they will be loaded automatically
             video_track = DetectionVideoTrack(
                 rtsp_url=rtsp_url,
                 camera_id=camera_id,
                 detector=self.detector,
                 data_channel=None,
+                precomputed_detections_path=detections_json,
             )
 
             # Handle data channel from client
@@ -195,6 +204,27 @@ class WebRTCSignalingServer:
             }
         )
 
+    async def metrics_endpoint(self, request: web.Request) -> web.Response:
+        """
+        Metrics endpoint for monitoring.
+
+        Returns metrics in JSON format (compatible with Prometheus JSON exporter)
+        or Prometheus text format based on Accept header.
+        """
+        accept = request.headers.get('Accept', 'application/json')
+
+        if 'text/plain' in accept or 'prometheus' in accept:
+            # Return Prometheus text format
+            metrics_text = metrics.export_prometheus_text()
+            return web.Response(
+                text=metrics_text,
+                content_type='text/plain; version=0.0.4'
+            )
+        else:
+            # Return JSON format
+            metrics_data = metrics.get_all_metrics()
+            return web.json_response(metrics_data)
+
     async def on_shutdown(self, app):
         """Cleanup on shutdown."""
         logger.info("Shutting down WebRTC server...")
@@ -203,9 +233,29 @@ class WebRTCSignalingServer:
         await asyncio.gather(*coros)
         self.pcs.clear()
 
+    async def log_metrics_periodically(self):
+        """Log metrics summary every 60 seconds."""
+        try:
+            while True:
+                await asyncio.sleep(60)
+                try:
+                    metrics.log_summary()
+                except Exception as e:
+                    logger.error(f"Error logging metrics: {e}")
+        except asyncio.CancelledError:
+            logger.info("Metrics logging task cancelled")
+        except Exception as e:
+            logger.error(f"Metrics logging task error: {e}")
+
+    async def on_startup(self, app):
+        """Start background tasks on startup."""
+        asyncio.create_task(self.log_metrics_periodically())
+
     def run(self):
         """Run the signaling server."""
         self.app.on_shutdown.append(self.on_shutdown)
+        self.app.on_startup.append(self.on_startup)
 
         logger.info(f"Starting WebRTC Signaling Server on {settings.host}:{settings.port}")
+        logger.info(f"Metrics endpoint available at: http://{settings.host}:{settings.port}/metrics")
         web.run_app(self.app, host=settings.host, port=settings.port)
