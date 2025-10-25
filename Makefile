@@ -45,7 +45,20 @@ setup: ## Install dependencies and initialize infrastructure
 	@for dir in simulation/webrtc-detection simulation/object-detection; do \
 		if [ -f "$$dir/requirements.txt" ]; then \
 			echo "$(BLUE)Setting up $$dir$(NC)"; \
-			(cd "$$dir" && python3 -m venv venv && . venv/bin/activate && pip install -r requirements.txt); \
+			if [ ! -d "$$dir/venv" ]; then \
+				(cd "$$dir" && \
+				 echo "$(YELLOW)  Creating virtual environment...$(NC)" && \
+				 python3 -m venv --without-pip venv && \
+				 echo "$(YELLOW)  Installing pip...$(NC)" && \
+				 curl -fsSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py && \
+				 venv/bin/python /tmp/get-pip.py && \
+				 rm -f /tmp/get-pip.py); \
+			fi; \
+			(cd "$$dir" && \
+			 echo "$(YELLOW)  Installing/updating requirements...$(NC)" && \
+			 venv/bin/pip install --upgrade pip setuptools wheel && \
+			 venv/bin/pip install -r requirements.txt && \
+			 echo "$(GREEN)  ✓ Requirements up to date$(NC)"); \
 		fi \
 	done
 	@echo ""
@@ -129,6 +142,39 @@ cameras: ## Stream mock camera feeds to MediaMTX (requires FFmpeg)
 	@echo ""
 	@bash simulation/scripts/stream-mock-cameras.sh all
 
+.PHONY: test
+test: ## Run all tests
+	@echo "$(BLUE)Running all tests...$(NC)"
+	@pytest
+
+.PHONY: test-unit
+test-unit: ## Run only unit tests
+	@echo "$(BLUE)Running unit tests...$(NC)"
+	@pytest -m unit
+
+.PHONY: test-object-detection
+test-object-detection: ## Run object detection service tests
+	@echo "$(BLUE)Running object detection tests...$(NC)"
+	@pytest simulation/object-detection/tests
+
+.PHONY: test-webrtc
+test-webrtc: ## Run WebRTC detection service tests
+	@echo "$(BLUE)Running WebRTC detection tests...$(NC)"
+	@pytest simulation/webrtc-detection/tests
+
+.PHONY: test-cov
+test-cov: ## Run tests with coverage report
+	@echo "$(BLUE)Running tests with coverage...$(NC)"
+	@pytest --cov --cov-report=html --cov-report=term
+	@echo ""
+	@echo "$(GREEN)✓ Coverage report generated at htmlcov/index.html$(NC)"
+
+.PHONY: test-watch
+test-watch: ## Run tests in watch mode (requires pytest-watch)
+	@echo "$(BLUE)Running tests in watch mode...$(NC)"
+	@echo "$(YELLOW)Press Ctrl+C to stop$(NC)"
+	@pytest-watch || (echo "$(YELLOW)Install pytest-watch: pip install pytest-watch$(NC)" && exit 1)
+
 .PHONY: clean
 clean: ## Clean up temporary files and logs
 	@echo "$(BLUE)Cleaning up...$(NC)"
@@ -136,4 +182,12 @@ clean: ## Clean up temporary files and logs
 	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.pyc" -delete 2>/dev/null || true
 	@find . -type f -name "*.log" -delete 2>/dev/null || true
+	@rm -rf htmlcov .coverage .pytest_cache 2>/dev/null || true
 	@echo "$(GREEN)✓ Cleanup complete$(NC)"
+
+.PHONY: clean-venv
+clean-venv: ## Remove Python virtual environments (forces rebuild on next setup)
+	@echo "$(BLUE)Removing Python virtual environments...$(NC)"
+	@rm -rf simulation/webrtc-detection/venv simulation/object-detection/venv
+	@echo "$(GREEN)✓ Virtual environments removed$(NC)"
+	@echo "$(YELLOW)Run 'make setup' to recreate them$(NC)"
