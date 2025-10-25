@@ -23,7 +23,7 @@ class DetectionService:
         self.stream_processors: List[StreamProcessor] = []
         self.running = False
 
-    def detection_callback(self, camera_id: str, detections: List[Dict[str, Any]], frame: np.ndarray):
+    def detection_callback(self, camera_id: str, detections: List[Dict[str, Any]], frame: np.ndarray, frame_timestamp: float):
         """
         Callback invoked when detections occur.
 
@@ -31,6 +31,7 @@ class DetectionService:
             camera_id: Camera identifier
             detections: List of detections
             frame: Current video frame
+            frame_timestamp: Timestamp of the frame
         """
         # Log detections
         class_summary = {}
@@ -41,7 +42,7 @@ class DetectionService:
         logger.info(f"{camera_id}: Detected {class_summary}")
 
         # Publish to MQTT
-        self.mqtt_publisher.publish_detections(camera_id, detections)
+        self.mqtt_publisher.publish_detections(camera_id, detections, frame_timestamp)
         self.mqtt_publisher.publish_summary(camera_id, detections)
 
     def start(self):

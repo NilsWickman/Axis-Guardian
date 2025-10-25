@@ -141,6 +141,29 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
         console.log('[WebRTC] Received track:', event.track.kind)
         if (event.track.kind === 'video' && videoEl) {
           videoEl.srcObject = event.streams[0]
+
+          // Minimize latency by reducing buffering and playing immediately
+          videoEl.addEventListener('loadedmetadata', () => {
+            // Seek to live edge (end of buffer) to minimize latency
+            if (videoEl.buffered.length > 0) {
+              const end = videoEl.buffered.end(videoEl.buffered.length - 1)
+              videoEl.currentTime = end
+            }
+          }, { once: true })
+
+          // Monitor buffer and jump to live edge if lag accumulates
+          videoEl.addEventListener('timeupdate', () => {
+            if (videoEl.buffered.length > 0) {
+              const end = videoEl.buffered.end(videoEl.buffered.length - 1)
+              const lag = end - videoEl.currentTime
+
+              // If lagging behind by more than 0.5 seconds, skip to live edge
+              if (lag > 0.5) {
+                videoEl.currentTime = end
+              }
+            }
+          })
+
           videoEl.play().catch(e => console.error('Error playing video:', e))
         }
       }
@@ -317,13 +340,7 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
           }
 
           // Log warnings for poor connection quality
-          if (packetLoss > 5) {
-            console.warn(`[WebRTC] High packet loss: ${packetLoss.toFixed(2)}%`)
-          }
-
-          if (connectionQuality.value.roundTripTime > 200) {
-            console.warn(`[WebRTC] High RTT: ${connectionQuality.value.roundTripTime}ms`)
-          }
+          // Packet loss and RTT are tracked in stats, no need to log warnings
         }
       } catch (error) {
         console.error('[WebRTC] Error getting connection stats:', error)
@@ -410,9 +427,6 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
     if (frameDiff < -maxFrameAge) {
       stats.value.droppedStaleDetections++
-      console.warn(
-        `[WebRTC] Dropped stale detection: frame ${metadata.frame_number} (current: ${currentFrame})`
-      )
       return
     }
 
@@ -426,12 +440,6 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     // Trigger callback for UI updates
     if (onDetectionUpdate) {
       onDetectionUpdate(metadata)
-    }
-
-    if (metadata.detection_count > 0) {
-      console.log(
-        `[WebRTC] Frame ${metadata.frame_number}: ${metadata.detection_count} detections (latency: ${stats.value.latencyMs.toFixed(1)}ms)`
-      )
     }
   }
 

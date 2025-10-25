@@ -23,14 +23,21 @@ NC='\033[0m' # No Color
 MEDIAMTX_HOST="${MEDIAMTX_HOST:-localhost}"
 MEDIAMTX_PORT="${MEDIAMTX_PORT:-8554}"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-VIDEOS_DIR="${PROJECT_ROOT}/shared/mock/camera-feeds"
+VIDEOS_DIR="${PROJECT_ROOT}/shared/cameras"
+RENDERED_DIR="${VIDEOS_DIR}/rendered"
 RESTART_DELAY="${RESTART_DELAY:-5}"  # Seconds between restarts
 MAX_RETRIES="${MAX_RETRIES:-0}"      # 0 = infinite retries
 
-# Video file mappings
+# Video file mappings (pre-rendered versions)
 declare -A CAMERA_VIDEOS=(
-    ["camera1"]="new_site.mp4"
-    ["camera2"]="low_old.mp4"
+    ["camera1"]="people-detection-rendered.mp4"
+    ["camera2"]="car-detection-rendered.mp4"
+)
+
+# Source videos (fallback)
+declare -A SOURCE_VIDEOS=(
+    ["camera1"]="people-detection.mp4"
+    ["camera2"]="car-detection.mp4"
 )
 
 # Track restart counts
@@ -49,24 +56,62 @@ check_ffmpeg() {
 check_mediamtx() {
     if ! curl -s "http://${MEDIAMTX_HOST}:9997/v3/config/global/get" > /dev/null 2>&1; then
         echo -e "${YELLOW}Warning: MediaMTX may not be running${NC}"
-        echo "Start it with: make database"
+        echo "Start it with: make infrastructure"
         return 1
     fi
     return 0
 }
 
+# Function to get best available video path
+get_video_path() {
+    local camera_name="$1"
+    local rendered_file="${CAMERA_VIDEOS[$camera_name]}"
+    local source_file="${SOURCE_VIDEOS[$camera_name]}"
+
+    # Try pre-rendered version first
+    if [[ -f "${RENDERED_DIR}/${rendered_file}" ]]; then
+        echo "${RENDERED_DIR}/${rendered_file}"
+        return 0
+    fi
+
+    # Fall back to source video
+    if [[ -f "${VIDEOS_DIR}/${source_file}" ]]; then
+        echo "${VIDEOS_DIR}/${source_file}"
+        return 0
+    fi
+
+    return 1
+}
+
 # Function to stream a camera with auto-restart
 stream_camera_persistent() {
     local camera_name="$1"
-    local video_file="${CAMERA_VIDEOS[$camera_name]}"
     local rtsp_url="rtsp://${MEDIAMTX_HOST}:${MEDIAMTX_PORT}/${camera_name}"
-    local video_path="${VIDEOS_DIR}/${video_file}"
     local retry_count=0
+
+    # Get best available video path
+    local video_path
+    video_path=$(get_video_path "$camera_name")
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}[${camera_name}] No video file found${NC}"
+        return 1
+    fi
+
+    local video_file=$(basename "$video_path")
+    local is_rendered=false
+    if [[ "$video_path" == *"/rendered/"* ]]; then
+        is_rendered=true
+    fi
 
     RESTART_COUNTS[$camera_name]=0
 
     echo -e "${GREEN}Starting persistent stream: ${camera_name}${NC}"
     echo "  Video: ${video_file}"
+    if [[ "$is_rendered" == true ]]; then
+        echo -e "  ${GREEN}✓ Pre-rendered (optimized)${NC}"
+    else
+        echo -e "  ${YELLOW}⚠ Source video (not optimized)${NC}"
+    fi
     echo "  RTSP URL: ${rtsp_url}"
     echo "  Auto-restart: ENABLED"
     echo ""
@@ -88,23 +133,38 @@ stream_camera_persistent() {
         # Start FFmpeg stream
         echo -e "${BLUE}[${camera_name}] Starting FFmpeg...${NC}"
 
-        ffmpeg \
-            -re \
-            -stream_loop -1 \
-            -i "${video_path}" \
-            -c:v libx264 \
-            -preset ultrafast \
-            -tune zerolatency \
-            -b:v 2M \
-            -maxrate 2M \
-            -bufsize 4M \
-            -g 30 \
-            -c:a aac \
-            -b:a 128k \
-            -rtsp_transport tcp \
-            -f rtsp \
-            "${rtsp_url}" \
-            2>&1 | grep -v "^frame=" || true
+        if [[ "$is_rendered" == true ]]; then
+            # Pre-rendered: Stream copy (no re-encoding)
+            ffmpeg \
+                -re \
+                -stream_loop -1 \
+                -i "${video_path}" \
+                -c:v copy \
+                -c:a copy \
+                -rtsp_transport tcp \
+                -f rtsp \
+                "${rtsp_url}" \
+                2>&1 | grep -v "^frame=" || true
+        else
+            # Source: Re-encode with low latency
+            ffmpeg \
+                -re \
+                -stream_loop -1 \
+                -i "${video_path}" \
+                -c:v libx264 \
+                -preset ultrafast \
+                -tune zerolatency \
+                -b:v 2M \
+                -maxrate 2M \
+                -bufsize 4M \
+                -g 30 \
+                -c:a aac \
+                -b:a 128k \
+                -rtsp_transport tcp \
+                -f rtsp \
+                "${rtsp_url}" \
+                2>&1 | grep -v "^frame=" || true
+        fi
 
         local exit_code=$?
 

@@ -123,3 +123,8 @@ jspm_packages/
 
 # Documentation build artifacts
 docs/api/
+
+# Pre-rendered camera videos (can be regenerated)
+# Keep detection JSON files for reproducibility
+cameras/rendered/*.mp4
+!cameras/rendered/*.detections.json

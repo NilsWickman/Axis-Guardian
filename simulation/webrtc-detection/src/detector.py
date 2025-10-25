@@ -79,11 +79,6 @@ class ObjectDetector:
                 interpolation=cv2.INTER_LINEAR  # Faster than INTER_CUBIC
             )
 
-            logger.debug(
-                f"Downscaled frame from {original_width}x{original_height} "
-                f"to {new_width}x{new_height} (scale: {scale_factor:.2f})"
-            )
-
         # Run YOLOv8 inference with optimizations
         results = self.model.predict(
             inference_frame,
@@ -122,12 +117,6 @@ class ObjectDetector:
 
                 detection = {
                     "bbox": {
-                        "x1": float(x1),
-                        "y1": float(y1),
-                        "x2": float(x2),
-                        "y2": float(y2),
-                        "width": float(x2 - x1),
-                        "height": float(y2 - y1),
                         "left": left,
                         "top": top,
                         "right": right,
@@ -136,8 +125,6 @@ class ObjectDetector:
                     "confidence": float(box.conf[0]),
                     "class_id": int(box.cls[0]),
                     "class_name": result.names[int(box.cls[0])],
-                    "timestamp": frame_timestamp,
-                    "frame_number": self.frame_number,
                 }
                 detections.append(detection)
 
@@ -151,12 +138,6 @@ class ObjectDetector:
         if len(self.detection_cache) > 30:
             oldest_frame = min(self.detection_cache.keys())
             del self.detection_cache[oldest_frame]
-
-        if detections:
-            logger.debug(
-                f"Frame {self.frame_number}: {len(detections)} detections "
-                f"in {processing_latency_ms:.1f}ms"
-            )
 
         self.frame_number += 1
         return detections

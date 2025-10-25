@@ -149,8 +149,7 @@
             >
               [{{ idx + 1 }}] {{ det.class_name }} ({{ (det.confidence * 100).toFixed(1) }}%) -
               Frame #{{ frameNumbers[camera.id] }} |
-              Pixel: ({{ det.bbox.x1.toFixed(0) }}, {{ det.bbox.y1.toFixed(0) }}) |
-              VAPIX: ({{ det.bbox.left.toFixed(3) }}, {{ det.bbox.top.toFixed(3) }})
+              Normalized: ({{ det.bbox.left.toFixed(3) }}, {{ det.bbox.top.toFixed(3) }}) to ({{ det.bbox.right.toFixed(3) }}, {{ det.bbox.bottom.toFixed(3) }})
             </div>
           </template>
           <div v-else class="no-detections">Waiting for detections...</div>
@@ -210,6 +209,10 @@ const dataChannelStates = reactive<Record<string, boolean>>({})
 const cameraStats = reactive<Record<string, any>>({})
 const animationFrames = ref<Record<string, number>>({})
 
+// Throttle mechanism for debug overlay updates (100ms = 10 Hz max)
+const lastDebugUpdateTime = reactive<Record<string, number>>({})
+const DEBUG_UPDATE_THROTTLE_MS = 100
+
 // Global computed
 const globalConnected = computed(() =>
   Object.values(connectionStates).some(state => state === 'connected')
@@ -251,7 +254,6 @@ function onVideoLoaded(cameraId: string) {
       width: video.videoWidth,
       height: video.videoHeight
     }
-    console.log(`Video loaded for ${cameraId}: ${video.videoWidth}x${video.videoHeight}`)
   }
 }
 
@@ -323,19 +325,29 @@ async function initializeWebRTC() {
 
     webrtcConnections[camera.id] = connection
 
-    // Set up reactive callback for immediate updates
+    // Set up reactive callback with throttled debug updates
     connection.setDetectionCallback((metadata) => {
-      // Update state reactively when detections arrive
+      // Always update detections for canvas drawing (real-time)
       cameraDetections[camera.id] = metadata.detections
-      frameNumbers[camera.id] = metadata.frame_number
-      detectionCounts[camera.id] = metadata.detection_count
-      cameraTotalDetections[camera.id] = connection.totalDetections.value
-      classCountsByCamera[camera.id] = connection.classCounts.value
-      cameraStats[camera.id] = connection.stats.value
 
       // Only trigger canvas redraw if client-side rendering
       if (!serverSideRendering.value) {
         drawDetections(camera.id)
+      }
+
+      // Throttle debug overlay updates to 10 Hz (every 100ms)
+      const now = Date.now()
+      const lastUpdate = lastDebugUpdateTime[camera.id] || 0
+
+      if (now - lastUpdate >= DEBUG_UPDATE_THROTTLE_MS) {
+        // Update debug state (causes Vue re-render)
+        frameNumbers[camera.id] = metadata.frame_number
+        detectionCounts[camera.id] = metadata.detection_count
+        cameraTotalDetections[camera.id] = connection.totalDetections.value
+        classCountsByCamera[camera.id] = connection.classCounts.value
+        cameraStats[camera.id] = connection.stats.value
+
+        lastDebugUpdateTime[camera.id] = now
       }
     })
 
@@ -360,8 +372,6 @@ async function initializeWebRTC() {
 
       // Store interval ID for cleanup
       animationFrames.value[camera.id] = stateUpdateInterval
-
-      console.log(`WebRTC initialized for ${camera.id}`)
     } catch (error) {
       console.error(`Failed to initialize WebRTC for ${camera.id}:`, error)
     }

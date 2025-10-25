@@ -64,13 +64,14 @@ class MQTTPublisher:
         """Callback when message is published."""
         logger.debug(f"Message {mid} published")
 
-    def publish_detections(self, camera_id: str, detections: List[Dict[str, Any]]):
+    def publish_detections(self, camera_id: str, detections: List[Dict[str, Any]], frame_timestamp: float = None):
         """
         Publish detection events to MQTT.
 
         Args:
             camera_id: Camera identifier
             detections: List of detection dictionaries
+            frame_timestamp: Timestamp of the frame (seconds since epoch)
         """
         if not self.connected:
             logger.warning("Not connected to MQTT broker, skipping publish")
@@ -79,39 +80,15 @@ class MQTTPublisher:
         if not detections:
             return
 
-        # Extract timing information from detections
-        frame_timestamp = detections[0]["timestamp"] if detections else time.time()
-        publish_timestamp = time.time()
+        # Use provided timestamp or current time
+        timestamp = frame_timestamp if frame_timestamp is not None else time.time()
 
-        # Extract PTS metadata if available
-        video_pts_ms = detections[0].get("video_pts_ms", 0.0) if detections else 0.0
-        loop_count = detections[0].get("loop_count", 0) if detections else 0
-        pts_based = detections[0].get("pts_based", False) if detections else False
-
-        # Calculate actual processing latency (excluding sync offset)
-        # frame_timestamp already includes the detection_delay_ms offset,
-        # so we need to subtract it to get the real processing time
-        actual_frame_time = frame_timestamp - (settings.detection_delay_ms / 1000.0)
-        processing_latency_ms = (publish_timestamp - actual_frame_time) * 1000
-
-        # Build detection message with comprehensive timestamp metadata
+        # Build simplified detection message
         message = {
             "camera_id": camera_id,
-            "timestamp": frame_timestamp,  # Original frame timestamp
-            "publish_timestamp": publish_timestamp,  # When message was published
+            "timestamp": timestamp,
             "detection_count": len(detections),
             "detections": detections,
-            "timing": {
-                "frame_timestamp": frame_timestamp,  # When frame was captured/processed
-                "publish_timestamp": publish_timestamp,  # When MQTT message was sent
-                "processing_latency_ms": round(processing_latency_ms, 2),  # Detection processing time
-                "detection_delay_ms": settings.detection_delay_ms,  # Configured sync offset
-                # PTS-based timing metadata
-                "video_pts_ms": video_pts_ms,  # Video presentation timestamp
-                "loop_count": loop_count,  # Number of loops detected
-                "pts_based": pts_based,  # Whether using PTS-based timing
-                "use_video_pts": settings.use_video_pts,  # Configuration flag
-            }
         }
 
         # Publish to camera-specific topic
@@ -128,7 +105,7 @@ class MQTTPublisher:
             if result.rc != mqtt.MQTT_ERR_SUCCESS:
                 logger.error(f"Failed to publish to {topic}: {result.rc}")
             else:
-                logger.debug(f"Published {len(detections)} detections to {topic} (latency: {processing_latency_ms:.1f}ms)")
+                logger.debug(f"Published {len(detections)} detections to {topic}")
 
         except Exception as e:
             logger.error(f"Error publishing to MQTT: {e}")

@@ -10,14 +10,14 @@
     >
       <g
         v-for="(detection, index) in detections"
-        :key="`${detection.timestamp}-${index}`"
+        :key="`${index}`"
       >
         <!-- Bounding box rectangle -->
         <rect
-          :x="detection.bbox.x1"
-          :y="detection.bbox.y1"
-          :width="detection.bbox.width"
-          :height="detection.bbox.height"
+          :x="detection.bbox.left * videoWidth"
+          :y="detection.bbox.top * videoHeight"
+          :width="(detection.bbox.right - detection.bbox.left) * videoWidth"
+          :height="(detection.bbox.bottom - detection.bbox.top) * videoHeight"
           :stroke="getClassColor(detection.class_name)"
           :stroke-width="strokeWidth"
           fill="none"
@@ -26,8 +26,8 @@
 
         <!-- Detection label background -->
         <rect
-          :x="detection.bbox.x1"
-          :y="detection.bbox.y1 - labelHeight"
+          :x="detection.bbox.left * videoWidth"
+          :y="detection.bbox.top * videoHeight - labelHeight"
           :width="getLabelWidth(detection)"
           :height="labelHeight"
           :fill="getClassColor(detection.class_name)"
@@ -36,8 +36,8 @@
 
         <!-- Detection label text -->
         <text
-          :x="detection.bbox.x1 + 4"
-          :y="detection.bbox.y1 - 4"
+          :x="detection.bbox.left * videoWidth + 4"
+          :y="detection.bbox.top * videoHeight - 4"
           :font-size="fontSize"
           fill="white"
           font-weight="600"
