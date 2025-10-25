@@ -27,7 +27,7 @@ NC='\033[0m' # No Color
 MEDIAMTX_HOST="${MEDIAMTX_HOST:-localhost}"
 MEDIAMTX_PORT="${MEDIAMTX_PORT:-8554}"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-VIDEOS_DIR="${PROJECT_ROOT}/shared/mock/camera-feeds/real-footage"
+VIDEOS_DIR="${PROJECT_ROOT}/shared/cameras"
 
 # Video file mappings (using real surveillance footage with detections)
 declare -A CAMERA_VIDEOS=(
