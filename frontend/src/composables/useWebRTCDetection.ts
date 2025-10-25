@@ -6,7 +6,9 @@
  */
 
 import { ref, computed, onUnmounted, type Ref } from 'vue'
+import msgpack from 'msgpack-lite'
 import type { Detection } from '@/types/detection.types'
+import { useToast } from '@/composables/useToast'
 
 export interface DetectionMetadata {
   camera_id: string
@@ -35,6 +37,7 @@ const DEFAULT_OPTIONS: WebRTCDetectionOptions = {
 
 export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOptions = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...options }
+  const toast = useToast()
 
   // State
   const peerConnection = ref<RTCPeerConnection | null>(null)
@@ -79,8 +82,13 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     bitrate: 0,
     framesDropped: 0,
     framesDecoded: 0,
+    fps: 0,
     timestamp: 0
   })
+
+  // FPS calculation state
+  let previousFramesDecoded = 0
+  let previousFpsTimestamp = 0
 
   // Stats monitoring interval
   let statsMonitorInterval: number | null = null
@@ -124,7 +132,14 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
         console.log(`[WebRTC] Connection state: ${pc.connectionState}`)
 
-        if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        // Toast notifications for connection state changes
+        if (pc.connectionState === 'connected') {
+          toast.success(`Camera ${cameraId} connected`, 3000)
+        } else if (pc.connectionState === 'failed') {
+          toast.error(`Camera ${cameraId} connection failed`, 5000)
+          handleDisconnect()
+        } else if (pc.connectionState === 'closed') {
+          toast.warning(`Camera ${cameraId} disconnected`, 4000)
           handleDisconnect()
         }
       }
@@ -168,13 +183,19 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
         }
       }
 
-      // Create data channel (client-initiated)
-      const channel = pc.createDataChannel('detections')
+      // Create data channel (client-initiated) with binary type for MessagePack
+      const channel = pc.createDataChannel('detections', {
+        ordered: true,
+        maxRetransmits: 3
+      })
+      // Set binary type to receive MessagePack as ArrayBuffer
+      channel.binaryType = 'arraybuffer'
       setupDataChannel(channel)
 
       // Handle data channel from server (fallback)
       pc.ondatachannel = (event) => {
         console.log('[WebRTC] Data channel received from server:', event.channel.label)
+        event.channel.binaryType = 'arraybuffer' // Set binary type for MessagePack
         setupDataChannel(event.channel)
       }
 
@@ -324,6 +345,24 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
           const totalPackets = packetsLost + packetsReceived
           const packetLoss = totalPackets > 0 ? (packetsLost / totalPackets) * 100 : 0
 
+          // Calculate FPS from framesDecoded
+          const currentFramesDecoded = inboundRtp.framesDecoded || 0
+          const currentTimestamp = Date.now()
+          let fps = 0
+
+          if (previousFpsTimestamp > 0) {
+            const timeDelta = (currentTimestamp - previousFpsTimestamp) / 1000 // Convert to seconds
+            const framesDelta = currentFramesDecoded - previousFramesDecoded
+
+            if (timeDelta > 0) {
+              fps = Math.round(framesDelta / timeDelta)
+            }
+          }
+
+          // Update FPS tracking state
+          previousFramesDecoded = currentFramesDecoded
+          previousFpsTimestamp = currentTimestamp
+
           // Update connection quality stats
           connectionQuality.value = {
             packetLoss: Math.round(packetLoss * 100) / 100,
@@ -336,6 +375,7 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
               : 0, // kbps
             framesDropped: inboundRtp.framesDropped || 0,
             framesDecoded: inboundRtp.framesDecoded || 0,
+            fps: fps,
             timestamp: Date.now()
           }
 
@@ -367,6 +407,7 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     channel.onopen = () => {
       console.log('[WebRTC] Data channel opened')
       isDataChannelOpen.value = true
+      toast.success(`Data channel for ${cameraId} ready`, 2000)
     }
 
     channel.onclose = () => {
@@ -376,44 +417,69 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
     channel.onerror = (error) => {
       console.error('[WebRTC] Data channel error:', error)
+      toast.error(`Data channel error on ${cameraId}`, 5000)
     }
 
-    // Receive detection metadata
+    // Receive detection metadata (MessagePack or JSON for backwards compatibility)
     channel.onmessage = (event) => {
       try {
-        const metadata: DetectionMetadata = JSON.parse(event.data)
-        const now = performance.now()
+        let metadata: DetectionMetadata
 
-        // Calculate latency
-        const latency = now - (metadata.timestamp * 1000)
-        stats.value.latencyMs = latency
-
-        // Add to buffer for time-based synchronization
-        detectionBuffer.push(metadata)
-
-        // Keep buffer size manageable
-        if (detectionBuffer.length > maxBufferSize) {
-          detectionBuffer.shift()
+        // Detect format: ArrayBuffer/Blob = MessagePack, string = JSON
+        if (event.data instanceof ArrayBuffer) {
+          // MessagePack binary format
+          const buffer = new Uint8Array(event.data)
+          metadata = msgpack.decode(buffer) as DetectionMetadata
+        } else if (event.data instanceof Blob) {
+          // MessagePack sent as Blob - need to read it first
+          event.data.arrayBuffer().then(buffer => {
+            const uint8 = new Uint8Array(buffer)
+            const blobMetadata = msgpack.decode(uint8) as DetectionMetadata
+            processMetadata(blobMetadata)
+          })
+          return // Exit early, will process async
+        } else {
+          // JSON string format (backwards compatibility)
+          metadata = JSON.parse(event.data as string)
         }
 
-        // Use slightly delayed detections to account for video decode/display lag
-        // Delay by approximately RTT/2 to sync with actual video display
-        const syncDelay = Math.min(connectionQuality.value.roundTripTime / 2, 50)
-
-        setTimeout(() => {
-          processBufferedDetection(metadata)
-        }, syncDelay)
-
-        // Update stats
-        stats.value.framesReceived++
-        stats.value.detectionsReceived += metadata.detection_count
-        stats.value.avgDetectionsPerFrame =
-          stats.value.detectionsReceived / stats.value.framesReceived
-        stats.value.lastUpdateTime = metadata.timestamp
+        processMetadata(metadata)
 
       } catch (error) {
-        console.error('[WebRTC] Error parsing metadata:', error)
+        console.error('[WebRTC] Error parsing metadata:', error, event.data)
       }
+    }
+
+    // Helper function to process metadata (avoid duplication for async case)
+    function processMetadata(metadata: DetectionMetadata) {
+      const now = performance.now()
+
+      // Calculate latency
+      const latency = now - (metadata.timestamp * 1000)
+      stats.value.latencyMs = latency
+
+      // Add to buffer for time-based synchronization
+      detectionBuffer.push(metadata)
+
+      // Keep buffer size manageable
+      if (detectionBuffer.length > maxBufferSize) {
+        detectionBuffer.shift()
+      }
+
+      // Use slightly delayed detections to account for video decode/display lag
+      // Delay by approximately RTT/2 to sync with actual video display
+      const syncDelay = Math.min(connectionQuality.value.roundTripTime / 2, 50)
+
+      setTimeout(() => {
+        processBufferedDetection(metadata)
+      }, syncDelay)
+
+      // Update stats
+      stats.value.framesReceived++
+      stats.value.detectionsReceived += metadata.detection_count
+      stats.value.avgDetectionsPerFrame =
+        stats.value.detectionsReceived / stats.value.framesReceived
+      stats.value.lastUpdateTime = metadata.timestamp
     }
   }
 
@@ -483,6 +549,11 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
       console.log(
         `[WebRTC] Reconnecting in ${exponentialDelay}ms... (attempt ${reconnectAttempts.value}/${maxReconnectAttempts})`
+      )
+
+      toast.info(
+        `Reconnecting ${cameraId} (attempt ${reconnectAttempts.value}/${maxReconnectAttempts})...`,
+        Math.min(exponentialDelay, 5000)
       )
 
       reconnectTimer.value = window.setTimeout(() => {
@@ -559,6 +630,54 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     onDetectionUpdate = callback
   }
 
+  /**
+   * Pause video playback
+   */
+  function pauseVideo(): void {
+    if (videoElement.value && !videoElement.value.paused) {
+      videoElement.value.pause()
+    }
+  }
+
+  /**
+   * Resume video playback
+   */
+  function resumeVideo(): void {
+    if (videoElement.value && videoElement.value.paused) {
+      videoElement.value.play().catch(e => console.error('Error resuming video:', e))
+    }
+  }
+
+  /**
+   * Manual retry connection
+   */
+  async function retryConnection(): Promise<void> {
+    if (!videoElement.value) {
+      console.error('[WebRTC] Cannot retry: no video element')
+      return
+    }
+
+    // Reset reconnect attempts for manual retry
+    reconnectAttempts.value = 0
+
+    // Disconnect first if still connected
+    if (peerConnection.value) {
+      disconnect()
+    }
+
+    // Wait a moment for cleanup
+    await new Promise(resolve => setTimeout(resolve, 500))
+
+    // Reconnect
+    try {
+      toast.info(`Manually reconnecting ${cameraId}...`, 2000)
+      await connect(videoElement.value)
+    } catch (error) {
+      console.error('[WebRTC] Manual retry failed:', error)
+      toast.error(`Failed to reconnect ${cameraId}`, 5000)
+    }
+  }
+
   return {
     // State
     isConnected,
@@ -581,6 +700,9 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     connect,
     disconnect,
     getDetectionsByClass,
-    setDetectionCallback
+    setDetectionCallback,
+    pauseVideo,
+    resumeVideo,
+    retryConnection
   }
 }

@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from collections import deque
 import cv2
 import numpy as np
+import msgpack
 from av import VideoFrame
 from aiortc import RTCDataChannel, VideoStreamTrack
 from loguru import logger
@@ -72,6 +73,12 @@ class DetectionVideoTrack(VideoStreamTrack):
         self.fps = 30
         self.frame_time = 1.0 / self.fps
         self.target_frame_time = 1.0 / self.fps
+
+        # Adaptive FPS control
+        self.current_fps_limit = 30  # Start at max, will be adjusted dynamically
+        self.min_fps = 10  # Never go below 10 FPS
+        self.overload_counter = 0  # Track consecutive overload frames
+        self.underload_counter = 0  # Track consecutive underload frames
 
         # Frame queue for async processing
         self.frame_queue = deque(maxlen=5)  # Max 5 frames buffered
@@ -202,26 +209,26 @@ class DetectionVideoTrack(VideoStreamTrack):
             # Track successful frame reads
             metrics.increment_counter('frames_read_total', labels={'camera': self.camera_id})
 
-            # Validate frame integrity
-            if not self._is_valid_frame(frame):
-                self.corrupted_frames += 1
-                metrics.increment_counter('frames_corrupted_total', labels={'camera': self.camera_id})
+            # Validate frame integrity (sampled - every 10th frame for performance)
+            # This reduces CPU overhead while still catching persistent corruption issues
+            if self.frame_count % 10 == 0:
+                if not self._is_valid_frame(frame):
+                    self.corrupted_frames += 1
+                    metrics.increment_counter('frames_corrupted_total', labels={'camera': self.camera_id})
 
-                # Log periodically to avoid spam
-                if self.corrupted_frames % 30 == 0:
-                    logger.warning(
-                        f"[{self.camera_id}] Corrupted frames detected: {self.corrupted_frames} total. "
-                        "This may be due to network issues or RTSP stream quality."
-                    )
+                    # Log periodically to avoid spam
+                    if self.corrupted_frames % 30 == 0:
+                        logger.warning(
+                            f"[{self.camera_id}] Corrupted frames detected: {self.corrupted_frames} total. "
+                            "This may be due to network issues or RTSP stream quality."
+                        )
 
-                # Use last valid frame if available, otherwise return current (may have artifacts)
-                if self.last_valid_frame is not None:
-                    frame = self.last_valid_frame
-                # else: continue with potentially corrupted frame to avoid stream interruption
-            else:
-                # Cache this valid frame for error recovery
-                # Only copy every 10th frame to reduce memory overhead
-                if self.frame_count % 10 == 0:
+                    # Use last valid frame if available, otherwise return current (may have artifacts)
+                    if self.last_valid_frame is not None:
+                        frame = self.last_valid_frame
+                    # else: continue with potentially corrupted frame to avoid stream interruption
+                else:
+                    # Cache this valid frame for error recovery
                     self.last_valid_frame = frame.copy()
 
             self.frame_count += 1
@@ -325,12 +332,17 @@ class DetectionVideoTrack(VideoStreamTrack):
             # Update gauges
             metrics.set_gauge('buffer_size', self.buffer_size, labels={'camera': self.camera_id})
             metrics.set_gauge('avg_processing_time_seconds', self.avg_processing_time, labels={'camera': self.camera_id})
+            metrics.set_gauge('current_fps_limit', self.current_fps_limit, labels={'camera': self.camera_id})
 
             # Periodic buffer adjustment based on frame loss rate
             self._adjust_buffer_size()
 
-            # Sleep only if we're ahead of schedule
-            sleep_time = max(0, self.target_frame_time - processing_time)
+            # Adaptive FPS throttling: reduce FPS when system is overloaded
+            self._adjust_fps_limit(processing_time)
+
+            # Sleep based on current FPS limit
+            adaptive_frame_time = 1.0 / self.current_fps_limit
+            sleep_time = max(0, adaptive_frame_time - processing_time)
             if sleep_time > 0:
                 await asyncio.sleep(sleep_time)
             else:
@@ -338,7 +350,8 @@ class DetectionVideoTrack(VideoStreamTrack):
                 if self.dropped_frames % 30 == 0:
                     logger.warning(
                         f"[{self.camera_id}] Running behind: {self.dropped_frames} frames dropped, "
-                        f"avg processing time: {self.avg_processing_time*1000:.1f}ms"
+                        f"avg processing time: {self.avg_processing_time*1000:.1f}ms, "
+                        f"current FPS limit: {self.current_fps_limit}"
                     )
 
             return video_frame
@@ -401,6 +414,73 @@ class DetectionVideoTrack(VideoStreamTrack):
         self.frame_loss_count = 0
         self.total_frames_attempted = 0
         self.last_buffer_adjustment = current_time
+
+    def _adjust_fps_limit(self, processing_time: float):
+        """
+        Adaptively adjust FPS limit based on processing load.
+
+        If processing is taking too long relative to target frame time,
+        reduce FPS to prevent accumulating lag. If processing is consistently
+        fast, increase FPS back toward the maximum.
+
+        Args:
+            processing_time: Time taken to process current frame in seconds
+        """
+        from config import settings
+
+        # Get target FPS from settings (respects MAX_FPS env var)
+        max_fps = min(settings.max_fps, 30)  # Cap at 30 FPS
+
+        # Calculate load factor: how much of the target frame time we're using
+        target_frame_time = 1.0 / self.current_fps_limit
+        load_factor = processing_time / target_frame_time
+
+        # Thresholds for adjustment
+        overload_threshold = 0.90  # Using >90% of available time = overloaded
+        underload_threshold = 0.70  # Using <70% of available time = underloaded
+
+        if load_factor > overload_threshold:
+            # System is overloaded - increment counter
+            self.overload_counter += 1
+            self.underload_counter = 0
+
+            # Reduce FPS after 5 consecutive overload frames (prevents jitter)
+            if self.overload_counter >= 5:
+                old_fps = self.current_fps_limit
+                # Reduce by 20% or at least 2 FPS, but never below min_fps
+                reduction = max(2, int(self.current_fps_limit * 0.2))
+                self.current_fps_limit = max(self.min_fps, self.current_fps_limit - reduction)
+
+                if self.current_fps_limit != old_fps:
+                    logger.info(
+                        f"[{self.camera_id}] High CPU load detected "
+                        f"(processing: {processing_time*1000:.1f}ms, target: {target_frame_time*1000:.1f}ms), "
+                        f"reducing FPS: {old_fps} → {self.current_fps_limit}"
+                    )
+                    self.overload_counter = 0  # Reset after adjustment
+
+        elif load_factor < underload_threshold:
+            # System has spare capacity - increment counter
+            self.underload_counter += 1
+            self.overload_counter = 0
+
+            # Increase FPS after 30 consecutive underload frames (be conservative)
+            if self.underload_counter >= 30 and self.current_fps_limit < max_fps:
+                old_fps = self.current_fps_limit
+                # Increase by 10% or at least 1 FPS, but never above max_fps
+                increase = max(1, int(self.current_fps_limit * 0.1))
+                self.current_fps_limit = min(max_fps, self.current_fps_limit + increase)
+
+                if self.current_fps_limit != old_fps:
+                    logger.info(
+                        f"[{self.camera_id}] Spare CPU capacity detected, "
+                        f"increasing FPS: {old_fps} → {self.current_fps_limit}"
+                    )
+                    self.underload_counter = 0  # Reset after adjustment
+        else:
+            # Load is in acceptable range - reset counters
+            self.overload_counter = 0
+            self.underload_counter = 0
 
     def _is_valid_frame(self, frame: np.ndarray) -> bool:
         """
@@ -602,7 +682,7 @@ class DetectionVideoTrack(VideoStreamTrack):
         return annotated_frame
 
     async def _send_cached_detections(self, current_frame: int, timestamp: float):
-        """Send detection results from cache via data channel."""
+        """Send detection results from cache via data channel using MessagePack."""
         if not self.data_channel or self.data_channel.readyState != "open":
             return
 
@@ -624,9 +704,11 @@ class DetectionVideoTrack(VideoStreamTrack):
                     "detection_count": len(cached["detections"]),
                     "detections": cached["detections"],
                     "detection_frame": latest_frame,  # Original detection frame
+                    "format": "msgpack",  # Indicate MessagePack encoding
                 }
 
-                message = json.dumps(metadata)
+                # Serialize with MessagePack (30-50% smaller than JSON)
+                message = msgpack.packb(metadata, use_bin_type=True)
                 self.data_channel.send(message)
 
             except Exception as e:

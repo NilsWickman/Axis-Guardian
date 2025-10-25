@@ -8,8 +8,8 @@
   "scripts": {
     "dev": "yarn run dev:frontend & yarn run dev:cameras & yarn run dev:webrtc-detection & wait",
     "dev:frontend": "yarn workspace @axis/surveillance-interface run dev",
-    "dev:cameras": "bash simulation/scripts/stream-mock-cameras.sh all",
-    "dev:webrtc-detection": "bash -c 'cd simulation/webrtc-detection && source venv/bin/activate && python3 src/main.py'",
+    "dev:cameras": "USE_RENDERED=${USE_RENDERED:-1} bash simulation/scripts/stream-mock-cameras.sh all",
+    "dev:webrtc-detection": "USE_REALTIME=${USE_REALTIME:-false} bash -c 'cd simulation/webrtc-detection && source venv/bin/activate && python3 src/main.py'",
     "build": "yarn workspaces foreach -A run build",
     "type-check": "yarn workspaces foreach -A run type-check"
   },

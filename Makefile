@@ -64,6 +64,9 @@ setup: ## Install dependencies and initialize infrastructure
 	@echo ""
 	@echo "$(GREEN)✓ Setup complete!$(NC)"
 	@echo ""
+	@echo "$(YELLOW)Pre-rendering detection videos...$(NC)"
+	@$(MAKE) prerender-videos
+	@echo ""
 	@echo "$(YELLOW)Next steps:$(NC)"
 	@echo "  1. Start surveillance system: make dev (MediaMTX will start automatically)"
 
@@ -79,8 +82,8 @@ stop-infrastructure: ## Stop MediaMTX media server
 
 
 .PHONY: dev
-dev: cleanup-ports ## Start complete surveillance system (frontend + cameras + WebRTC detection)
-	@echo "$(BLUE)Starting complete surveillance system...$(NC)"
+dev: cleanup-ports ## Start complete surveillance system (optimized with pre-rendered detections)
+	@echo "$(BLUE)Starting complete surveillance system (optimized mode)...$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Starting infrastructure...$(NC)"
 	@$(MAKE) infrastructure
@@ -92,10 +95,39 @@ dev: cleanup-ports ## Start complete surveillance system (frontend + cameras + W
 	@echo "  HLS Streams:       http://localhost:8888/camera{1,2,3}"
 	@echo "  WebRTC Detection:  http://localhost:8080 (signaling + data channels)"
 	@echo ""
-	@echo "$(YELLOW)Note: All services start automatically in parallel$(NC)"
+	@echo "$(GREEN)Mode: Optimized with pre-rendered detections (default)$(NC)"
+	@echo "  • Pre-rendered videos with baked-in detections"
+	@echo "  • Minimal CPU usage, maximum performance"
+	@echo "  • Run 'make prerender-videos' to generate/update rendered videos"
+	@echo ""
+	@echo "$(YELLOW)For real-time inference mode, use: make dev-realtime$(NC)"
+	@echo ""
 	@echo "$(YELLOW)Access WebRTC Detection view at: http://localhost:5173/webrtc-detection$(NC)"
 	@echo ""
 	@yarn dev
+
+.PHONY: dev-realtime
+dev-realtime: cleanup-ports ## Start surveillance system with real-time inference
+	@echo "$(BLUE)Starting complete surveillance system (real-time inference)...$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Starting infrastructure...$(NC)"
+	@$(MAKE) infrastructure
+	@sleep 1
+	@echo ""
+	@echo "$(YELLOW)Starting services:$(NC)"
+	@echo "  Frontend:          http://localhost:5173"
+	@echo "  Cameras:           rtsp://localhost:8554/camera{1,2,3}"
+	@echo "  HLS Streams:       http://localhost:8888/camera{1,2,3}"
+	@echo "  WebRTC Detection:  http://localhost:8080 (signaling + data channels)"
+	@echo ""
+	@echo "$(GREEN)Mode: Real-time inference$(NC)"
+	@echo "  • Source videos streamed"
+	@echo "  • Detection runs in real-time"
+	@echo "  • Higher CPU usage, more realistic simulation"
+	@echo ""
+	@echo "$(YELLOW)Access WebRTC Detection view at: http://localhost:5173/webrtc-detection$(NC)"
+	@echo ""
+	@USE_RENDERED=0 USE_REALTIME=true yarn dev
 
 .PHONY: cleanup-ports
 cleanup-ports: ## Kill processes on development ports (5173, 8080)

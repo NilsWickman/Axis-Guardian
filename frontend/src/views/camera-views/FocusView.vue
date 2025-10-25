@@ -2,27 +2,17 @@
   <div class="h-full w-full bg-background flex flex-col">
     <!-- Header -->
     <div class="flex justify-between items-center p-4 border-b border-sidebar-border">
-      <h1 class="text-base font-bold text-foreground">Focus View</h1>
+      <h1 class="text-base font-bold text-foreground">Focus View - WebRTC Detection</h1>
       <div class="flex items-center space-x-3">
+        <div class="flex items-center gap-2">
+          <div :class="['status-indicator', { connected: isConnected }]" />
+          <span class="text-xs text-muted-foreground">
+            {{ isConnected ? 'Connected' : 'Connecting...' }}
+          </span>
+        </div>
         <span class="text-xs text-muted-foreground">
-          {{ onlineCameras }}/{{ cameras.length }} cameras online
+          {{ cameras.length }} cameras
         </span>
-        <button
-          @click="compactMode = !compactMode"
-          class="px-3 py-1.5 border rounded-lg hover:bg-accent text-xs transition-colors"
-          :class="compactMode ? 'bg-accent' : ''"
-          title="Toggle Compact Mode"
-        >
-          {{ compactMode ? 'Expanded' : 'Compact' }}
-        </button>
-        <button
-          v-if="selectedCamera"
-          @click="popOutCamera"
-          class="px-3 py-1.5 border rounded-lg hover:bg-accent text-xs transition-colors"
-          title="Pop Out Camera"
-        >
-          Pop Out
-        </button>
         <button
           @click="refreshCameras"
           class="px-3 py-1.5 bg-primary text-primary-foreground text-xs rounded-lg hover:bg-primary/90 transition-colors"
@@ -36,45 +26,101 @@
     <div class="flex-1 flex overflow-hidden">
       <!-- Primary Camera Feed -->
       <div class="flex-1 p-4">
-        <CameraFeedDisplay
-          :camera="selectedCamera"
-          @video-ready="onVideoReady"
-        >
-          <template #overlays="{ videoWidth, videoHeight, containerWidth: cWidth, containerHeight: cHeight }">
-            <!-- Legacy person overlays -->
-            <PersonOverlay
-              v-for="overlay in currentOverlays"
-              :key="overlay.id"
-              :overlay="overlay"
-              :container-width="cWidth"
-              :container-height="cHeight"
+        <div v-if="selectedCamera" class="camera-container h-full">
+          <div class="camera-header">
+            <div class="camera-info">
+              <div class="camera-name">{{ selectedCamera.name }}</div>
+              <div class="camera-meta">
+                <span class="frame-number">Frame: #{{ frameNumber }}</span>
+                <span class="detection-count">{{ detectionCount }} objects</span>
+              </div>
+            </div>
+            <div :class="['connection-badge', { connected: connectionState === 'connected' }]">
+              {{ connectionState || 'disconnected' }}
+            </div>
+          </div>
+
+          <div class="video-wrapper">
+            <video
+              ref="primaryVideoRef"
+              autoplay
+              muted
+              playsinline
+              @loadedmetadata="onVideoLoaded"
+              @play="startDrawing"
             />
 
-            <!-- Real-time detection overlays -->
-            <DetectionOverlay
-              :detections="currentDetections"
-              :video-width="videoWidth"
-              :video-height="videoHeight"
-              :container-width="cWidth"
-              :container-height="cHeight"
-              :show-connection-status="true"
-              :is-connected="mqttConnected"
+            <!-- Detection Overlay (Canvas) -->
+            <canvas ref="primaryCanvasRef" class="canvas-overlay" />
+
+            <div v-if="!videoDimensions" class="no-stream">
+              <div class="spinner"></div>
+              <p>Initializing WebRTC...</p>
+            </div>
+
+            <!-- Video Metrics Overlay -->
+            <VideoMetrics
+              v-if="selectedCamera && currentConnection"
+              :camera-id="selectedCamera.id"
+              :connection-quality="currentConnection.connectionQuality.value"
+              :stats="currentConnection.stats.value"
+              :connection-state="connectionState"
             />
-          </template>
-        </CameraFeedDisplay>
+          </div>
+
+          <!-- Detection Legend -->
+          <div class="detection-legend">
+            <template v-if="classCounts && Object.keys(classCounts).length > 0">
+              <div
+                v-for="(count, className) in classCounts"
+                :key="className"
+                class="legend-item"
+              >
+                <div
+                  class="legend-color"
+                  :style="{ background: getClassColor(className as string) }"
+                />
+                <span class="legend-label">{{ className }}:</span>
+                <span class="legend-count">{{ count }}</span>
+              </div>
+            </template>
+            <span v-else class="no-detections">No detections yet</span>
+          </div>
+        </div>
+        <div v-else class="h-full flex items-center justify-center text-muted-foreground">
+          Select a camera to view
+        </div>
       </div>
 
       <!-- Thumbnail Strip -->
       <div class="w-64 border-l bg-card p-2 overflow-y-auto">
         <h3 class="text-sm font-semibold mb-2 px-2">All Cameras</h3>
         <div class="space-y-2">
-          <CameraThumbnail
+          <div
             v-for="camera in cameras"
             :key="camera.id"
-            :camera="camera"
-            :is-selected="selectedCamera?.id === camera.id"
-            @select="selectCamera"
-          />
+            @click="selectCamera(camera)"
+            :class="[
+              'camera-thumbnail',
+              { 'selected': selectedCamera?.id === camera.id }
+            ]"
+          >
+            <div class="thumbnail-header">
+              <span class="thumbnail-name">{{ camera.name }}</span>
+              <div
+                :class="['thumbnail-status', { connected: connectionStatuses[camera.id] }]"
+              />
+            </div>
+            <div class="thumbnail-video-container">
+              <video
+                :ref="el => thumbnailVideoRefs[camera.id] = el as HTMLVideoElement"
+                autoplay
+                muted
+                playsinline
+                class="thumbnail-video"
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -83,204 +129,491 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import type { Camera } from '../../types/generated'
-import CameraFeedDisplay from '@/components/features/camera/CameraFeedDisplay.vue'
-import CameraThumbnail from '@/components/features/camera/CameraThumbnail.vue'
-import PersonOverlay from '@/components/features/camera/PersonOverlay.vue'
-import DetectionOverlay from '@/components/features/camera/DetectionOverlay.vue'
-import { useCameraOverlays } from '@/composables/useCameraOverlays'
-import { useDetections } from '@/composables/useDetections'
+import { useCameraConnectionManager } from '@/composables/useCameraConnectionManager'
+import VideoMetrics from '@/components/features/camera/VideoMetrics.vue'
+import type { Detection } from '@/types/detection.types'
 
-const cameras = ref<Camera[]>([])
+interface Camera {
+  id: string
+  name: string
+}
 
-const selectedCamera = ref<Camera | null>(null)
-
-// Video refs for pop-out functionality
-const videoRefs = ref<Record<string, HTMLVideoElement>>({})
-
-// UI State
-const compactMode = ref(false)
-
-// Camera overlays (legacy person overlays)
-const { getOverlays } = useCameraOverlays()
-
-// Detection system integration
+// Global connection manager
 const {
-  isConnected: mqttConnected,
-  subscribe,
-  unsubscribe,
-  getDetections,
-  connect: connectMQTT
-} = useDetections()
+  cameras,
+  isInitialized,
+  isInitializing,
+  connections,
+  connectionStatuses,
+  attachToVideoElement,
+  getConnection
+} = useCameraConnectionManager()
 
-// Container dimensions for overlay positioning
-const containerWidth = ref(1920)
-const containerHeight = ref(1080)
-const videoNativeWidth = ref(1920)
-const videoNativeHeight = ref(1080)
+// Server-side rendering flag
+const serverSideRendering = ref(true)
 
-const onlineCameras = computed(() => cameras.value.filter(c => c.status === 'online').length)
-
-const currentOverlays = computed(() => {
-  if (!selectedCamera.value) return []
-  return getOverlays(selectedCamera.value.id)
-})
-
-// Get detections for the selected camera
-const currentDetections = computed(() => {
-  if (!selectedCamera.value) return []
-  return getDetections(selectedCamera.value.id).value
-})
-
-const selectCamera = (camera: Camera) => {
-  selectedCamera.value = camera
+// Class colors
+const CLASS_COLORS: Record<string, string> = {
+  person: '#22c55e',
+  car: '#3b82f6',
+  truck: '#ef4444',
+  bus: '#06b6d4',
+  motorbike: '#a855f7',
+  bicycle: '#eab308'
 }
 
-// Watch for camera changes and subscribe to detections
-watch(selectedCamera, async (newCamera, oldCamera) => {
-  // Unsubscribe from old camera
-  if (oldCamera) {
-    unsubscribe(oldCamera.id)
-  }
+// State
+const selectedCamera = ref<Camera | null>(null)
+const primaryVideoRef = ref<HTMLVideoElement | null>(null)
+const primaryCanvasRef = ref<HTMLCanvasElement | null>(null)
+const thumbnailVideoRefs = ref<Record<string, HTMLVideoElement | null>>({})
 
-  // Subscribe to new camera
-  if (newCamera) {
-    await subscribe(newCamera.id)
-  }
+// Current camera state (switches instantly)
+const videoDimensions = ref<{ width: number; height: number } | null>(null)
+const currentDetections = ref<Detection[]>([])
+const frameNumber = ref(0)
+const detectionCount = ref(0)
+const classCounts = ref<Record<string, number>>({})
+const connectionState = ref<RTCPeerConnectionState>('new')
+
+// Computed
+const isConnected = computed(() => connectionState.value === 'connected')
+const currentConnection = computed(() => {
+  if (!selectedCamera.value) return null
+  const conn = getConnection(selectedCamera.value.id)
+  return conn?.connection || null
 })
 
-const onVideoReady = (cameraId: string, videoElement: HTMLVideoElement) => {
-  videoRefs.value[cameraId] = videoElement
+// Methods
+function getClassColor(className: string): string {
+  return CLASS_COLORS[className] || '#94a3b8'
 }
 
-// Fetch cameras from the mock server
-const fetchCameras = async () => {
-  try {
-    const response = await fetch('http://localhost:8000/cameras')
-    if (response.ok) {
-      const camerasData = await response.json()
-      cameras.value = camerasData
-      console.log('Loaded cameras:', camerasData)
+function onVideoLoaded() {
+  const video = primaryVideoRef.value
+  const canvas = primaryCanvasRef.value
 
-      // Auto-select first camera if none selected
-      if (!selectedCamera.value && camerasData.length > 0) {
-        selectedCamera.value = camerasData[0]
-      }
-    } else {
-      console.error('Failed to fetch cameras:', response.statusText)
+  if (video && canvas && video.videoWidth > 0) {
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    videoDimensions.value = {
+      width: video.videoWidth,
+      height: video.videoHeight
     }
-  } catch (error) {
-    console.error('Error fetching cameras:', error)
   }
+}
+
+function startDrawing() {
+  // Initial draw to clear canvas
+  drawDetections()
+}
+
+function drawDetections() {
+  // Skip if server-side rendering is enabled
+  if (serverSideRendering.value) return
+
+  const canvas = primaryCanvasRef.value
+  const video = primaryVideoRef.value
+
+  if (!canvas || !video || !video.videoWidth) return
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  // Clear canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+  const detections = currentDetections.value
+  if (!detections || detections.length === 0) return
+
+  // Draw each detection
+  detections.forEach(detection => {
+    const { bbox, class_name, confidence } = detection
+
+    // Convert VAPIX normalized coordinates to pixel coordinates
+    const x = bbox.left * canvas.width
+    const y = bbox.top * canvas.height
+    const width = (bbox.right - bbox.left) * canvas.width
+    const height = (bbox.bottom - bbox.top) * canvas.height
+
+    const color = getClassColor(class_name)
+
+    // Draw bounding box
+    ctx.strokeStyle = color
+    ctx.lineWidth = 3
+    ctx.strokeRect(x, y, width, height)
+
+    // Draw label background
+    const label = `${class_name} ${(confidence * 100).toFixed(0)}%`
+    ctx.font = 'bold 14px Arial'
+    const textMetrics = ctx.measureText(label)
+    const textHeight = 20
+
+    ctx.fillStyle = color
+    ctx.fillRect(x, y - textHeight - 5, textMetrics.width + 10, textHeight)
+
+    // Draw label text
+    ctx.fillStyle = '#000'
+    ctx.fillText(label, x + 5, y - 8)
+  })
+}
+
+// Attach thumbnail videos to global connections
+async function attachThumbnailVideos() {
+  console.log('[FocusView] Attaching thumbnail videos to global connections...')
+
+  // If connections aren't initialized yet, wait (only happens on first load)
+  if (!isInitialized.value) {
+    console.log('[FocusView] Waiting for connections to initialize...')
+    const maxWait = 10000 // 10 seconds
+    const startTime = Date.now()
+    while (!isInitialized.value && Date.now() - startTime < maxWait) {
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+
+    if (!isInitialized.value) {
+      console.error('[FocusView] Timeout waiting for connections to initialize')
+      return
+    }
+  } else {
+    console.log('[FocusView] Connections already initialized - instant attach!')
+  }
+
+  // Minimal wait for video elements to be in DOM
+  await new Promise(resolve => setTimeout(resolve, 50))
+
+  // Attach each thumbnail video to its corresponding global connection
+  for (const camera of cameras.value) {
+    const thumbnailVideo = thumbnailVideoRefs.value[camera.id]
+    if (!thumbnailVideo) {
+      console.warn(`[FocusView] Thumbnail video not found for ${camera.id}, retrying...`)
+      // Retry once after a short delay
+      await new Promise(resolve => setTimeout(resolve, 50))
+      const retryVideo = thumbnailVideoRefs.value[camera.id]
+      if (!retryVideo) {
+        console.error(`[FocusView] Still no video element for ${camera.id}`)
+        continue
+      }
+    }
+
+    const videoElement = thumbnailVideoRefs.value[camera.id]
+    if (!videoElement) continue
+
+    // Attach to global connection (stream already flowing!)
+    const attached = attachToVideoElement(camera.id, videoElement)
+    if (attached) {
+      console.log(`[FocusView] ✓ Instantly attached ${camera.id} (stream was ready)`)
+    }
+
+    // Set up detection callback for this camera (idempotent - safe to call multiple times)
+    const conn = getConnection(camera.id)
+    if (conn) {
+      conn.connection.setDetectionCallback((metadata) => {
+        // If this is the selected camera, update the main view
+        if (selectedCamera.value?.id === camera.id) {
+          currentDetections.value = metadata.detections
+          frameNumber.value = metadata.frame_number
+          detectionCount.value = metadata.detection_count
+          classCounts.value = conn.connection.classCounts.value
+
+          // Only trigger canvas redraw if client-side rendering
+          if (!serverSideRendering.value) {
+            drawDetections()
+          }
+        }
+      })
+    }
+  }
+
+  // Monitor connection state for selected camera
+  setInterval(() => {
+    if (selectedCamera.value) {
+      const conn = getConnection(selectedCamera.value.id)
+      if (conn) {
+        connectionState.value = conn.connection.connectionState.value
+      }
+    }
+  }, 100)
+
+  console.log('[FocusView] All thumbnails attached')
+}
+
+// Select camera (instant switch - no reconnection needed)
+function selectCamera(camera: Camera) {
+  console.log(`[FocusView] Switching to ${camera.id}`)
+
+  selectedCamera.value = camera
+  videoDimensions.value = null
+
+  // Get connection from global manager
+  const conn = getConnection(camera.id)
+  if (!conn) {
+    console.error(`[FocusView] No connection found for ${camera.id}`)
+    return
+  }
+
+  // Attach stream to main video
+  if (primaryVideoRef.value) {
+    attachToVideoElement(camera.id, primaryVideoRef.value)
+  }
+
+  // Update state immediately
+  currentDetections.value = conn.connection.currentDetections.value
+  frameNumber.value = conn.connection.frameNumber.value
+  detectionCount.value = conn.connection.detectionCount.value
+  classCounts.value = conn.connection.classCounts.value
+  connectionState.value = conn.connection.connectionState.value
 }
 
 const refreshCameras = () => {
-  // Reload cameras from server
-  fetchCameras()
-}
-
-const takeSnapshot = () => {
-  console.log('Taking snapshot of:', selectedCamera.value?.name)
-  alert(`Snapshot taken of: ${selectedCamera.value?.name}`)
-}
-
-const popOutCamera = () => {
-  if (!selectedCamera.value) return
-
-  const width = 1280
-  const height = 720
-  const left = (screen.width - width) / 2
-  const top = (screen.height - height) / 2
-
-  const popoutWindow = window.open(
-    '',
-    `camera-${selectedCamera.value.id}`,
-    `width=${width},height=${height},left=${left},top=${top},resizable=yes`
-  )
-
-  if (popoutWindow) {
-    const cameraName = selectedCamera.value.name
-    const cameraId = selectedCamera.value.id
-
-    popoutWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>${cameraName} - Live Feed</title>
-          <style>
-            body { margin: 0; padding: 0; background: #000; overflow: hidden; }
-            video { width: 100vw; height: 100vh; object-fit: contain; }
-            .overlay {
-              position: absolute;
-              top: 10px;
-              left: 10px;
-              background: rgba(0,0,0,0.7);
-              color: white;
-              padding: 8px 12px;
-              border-radius: 4px;
-              font-family: sans-serif;
-              font-size: 14px;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="overlay">${cameraName}</div>
-          <video id="popout-video" autoplay muted playsinline></video>
-          <script>
-            // Request parent to send stream
-            window.opener.postMessage({
-              type: 'REQUEST_STREAM',
-              cameraId: '${cameraId}'
-            }, '*');
-
-            // Listen for stream
-            window.addEventListener('message', (event) => {
-              if (event.data.type === 'STREAM_DATA' && event.data.cameraId === '${cameraId}') {
-                const video = document.getElementById('popout-video');
-                if (video && event.data.stream) {
-                  video.srcObject = event.data.stream;
-                }
-              }
-            });
-          <` + `/script>
-        </body>
-      </html>
-    `)
-    popoutWindow.document.close()
-
-    // Listen for stream requests
-    window.addEventListener('message', (event) => {
-      if (event.data.type === 'REQUEST_STREAM' && event.data.cameraId === selectedCamera.value?.id) {
-        const videoElement = videoRefs.value[event.data.cameraId]
-        if (videoElement && videoElement.srcObject) {
-          popoutWindow.postMessage({
-            type: 'STREAM_DATA',
-            cameraId: event.data.cameraId,
-            stream: videoElement.srcObject
-          }, '*')
-        }
-      }
-    })
-  }
+  console.log('Refreshing cameras...')
 }
 
 onMounted(async () => {
-  // Connect to MQTT broker
-  try {
-    await connectMQTT()
-    console.log('Connected to MQTT broker for detections')
-  } catch (error) {
-    console.error('Failed to connect to MQTT broker:', error)
-  }
+  // Attach thumbnails to global connections (connections are already initialized globally)
+  await attachThumbnailVideos()
 
-  // Fetch cameras from server
-  await fetchCameras()
+  // Auto-select first camera
+  if (cameras.value.length > 0) {
+    selectCamera(cameras.value[0])
+  }
 })
 
 onUnmounted(() => {
-  // Clean up MQTT subscriptions
-  if (selectedCamera.value) {
-    unsubscribe(selectedCamera.value.id)
-  }
+  // Note: We don't disconnect here because connections are global
+  // They stay active for instant loading on other pages
+  console.log('[FocusView] Unmounting (connections remain active)')
 })
 </script>
+
+<style scoped>
+.status-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #64748b;
+  animation: pulse 2s infinite;
+}
+
+.status-indicator.connected {
+  background: #22c55e;
+}
+
+.camera-container {
+  display: flex;
+  flex-direction: column;
+  background: #1e293b;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.camera-header {
+  padding: 15px 20px;
+  background: linear-gradient(135deg, #334155, #1e293b);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid #475569;
+}
+
+.camera-info {
+  flex: 1;
+}
+
+.camera-name {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: #e2e8f0;
+}
+
+.camera-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 0.875rem;
+  color: #94a3b8;
+}
+
+.frame-number {
+  font-family: 'Courier New', monospace;
+}
+
+.detection-count {
+  background: #3b82f6;
+  padding: 2px 8px;
+  border-radius: 12px;
+  color: white;
+  font-weight: 600;
+}
+
+.connection-badge {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: #ef4444;
+  color: white;
+}
+
+.connection-badge.connected {
+  background: #22c55e;
+}
+
+.video-wrapper {
+  position: relative;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  flex: 1;
+}
+
+video {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  display: block;
+}
+
+.canvas-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.no-stream {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  color: #64748b;
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid #334155;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 16px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.detection-legend {
+  padding: 15px 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  background: #0f172a;
+  min-height: 50px;
+  align-items: center;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-color {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+}
+
+.legend-label {
+  font-size: 0.875rem;
+  color: #e2e8f0;
+}
+
+.legend-count {
+  font-weight: 600;
+  color: #3b82f6;
+}
+
+.no-detections {
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+.camera-thumbnail {
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 2px solid transparent;
+}
+
+.camera-thumbnail:hover {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: #3b82f6;
+}
+
+.camera-thumbnail.selected {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: #3b82f6;
+}
+
+.thumbnail-header {
+  margin-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.thumbnail-name {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  flex: 1;
+}
+
+.thumbnail-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #64748b;
+  flex-shrink: 0;
+}
+
+.thumbnail-status.connected {
+  background: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+}
+
+.thumbnail-video-container {
+  background: #000;
+  border-radius: 4px;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  position: relative;
+}
+
+.thumbnail-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+</style>

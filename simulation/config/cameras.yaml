@@ -1,0 +1,155 @@
+# Camera Configuration for Axis-Guardian Simulation
+# This file defines all simulated cameras and their properties
+
+cameras:
+  - id: camera1
+    name: "Entrance - People Detection"
+    description: "Main entrance monitoring with pedestrian detection"
+
+    # Video sources
+    source_video: "people-detection.mp4"
+    rendered_video: "people-detection-rendered.mp4"
+    detections_json: "people-detection-rendered.detections.json"
+
+    # Stream configuration
+    rtsp_url: "rtsp://localhost:8554/camera1"
+    resolution: "768x432"
+    fps: 12
+    bitrate: "2M"
+
+    # Camera capabilities
+    capabilities:
+      - object_detection
+      - people_counting
+      - motion_detection
+
+    # Detection classes this camera focuses on
+    detection_classes:
+      - person
+      - bicycle
+      - backpack
+
+    # VAPIX properties (simulates real Axis camera)
+    vapix:
+      brand: "AXIS"
+      model: "P3245-LVE"
+      serial_number: "ACCC8E123456"
+      firmware_version: "11.8.67"
+      mac_address: "AC:CC:8E:12:34:56"
+
+    # Physical location (for site map)
+    location:
+      site: "Main Building"
+      zone: "Entrance"
+      coordinates:
+        x: 100
+        y: 150
+        z: 3.5  # Height in meters
+
+  - id: camera2
+    name: "Parking Lot - Vehicle Detection"
+    description: "Parking area monitoring with vehicle and license plate detection"
+
+    # Video sources
+    source_video: "car-detection.mp4"
+    rendered_video: "car-detection-rendered.mp4"
+    detections_json: "car-detection-rendered.detections.json"
+
+    # Stream configuration
+    rtsp_url: "rtsp://localhost:8554/camera2"
+    resolution: "768x432"
+    fps: 12
+    bitrate: "2M"
+
+    # Camera capabilities
+    capabilities:
+      - object_detection
+      - vehicle_detection
+      - license_plate_recognition
+      - motion_detection
+
+    # Detection classes this camera focuses on
+    detection_classes:
+      - car
+      - truck
+      - motorcycle
+      - bus
+
+    # VAPIX properties
+    vapix:
+      brand: "AXIS"
+      model: "Q1615-E"
+      serial_number: "ACCC8E789012"
+      firmware_version: "11.8.67"
+      mac_address: "AC:CC:8E:78:90:12"
+
+    # Physical location
+    location:
+      site: "Main Building"
+      zone: "Parking Lot"
+      coordinates:
+        x: 250
+        y: 50
+        z: 5.0
+
+  - id: camera3
+    name: "Street View - Multi-class Detection"
+    description: "Street monitoring with person, bicycle, and vehicle detection"
+
+    # Video sources
+    source_video: "person-bicycle-car-detection.mp4"
+    rendered_video: "person-bicycle-car-detection-rendered.mp4"
+    detections_json: "person-bicycle-car-detection-rendered.detections.json"
+
+    # Stream configuration
+    rtsp_url: "rtsp://localhost:8554/camera3"
+    resolution: "768x432"
+    fps: 12
+    bitrate: "2M"
+
+    # Camera capabilities
+    capabilities:
+      - object_detection
+      - people_counting
+      - vehicle_detection
+      - motion_detection
+
+    # Detection classes this camera focuses on
+    detection_classes:
+      - person
+      - bicycle
+      - car
+      - motorcycle
+
+    # VAPIX properties
+    vapix:
+      brand: "AXIS"
+      model: "M3058-PLVE"
+      serial_number: "ACCC8E345678"
+      firmware_version: "11.8.67"
+      mac_address: "AC:CC:8E:34:56:78"
+
+    # Physical location
+    location:
+      site: "Main Building"
+      zone: "Street"
+      coordinates:
+        x: 200
+        y: 300
+        z: 4.0
+
+# Global detection settings (can be overridden per camera)
+detection_defaults:
+  confidence_threshold: 0.5
+  iou_threshold: 0.45
+  model: "yolov8n.pt"
+  inference_resolution: 640
+  frame_skip: 1
+  max_fps: 30
+  auto_scale: true
+
+# Video path configuration
+paths:
+  cameras_dir: "shared/cameras"
+  rendered_dir: "shared/cameras/rendered"
+  models_dir: "shared/models"
