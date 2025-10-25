@@ -1,0 +1,133 @@
+###############################################
+# MediaMTX Configuration for Surveillance System
+#
+# This configuration enables:
+# - RTSP streaming for camera feeds
+# - WebRTC for browser-based viewing
+# - Recording capabilities
+# - Authentication support
+###############################################
+
+###############################################
+# Global Settings
+###############################################
+
+logLevel: info
+logDestinations: [stdout]
+readTimeout: 10s
+writeTimeout: 10s
+writeQueueSize: 512
+
+# Enable API for programmatic control
+api: yes
+apiAddress: :9997
+
+# Enable metrics
+metrics: yes
+metricsAddress: :9998
+
+###############################################
+# Authentication - DISABLED FOR DEVELOPMENT
+###############################################
+
+# Disable authentication for easier development (MediaMTX v1.x syntax)
+# Empty authInternalUsers array = no authentication required
+authInternalUsers: []
+authHTTPExclude:
+  - "api"
+
+###############################################
+# RTSP Server
+###############################################
+
+rtspAddress: :8554
+rtspTransports: [udp, multicast, tcp]
+rtspEncryption: "no"
+
+###############################################
+# RTMP Server (for OBS, etc.)
+###############################################
+
+rtmpAddress: :1935
+rtmpEncryption: "no"
+
+###############################################
+# HLS Server (HTTP Live Streaming)
+###############################################
+
+hlsAddress: :8888
+hlsEncryption: no
+hlsVariant: mpegts
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+hlsSegmentMaxSize: 50M
+
+###############################################
+# WebRTC Server (for browser viewing)
+###############################################
+
+webrtcAddress: :8889
+webrtcEncryption: no
+webrtcICEServers2: []
+# Map ICE host candidates to localhost for local development
+webrtcICEHostNAT1To1IPs: ["127.0.0.1"]
+# Use UDP mux to avoid port allocation issues
+webrtcICEUDPMuxAddress: :8189
+
+###############################################
+# SRT Server
+###############################################
+
+srtAddress: :8890
+
+###############################################
+# Path Defaults
+###############################################
+
+# Default path settings apply to all paths unless overridden
+pathDefaults:
+  # Source settings
+  source: publisher
+
+  # Recording can be enabled per-path
+  record: no
+  recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+  recordFormat: fmp4
+  recordPartDuration: 1s
+  recordSegmentDuration: 1h
+  recordDeleteAfter: 24h
+
+  # Allow stream to be available even when there's no publisher
+  # (useful for on-demand streams)
+  runOnDemand:
+  runOnDemandRestart: no
+  runOnDemandCloseAfter: 10s
+
+###############################################
+# Specific Path Configurations
+###############################################
+
+paths:
+  # Example: Camera 1 with recording enabled
+  camera1:
+    source: publisher
+    record: yes
+
+  # Example: Camera 2 with recording enabled
+  camera2:
+    source: publisher
+    record: yes
+
+  # Camera 3 with recording enabled
+  camera3:
+    source: publisher
+    record: yes
+
+  # Test stream path (no recording)
+  test:
+    source: publisher
+    record: no
+
+  # All other paths use default settings
+  # Streams can be published to any path like: rtsp://localhost:8554/site1/camera4

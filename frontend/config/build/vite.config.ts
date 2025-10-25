@@ -5,6 +5,8 @@ import path from 'path'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [vue()],
+  // Read environment variables from project root instead of frontend directory
+  envDir: path.resolve(__dirname, '../../../'),
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '../../src'),
