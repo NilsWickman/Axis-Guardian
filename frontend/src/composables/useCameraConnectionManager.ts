@@ -28,9 +28,10 @@ const isInitializing = ref(false)
 
 // Available cameras
 const cameras = ref<Camera[]>([
-  { id: 'camera1', name: 'Camera 1 - People Detection' },
-  { id: 'camera2', name: 'Camera 2 - Car Detection' },
-  { id: 'camera3', name: 'Camera 3 - Mixed Detection' }
+  { id: 'camera1', name: 'Camera 1 - Auditorium HC3' },
+  { id: 'camera2', name: 'Camera 2 - Auditorium HC4' },
+  { id: 'camera3', name: 'Camera 3 - Auditorium IP2' },
+  { id: 'camera4', name: 'Camera 4 - Auditorium IP5' }
 ])
 
 /**

@@ -33,16 +33,18 @@ RENDERED_DIR="${VIDEOS_DIR}/rendered"
 # Video file mappings
 # Priority: Use pre-rendered videos if available, otherwise fall back to source
 declare -A CAMERA_VIDEOS=(
-    ["camera1"]="people-detection-rendered.mp4"
-    ["camera2"]="car-detection-rendered.mp4"
-    ["camera3"]="person-bicycle-car-detection-rendered.mp4"
+    ["camera1"]="view-HC3-rendered.mp4"
+    ["camera2"]="view-HC4-rendered.mp4"
+    ["camera3"]="view-IP2-rendered.mp4"
+    ["camera4"]="view-IP5-rendered.mp4"
 )
 
 # Source videos (fallback if rendered not available)
 declare -A SOURCE_VIDEOS=(
-    ["camera1"]="people-detection.mp4"
-    ["camera2"]="car-detection.mp4"
-    ["camera3"]="person-bicycle-car-detection.mp4"
+    ["camera1"]="view-HC3.mp4"
+    ["camera2"]="view-HC4.mp4"
+    ["camera3"]="view-IP2.mp4"
+    ["camera4"]="view-IP5.mp4"
 )
 
 # Function to check if FFmpeg is installed
@@ -194,17 +196,19 @@ stream_all() {
 
 # Function to show usage
 show_usage() {
-    echo "Usage: $0 [all|camera1|camera2|camera3]"
+    echo "Usage: $0 [all|camera1|camera2|camera3|camera4]"
     echo ""
     echo "Options:"
     echo "  all      - Stream all available cameras"
-    echo "  camera1  - Stream camera 1 (people detection)"
-    echo "  camera2  - Stream camera 2 (car detection)"
-    echo "  camera3  - Stream camera 3 (person, bicycle, car detection)"
+    echo "  camera1  - Stream camera 1 (auditorium - high corner view 3)"
+    echo "  camera2  - Stream camera 2 (auditorium - high corner view 4)"
+    echo "  camera3  - Stream camera 3 (auditorium - IP camera view 2)"
+    echo "  camera4  - Stream camera 4 (auditorium - IP camera view 5)"
     echo ""
     echo "Examples:"
     echo "  $0 all              # Stream all cameras"
     echo "  $0 camera1          # Stream only camera1"
+    echo "  $0 camera3          # Stream auditorium camera IP2"
     echo ""
     echo "Pre-rendered Videos:"
     echo "  This script automatically uses pre-rendered videos with baked-in detections"
@@ -233,7 +237,7 @@ main() {
         all)
             stream_all
             ;;
-        camera1|camera2|camera3)
+        camera1|camera2|camera3|camera4)
             stream_camera "$target"
             ;;
         help|-h|--help)
