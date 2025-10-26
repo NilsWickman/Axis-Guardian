@@ -40,236 +40,86 @@ export interface SiteMap {
 export const useSiteMapStore = defineStore('siteMaps', () => {
   const siteMaps = ref<SiteMap[]>([
     {
-      id: 'map-warehouse-main',
-      name: 'Site Map 2',
-      description: 'Residential apartment with kitchen, living areas, and bedrooms',
-      width: 795,
-      height: 1011,
-      scale: 80, // Approximately 80 pixels per meter based on 6m width
+      id: 'map-auditorium',
+      name: 'Auditorium - Main Hall',
+      description: 'UCLA Auditorium with 4-camera multi-view tracking setup (21m x 28m)',
+      width: 1260, // 21m * 60 pixels/meter
+      height: 1680, // 28m * 60 pixels/meter
+      scale: 60, // 60 pixels per meter
       walls: [
         // External perimeter walls
-        { id: 'w-ext-1', start: { x: 60, y: 60 }, end: { x: 735, y: 60 }, type: 'external', thickness: 6 },
-        { id: 'w-ext-2', start: { x: 735, y: 60 }, end: { x: 735, y: 950 }, type: 'external', thickness: 6 },
-        { id: 'w-ext-3', start: { x: 735, y: 950 }, end: { x: 60, y: 950 }, type: 'external', thickness: 6 },
-        { id: 'w-ext-4', start: { x: 60, y: 950 }, end: { x: 60, y: 60 }, type: 'external', thickness: 6 },
+        { id: 'w-ext-1', start: { x: 60, y: 60 }, end: { x: 1200, y: 60 }, type: 'external', thickness: 8 },
+        { id: 'w-ext-2', start: { x: 1200, y: 60 }, end: { x: 1200, y: 1620 }, type: 'external', thickness: 8 },
+        { id: 'w-ext-3', start: { x: 1200, y: 1620 }, end: { x: 60, y: 1620 }, type: 'external', thickness: 8 },
+        { id: 'w-ext-4', start: { x: 60, y: 1620 }, end: { x: 60, y: 60 }, type: 'external', thickness: 8 },
 
-        // Vertical divider between living area and bedroom
-        { id: 'w-int-1', start: { x: 60, y: 290 }, end: { x: 150, y: 290 }, type: 'internal', thickness: 4 },
-        { id: 'w-int-2', start: { x: 350, y: 60 }, end: { x: 350, y: 290 }, type: 'internal', thickness: 4 },
+        // Stage area (front of auditorium, 0-3m depth)
+        { id: 'w-stage-1', start: { x: 60, y: 240 }, end: { x: 1200, y: 240 }, type: 'internal', thickness: 4 },
 
-        // Horizontal wall separating upper and middle sections
-        { id: 'w-int-3', start: { x: 60, y: 290 }, end: { x: 540, y: 290 }, type: 'internal', thickness: 4 },
-
-        // Kitchen/stairs area walls
-        { id: 'w-int-4', start: { x: 280, y: 290 }, end: { x: 280, y: 615 }, type: 'internal', thickness: 4 },
-        { id: 'w-int-5', start: { x: 540, y: 290 }, end: { x: 540, y: 615 }, type: 'internal', thickness: 4 },
-
-        // Bottom section horizontal divider
-        { id: 'w-int-6', start: { x: 60, y: 615 }, end: { x: 735, y: 615 }, type: 'internal', thickness: 4 },
-
-        // Bathroom walls
-        { id: 'w-int-7', start: { x: 60, y: 750 }, end: { x: 350, y: 750 }, type: 'internal', thickness: 4 },
-        { id: 'w-int-8', start: { x: 350, y: 750 }, end: { x: 350, y: 950 }, type: 'internal', thickness: 4 },
-
-        // Bedroom divider
-        { id: 'w-int-9', start: { x: 540, y: 615 }, end: { x: 540, y: 750 }, type: 'internal', thickness: 4 },
+        // Seating area dividers (approximate rows)
+        { id: 'w-aisle-1', start: { x: 420, y: 240 }, end: { x: 420, y: 1620 }, type: 'internal', thickness: 3 },
+        { id: 'w-aisle-2', start: { x: 840, y: 240 }, end: { x: 840, y: 1620 }, type: 'internal', thickness: 3 },
       ],
       cameras: [
         {
-          cameraId: 'cam-01',
-          x: 120, y: 120,
-          rotation: 135,
-          angle: 35,
-          height: 2.4,
+          cameraId: 'camera1',
+          x: 1033, // 16.22m * 60 + 60 (offset)
+          y: 78,   // 0.3m * 60 + 60 (offset)
+          rotation: 18, // Azimuth angle
+          angle: 1,     // Elevation angle (positive = looking slightly up)
+          height: 1.68,
           fov: 90,
-          viewDistance: 150,
+          viewDistance: 240, // ~4m viewing distance at 60px/m
           autoCalculateDistance: true,
           color: 'emerald-400',
-          notes: 'Living room corner view',
+          notes: 'High Corner View 3 - Front-Right position covering stage area',
         },
         {
-          cameraId: 'cam-02',
-          x: 650, y: 150,
-          rotation: 225,
-          angle: 35,
-          height: 2.4,
-          fov: 100,
-          viewDistance: 160,
+          cameraId: 'camera2',
+          x: 114,  // 0.9m * 60 + 60
+          y: 90,   // 0.5m * 60 + 60
+          rotation: 313, // Azimuth angle (northwest)
+          angle: -5,     // Elevation angle (negative = looking slightly down)
+          height: 1.67,
+          fov: 90,
+          viewDistance: 240,
           autoCalculateDistance: true,
           color: 'blue-500',
-          notes: 'Bedroom entrance coverage',
+          notes: 'High Corner View 4 - Front-Left position with downward angle',
         },
         {
-          cameraId: 'cam-03',
-          x: 400, y: 450,
-          rotation: 180,
-          angle: 40,
-          height: 2.6,
-          fov: 110,
-          viewDistance: 140,
+          cameraId: 'camera3',
+          x: 1296,  // 20.6m * 60 + 60
+          y: 1758,  // 28.31m * 60 + 60
+          rotation: 140, // Azimuth angle (southeast)
+          angle: -9,     // Elevation angle (looking down from highest mount)
+          height: 2.62,  // Tallest camera mounting
+          fov: 90,
+          viewDistance: 300, // Longer distance from elevated position
           autoCalculateDistance: true,
           color: 'red-500',
-          notes: 'Hallway and stairs monitoring',
+          notes: 'IP Camera View 2 - Back-Right elevated position (highest mount at 2.62m)',
         },
         {
-          cameraId: 'cam-04',
-          x: 200, y: 850,
-          rotation: 90,
-          angle: 35,
-          height: 2.4,
-          fov: 95,
-          viewDistance: 130,
+          cameraId: 'camera4',
+          x: 694,   // 10.57m * 60 + 60
+          y: 1039,  // 16.31m * 60 + 60
+          rotation: 339, // Azimuth angle (nearly north)
+          angle: 0,      // Elevation angle (level)
+          height: 1.84,
+          fov: 90,
+          viewDistance: 270,
           autoCalculateDistance: true,
           color: 'amber-400',
-          notes: 'Bathroom and bedroom area',
+          notes: 'IP Camera View 5 - Center-Back position with level view angle',
         },
       ],
-      createdAt: new Date('2024-01-15'),
-      updatedAt: new Date('2024-02-20'),
-    },
-    {
-      id: 'map-office-building',
-      name: 'Site Map 1',
-      description: 'Ground floor with offices, conference rooms, and stairwell',
-      width: 700,
-      height: 612,
-      scale: 60,
-      walls: [
-        // External perimeter
-        { id: 'w-ext-1', start: { x: 20, y: 20 }, end: { x: 680, y: 20 }, type: 'external', thickness: 6 },
-        { id: 'w-ext-2', start: { x: 680, y: 20 }, end: { x: 680, y: 592 }, type: 'external', thickness: 6 },
-        { id: 'w-ext-3', start: { x: 680, y: 592 }, end: { x: 20, y: 592 }, type: 'external', thickness: 6 },
-        { id: 'w-ext-4', start: { x: 20, y: 592 }, end: { x: 20, y: 20 }, type: 'external', thickness: 6 },
-
-        // Stairwell walls (left side)
-        { id: 'w-int-1', start: { x: 20, y: 110 }, end: { x: 140, y: 110 }, type: 'internal', thickness: 4 },
-        { id: 'w-int-2', start: { x: 140, y: 110 }, end: { x: 140, y: 380 }, type: 'internal', thickness: 4 },
-        { id: 'w-int-3', start: { x: 140, y: 380 }, end: { x: 20, y: 380 }, type: 'internal', thickness: 4 },
-
-        // Central corridor walls
-        { id: 'w-int-4', start: { x: 140, y: 200 }, end: { x: 420, y: 200 }, type: 'internal', thickness: 4 },
-        { id: 'w-int-5', start: { x: 140, y: 380 }, end: { x: 420, y: 380 }, type: 'internal', thickness: 4 },
-
-        // Right section dividers
-        { id: 'w-int-6', start: { x: 420, y: 20 }, end: { x: 420, y: 200 }, type: 'internal', thickness: 4 },
-        { id: 'w-int-7', start: { x: 420, y: 380 }, end: { x: 420, y: 592 }, type: 'internal', thickness: 4 },
-        { id: 'w-int-8', start: { x: 550, y: 200 }, end: { x: 550, y: 380 }, type: 'internal', thickness: 4 },
-
-        // Top room dividers
-        { id: 'w-int-9', start: { x: 320, y: 20 }, end: { x: 320, y: 100 }, type: 'internal', thickness: 4 },
-      ],
-      cameras: [
-        {
-          cameraId: 'cam-05',
-          x: 80, y: 240,
-          rotation: 90,
-          angle: 30,
-          height: 2.8,
-          fov: 90,
-          viewDistance: 120,
-          autoCalculateDistance: true,
-          color: 'purple-500',
-          notes: 'Stairwell monitoring',
-        },
-        {
-          cameraId: 'cam-06',
-          x: 600, y: 100,
-          rotation: 225,
-          angle: 35,
-          height: 2.8,
-          fov: 100,
-          viewDistance: 140,
-          autoCalculateDistance: true,
-          color: 'pink-500',
-          notes: 'Upper office corridor',
-        },
-      ],
-      createdAt: new Date('2024-02-01'),
-      updatedAt: new Date('2024-02-15'),
-    },
-    {
-      id: 'map-parking-lot',
-      name: 'Site Map 3',
-      description: 'Main floor with bedrooms, kitchen, family room, and bathroom',
-      width: 2732,
-      height: 1908,
-      scale: 105, // Approximately 105 pixels per meter based on 26' (~8m) width
-      walls: [
-        // External perimeter (black thick walls in the image)
-        { id: 'w-ext-1', start: { x: 410, y: 145 }, end: { x: 2280, y: 145 }, type: 'external', thickness: 8 },
-        { id: 'w-ext-2', start: { x: 2280, y: 145 }, end: { x: 2280, y: 1420 }, type: 'external', thickness: 8 },
-        { id: 'w-ext-3', start: { x: 2280, y: 1420 }, end: { x: 410, y: 1420 }, type: 'external', thickness: 8 },
-        { id: 'w-ext-4', start: { x: 410, y: 1420 }, end: { x: 410, y: 145 }, type: 'external', thickness: 8 },
-
-        // Front porch extension
-        { id: 'w-ext-5', start: { x: 410, y: 1420 }, end: { x: 410, y: 1660 }, type: 'external', thickness: 8 },
-        { id: 'w-ext-6', start: { x: 410, y: 1660 }, end: { x: 2280, y: 1660 }, type: 'external', thickness: 8 },
-        { id: 'w-ext-7', start: { x: 2280, y: 1660 }, end: { x: 2280, y: 1420 }, type: 'external', thickness: 8 },
-
-        // Bathroom divider (left side)
-        { id: 'w-int-1', start: { x: 410, y: 280 }, end: { x: 800, y: 280 }, type: 'internal', thickness: 5 },
-        { id: 'w-int-2', start: { x: 800, y: 280 }, end: { x: 800, y: 680 }, type: 'internal', thickness: 5 },
-        { id: 'w-int-3', start: { x: 800, y: 680 }, end: { x: 410, y: 680 }, type: 'internal', thickness: 5 },
-
-        // Bedroom #1 walls
-        { id: 'w-int-4', start: { x: 800, y: 145 }, end: { x: 800, y: 420 }, type: 'internal', thickness: 5 },
-        { id: 'w-int-5', start: { x: 800, y: 420 }, end: { x: 1220, y: 420 }, type: 'internal', thickness: 5 },
-
-        // Vertical divider to master bedroom
-        { id: 'w-int-6', start: { x: 1220, y: 145 }, end: { x: 1220, y: 680 }, type: 'internal', thickness: 5 },
-
-        // Stairs area wall
-        { id: 'w-int-7', start: { x: 1220, y: 680 }, end: { x: 1660, y: 680 }, type: 'internal', thickness: 5 },
-        { id: 'w-int-8', start: { x: 1660, y: 420 }, end: { x: 1660, y: 1020 }, type: 'internal', thickness: 5 },
-
-        // Kitchen/dining divider
-        { id: 'w-int-9', start: { x: 410, y: 1020 }, end: { x: 1010, y: 1020 }, type: 'internal', thickness: 5 },
-        { id: 'w-int-10', start: { x: 1010, y: 1020 }, end: { x: 1010, y: 1420 }, type: 'internal', thickness: 5 },
-      ],
-      cameras: [
-        {
-          cameraId: 'cam-02',
-          x: 900, y: 800,
-          rotation: 90,
-          angle: 40,
-          height: 2.4,
-          fov: 110,
-          viewDistance: 200,
-          autoCalculateDistance: true,
-          color: 'blue-500',
-          notes: 'Hallway and family room entrance',
-        },
-        {
-          cameraId: 'cam-05',
-          x: 2150, y: 300,
-          rotation: 225,
-          angle: 35,
-          height: 2.4,
-          fov: 95,
-          viewDistance: 180,
-          autoCalculateDistance: true,
-          color: 'purple-500',
-          notes: 'Master bedroom coverage',
-        },
-        {
-          cameraId: 'cam-06',
-          x: 700, y: 1280,
-          rotation: 45,
-          angle: 38,
-          height: 2.4,
-          fov: 100,
-          viewDistance: 190,
-          autoCalculateDistance: true,
-          color: 'pink-500',
-          notes: 'Kitchen and dining area',
-        },
-      ],
-      createdAt: new Date('2024-01-20'),
-      updatedAt: new Date('2024-02-10'),
+      createdAt: new Date('2025-01-26'),
+      updatedAt: new Date('2025-01-26'),
     },
   ])
 
-  const activeSiteMapId = ref<string>('map-warehouse-main')
+  const activeSiteMapId = ref<string>('map-auditorium')
 
   const activeSiteMap = computed(() =>
     siteMaps.value.find(map => map.id === activeSiteMapId.value) || siteMaps.value[0]

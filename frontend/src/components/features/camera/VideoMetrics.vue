@@ -1,25 +1,17 @@
 <template>
   <div class="video-metrics-overlay">
-    <!-- FPS -->
-    <div class="metric-row">
-      <div class="metric-label">FPS:</div>
-      <div class="metric-value" :class="getFpsClass()">
-        {{ fps }}
-      </div>
-    </div>
-
-    <!-- Latency -->
-    <div class="metric-row">
-      <div class="metric-label">Latency:</div>
-      <div class="metric-value" :class="getLatencyClass()">
-        {{ latency }}ms
-      </div>
-    </div>
+    <span class="metric-text">{{ fps }} FPS</span>
+    <span class="metric-separator">|</span>
+    <span class="metric-text">{{ latency }}ms</span>
+    <!-- Debug: show raw values -->
+    <span v-if="false" style="font-size: 10px; color: red;">
+      (cq.fps={{ connectionQuality?.fps }}, stats.latency={{ stats?.latencyMs }})
+    </span>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 
 interface ConnectionQuality {
   packetLoss: number
@@ -52,23 +44,18 @@ const props = defineProps<{
 const fps = computed(() => props.connectionQuality?.fps || 0)
 const latency = computed(() => Math.round(props.stats?.latencyMs || 0))
 
-// Color-coded quality indicators
+// Debug: Watch for changes (throttled to once per 2 seconds)
+let lastLogTime = 0
+watch([() => props.connectionQuality, () => props.stats], ([cq, st]) => {
+  const now = Date.now()
+  if (now - lastLogTime > 2000) {
+    console.log(`[VideoMetrics] ${props.cameraId} - connectionQuality:`, cq, 'stats:', st)
+    lastLogTime = now
+  }
+}, { immediate: true })
 
-// FPS: Good >= 25, Fair >= 15, Poor < 15
-function getFpsClass(): string {
-  const fpsValue = fps.value
-  if (fpsValue >= 25) return 'quality-good'
-  if (fpsValue >= 15) return 'quality-fair'
-  return 'quality-poor'
-}
-
-// Latency: Good <= 100ms, Fair <= 250ms, Poor > 250ms
-function getLatencyClass(): string {
-  const latencyValue = latency.value
-  if (latencyValue <= 100) return 'quality-good'
-  if (latencyValue <= 250) return 'quality-fair'
-  return 'quality-poor'
-}
+// Also log on mount
+console.log(`[VideoMetrics] ${props.cameraId} - MOUNTED with connectionQuality:`, props.connectionQuality, 'stats:', props.stats)
 </script>
 
 <style scoped>
@@ -76,56 +63,21 @@ function getLatencyClass(): string {
   position: absolute;
   top: 10px;
   right: 10px;
-  background: rgba(15, 23, 42, 0.85);
-  border-radius: 6px;
-  padding: 8px 12px;
   font-family: 'Courier New', monospace;
   font-size: 0.875rem;
-  color: #e2e8f0;
-  backdrop-filter: blur(4px);
+  color: #94a3b8;
   z-index: 10;
   display: flex;
-  gap: 16px;
-}
-
-.metric-row {
-  display: flex;
+  gap: 8px;
   align-items: center;
-  gap: 6px;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
 }
 
-.metric-label {
-  color: #94a3b8;
-  font-weight: 600;
+.metric-text {
+  font-weight: 500;
 }
 
-.metric-value {
-  font-weight: 700;
-  min-width: 50px;
-  text-align: right;
-}
-
-/* Quality-based colors */
-.quality-good {
-  color: #22c55e !important;
-}
-
-.quality-fair {
-  color: #f59e0b !important;
-}
-
-.quality-poor {
-  color: #ef4444 !important;
-  animation: pulse-warning 2s infinite;
-}
-
-@keyframes pulse-warning {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.6;
-  }
+.metric-separator {
+  opacity: 0.5;
 }
 </style>
