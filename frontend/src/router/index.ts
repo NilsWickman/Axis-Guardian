@@ -55,6 +55,14 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/generated-site-map',
+    name: 'GeneratedSiteMapViewer',
+    component: () => import('@/views/GeneratedSiteMapViewer.vue'),
+    meta: {
+      title: 'Auto-Generated Site Map',
+    },
+  },
+  {
     path: '/users',
     name: 'Users',
     component: () => import('@/views/UserManagement.vue'),

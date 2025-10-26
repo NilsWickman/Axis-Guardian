@@ -1,0 +1,28 @@
+# Core dependencies
+numpy>=1.24.0
+scipy>=1.11.0
+opencv-contrib-python>=4.8.0
+scikit-image>=0.22.0
+
+# Coordinate transforms and geospatial
+pyproj>=3.6.0
+
+# Deep learning for semantic segmentation
+torch>=2.0.0
+torchvision>=0.15.0
+transformers>=4.35.0
+timm>=0.9.0
+
+# 3D processing (optional, for visualization)
+open3d>=0.18.0
+
+# Image processing and visualization
+Pillow>=10.0.0
+matplotlib>=3.7.0
+
+# Configuration and data handling
+pyyaml>=6.0.0
+pydantic>=2.0.0
+
+# Utilities
+tqdm>=4.65.0

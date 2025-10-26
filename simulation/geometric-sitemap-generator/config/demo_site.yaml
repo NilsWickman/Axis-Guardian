@@ -1,0 +1,65 @@
+# Demo site configuration with sample images
+
+cameras:
+  - id: camera1
+    # Approximate GPS coordinates (Duke campus area)
+    gps: [35.9940, -78.9018, 120.5]
+    mount_height: 3.5
+    orientation:
+      pan: 0.0      # Looking north
+      tilt: -15.0   # Looking down 15 degrees
+      roll: 0.0
+    intrinsics:
+      focal_length: 4.0
+      sensor_size: [0.357, 0.357]  # 1/2.8" sensor
+      resolution: [1920, 1080]
+      fov: [92.0, 50.0]
+    image_path: "sample_images/camera1.jpg"
+
+  - id: camera2
+    gps: [35.9942, -78.9020, 121.0]
+    mount_height: 3.8
+    orientation:
+      pan: 90.0     # Looking east
+      tilt: -18.0
+      roll: 0.0
+    intrinsics:
+      focal_length: 4.0
+      sensor_size: [0.357, 0.357]
+      resolution: [1920, 1080]
+      fov: [92.0, 50.0]
+    image_path: "sample_images/camera2.jpg"
+
+  - id: camera3
+    gps: [35.9938, -78.9016, 119.8]
+    mount_height: 3.2
+    orientation:
+      pan: 180.0    # Looking south
+      tilt: -12.0
+      roll: 0.0
+    intrinsics:
+      focal_length: 4.0
+      sensor_size: [0.357, 0.357]
+      resolution: [1920, 1080]
+      fov: [92.0, 50.0]
+    image_path: "sample_images/camera3.jpg"
+
+  - id: camera4
+    gps: [35.9936, -78.9022, 120.2]
+    mount_height: 3.6
+    orientation:
+      pan: 270.0    # Looking west
+      tilt: -16.0
+      roll: 0.0
+    intrinsics:
+      focal_length: 4.0
+      sensor_size: [0.357, 0.357]
+      resolution: [1920, 1080]
+      fov: [92.0, 50.0]
+    image_path: "sample_images/camera4.jpg"
+
+generation:
+  grid_resolution: 0.1          # 10cm cells (faster for demo)
+  min_wall_length: 0.5
+  confidence_threshold: 0.4     # Lower threshold for demo
+  semantic_model: "nvidia/segformer-b0-finetuned-ade-512-512"  # Fastest model

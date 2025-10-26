@@ -1,0 +1,86 @@
+# Example site configuration for geometric site map generation
+
+# Camera configurations
+cameras:
+  - id: camera1
+    # GPS coordinates: [latitude, longitude, elevation_meters]
+    gps: [35.9940, -78.9018, 120.5]
+
+    # Mount height above ground in meters
+    mount_height: 3.5
+
+    # Camera orientation
+    orientation:
+      pan: 45.0    # degrees from north (0=north, 90=east, 180=south, 270=west)
+      tilt: -15.0  # degrees from horizon (negative = looking down)
+      roll: 0.0    # rotation around optical axis
+
+    # Camera intrinsics
+    intrinsics:
+      focal_length: 4.0           # mm
+      sensor_size: [0.357, 0.357] # inches [width, height] (1/2.8" sensor)
+      resolution: [1920, 1080]    # pixels [width, height]
+      fov: [92.0, 50.0]          # degrees [horizontal, vertical]
+
+    # Path to sample image (relative or absolute)
+    image_path: "../../shared/cameras/view-HC3.mp4.0001.jpg"
+
+  - id: camera2
+    gps: [35.9942, -78.9020, 121.0]
+    mount_height: 3.8
+    orientation:
+      pan: 135.0
+      tilt: -18.0
+      roll: 0.0
+    intrinsics:
+      focal_length: 4.0
+      sensor_size: [0.357, 0.357]
+      resolution: [1920, 1080]
+      fov: [92.0, 50.0]
+    image_path: "../../shared/cameras/view-HC4.mp4.0001.jpg"
+
+  - id: camera3
+    gps: [35.9938, -78.9016, 119.8]
+    mount_height: 3.2
+    orientation:
+      pan: 225.0
+      tilt: -12.0
+      roll: 0.0
+    intrinsics:
+      focal_length: 4.0
+      sensor_size: [0.357, 0.357]
+      resolution: [1920, 1080]
+      fov: [92.0, 50.0]
+    image_path: "../../shared/cameras/view-IP2.mp4.0001.jpg"
+
+  - id: camera4
+    gps: [35.9936, -78.9022, 120.2]
+    mount_height: 3.6
+    orientation:
+      pan: 315.0
+      tilt: -16.0
+      roll: 0.0
+    intrinsics:
+      focal_length: 4.0
+      sensor_size: [0.357, 0.357]
+      resolution: [1920, 1080]
+      fov: [92.0, 50.0]
+    image_path: "../../shared/cameras/view-IP5.mp4.0001.jpg"
+
+# Generation parameters
+generation:
+  # Occupancy grid resolution in meters (5cm default)
+  grid_resolution: 0.05
+
+  # Minimum wall length to extract (meters)
+  min_wall_length: 0.5
+
+  # Minimum confidence threshold for features
+  confidence_threshold: 0.5
+
+  # Semantic segmentation model
+  # Options:
+  #   - nvidia/segformer-b5-finetuned-ade-640-640 (best quality, slower)
+  #   - nvidia/segformer-b3-finetuned-ade-512-512 (balanced)
+  #   - nvidia/segformer-b0-finetuned-ade-512-512 (fastest)
+  semantic_model: "nvidia/segformer-b5-finetuned-ade-640-640"

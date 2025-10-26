@@ -16,9 +16,11 @@ from av import VideoFrame
 from aiortc import RTCDataChannel, VideoStreamTrack
 from loguru import logger
 
+from config import InterfaceMode
 from detector import ObjectDetector
 from metrics import metrics
-from video_track_precomputed import load_precomputed_detections, get_detection_for_frame
+from video_track_preprocessed import load_preprocessed_detections, get_detection_for_frame
+from thread_pool import get_shared_pool
 
 
 class DetectionVideoTrack(VideoStreamTrack):
@@ -34,6 +36,7 @@ class DetectionVideoTrack(VideoStreamTrack):
         detector: ObjectDetector,
         data_channel: Optional[RTCDataChannel] = None,
         precomputed_detections_path: Optional[str] = None,
+        interface_mode: InterfaceMode = InterfaceMode.VIDEO_BOXES,
     ):
         """
         Initialize detection video track.
@@ -44,30 +47,39 @@ class DetectionVideoTrack(VideoStreamTrack):
             detector: ObjectDetector instance
             data_channel: WebRTC data channel for metadata
             precomputed_detections_path: Optional path to pre-computed detections JSON
+            interface_mode: Interface mode (rtsp_only, metadata_only, video_metadata, video_boxes)
         """
         super().__init__()
         self.rtsp_url = rtsp_url
         self.camera_id = camera_id
         self.detector = detector
         self.data_channel = data_channel
+        self.interface_mode = interface_mode
 
-        # Pre-computed detections support
-        self.precomputed_detections: Optional[Dict[int, List[Any]]] = None
-        self.use_precomputed = False
+        # Pre-processed detections support
+        self.preprocessed_detections: Optional[Dict[int, List[Any]]] = None
+        self.use_preprocessed = False
         if precomputed_detections_path:
-            self.precomputed_detections = load_precomputed_detections(precomputed_detections_path)
-            self.use_precomputed = self.precomputed_detections is not None
+            self.preprocessed_detections = load_preprocessed_detections(precomputed_detections_path)
+            self.use_preprocessed = self.preprocessed_detections is not None
 
-        # Per-camera thread pool to avoid cross-camera blocking
-        # Using 1 worker ensures sequential processing for this camera
-        self._executor = ThreadPoolExecutor(
-            max_workers=1,
-            thread_name_prefix=f"detect-{camera_id}"
-        )
+        # Use shared thread pool instead of per-camera pool (more efficient)
+        # This reduces resource overhead when managing multiple cameras
+        self._executor = get_shared_pool(max_workers=8)  # 8 workers shared across all cameras
+        self._uses_shared_pool = True  # Flag to prevent shutdown on stop()
 
         self.cap: Optional[cv2.VideoCapture] = None
         self.frame_count = 0
         self.running = True
+
+        # Connection retry management
+        self.connection_retry_count = 0
+        self.max_retry_attempts = 5  # Stop trying after 5 failures
+        self.retry_delay = 1.0  # Start with 1 second delay
+        self.max_retry_delay = 30.0  # Cap at 30 seconds
+        self.last_connection_attempt = 0.0
+        self.connection_backoff_active = False
+        self.max_retry_logged = False  # Track if we've logged max retry message
 
         # Video properties
         self.fps = 30
@@ -116,13 +128,15 @@ class DetectionVideoTrack(VideoStreamTrack):
         }
 
         logger.info(f"DetectionVideoTrack initialized for {camera_id}")
-        if self.use_precomputed:
-            logger.info(f"  ✓ Using pre-computed detections (optimized mode)")
+        logger.info(f"  Interface mode: {self.interface_mode.value}")
+        if self.use_preprocessed:
+            logger.info(f"  ✓ Using pre-processed detections (optimized mode)")
 
     async def _connect_stream(self) -> bool:
         """Connect to RTSP stream with optimized settings for reliability."""
         try:
-            logger.info(f"Connecting to {self.rtsp_url}")
+            self.last_connection_attempt = time.time()
+            logger.info(f"Connecting to {self.rtsp_url} (attempt {self.connection_retry_count + 1}/{self.max_retry_attempts})")
 
             # Set FFmpeg environment variables for better RTSP reliability and low latency
             # Use TCP transport instead of UDP to prevent packet loss
@@ -162,6 +176,8 @@ class DetectionVideoTrack(VideoStreamTrack):
 
             if not self.cap.isOpened():
                 logger.error(f"Failed to open stream: {self.rtsp_url}")
+                self.connection_retry_count += 1
+                self._update_retry_delay()
                 return False
 
             # Get stream properties
@@ -172,6 +188,12 @@ class DetectionVideoTrack(VideoStreamTrack):
             width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
+            # Connection successful - reset retry counters
+            self.connection_retry_count = 0
+            self.retry_delay = 1.0
+            self.connection_backoff_active = False
+            self.max_retry_logged = False
+
             logger.info(
                 f"Connected to {self.camera_id}: {width}x{height} @ {self.fps:.1f} FPS"
             )
@@ -179,7 +201,34 @@ class DetectionVideoTrack(VideoStreamTrack):
 
         except Exception as e:
             logger.error(f"Error connecting to {self.rtsp_url}: {e}")
+            self.connection_retry_count += 1
+            self._update_retry_delay()
             return False
+
+    def _update_retry_delay(self):
+        """Calculate exponential backoff delay for reconnection attempts."""
+        # Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s (capped)
+        self.retry_delay = min(
+            self.max_retry_delay,
+            self.retry_delay * 2
+        )
+        self.connection_backoff_active = True
+
+        # Only log max retry message once to avoid spam
+        if self.connection_retry_count >= self.max_retry_attempts and not self.max_retry_logged:
+            logger.error(
+                f"[{self.camera_id}] Max reconnection attempts ({self.max_retry_attempts}) reached. "
+                f"Camera stream appears to be unavailable. Waiting {self.retry_delay}s before next attempt."
+            )
+            self.max_retry_logged = True
+
+    def _should_attempt_connection(self) -> bool:
+        """Check if enough time has passed since last connection attempt."""
+        if not self.connection_backoff_active:
+            return True
+
+        time_since_last_attempt = time.time() - self.last_connection_attempt
+        return time_since_last_attempt >= self.retry_delay
 
     async def recv(self):
         """
@@ -190,10 +239,16 @@ class DetectionVideoTrack(VideoStreamTrack):
         """
         frame_start = time.time()
 
-        # Connect on first call
+        # Connect on first call or reconnect if disconnected
         if self.cap is None:
+            # Check if we should attempt connection (respects exponential backoff)
+            if not self._should_attempt_connection():
+                # Still in backoff period, return placeholder frame
+                return self._create_black_frame()
+
             connected = await self._connect_stream()
             if not connected:
+                # Connection failed, return placeholder frame
                 return self._create_black_frame()
 
         # Read frame from RTSP
@@ -204,10 +259,18 @@ class DetectionVideoTrack(VideoStreamTrack):
             if not ret or frame is None:
                 self.frame_loss_count += 1
                 metrics.increment_counter('frames_lost_total', labels={'camera': self.camera_id})
-                logger.warning(f"Lost connection to {self.camera_id}, reconnecting...")
+
+                # Only log warning on first failure to avoid spam
+                if self.connection_retry_count == 0:
+                    logger.warning(f"Lost connection to {self.camera_id}, will reconnect with backoff...")
+
                 if self.cap:
                     self.cap.release()
                     self.cap = None
+
+                # Mark that we need to reconnect (backoff will be applied on next recv() call)
+                self.connection_retry_count += 1
+                self._update_retry_delay()
 
                 # Adjust buffer before reconnecting
                 self._adjust_buffer_size()
@@ -241,10 +304,19 @@ class DetectionVideoTrack(VideoStreamTrack):
             self.frame_count += 1
             frame_timestamp = time.time()
 
-            # Handle detections: pre-computed or real-time
-            if self.use_precomputed:
-                # Use pre-computed detections (instant lookup, no processing)
-                detections = get_detection_for_frame(self.precomputed_detections, self.frame_count)
+            # Handle detections based on interface mode
+            should_process_detections = self.interface_mode in [
+                InterfaceMode.METADATA_ONLY,
+                InterfaceMode.VIDEO_METADATA,
+                InterfaceMode.VIDEO_BOXES
+            ]
+
+            if not should_process_detections:
+                # RTSP_ONLY mode - skip all detection processing
+                pass
+            elif self.use_preprocessed:
+                # Use pre-processed detections (instant lookup, no processing)
+                detections = get_detection_for_frame(self.preprocessed_detections, self.frame_count)
 
                 if detections:
                     # Update latest detections for drawing
@@ -262,7 +334,7 @@ class DetectionVideoTrack(VideoStreamTrack):
                         oldest_frame = min(self.detection_cache.keys())
                         del self.detection_cache[oldest_frame]
 
-                    metrics.increment_counter('detections_precomputed_total', labels={'camera': self.camera_id})
+                    metrics.increment_counter('detections_preprocessed_total', labels={'camera': self.camera_id})
             else:
                 # Real-time detection (original behavior)
                 should_detect = self._should_run_detection()
@@ -307,15 +379,25 @@ class DetectionVideoTrack(VideoStreamTrack):
                     self.frames_since_detection += 1
                     metrics.increment_counter('detections_skipped_total', labels={'camera': self.camera_id})
 
-            # Send any ready detection results via data channel
-            await self._send_cached_detections(self.frame_count, frame_timestamp)
+            # Send any ready detection results via data channel (if mode supports it)
+            if should_process_detections:
+                await self._send_cached_detections(self.frame_count, frame_timestamp)
 
-            # Draw detections on frame before encoding (only if not pre-rendered)
-            # Pre-rendered videos already have boxes drawn, so skip drawing
-            if self.use_precomputed:
-                frame_with_detections = frame  # Already has detections drawn
-            else:
+            # Draw detections on frame based on interface mode
+            should_draw_boxes = (
+                self.interface_mode == InterfaceMode.VIDEO_BOXES
+                and should_process_detections
+            )
+
+            if self.use_preprocessed and should_draw_boxes:
+                # Pre-processed videos already have boxes drawn
+                frame_with_detections = frame
+            elif should_draw_boxes and not self.use_preprocessed:
+                # Draw boxes for real-time detection
                 frame_with_detections = self._draw_detections_on_frame(frame)
+            else:
+                # No box drawing (rtsp_only, metadata_only, or video_metadata modes)
+                frame_with_detections = frame
 
             # Convert BGR to RGB for WebRTC
             frame_rgb = cv2.cvtColor(frame_with_detections, cv2.COLOR_BGR2RGB)
@@ -724,6 +806,36 @@ class DetectionVideoTrack(VideoStreamTrack):
     def _create_black_frame(self) -> VideoFrame:
         """Create a black frame when stream is unavailable."""
         black = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        # Add text overlay indicating connection status
+        if self.connection_backoff_active:
+            time_until_retry = max(0, self.retry_delay - (time.time() - self.last_connection_attempt))
+            if time_until_retry > 0:
+                text = f"Camera {self.camera_id}: Reconnecting in {int(time_until_retry)}s..."
+            else:
+                text = f"Camera {self.camera_id}: Attempting to reconnect..."
+
+            # Draw text on black frame
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.7
+            thickness = 2
+            color = (200, 200, 200)  # Light gray
+
+            # Get text size for centering
+            (text_width, text_height), _ = cv2.getTextSize(text, font, font_scale, thickness)
+            x = (640 - text_width) // 2
+            y = (480 + text_height) // 2
+
+            cv2.putText(black, text, (x, y), font, font_scale, color, thickness, cv2.LINE_AA)
+
+            # Add smaller message about starting camera streams
+            help_text = "Start camera streams with: make cameras"
+            (help_width, help_height), _ = cv2.getTextSize(help_text, font, 0.5, 1)
+            help_x = (640 - help_width) // 2
+            help_y = y + 40
+
+            cv2.putText(black, help_text, (help_x, help_y), font, 0.5, (150, 150, 150), 1, cv2.LINE_AA)
+
         frame = VideoFrame.from_ndarray(black, format="rgb24")
         frame.pts = self.frame_count
         frame.time_base = fractions.Fraction(1, int(self.fps))
@@ -738,9 +850,13 @@ class DetectionVideoTrack(VideoStreamTrack):
             self.cap.release()
             self.cap = None
 
-        # Shutdown the per-camera thread pool
-        if hasattr(self, '_executor'):
+        # Don't shutdown shared thread pool (it's used by all cameras)
+        # The pool will be shut down when the application exits
+        if hasattr(self, '_uses_shared_pool') and self._uses_shared_pool:
+            logger.debug(f"Video track stopped for {self.camera_id} (using shared pool)")
+        elif hasattr(self, '_executor'):
+            # Only shutdown if using a private pool (shouldn't happen with new code)
             self._executor.shutdown(wait=True, cancel_futures=True)
-            logger.debug(f"Shutdown thread pool for {self.camera_id}")
+            logger.debug(f"Shutdown private thread pool for {self.camera_id}")
 
         logger.info(f"DetectionVideoTrack stopped for {self.camera_id}")

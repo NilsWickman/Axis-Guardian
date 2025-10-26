@@ -166,7 +166,13 @@ shared/dist/
 shared/axis_shared.egg-info/
 frontend/src/types/generated/
 frontend/src/api/generated/
-shared/cameras/rendered/
+# Ignore preprocessed videos (can be regenerated)
+shared/cameras/preprocessed/*/*.mp4
+# Keep detection metadata and directory structure
+!shared/cameras/preprocessed/*/*.json
+!shared/cameras/preprocessed/*/*.json.gz
+# Old rendered directory (backward compat symlink)
+shared/cameras/rendered
 
 # MediaMTX runtime files
 simulation/mediamtx/*.log

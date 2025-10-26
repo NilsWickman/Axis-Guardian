@@ -1,45 +1,10 @@
 <template>
-  <div class="h-full w-full bg-background flex flex-col">
-    <!-- Header -->
-    <div class="flex justify-between items-center p-4 border-b border-sidebar-border">
-      <h1 class="text-base font-bold text-foreground">Focus View - WebRTC Detection</h1>
-      <div class="flex items-center space-x-3">
-        <div class="flex items-center gap-2">
-          <div :class="['status-indicator', { connected: isConnected }]" />
-          <span class="text-xs text-muted-foreground">
-            {{ isConnected ? 'Connected' : 'Connecting...' }}
-          </span>
-        </div>
-        <span class="text-xs text-muted-foreground">
-          {{ cameras.length }} cameras
-        </span>
-        <button
-          @click="refreshCameras"
-          class="px-3 py-1.5 bg-primary text-primary-foreground text-xs rounded-lg hover:bg-primary/90 transition-colors"
-        >
-          Refresh
-        </button>
-      </div>
-    </div>
-
+  <div class="h-full w-full bg-background flex overflow-hidden">
     <!-- Main Layout: Primary Camera + Thumbnail Strip -->
     <div class="flex-1 flex overflow-hidden">
       <!-- Primary Camera Feed -->
-      <div class="flex-1 p-4">
+      <div class="flex-1">
         <div v-if="selectedCamera" class="camera-container h-full">
-          <div class="camera-header">
-            <div class="camera-info">
-              <div class="camera-name">{{ selectedCamera.name }}</div>
-              <div class="camera-meta">
-                <span class="frame-number">Frame: #{{ frameNumber }}</span>
-                <span class="detection-count">{{ detectionCount }} objects</span>
-              </div>
-            </div>
-            <div :class="['connection-badge', { connected: connectionState === 'connected' }]">
-              {{ connectionState || 'disconnected' }}
-            </div>
-          </div>
-
           <div class="video-wrapper">
             <video
               ref="primaryVideoRef"
@@ -66,25 +31,6 @@
               :stats="currentConnection.stats"
               :connection-state="connectionState"
             />
-          </div>
-
-          <!-- Detection Legend -->
-          <div class="detection-legend">
-            <template v-if="classCounts && Object.keys(classCounts).length > 0">
-              <div
-                v-for="(count, className) in classCounts"
-                :key="className"
-                class="legend-item"
-              >
-                <div
-                  class="legend-color"
-                  :style="{ background: getClassColor(className as string) }"
-                />
-                <span class="legend-label">{{ className }}:</span>
-                <span class="legend-count">{{ count }}</span>
-              </div>
-            </template>
-            <span v-else class="no-detections">No detections yet</span>
           </div>
         </div>
         <div v-else class="h-full flex items-center justify-center text-muted-foreground">
@@ -177,7 +123,6 @@ const classCounts = ref<Record<string, number>>({})
 const connectionState = ref<RTCPeerConnectionState>('new')
 
 // Computed
-const isConnected = computed(() => connectionState.value === 'connected')
 const currentConnection = computed(() => {
   if (!selectedCamera.value) return null
   const conn = getConnection(selectedCamera.value.id)
@@ -260,11 +205,8 @@ function drawDetections() {
 
 // Attach thumbnail videos to global connections
 async function attachThumbnailVideos() {
-  console.log('[FocusView] Attaching thumbnail videos to global connections...')
-
   // If connections aren't initialized yet, wait (only happens on first load)
   if (!isInitialized.value) {
-    console.log('[FocusView] Waiting for connections to initialize...')
     const maxWait = 10000 // 10 seconds
     const startTime = Date.now()
     while (!isInitialized.value && Date.now() - startTime < maxWait) {
@@ -275,8 +217,6 @@ async function attachThumbnailVideos() {
       console.error('[FocusView] Timeout waiting for connections to initialize')
       return
     }
-  } else {
-    console.log('[FocusView] Connections already initialized - instant attach!')
   }
 
   // Minimal wait for video elements to be in DOM
@@ -286,12 +226,11 @@ async function attachThumbnailVideos() {
   for (const camera of cameras.value) {
     const thumbnailVideo = thumbnailVideoRefs.value[camera.id]
     if (!thumbnailVideo) {
-      console.warn(`[FocusView] Thumbnail video not found for ${camera.id}, retrying...`)
       // Retry once after a short delay
       await new Promise(resolve => setTimeout(resolve, 50))
       const retryVideo = thumbnailVideoRefs.value[camera.id]
       if (!retryVideo) {
-        console.error(`[FocusView] Still no video element for ${camera.id}`)
+        console.error(`[FocusView] No video element for ${camera.id}`)
         continue
       }
     }
@@ -300,10 +239,7 @@ async function attachThumbnailVideos() {
     if (!videoElement) continue
 
     // Attach to global connection (stream already flowing!)
-    const attached = attachToVideoElement(camera.id, videoElement)
-    if (attached) {
-      console.log(`[FocusView] ✓ Instantly attached ${camera.id} (stream was ready)`)
-    }
+    attachToVideoElement(camera.id, videoElement)
 
     // Set up detection callback for this camera (idempotent - safe to call multiple times)
     const conn = getConnection(camera.id)
@@ -334,13 +270,10 @@ async function attachThumbnailVideos() {
       }
     }
   }, 100)
-
-  console.log('[FocusView] All thumbnails attached')
 }
 
 // Select camera (instant switch - no reconnection needed)
 function selectCamera(camera: Camera) {
-  console.log(`[FocusView] Switching to ${camera.id}`)
 
   selectedCamera.value = camera
   videoDimensions.value = null
@@ -365,10 +298,6 @@ function selectCamera(camera: Camera) {
   connectionState.value = conn.connection.connectionState.value
 }
 
-const refreshCameras = () => {
-  console.log('Refreshing cameras...')
-}
-
 onMounted(async () => {
   // Attach thumbnails to global connections (connections are already initialized globally)
   await attachThumbnailVideos()
@@ -382,7 +311,6 @@ onMounted(async () => {
 onUnmounted(() => {
   // Note: We don't disconnect here because connections are global
   // They stay active for instant loading on other pages
-  console.log('[FocusView] Unmounting (connections remain active)')
 })
 </script>
 
@@ -402,80 +330,24 @@ onUnmounted(() => {
 .camera-container {
   display: flex;
   flex-direction: column;
-  background: #1e293b;
-  border-radius: 12px;
+  background: #000;
   overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-}
-
-.camera-header {
-  padding: 15px 20px;
-  background: linear-gradient(135deg, #334155, #1e293b);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 2px solid #475569;
-}
-
-.camera-info {
-  flex: 1;
-}
-
-.camera-name {
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin-bottom: 4px;
-  color: #e2e8f0;
-}
-
-.camera-meta {
-  display: flex;
-  gap: 12px;
-  font-size: 0.875rem;
-  color: #94a3b8;
-}
-
-.frame-number {
-  font-family: 'Courier New', monospace;
-}
-
-.detection-count {
-  background: #3b82f6;
-  padding: 2px 8px;
-  border-radius: 12px;
-  color: white;
-  font-weight: 600;
-}
-
-.connection-badge {
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  background: #ef4444;
-  color: white;
-}
-
-.connection-badge.connected {
-  background: #22c55e;
+  width: 100%;
+  height: 100%;
 }
 
 .video-wrapper {
   position: relative;
   background: #000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 400px;
-  flex: 1;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 video {
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   display: block;
 }
 
@@ -509,43 +381,6 @@ video {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
-}
-
-.detection-legend {
-  padding: 15px 20px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 15px;
-  background: #0f172a;
-  min-height: 50px;
-  align-items: center;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.legend-color {
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
-}
-
-.legend-label {
-  font-size: 0.875rem;
-  color: #e2e8f0;
-}
-
-.legend-count {
-  font-weight: 600;
-  color: #3b82f6;
-}
-
-.no-detections {
-  color: #64748b;
-  font-size: 0.875rem;
 }
 
 .camera-thumbnail {

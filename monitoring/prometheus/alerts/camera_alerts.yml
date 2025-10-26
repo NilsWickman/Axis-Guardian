@@ -1,0 +1,80 @@
+groups:
+  - name: camera_alerts
+    interval: 30s
+    rules:
+      # High frame loss rate
+      - alert: HighFrameLossRate
+        expr: rate(frames_lost_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          component: camera
+        annotations:
+          summary: "High frame loss on {{ $labels.camera }}"
+          description: "Camera {{ $labels.camera }} is losing {{ $value }} frames per second (5min avg)"
+
+      # Critical frame loss
+      - alert: CriticalFrameLoss
+        expr: rate(frames_lost_total[5m]) > 30
+        for: 1m
+        labels:
+          severity: critical
+          component: camera
+        annotations:
+          summary: "Critical frame loss on {{ $labels.camera }}"
+          description: "Camera {{ $labels.camera }} is losing {{ $value }} frames per second - check RTSP connection"
+
+      # Low FPS
+      - alert: LowCameraFPS
+        expr: rate(frames_read_total[1m]) * 60 < 15
+        for: 2m
+        labels:
+          severity: warning
+          component: camera
+        annotations:
+          summary: "Low FPS on {{ $labels.camera }}"
+          description: "Camera {{ $labels.camera }} FPS is {{ $value }}, expected >15 FPS"
+
+      # High processing latency
+      - alert: HighFrameProcessingLatency
+        expr: avg(frame_processing_seconds{quantile="0.95"}) by (camera) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+          component: processing
+        annotations:
+          summary: "High frame processing latency on {{ $labels.camera }}"
+          description: "P95 processing time is {{ $value }}s (>500ms)"
+
+      # Corrupted frames
+      - alert: HighCorruptedFrameRate
+        expr: rate(frames_corrupted_total[5m]) > 5
+        for: 2m
+        labels:
+          severity: warning
+          component: camera
+        annotations:
+          summary: "High corrupted frame rate on {{ $labels.camera }}"
+          description: "Camera {{ $labels.camera }} has {{ $value }} corrupted frames per second"
+
+      # Buffer issues
+      - alert: BufferSizeIncreasing
+        expr: delta(buffer_size[10m]) > 3
+        for: 5m
+        labels:
+          severity: info
+          component: camera
+        annotations:
+          summary: "RTSP buffer growing on {{ $labels.camera }}"
+          description: "Buffer increased from {{ $value }} - possible network congestion"
+
+      # FPS limit throttling
+      - alert: FPSLimitThrottled
+        expr: current_fps_limit < 20
+        for: 5m
+        labels:
+          severity: warning
+          component: processing
+        annotations:
+          summary: "FPS limit throttled on {{ $labels.camera }}"
+          description: "FPS limit reduced to {{ $value }} due to system load"

@@ -7,15 +7,18 @@
  *  * Real-time object detection and tracking service via WebSocket.
  * Streams detection events and track updates to subscribed clients.
  * Requires JWT authentication.
- * 
+ *
  */
 
+import { SecureStorage } from '@/utils/storage'
+import { config } from '@/config/environment'
+
 export interface DetectionWebSocketClientOptions {
-  /** WebSocket server host (default: localhost:3007) */
+  /** WebSocket server host (default: from config) */
   host?: string;
   /** Use secure WebSocket (wss://) instead of ws:// */
   secure?: boolean;
-  /** JWT authentication token */
+  /** JWT authentication token (auto-retrieved from storage if not provided) */
   token?: string;
   /** Auto-reconnect on disconnect */
   autoReconnect?: boolean;
@@ -64,10 +67,13 @@ export class DetectionWebSocketClient {
   private reconnectTimer: NodeJS.Timeout | null = null;
 
   constructor(options: DetectionWebSocketClientOptions = {}) {
+    // Extract host from config URL (remove protocol)
+    const defaultHost = config.wsDetectionUrl.replace(/^wss?:\/\//, '')
+
     this.options = {
-      host: options.host || 'localhost:3007',
-      secure: options.secure ?? false,
-      token: options.token || '',
+      host: options.host || defaultHost,
+      secure: options.secure ?? config.wsDetectionUrl.startsWith('wss://'),
+      token: options.token || SecureStorage.getToken() || '',
       autoReconnect: options.autoReconnect ?? true,
       reconnectInterval: options.reconnectInterval || 5000,
       maxReconnectAttempts: options.maxReconnectAttempts || 0,

@@ -43,7 +43,7 @@
           font-weight="600"
           font-family="sans-serif"
         >
-          {{ detection.class_name }} {{ Math.round(detection.confidence * 100) }}%
+          {{ getLabel(detection) }}
         </text>
       </g>
     </svg>
@@ -124,11 +124,22 @@ const getClassColor = (className: string): string => {
 }
 
 /**
+ * Get label text for a detection (includes track ID if available)
+ */
+const getLabel = (detection: Detection): string => {
+  const confidence = Math.round(detection.confidence * 100)
+  if (detection.track_id !== undefined) {
+    return `${detection.class_name} #${detection.track_id} ${confidence}%`
+  }
+  return `${detection.class_name} ${confidence}%`
+}
+
+/**
  * Calculate label width based on text content
  * Approximation: ~8px per character for font-size 14
  */
 const getLabelWidth = (detection: Detection): number => {
-  const text = `${detection.class_name} ${Math.round(detection.confidence * 100)}%`
+  const text = getLabel(detection)
   return Math.max(text.length * 8 + 8, 60)
 }
 

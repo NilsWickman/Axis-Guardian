@@ -21,7 +21,11 @@ class Settings(BaseSettings):
     # Detection parameters
     confidence_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
     iou_threshold: float = Field(default=0.45, ge=0.0, le=1.0)
-    yolo_model_path: str = Field(default="../../../../shared/models/yolov8n.pt", alias="model_path")
+    yolo_model_path: str = Field(
+        default="../../../../shared/models/yolov8n.pt",
+        alias="realtime_model_path",
+        description="YOLO model path for real-time detection"
+    )
     yolo_model_size: str = Field(default="yolov8n", alias="model_size")  # Kept for backward compatibility
 
     # Target classes to detect
