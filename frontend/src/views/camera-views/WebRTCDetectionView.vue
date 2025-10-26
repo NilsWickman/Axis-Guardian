@@ -81,8 +81,8 @@
           <!-- Video Metrics Overlay -->
           <VideoMetrics
             :camera-id="camera.id"
-            :connection-quality="getConnection(camera.id)?.connection.connectionQuality.value"
-            :stats="getConnection(camera.id)?.connection.stats.value"
+            :connection-quality="getConnection(camera.id)?.connection.connectionQuality"
+            :stats="getConnection(camera.id)?.connection.stats"
             :connection-state="connectionStates[camera.id]"
           />
 
