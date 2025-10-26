@@ -8,11 +8,14 @@ import aiohttp_cors
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
 from loguru import logger
 
-from config import settings
+from config import settings, InterfaceMode
 from detector import ObjectDetector
 from video_track import DetectionVideoTrack
-from video_track_precomputed import find_detection_json_for_rtsp
+from video_track_preprocessed import find_detection_json_for_rtsp
+from metadata_track import MetadataOnlyTrack
 from metrics import metrics
+from rtsp_pool import get_pool, init_pool, shutdown_pool
+from camera_discovery import get_discovery, init_discovery, shutdown_discovery
 
 
 class WebRTCSignalingServer:
@@ -37,12 +40,16 @@ class WebRTCSignalingServer:
         # Configure routes
         offer_route = self.app.router.add_post("/offer", self.handle_offer)
         health_route = self.app.router.add_get("/health", self.health_check)
+        ready_route = self.app.router.add_get("/ready", self.readiness_check)
         metrics_route = self.app.router.add_get("/metrics", self.metrics_endpoint)
+        cameras_route = self.app.router.add_get("/cameras", self.list_cameras)
 
         # Add CORS to routes
         cors.add(offer_route)
         cors.add(health_route)
+        cors.add(ready_route)
         cors.add(metrics_route)
+        cors.add(cameras_route)
 
         # ICE servers configuration
         ice_servers = [RTCIceServer(urls=[settings.stun_server])]
@@ -102,48 +109,89 @@ class WebRTCSignalingServer:
             }
             rtsp_url = camera_urls.get(camera_id, settings.camera1_url)
 
+            # Get interface mode for this camera
+            interface_mode = settings.get_interface_mode(camera_id)
+            logger.info(f"Interface mode for {camera_id}: {interface_mode.value}")
+
             # Try to find pre-computed detections JSON file
             detections_json = find_detection_json_for_rtsp(rtsp_url, camera_id)
 
-            # Create detection video track (data channel will be set when received from client)
-            # If pre-computed detections are available, they will be loaded automatically
-            video_track = DetectionVideoTrack(
-                rtsp_url=rtsp_url,
-                camera_id=camera_id,
-                detector=self.detector,
-                data_channel=None,
-                precomputed_detections_path=detections_json,
-            )
+            # Handle different interface modes
+            if interface_mode == InterfaceMode.METADATA_ONLY:
+                # Metadata-only mode: no video track, only data channel
+                metadata_track = None
 
-            # Handle data channel from client
-            @pc.on("datachannel")
-            def on_datachannel(channel):
-                logger.info(f"Data channel received: {channel.label}")
-                video_track.data_channel = channel
+                @pc.on("datachannel")
+                def on_datachannel(channel):
+                    nonlocal metadata_track
+                    logger.info(f"Data channel received for metadata-only mode: {channel.label}")
 
-                @channel.on("open")
-                def on_open():
-                    logger.info(f"Data channel opened for {camera_id}")
+                    # Create and start metadata-only track
+                    metadata_track = MetadataOnlyTrack(
+                        rtsp_url=rtsp_url,
+                        camera_id=camera_id,
+                        detector=self.detector,
+                        data_channel=channel,
+                        precomputed_detections_path=detections_json,
+                    )
 
-                @channel.on("close")
-                def on_close():
-                    logger.info(f"Data channel closed for {camera_id}")
+                    @channel.on("open")
+                    def on_open():
+                        logger.info(f"Data channel opened for {camera_id} (metadata-only)")
+                        metadata_track.start()
 
-            # Find the recvonly video transceiver created by the client
-            # and add our sending track to it
-            for transceiver in pc.getTransceivers():
-                if transceiver.kind == "video" and transceiver.direction == "recvonly":
-                    # Change direction to sendrecv so we can send video
-                    transceiver.direction = "sendrecv"
-                    # Replace the track
-                    if transceiver.sender:
-                        transceiver.sender.replaceTrack(video_track)
-                    logger.info(f"Added video track to transceiver for {camera_id}, direction: {transceiver.direction}")
-                    break
+                    @channel.on("close")
+                    def on_close():
+                        logger.info(f"Data channel closed for {camera_id} (metadata-only)")
+                        if metadata_track:
+                            asyncio.create_task(metadata_track.stop())
+
+                logger.info(f"Configured metadata-only mode for {camera_id}")
+
             else:
-                # Fallback: add track if no suitable transceiver found
-                pc.addTrack(video_track)
-                logger.info(f"Added new video track for {camera_id}")
+                # Video modes: rtsp_only, video_metadata, or video_boxes
+                # For rtsp_only, don't load precomputed detections (no metadata sent)
+                precomputed_path = None if interface_mode == InterfaceMode.RTSP_ONLY else detections_json
+
+                # Create detection video track (data channel will be set when received from client)
+                video_track = DetectionVideoTrack(
+                    rtsp_url=rtsp_url,
+                    camera_id=camera_id,
+                    detector=self.detector,
+                    data_channel=None,
+                    precomputed_detections_path=precomputed_path,
+                    interface_mode=interface_mode,
+                )
+
+                # Handle data channel from client
+                @pc.on("datachannel")
+                def on_datachannel(channel):
+                    logger.info(f"Data channel received: {channel.label}")
+                    video_track.data_channel = channel
+
+                    @channel.on("open")
+                    def on_open():
+                        logger.info(f"Data channel opened for {camera_id}")
+
+                    @channel.on("close")
+                    def on_close():
+                        logger.info(f"Data channel closed for {camera_id}")
+
+                # Find the recvonly video transceiver created by the client
+                # and add our sending track to it
+                for transceiver in pc.getTransceivers():
+                    if transceiver.kind == "video" and transceiver.direction == "recvonly":
+                        # Change direction to sendrecv so we can send video
+                        transceiver.direction = "sendrecv"
+                        # Replace the track
+                        if transceiver.sender:
+                            transceiver.sender.replaceTrack(video_track)
+                        logger.info(f"Added video track to transceiver for {camera_id}, direction: {transceiver.direction}")
+                        break
+                else:
+                    # Fallback: add track if no suitable transceiver found
+                    pc.addTrack(video_track)
+                    logger.info(f"Added new video track for {camera_id}")
 
             # Create answer with codec preferences
             answer = await pc.createAnswer()
@@ -192,17 +240,72 @@ class WebRTCSignalingServer:
             return web.json_response({"error": str(e)}, status=500)
 
     async def health_check(self, request: web.Request) -> web.Response:
-        """Health check endpoint."""
+        """
+        Health check endpoint.
+
+        Returns basic health status. For detailed readiness check use /ready.
+        """
         return web.json_response(
             {
                 "status": "healthy",
+                "service": "webrtc-detection",
                 "active_connections": len(self.pcs),
-                "camera_sources": {
+            }
+        )
+
+    async def readiness_check(self, request: web.Request) -> web.Response:
+        """
+        Readiness check endpoint with detailed status.
+
+        Returns comprehensive system state including RTSP pool and camera discovery.
+        """
+        pool = get_pool()
+        pool_stats = pool.get_pool_stats()
+
+        discovery = get_discovery()
+        discovery_stats = discovery.get_statistics()
+
+        return web.json_response(
+            {
+                "status": "ready",
+                "service": "webrtc-detection",
+                "active_connections": len(self.pcs),
+                "rtsp_pool": pool_stats,
+                "camera_discovery": discovery_stats,
+                "configured_sources": {
                     "camera1": settings.camera1_url,
                     "camera2": settings.camera2_url,
                     "camera3": settings.camera3_url,
                     "camera4": settings.camera4_url,
                 },
+            }
+        )
+
+    async def list_cameras(self, request: web.Request) -> web.Response:
+        """
+        List discovered cameras endpoint.
+
+        Returns all discovered cameras with their details and availability.
+        """
+        discovery = get_discovery()
+        cameras = discovery.get_cameras()
+
+        camera_list = []
+        for camera_id, camera in cameras.items():
+            camera_list.append({
+                "id": camera_id,
+                "name": camera.name,
+                "rtsp_url": camera.rtsp_url,
+                "ready": camera.ready,
+                "readers": camera.readers,
+                "tracks": camera.tracks,
+                "source": camera.source,
+            })
+
+        return web.json_response(
+            {
+                "cameras": camera_list,
+                "count": len(camera_list),
             }
         )
 
@@ -235,6 +338,12 @@ class WebRTCSignalingServer:
         await asyncio.gather(*coros)
         self.pcs.clear()
 
+        # Shutdown RTSP connection pool
+        await shutdown_pool()
+
+        # Shutdown camera discovery
+        await shutdown_discovery()
+
     async def log_metrics_periodically(self):
         """Log metrics summary every 60 seconds."""
         try:
@@ -251,6 +360,13 @@ class WebRTCSignalingServer:
 
     async def on_startup(self, app):
         """Start background tasks on startup."""
+        # Initialize RTSP connection pool
+        await init_pool()
+
+        # Initialize camera discovery
+        await init_discovery()
+
+        # Start metrics logging
         asyncio.create_task(self.log_metrics_periodically())
 
     def run(self):

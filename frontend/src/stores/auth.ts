@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { User, LoginRequest, LoginResponse, Permission } from '../types/generated'
 import { mockUsers, mockRoles } from '../mocks/data'
+import { SecureStorage } from '../utils/storage'
 
 // Mock JWT utilities
 interface JWTPayload {
@@ -88,10 +89,10 @@ export const useAuthStore = defineStore('auth', () => {
       refreshToken.value = mockRefreshToken
       isAuthenticated.value = true
 
-      // Store in localStorage
-      localStorage.setItem('accessToken', mockAccessToken)
-      localStorage.setItem('refreshToken', mockRefreshToken)
-      localStorage.setItem('currentUser', JSON.stringify(user))
+      // Store in SecureStorage
+      SecureStorage.setToken(mockAccessToken)
+      SecureStorage.setRefreshToken(mockRefreshToken)
+      SecureStorage.setUser(user)
 
       return {
         accessToken: mockAccessToken,
@@ -114,9 +115,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated.value = false
 
     // Clear localStorage
-    localStorage.removeItem('accessToken')
-    localStorage.removeItem('refreshToken')
-    localStorage.removeItem('currentUser')
+    SecureStorage.clearAuth()
   }
 
   async function refreshSession() {
@@ -124,7 +123,7 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null
 
     try {
-      const storedRefreshToken = refreshToken.value || localStorage.getItem('refreshToken')
+      const storedRefreshToken = refreshToken.value || SecureStorage.getRefreshToken()
 
       if (!storedRefreshToken || isTokenExpired(storedRefreshToken)) {
         throw new Error('Refresh token expired')
@@ -141,7 +140,7 @@ export const useAuthStore = defineStore('auth', () => {
       // Generate new access token
       const newAccessToken = generateMockJWT(currentUser.value, 3600)
       accessToken.value = newAccessToken
-      localStorage.setItem('accessToken', newAccessToken)
+      SecureStorage.setToken(newAccessToken)
 
       return { accessToken: newAccessToken, expiresIn: 3600 }
     } catch (err) {
@@ -153,9 +152,9 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function restoreSession() {
-    const storedToken = localStorage.getItem('accessToken')
-    const storedRefreshToken = localStorage.getItem('refreshToken')
-    const storedUser = localStorage.getItem('currentUser')
+    const storedToken = SecureStorage.getToken()
+    const storedRefreshToken = SecureStorage.getRefreshToken()
+    const storedUser = SecureStorage.getUser<User>()
 
     if (storedToken && storedUser) {
       try {
@@ -164,7 +163,7 @@ export const useAuthStore = defineStore('auth', () => {
           // Try to refresh if we have a refresh token
           if (storedRefreshToken && !isTokenExpired(storedRefreshToken)) {
             refreshToken.value = storedRefreshToken
-            currentUser.value = JSON.parse(storedUser)
+            currentUser.value = storedUser // Already parsed by SecureStorage
             refreshSession().catch(() => logout())
             return
           }
@@ -174,7 +173,7 @@ export const useAuthStore = defineStore('auth', () => {
 
         accessToken.value = storedToken
         refreshToken.value = storedRefreshToken
-        currentUser.value = JSON.parse(storedUser)
+        currentUser.value = storedUser // Already parsed by SecureStorage
         isAuthenticated.value = true
       } catch (err) {
         console.error('Failed to restore session:', err)
@@ -195,9 +194,9 @@ export const useAuthStore = defineStore('auth', () => {
         isAuthenticated.value = true
 
         // Store in localStorage
-        localStorage.setItem('accessToken', mockAccessToken)
-        localStorage.setItem('refreshToken', mockRefreshToken)
-        localStorage.setItem('currentUser', JSON.stringify(adminUser))
+        SecureStorage.setToken(mockAccessToken)
+        SecureStorage.setRefreshToken(mockRefreshToken)
+        SecureStorage.setUser(adminUser)
       }
     }
   }
@@ -259,7 +258,7 @@ export const useAuthStore = defineStore('auth', () => {
       // If updating current user, update current user state
       if (currentUser.value?.id === userId) {
         currentUser.value = { ...currentUser.value, ...updates }
-        localStorage.setItem('currentUser', JSON.stringify(currentUser.value))
+        SecureStorage.setUser(currentUser.value)
       }
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to update user'

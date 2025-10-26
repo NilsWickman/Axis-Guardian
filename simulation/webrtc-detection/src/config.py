@@ -1,10 +1,20 @@
 """Configuration for WebRTC Detection Service."""
 
 import os
+from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict
 from pydantic_settings import BaseSettings
 from pydantic import Field
+
+
+class InterfaceMode(str, Enum):
+    """Camera interface mode enumeration."""
+
+    RTSP_ONLY = "rtsp_only"          # Raw RTSP feed, no detection
+    METADATA_ONLY = "metadata_only"   # Metadata via data channel/MQTT, no video
+    VIDEO_METADATA = "video_metadata" # Video + metadata, no bounding boxes
+    VIDEO_BOXES = "video_boxes"       # Video with bounding boxes + metadata (default)
 
 
 class Settings(BaseSettings):
@@ -23,12 +33,30 @@ class Settings(BaseSettings):
     turn_password: Optional[str] = Field(default=None, description="TURN password")
 
     # Detection configuration
-    model_path: str = Field(default="../../../../shared/models/yolov8n.pt", description="YOLOv8 model path")
+    model_path: str = Field(
+        default="../../../../shared/models/yolov8n.pt",
+        description="YOLOv8 model path (use REALTIME_MODEL_PATH env var)",
+        alias="realtime_model_path"
+    )
     confidence_threshold: float = Field(
-        default=0.5, ge=0.0, le=1.0, description="Detection confidence threshold"
+        default=0.5, ge=0.0, le=1.0,
+        description="Detection confidence threshold (legacy, use detection_confidence_threshold for tracking)"
     )
     iou_threshold: float = Field(
         default=0.45, ge=0.0, le=1.0, description="NMS IOU threshold"
+    )
+
+    # Two-tier confidence system for tracking
+    two_tier_confidence_enabled: bool = Field(
+        default=True, description="Enable two-tier confidence filtering with tracking"
+    )
+    detection_confidence_threshold: float = Field(
+        default=0.25, ge=0.0, le=1.0,
+        description="YOLO output threshold - lower to capture potential track matches"
+    )
+    new_track_confidence_threshold: float = Field(
+        default=0.5, ge=0.0, le=1.0,
+        description="Minimum confidence to START a new track (higher = stricter)"
     )
     frame_skip: int = Field(
         default=1, ge=1, description="Process every Nth frame (1 = every frame)"
@@ -43,7 +71,55 @@ class Settings(BaseSettings):
         default=True, description="Automatically scale down high-res frames for detection"
     )
     draw_on_frame: bool = Field(
-        default=True, description="Draw bounding boxes directly on video frames"
+        default=True, description="Draw bounding boxes directly on video frames (deprecated, use camera_interface_mode)"
+    )
+
+    # Object tracking configuration
+    enable_tracking: bool = Field(
+        default=True, description="Enable object tracking for persistent IDs across frames"
+    )
+    track_activation_threshold: float = Field(
+        default=0.25, ge=0.0, le=1.0,
+        description="ByteTrack internal threshold - should match detection_confidence_threshold"
+    )
+    lost_track_buffer: int = Field(
+        default=30, ge=1, le=120,
+        description="Number of frames to keep lost tracks before deletion"
+    )
+    minimum_matching_threshold: float = Field(
+        default=0.7, ge=0.0, le=1.0,
+        description="Minimum IOU for matching detections to tracks (higher = stricter)"
+    )
+    track_history_length: int = Field(
+        default=10, ge=1, le=30,
+        description="Number of frames to use for temporal smoothing"
+    )
+
+    # Confidence boosting for stable tracks
+    confidence_boost_enabled: bool = Field(
+        default=True, description="Enable confidence boosting for stable tracked objects"
+    )
+    max_confidence_boost: float = Field(
+        default=0.15, ge=0.0, le=0.5,
+        description="Maximum confidence boost for stable tracks (linear ramp over 30 frames)"
+    )
+
+    # Interface mode configuration
+    camera_interface_mode: InterfaceMode = Field(
+        default=InterfaceMode.VIDEO_BOXES,
+        description="Default camera interface mode for all cameras"
+    )
+    camera1_interface_mode: Optional[InterfaceMode] = Field(
+        default=None, description="Camera 1 interface mode override"
+    )
+    camera2_interface_mode: Optional[InterfaceMode] = Field(
+        default=None, description="Camera 2 interface mode override"
+    )
+    camera3_interface_mode: Optional[InterfaceMode] = Field(
+        default=None, description="Camera 3 interface mode override"
+    )
+    camera4_interface_mode: Optional[InterfaceMode] = Field(
+        default=None, description="Camera 4 interface mode override"
     )
 
     # Camera sources
@@ -62,6 +138,26 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")
+
+    def get_interface_mode(self, camera_id: str) -> InterfaceMode:
+        """
+        Get the interface mode for a specific camera.
+
+        Args:
+            camera_id: Camera identifier (e.g., "camera1", "camera2")
+
+        Returns:
+            InterfaceMode for the specified camera (per-camera override or default)
+        """
+        # Check for per-camera override
+        override_attr = f"{camera_id}_interface_mode"
+        if hasattr(self, override_attr):
+            override = getattr(self, override_attr)
+            if override is not None:
+                return override
+
+        # Fall back to default
+        return self.camera_interface_mode
 
     class Config:
         # Use root .env file (project-wide configuration)

@@ -7,15 +7,18 @@
  *  * Real-time camera status monitoring service via WebSocket.
  * Broadcasts camera status changes (online, offline, error) to subscribed clients.
  * Requires JWT authentication.
- * 
+ *
  */
 
+import { SecureStorage } from '@/utils/storage'
+import { config } from '@/config/environment'
+
 export interface CameraStatusWebSocketClientOptions {
-  /** WebSocket server host (default: localhost:3002) */
+  /** WebSocket server host (default: from config) */
   host?: string;
   /** Use secure WebSocket (wss://) instead of ws:// */
   secure?: boolean;
-  /** JWT authentication token */
+  /** JWT authentication token (auto-retrieved from storage if not provided) */
   token?: string;
   /** Auto-reconnect on disconnect */
   autoReconnect?: boolean;
@@ -62,10 +65,13 @@ export class CameraStatusWebSocketClient {
   private reconnectTimer: NodeJS.Timeout | null = null;
 
   constructor(options: CameraStatusWebSocketClientOptions = {}) {
+    // Extract host from config URL (remove protocol)
+    const defaultHost = config.wsCameraStatusUrl.replace(/^wss?:\/\//, '')
+
     this.options = {
-      host: options.host || 'localhost:3002',
-      secure: options.secure ?? false,
-      token: options.token || '',
+      host: options.host || defaultHost,
+      secure: options.secure ?? config.wsCameraStatusUrl.startsWith('wss://'),
+      token: options.token || SecureStorage.getToken() || '',
       autoReconnect: options.autoReconnect ?? true,
       reconnectInterval: options.reconnectInterval || 5000,
       maxReconnectAttempts: options.maxReconnectAttempts || 0,

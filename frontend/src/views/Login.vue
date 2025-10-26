@@ -3,7 +3,7 @@
     <div class="w-full max-w-md p-8 space-y-6">
       <!-- Logo -->
       <div class="flex justify-center mb-8">
-        <img src="/axis.png" alt="AXIS" class="h-12" />
+        <!-- <img src="/axis.png" alt="AXIS" class="h-12" /> -->
       </div>
 
       <!-- Title -->

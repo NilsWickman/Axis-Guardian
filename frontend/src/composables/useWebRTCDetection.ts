@@ -108,7 +108,6 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     try {
       // Prevent multiple simultaneous connections
       if (peerConnection.value || isReconnecting.value) {
-        console.log('[WebRTC] Already connecting or connected, aborting')
         return
       }
 
@@ -135,8 +134,6 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
         connectionState.value = pc.connectionState
         isConnected.value = pc.connectionState === 'connected'
 
-        console.log(`[WebRTC] Connection state: ${pc.connectionState}`)
-
         // Toast notifications for connection state changes
         if (pc.connectionState === 'connected') {
           toast.success(`Camera ${cameraId} connected`, 3000)
@@ -151,14 +148,11 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
       // Handle ICE candidates
       pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          console.log('[WebRTC] ICE candidate:', event.candidate.candidate)
-        }
+        // ICE candidates being gathered
       }
 
       // Handle incoming tracks (video)
       pc.ontrack = (event) => {
-        console.log('[WebRTC] Received track:', event.track.kind)
         if (event.track.kind === 'video' && videoEl) {
           videoEl.srcObject = event.streams[0]
 
@@ -199,7 +193,6 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
       // Handle data channel from server (fallback)
       pc.ondatachannel = (event) => {
-        console.log('[WebRTC] Data channel received from server:', event.channel.label)
         event.channel.binaryType = 'arraybuffer' // Set binary type for MessagePack
         setupDataChannel(event.channel)
       }
@@ -295,8 +288,6 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
       // Set remote description (answer)
       await pc.setRemoteDescription(new RTCSessionDescription(answer))
-
-      console.log('[WebRTC] Connection established')
 
       // Reset reconnect attempts on successful connection
       reconnectAttempts.value = 0
@@ -410,13 +401,11 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     dataChannel.value = channel
 
     channel.onopen = () => {
-      console.log('[WebRTC] Data channel opened')
       isDataChannelOpen.value = true
       toast.success(`Data channel for ${cameraId} ready`, 2000)
     }
 
     channel.onclose = () => {
-      console.log('[WebRTC] Data channel closed')
       isDataChannelOpen.value = false
     }
 
@@ -591,8 +580,6 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
    * Disconnect and cleanup
    */
   function disconnect(): void {
-    console.log('[WebRTC] Disconnecting...')
-
     // Clear reconnect timer
     if (reconnectTimer.value !== null) {
       clearTimeout(reconnectTimer.value)

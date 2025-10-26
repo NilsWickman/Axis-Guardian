@@ -1,0 +1,265 @@
+version: '3.8'
+
+###############################################
+# Axis Guardian - Development Environment
+#
+# Complete development stack with monitoring
+#
+# Usage:
+#   docker-compose -f docker-compose.dev.yml up
+#
+# Services:
+#   - PostgreSQL (port 5432)
+#   - MediaMTX (ports 8554, 8888, 8889, 9997)
+#   - Prometheus (port 9090)
+#   - Grafana (port 3000)
+#   - Node Exporter (port 9100)
+#
+# Note: WebRTC and VAPIX services run outside Docker
+#       for easier development iteration
+###############################################
+
+networks:
+  axis-guardian:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+
+volumes:
+  postgres_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  mediamtx_recordings:
+    driver: local
+
+services:
+  ###############################################
+  # Database
+  ###############################################
+  postgres:
+    image: postgres:15-alpine
+    container_name: axis-guardian-postgres
+    restart: unless-stopped
+    networks:
+      axis-guardian:
+        ipv4_address: 172.25.0.10
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-surveillance}
+      POSTGRES_USER: ${POSTGRES_USER:-dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dev}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  ###############################################
+  # MediaMTX - RTSP/WebRTC/HLS Media Server
+  ###############################################
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: axis-guardian-mediamtx
+    restart: unless-stopped
+    networks:
+      axis-guardian:
+        ipv4_address: 172.25.0.20
+    ports:
+      - "8554:8554"     # RTSP
+      - "8888:8888"     # HLS
+      - "8889:8889"     # WebRTC
+      - "9997:9997"     # API
+      - "9998:9998"     # Metrics
+    volumes:
+      - ./simulation/mediamtx/mediamtx.yml:/mediamtx.yml:ro
+      - mediamtx_recordings:/recordings
+    environment:
+      MTX_PROTOCOLS: "tcp"
+      MTX_RTSPADDRESS: ":8554"
+      MTX_HLSADDRESS: ":8888"
+      MTX_WEBRTCADDRESS: ":8889"
+      MTX_APIADDRESS: ":9997"
+      MTX_METRICSADDRESS: ":9998"
+      MTX_LOGDESTINATIONS: "stdout"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9997/v3/config/global/get"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  ###############################################
+  # Prometheus - Metrics Collection
+  ###############################################
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: axis-guardian-prometheus
+    restart: unless-stopped
+    networks:
+      axis-guardian:
+        ipv4_address: 172.25.0.30
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts:/etc/prometheus/alerts:ro
+      - prometheus_data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  ###############################################
+  # Grafana - Monitoring Dashboards
+  ###############################################
+  grafana:
+    image: grafana/grafana:latest
+    container_name: axis-guardian-grafana
+    restart: unless-stopped
+    networks:
+      axis-guardian:
+        ipv4_address: 172.25.0.40
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: ""
+      GF_SERVER_ROOT_URL: http://localhost:3000
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_DEFAULT_THEME: dark
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/camera-overview.json
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  ###############################################
+  # Node Exporter - System Metrics
+  ###############################################
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: axis-guardian-node-exporter
+    restart: unless-stopped
+    networks:
+      axis-guardian:
+        ipv4_address: 172.25.0.50
+    ports:
+      - "9100:9100"
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/host'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host:ro,rslave
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9100/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  ###############################################
+  # Redis - Caching & Session Store (Optional)
+  ###############################################
+  redis:
+    image: redis:7-alpine
+    container_name: axis-guardian-redis
+    restart: unless-stopped
+    networks:
+      axis-guardian:
+        ipv4_address: 172.25.0.60
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-devpassword}
+    volumes:
+      - ./data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+###############################################
+# Service Status Summary
+###############################################
+# After starting, access:
+#
+# Grafana:      http://localhost:3000
+#   - Username: admin
+#   - Password: admin (change on first login)
+#   - Dashboards: Axis Guardian > Camera Overview
+#
+# Prometheus:   http://localhost:9090
+#   - Query UI for metrics exploration
+#   - Alerts: http://localhost:9090/alerts
+#
+# MediaMTX API: http://localhost:9997/v3/config/global/get
+#   - List streams: http://localhost:9997/v3/paths/list
+#
+# PostgreSQL:   localhost:5432
+#   - Database: surveillance
+#   - User: dev / Password: dev
+#
+# Node Metrics: http://localhost:9100/metrics
+#
+# Redis:        localhost:6379
+#   - Password: devpassword
+###############################################

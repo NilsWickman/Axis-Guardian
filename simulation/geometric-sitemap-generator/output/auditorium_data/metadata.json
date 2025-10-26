@@ -1,0 +1,18 @@
+{
+  "num_cameras": 4,
+  "camera_ids": [
+    "camera1",
+    "camera2",
+    "camera3",
+    "camera4"
+  ],
+  "origin_gps": [
+    36.00321227620837,
+    -78.93988228103247,
+    111.35249999999999
+  ],
+  "ground_level": 109.39999999999999,
+  "grid_resolution": 0.05,
+  "num_walls": 0,
+  "total_wall_length": 0.0
+}

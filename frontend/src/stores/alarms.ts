@@ -1,19 +1,88 @@
 // Active alarms store
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import type { Alarm } from '../types/generated'
-import { mockAlarms, acknowledgeMockAlarm } from '../mocks/data'
+import { ref, computed, onUnmounted } from 'vue'
+import type { Alarm, AlarmSeverity } from '../types/generated'
+import type { ApiError } from '../types/errors'
+import { alarmService } from '../api/services/alarmService'
+import { AlarmWebSocketClient } from '../api/websocket/alarm'
+import { config } from '../config/environment'
+
+// WebSocket client instance
+const wsClient = new AlarmWebSocketClient()
 
 export const useAlarmStore = defineStore('alarms', () => {
   // State
-  const alarms = ref<Alarm[]>([...mockAlarms])
+  const alarms = ref<Alarm[]>([])
   const loading = ref(false)
-  const error = ref<string | null>(null)
+  const error = ref<ApiError | null>(null)
+  const wsConnected = ref(false)
 
   // Filters
   const filters = ref({
-    severity: '' as Alarm['severity'] | '',
+    severity: '' as AlarmSeverity | '',
     acknowledged: '' as 'true' | 'false' | '',
+  })
+
+  // WebSocket event handlers
+  function initWebSocket() {
+    // Only connect WebSocket when not in mock mode
+    if (config.useMockData) {
+      console.log('Alarm WebSocket: Skipping connection (mock mode enabled)')
+      return
+    }
+
+    wsClient.on('alarm.new', (alarm: Alarm) => {
+      // Add new alarm to the beginning of the list
+      alarms.value.unshift(alarm)
+    })
+
+    wsClient.on('alarm.acknowledged', (data: { id: string; acknowledgedBy: string; acknowledgedAt: string }) => {
+      const alarm = alarms.value.find((a) => a.id === data.id)
+      if (alarm) {
+        alarm.acknowledged = true
+        alarm.acknowledgedBy = data.acknowledgedBy
+        alarm.acknowledgedAt = data.acknowledgedAt
+        if (alarm.status === 'pending') {
+          alarm.status = 'acknowledged'
+        }
+      }
+    })
+
+    wsClient.on('alarm.resolved', (data: { id: string }) => {
+      const index = alarms.value.findIndex((a) => a.id === data.id)
+      if (index !== -1) {
+        alarms.value.splice(index, 1)
+      }
+    })
+
+    wsClient.on('connected', () => {
+      wsConnected.value = true
+      console.log('Alarm WebSocket connected')
+    })
+
+    wsClient.on('disconnected', () => {
+      wsConnected.value = false
+      console.log('Alarm WebSocket disconnected')
+    })
+
+    wsClient.on('error', (err) => {
+      console.error('Alarm WebSocket error:', err)
+    })
+
+    // Connect to WebSocket
+    wsClient.connect().catch((err) => {
+      console.error('Failed to connect to Alarm WebSocket:', err)
+    })
+  }
+
+  // Initialize WebSocket on store creation
+  initWebSocket()
+
+  // Cleanup on unmount
+  onUnmounted(() => {
+    if (!config.useMockData) {
+      wsClient.disconnect()
+    }
   })
 
   // Getters
@@ -52,15 +121,9 @@ export const useAlarmStore = defineStore('alarms', () => {
     loading.value = true
     error.value = null
     try {
-      // Simulate API call delay
-      await new Promise((resolve) => setTimeout(resolve, 300))
-      let result = [...mockAlarms]
-      if (options?.limit) {
-        result = result.slice(0, options.limit)
-      }
-      alarms.value = result
+      alarms.value = await alarmService.getAlarms({ limit: options?.limit })
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to fetch alarms'
+      error.value = err as ApiError
       throw err
     } finally {
       loading.value = false
@@ -69,23 +132,14 @@ export const useAlarmStore = defineStore('alarms', () => {
 
   async function acknowledgeAlarm(alarmId: string, acknowledgedBy: string) {
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 200))
-
-      const alarm = alarms.value.find((a) => a.id === alarmId)
-      if (alarm) {
-        alarm.acknowledged = true
-        alarm.acknowledgedBy = acknowledgedBy
-        alarm.acknowledgedAt = new Date().toISOString()
-        if (alarm.status === 'pending') {
-          alarm.status = 'acknowledged'
-        }
+      const updatedAlarm = await alarmService.acknowledgeAlarm(alarmId, { acknowledgedBy })
+      // Update local state
+      const index = alarms.value.findIndex((a) => a.id === alarmId)
+      if (index !== -1) {
+        alarms.value[index] = updatedAlarm
       }
-
-      // Also update in mock data
-      acknowledgeMockAlarm(alarmId, acknowledgedBy)
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to acknowledge alarm'
+      error.value = err as ApiError
       throw err
     }
   }
@@ -100,26 +154,14 @@ export const useAlarmStore = defineStore('alarms', () => {
     }
   ) {
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 200))
-
-      const alarm = alarms.value.find((a) => a.id === alarmId)
-      if (alarm) {
-        alarm.status = 'confirmed'
-        alarm.confirmedBy = confirmedBy
-        alarm.confirmedAt = new Date().toISOString()
-        if (data.outcomeCategory) {
-          alarm.outcomeCategory = data.outcomeCategory as any
-        }
-        if (data.notes) {
-          alarm.closureNotes = data.notes
-        }
-        if (data.createIncident !== false) {
-          alarm.incidentId = `incident-${Date.now()}`
-        }
+      const updatedAlarm = await alarmService.confirmAlarm(alarmId, { confirmedBy, ...data })
+      // Update local state
+      const index = alarms.value.findIndex((a) => a.id === alarmId)
+      if (index !== -1) {
+        alarms.value[index] = updatedAlarm
       }
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to confirm alarm'
+      error.value = err as ApiError
       throw err
     }
   }
@@ -134,24 +176,19 @@ export const useAlarmStore = defineStore('alarms', () => {
     }
   ) {
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 200))
-
-      const alarm = alarms.value.find((a) => a.id === alarmId)
-      if (alarm) {
-        alarm.status = 'dismissed'
-        alarm.dismissedBy = dismissedBy
-        alarm.dismissedAt = new Date().toISOString()
-        alarm.dismissalReason = data.reason
-        if (data.outcomeCategory) {
-          alarm.outcomeCategory = data.outcomeCategory as any
-        }
-        if (data.closureNotes) {
-          alarm.closureNotes = data.closureNotes
-        }
+      const updatedAlarm = await alarmService.dismissAlarm(alarmId, {
+        dismissedBy,
+        reason: data.reason,
+        outcomeCategory: data.outcomeCategory,
+        notes: data.closureNotes,
+      })
+      // Update local state
+      const index = alarms.value.findIndex((a) => a.id === alarmId)
+      if (index !== -1) {
+        alarms.value[index] = updatedAlarm
       }
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to dismiss alarm'
+      error.value = err as ApiError
       throw err
     }
   }

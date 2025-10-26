@@ -1,21 +1,84 @@
 // Detection events store
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import type { Detection, Track } from '../types/generated'
-import { mockDetections, mockTracks, addMockDetection, getDetectionsByCameraId } from '../mocks/data'
+import type { ApiError } from '../types/errors'
+import { detectionService } from '../api/services/detectionService'
+import { DetectionWebSocketClient } from '../api/websocket/detection'
+import { config } from '../config/environment'
+
+// WebSocket client instance
+const wsClient = new DetectionWebSocketClient()
 
 export const useDetectionStore = defineStore('detections', () => {
   // State
-  const detections = ref<Detection[]>([...mockDetections])
-  const tracks = ref<Track[]>([...mockTracks])
+  const detections = ref<Detection[]>([])
+  const tracks = ref<Track[]>([])
   const loading = ref(false)
-  const error = ref<string | null>(null)
+  const error = ref<ApiError | null>(null)
+  const wsConnected = ref(false)
 
   // Filters
   const filters = ref({
     cameraId: '',
     type: '' as Detection['type'] | '',
     minConfidence: 0,
+  })
+
+  // WebSocket event handlers
+  function initWebSocket() {
+    // Only connect WebSocket when not in mock mode
+    if (config.useMockData) {
+      console.log('Detection WebSocket: Skipping connection (mock mode enabled)')
+      return
+    }
+
+    wsClient.on('detection.new', (detection: Detection) => {
+      // Add new detection to the beginning of the list
+      detections.value.unshift(detection)
+      // Keep only last 1000 detections in memory
+      if (detections.value.length > 1000) {
+        detections.value = detections.value.slice(0, 1000)
+      }
+    })
+
+    wsClient.on('track.update', (track: Track) => {
+      const index = tracks.value.findIndex((t) => t.trackId === track.trackId)
+      if (index !== -1) {
+        tracks.value[index] = track
+      } else {
+        tracks.value.push(track)
+      }
+    })
+
+    wsClient.on('connected', () => {
+      wsConnected.value = true
+      console.log('Detection WebSocket connected')
+    })
+
+    wsClient.on('disconnected', () => {
+      wsConnected.value = false
+      console.log('Detection WebSocket disconnected')
+    })
+
+    wsClient.on('error', (err) => {
+      console.error('Detection WebSocket error:', err)
+    })
+
+    // Connect to WebSocket
+    wsClient.connect().catch((err) => {
+      console.error('Failed to connect to Detection WebSocket:', err)
+    })
+  }
+
+  // Initialize WebSocket on store creation
+  initWebSocket()
+
+  // Cleanup on unmount
+  onUnmounted(() => {
+    if (!config.useMockData) {
+      wsClient.disconnect()
+    }
   })
 
   // Getters
@@ -53,47 +116,47 @@ export const useDetectionStore = defineStore('detections', () => {
     loading.value = true
     error.value = null
     try {
-      // Simulate API call delay
-      await new Promise((resolve) => setTimeout(resolve, 300))
-
-      let result = [...mockDetections]
-
-      if (options?.cameraId) {
-        result = result.filter((d) => d.cameraId === options.cameraId)
-      }
-
-      if (options?.limit) {
-        result = result.slice(0, options.limit)
-      }
-
-      detections.value = result
+      detections.value = await detectionService.getDetections({
+        cameraId: options?.cameraId,
+        limit: options?.limit,
+      })
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to fetch detections'
+      error.value = err as ApiError
       throw err
     } finally {
       loading.value = false
     }
   }
 
-  async function fetchTracks() {
+  async function fetchTracks(cameraId?: string) {
     loading.value = true
     error.value = null
     try {
-      // Simulate API call delay
-      await new Promise((resolve) => setTimeout(resolve, 300))
-      tracks.value = [...mockTracks]
+      tracks.value = await detectionService.getTracks({ cameraId })
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to fetch tracks'
+      error.value = err as ApiError
       throw err
     } finally {
       loading.value = false
     }
   }
 
-  function addDetection(detection: Omit<Detection, 'id' | 'timestamp'>) {
-    const newDetection = addMockDetection(detection)
-    detections.value.unshift(newDetection)
-    return newDetection
+  async function fetchDetectionStats(cameraId?: string) {
+    try {
+      return await detectionService.getDetectionStats({ cameraId })
+    } catch (err) {
+      error.value = err as ApiError
+      throw err
+    }
+  }
+
+  function addDetection(detection: Detection) {
+    detections.value.unshift(detection)
+    // Keep only last 1000 detections
+    if (detections.value.length > 1000) {
+      detections.value = detections.value.slice(0, 1000)
+    }
+    return detection
   }
 
   function getDetectionsByCameraIdFromStore(cameraId: string): Detection[] {

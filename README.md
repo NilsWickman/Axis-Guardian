@@ -474,6 +474,9 @@ make cleanup-ports
 - ✅ OpenAPI schema validation and type generation
 - ✅ Code quality tooling (ESLint, Prettier)
 
+https://www.google.com/maps/place/Kenneth+T.+Schiciano+Auditorium/@36.0031562,-78.9402752,20z/data=!4m15!1m8!3m7!1s0x89ace6ae2705c505:0xebe4fa6e621cb48d!2sFitzpatrick+Center+for+Interdisciplinary+Engineering,+Medicine+and+Applied+Sciences,+101+Science+Dr,+Durham,+NC+27705,+USA!3b1!8m2!3d36.0031501!4d-78.9406158!16zL20vMDcxOGpu!3m5!1s0x89ace6ae28a429ff:0x8af9fbe8a399ac5!8m2!3d36.003224!4d-78.9398414!16s%2Fg%2F11c464q5_g?entry=ttu&g_ep=EgoyMDI1MTAyMi4wIKXMDSoASAFQAw%3D%3D
+101 Science Drive, Research Dr, Durham, NC 27708, United States
+
 ## License
 
 MIT License

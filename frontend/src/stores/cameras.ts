@@ -2,14 +2,15 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Camera } from '../types/generated'
-import { mockCameras, getCameraById, getCamerasByStatus } from '../mocks/data'
+import type { ApiError } from '../types/errors'
+import { cameraService } from '../api/services/cameraService'
 
 export const useCameraStore = defineStore('cameras', () => {
   // State
-  const cameras = ref<Camera[]>([...mockCameras])
+  const cameras = ref<Camera[]>([])
   const selectedCameraId = ref<string | null>(null)
   const loading = ref(false)
-  const error = ref<string | null>(null)
+  const error = ref<ApiError | null>(null)
 
   // Getters
   const onlineCameras = computed(() => cameras.value.filter((c) => c.status === 'online'))
@@ -37,11 +38,9 @@ export const useCameraStore = defineStore('cameras', () => {
     loading.value = true
     error.value = null
     try {
-      // Simulate API call delay
-      await new Promise((resolve) => setTimeout(resolve, 300))
-      cameras.value = [...mockCameras]
+      cameras.value = await cameraService.getCameras()
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to fetch cameras'
+      error.value = err as ApiError
       throw err
     } finally {
       loading.value = false

@@ -63,7 +63,7 @@ torch.load = _patched_torch_load
 
 
 # Configuration
-DEFAULT_MODEL = "yolov8n.pt"
+DEFAULT_MODEL = os.getenv("PRERENDER_MODEL_PATH", "shared/models/yolov8x.pt")
 DEFAULT_CONFIDENCE = 0.5
 DEFAULT_IOU = 0.45
 DEFAULT_INFERENCE_SIZE = 640
@@ -394,7 +394,7 @@ class DetectionRenderer:
             "format_version": "2.0",  # Version for backwards compatibility checking
             "video_info": video_info,
             "detection_config": {
-                "model": "yolov8n",
+                "model": os.path.basename(DEFAULT_MODEL),
                 "confidence_threshold": self.confidence,
                 "iou_threshold": self.iou,
                 "inference_size": self.inference_size,
@@ -819,14 +819,6 @@ Examples:
             logger.info(f"  - {video.name}")
         return
 
-    # Create renderer
-    renderer = DetectionRenderer(
-        model_path=args.model,
-        confidence=args.confidence,
-        iou=args.iou,
-        inference_size=args.inference_size,
-    )
-
     # Batch processing
     if args.batch_all:
         videos = list_source_videos()
@@ -838,7 +830,7 @@ Examples:
 
         logger.info(f"Found {len(videos)} source videos in {SOURCE_VIDEOS_DIR}")
 
-        # Check which videos need processing
+        # Check which videos need processing BEFORE loading the model
         videos_to_process = []
         videos_skipped = []
 
@@ -858,6 +850,14 @@ Examples:
             logger.info("\n✓ All videos are already pre-rendered!")
             logger.info(f"Rendered videos: {RENDERED_VIDEOS_DIR}")
             return
+
+        # Create renderer for batch processing
+        renderer = DetectionRenderer(
+            model_path=args.model,
+            confidence=args.confidence,
+            iou=args.iou,
+            inference_size=args.inference_size,
+        )
 
         logger.info(f"\nProcessing {len(videos_to_process)} videos...")
 
@@ -891,7 +891,7 @@ Examples:
         logger.info(f"  Output: {RENDERED_VIDEOS_DIR}")
         return
 
-    # Single video processing
+    # Single video processing - validate BEFORE loading model
     if not args.input:
         parser.print_help()
         logger.error("\nError: --input required (or use --batch-all)")
@@ -914,6 +914,20 @@ Examples:
     else:
         output_name = input_path.stem + "-rendered.mp4"
         output_path = RENDERED_VIDEOS_DIR / output_name
+
+    # Check if already rendered (unless --force)
+    if not args.force and not check_if_needs_rerendering(input_path):
+        logger.info(f"✓ Video already rendered: {output_path}")
+        logger.info("Use --force to re-render")
+        return
+
+    # Now create renderer since we have work to do
+    renderer = DetectionRenderer(
+        model_path=args.model,
+        confidence=args.confidence,
+        iou=args.iou,
+        inference_size=args.inference_size,
+    )
 
     # Process video
     try:

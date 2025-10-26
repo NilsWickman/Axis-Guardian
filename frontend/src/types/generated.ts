@@ -42,15 +42,42 @@ export interface Velocity {
 }
 
 // Alarm Types
+export type AlarmStatus = 'pending' | 'acknowledged' | 'confirmed' | 'dismissed' | 'archived'
+export type AlarmType = 'intrusion' | 'loitering' | 'line_crossing' | 'zone_violation' | 'abandoned_object'
+export type AlarmSeverity = 'low' | 'medium' | 'high' | 'critical'
+export type OutcomeCategory = 'incident_created' | 'false_alarm' | 'authorized_personnel' | 'other'
+
 export interface Alarm {
   id: string
   timestamp: string
-  type: 'intrusion' | 'loitering' | 'line_crossing' | 'zone_violation' | 'abandoned_object'
-  severity: 'low' | 'medium' | 'high' | 'critical'
+  type?: AlarmType
+  severity: AlarmSeverity
   source: AlarmSource
+
+  // Acknowledgement
   acknowledged: boolean
   acknowledgedBy?: string
   acknowledgedAt?: string
+
+  // Status and lifecycle
+  status?: AlarmStatus
+
+  // Confirmation
+  confirmedBy?: string
+  confirmedAt?: string
+
+  // Dismissal
+  dismissedBy?: string
+  dismissedAt?: string
+  dismissalReason?: string
+
+  // Closure
+  outcomeCategory?: OutcomeCategory
+  closureNotes?: string
+  incidentId?: string
+
+  // Metadata
+  tags?: string[]
 }
 
 export interface AlarmSource {
@@ -58,6 +85,9 @@ export interface AlarmSource {
   zoneId: string
   trackId?: string
   snapshot?: string
+  snapshots?: string[]
+  videoUrl?: string
+  coordinates?: { x: number; y: number }
 }
 
 // Camera Types

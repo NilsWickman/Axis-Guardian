@@ -1,0 +1,73 @@
+# Auditorium site configuration with REAL GPS coordinates
+
+cameras:
+  - id: camera1  # view-HC3
+    # Real GPS coordinates
+    gps: [36.00329921236863, -78.93988946164441, 111.08]  # lat, lon, elevation (109.4m base + 1.68m height)
+    mount_height: 1.68  # z coordinate from scene_metadata.xml
+    orientation:
+      pan: 18.0      # Azimuth from metadata
+      tilt: 1.0      # Elevation from metadata
+      roll: 0.0
+    intrinsics:
+      focal_length: 4.0
+      sensor_size: [0.357, 0.357]  # 1/2.8" sensor
+      resolution: [1920, 1080]
+      fov: [92.0, 50.0]
+    image_path: "sample_images/camera1.jpg"
+    # Metadata reference
+    local_position: [16.22, 0.3, 1.68]
+
+  - id: camera2  # view-HC4
+    # Real GPS coordinates
+    gps: [36.00321914848441, -78.93971507535433, 111.07]  # lat, lon, elevation (109.4m base + 1.67m height)
+    mount_height: 1.67  # z coordinate from metadata
+    orientation:
+      pan: 313.0     # Azimuth (NW direction)
+      tilt: -5.0     # Elevation (looking down 5 degrees)
+      roll: 0.0
+    intrinsics:
+      focal_length: 4.0
+      sensor_size: [0.357, 0.357]
+      resolution: [1920, 1080]
+      fov: [92.0, 50.0]
+    image_path: "sample_images/camera2.jpg"
+    local_position: [0.9, 0.5, 1.67]
+
+  - id: camera3  # view-IP2
+    # Real GPS coordinates
+    gps: [36.003138462125385, -78.94001529332041, 112.02]  # lat, lon, elevation (109.4m base + 2.62m height)
+    mount_height: 2.62  # z coordinate from metadata
+    orientation:
+      pan: 140.0     # Azimuth (SE direction)
+      tilt: -9.0     # Elevation (looking down 9 degrees)
+      roll: 0.0
+    intrinsics:
+      focal_length: 4.0
+      sensor_size: [0.357, 0.357]
+      resolution: [1920, 1080]
+      fov: [92.0, 50.0]
+    image_path: "sample_images/camera3.jpg"
+    local_position: [20.60, 28.31, 2.62]
+
+  - id: camera4  # view-IP5
+    # Real GPS coordinates
+    gps: [36.00319228185505, -78.93990929381074, 111.24]  # lat, lon, elevation (109.4m base + 1.84m height)
+    mount_height: 1.84  # z coordinate from metadata
+    orientation:
+      pan: 339.0     # Azimuth (NNW direction)
+      tilt: 0.0      # Elevation (looking at horizon)
+      roll: 0.0
+    intrinsics:
+      focal_length: 4.0
+      sensor_size: [0.357, 0.357]
+      resolution: [1920, 1080]
+      fov: [92.0, 50.0]
+    image_path: "sample_images/camera4.jpg"
+    local_position: [10.57, 16.31, 1.84]
+
+generation:
+  grid_resolution: 0.05         # 5cm cells for indoor precision
+  min_wall_length: 0.3          # Smaller threshold for indoor walls
+  confidence_threshold: 0.3     # Lower threshold for indoor scenes
+  semantic_model: "nvidia/segformer-b0-finetuned-ade-512-512"  # Fastest model

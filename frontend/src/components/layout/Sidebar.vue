@@ -12,6 +12,7 @@
     Cctv,
     Users,
     Map,
+    MapPin,
     Bell,
     Settings,
     Archive,
@@ -55,7 +56,7 @@
   const navigationItems = computed<NavigationItem[]>(() => {
     const items: NavigationItem[] = [
       {
-        name: 'Camera View',
+        name: 'Video',
         path: '/cameras/focus',
         icon: Focus,
       },
@@ -73,6 +74,11 @@
         name: 'Site Map',
         path: '/site-config',
         icon: Map,
+      },
+      {
+        name: 'Generated Map',
+        path: '/generated-site-map',
+        icon: MapPin,
       },
       {
         name: 'Alarms',
@@ -158,7 +164,7 @@
   >
     <!-- Header -->
     <div class="p-6 border-b border-sidebar-border flex items-center justify-center">
-      <img src="/axis.png" alt="AXIS" class="h-8" />
+      <!-- <img src="/axis.png" alt="AXIS" class="h-8" /> -->
     </div>
 
     <!-- Navigation Items -->

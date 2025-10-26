@@ -34,28 +34,30 @@ const cameras = ref<Camera[]>([
   { id: 'camera4', name: 'Camera 4 - Auditorium IP5' }
 ])
 
+// Video synchronization state
+let syncMonitorInterval: number | null = null
+const SYNC_CHECK_INTERVAL = 2000 // Check sync every 2 seconds
+const MAX_SYNC_DRIFT = 0.5 // Maximum allowed drift in seconds before correction (reduced from 1.0)
+const SYNC_ENABLED = true // Enable/disable sync monitoring
+let syncCorrectionCount = 0 // Track number of corrections for debugging
+
 /**
  * Initialize all camera connections in the background
  * This is called automatically on first use
  */
 async function initializeConnections() {
   if (isInitialized.value || isInitializing.value) {
-    console.log('[ConnectionManager] Already initialized or initializing')
     return
   }
 
   isInitializing.value = true
-  console.log('[ConnectionManager] Initializing all camera connections...')
 
   try {
     // Create connections for all cameras
     await Promise.all(cameras.value.map(async (camera) => {
       if (cameraConnections[camera.id]) {
-        console.log(`[ConnectionManager] Connection for ${camera.id} already exists`)
         return
       }
-
-      console.log(`[ConnectionManager] Creating connection for ${camera.id}`)
 
       // Create a hidden video element for this connection
       const videoElement = document.createElement('video')
@@ -94,15 +96,18 @@ async function initializeConnections() {
       // Connect WebRTC
       try {
         await connection.connect(videoElement)
-        console.log(`[ConnectionManager] ✓ Connected ${camera.id}`)
       } catch (error) {
-        console.error(`[ConnectionManager] ✗ Failed to connect ${camera.id}:`, error)
+        console.error(`[ConnectionManager] Failed to connect ${camera.id}:`, error)
         clearInterval(stateInterval)
       }
     }))
 
     isInitialized.value = true
-    console.log('[ConnectionManager] All cameras initialized and ready')
+
+    // Start video synchronization monitoring
+    if (SYNC_ENABLED) {
+      startSyncMonitoring()
+    }
   } catch (error) {
     console.error('[ConnectionManager] Failed to initialize connections:', error)
   } finally {
@@ -139,7 +144,6 @@ function getVideoStream(cameraId: string): MediaStream | null {
 function attachToVideoElement(cameraId: string, videoElement: HTMLVideoElement): boolean {
   const stream = getVideoStream(cameraId)
   if (!stream) {
-    console.warn(`[ConnectionManager] No stream available for ${cameraId}`)
     return false
   }
 
@@ -169,10 +173,108 @@ function getConnectionStatuses(): Record<string, boolean> {
 }
 
 /**
+ * Start monitoring video synchronization across all cameras
+ */
+function startSyncMonitoring() {
+  if (syncMonitorInterval !== null) {
+    return // Already monitoring
+  }
+
+  console.log('[ConnectionManager] Starting video synchronization monitoring')
+
+  syncMonitorInterval = window.setInterval(() => {
+    synchronizeVideos()
+  }, SYNC_CHECK_INTERVAL)
+}
+
+/**
+ * Stop monitoring video synchronization
+ */
+function stopSyncMonitoring() {
+  if (syncMonitorInterval !== null) {
+    clearInterval(syncMonitorInterval)
+    syncMonitorInterval = null
+    console.log('[ConnectionManager] Stopped video synchronization monitoring')
+  }
+}
+
+/**
+ * Synchronize all video elements to prevent drift
+ */
+function synchronizeVideos() {
+  const videoElements: Array<{ id: string; element: HTMLVideoElement; currentTime: number }> = []
+
+  // Collect all video elements with their current playback positions
+  for (const [id, conn] of Object.entries(cameraConnections)) {
+    if (!conn.videoElement || !conn.isConnected) {
+      continue
+    }
+
+    const video = conn.videoElement
+
+    // Skip if video is not playing or doesn't have valid time
+    if (video.paused || video.readyState < 2 || isNaN(video.currentTime)) {
+      continue
+    }
+
+    videoElements.push({
+      id,
+      element: video,
+      currentTime: video.currentTime
+    })
+  }
+
+  // Need at least 2 videos to synchronize
+  if (videoElements.length < 2) {
+    return
+  }
+
+  // Find the video that's furthest ahead (reference point)
+  // We sync all videos to the most advanced one to avoid rewinding
+  const referenceVideo = videoElements.reduce((max, current) =>
+    current.currentTime > max.currentTime ? current : max
+  )
+
+  // Log sync status every 10 checks (every 20 seconds)
+  if (syncCorrectionCount % 10 === 0) {
+    const drifts = videoElements
+      .map(v => `${v.id}=${v.currentTime.toFixed(2)}s`)
+      .join(', ')
+    console.log(`[ConnectionManager] Sync check - Times: ${drifts}`)
+  }
+
+  // Check each video against the reference
+  for (const video of videoElements) {
+    if (video.id === referenceVideo.id) {
+      continue // Skip the reference video
+    }
+
+    const drift = referenceVideo.currentTime - video.currentTime
+
+    // If drift exceeds threshold, adjust the lagging video
+    if (Math.abs(drift) > MAX_SYNC_DRIFT) {
+      syncCorrectionCount++
+      console.warn(
+        `[ConnectionManager] ⚠️ Sync drift #${syncCorrectionCount}: ${video.id} is ${drift.toFixed(2)}s ${drift > 0 ? 'behind' : 'ahead of'} ${referenceVideo.id}, correcting...`
+      )
+
+      // Jump to the reference time (seek to live edge)
+      try {
+        video.element.currentTime = referenceVideo.currentTime
+        console.log(`[ConnectionManager] ✓ Synced ${video.id} to ${referenceVideo.currentTime.toFixed(2)}s`)
+      } catch (error) {
+        console.error(`[ConnectionManager] ✗ Failed to sync ${video.id}:`, error)
+      }
+    }
+  }
+}
+
+/**
  * Cleanup all connections (call on app unmount)
  */
 function cleanup() {
-  console.log('[ConnectionManager] Cleaning up all connections')
+  // Stop sync monitoring
+  stopSyncMonitoring()
 
   for (const [id, conn] of Object.entries(cameraConnections)) {
     conn.connection.disconnect()
