@@ -129,21 +129,90 @@ stream_camera() {
     echo ""
 
     # Stream with FFmpeg
-    # For pre-rendered videos: Use stream copy for minimal CPU overhead
+    # For pre-rendered videos: Use optimized settings for low-latency RTSP
     # For source videos: Re-encode for compatibility
     if [[ "$is_rendered" == true ]]; then
-        # Pre-rendered videos: Direct copy (no re-encoding)
-        ffmpeg \
-            -re \
-            -stream_loop -1 \
-            -i "${video_path}" \
-            -c:v copy \
-            -c:a copy \
-            -rtsp_transport tcp \
-            -f rtsp \
-            "${rtsp_url}"
+        # Detect codec to determine if we can use stream copy
+        local codec=$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "${video_path}" 2>/dev/null)
+
+        if [[ "$codec" == "h264" ]]; then
+            # H.264 videos: Optimized streaming
+            # Check if video is too high resolution/bitrate for current setup
+            local width=$(ffprobe -v error -select_streams v:0 -show_entries stream=width -of default=noprint_wrappers=1:nokey=1 "${video_path}" 2>/dev/null)
+
+            if [[ "$width" -gt 1280 ]]; then
+                # High res video (>720p): Re-encode to reduce bitrate for smoother streaming
+                echo -e "  ${YELLOW}⚠ High resolution ($width px), re-encoding for smoother streaming${NC}" >&2
+                echo -e "  ${YELLOW}  For best performance, re-render at 720p: make prerender-videos-force${NC}" >&2
+                ffmpeg \
+                    -re \
+                    -stream_loop -1 \
+                    -i "${video_path}" \
+                    -c:v libx264 \
+                    -preset veryfast \
+                    -tune zerolatency \
+                    -profile:v baseline \
+                    -level 3.1 \
+                    -b:v 2M \
+                    -maxrate 2M \
+                    -bufsize 1M \
+                    -vf scale=1280:-2 \
+                    -g 30 \
+                    -keyint_min 30 \
+                    -sc_threshold 0 \
+                    -fflags nobuffer \
+                    -flags low_delay \
+                    -rtsp_transport tcp \
+                    -rtbufsize 10M \
+                    -max_delay 0 \
+                    -f rtsp \
+                    "${rtsp_url}"
+            else
+                # 720p or lower: Stream copy (no re-encoding)
+                ffmpeg \
+                    -re \
+                    -stream_loop -1 \
+                    -i "${video_path}" \
+                    -c:v copy \
+                    -c:a copy \
+                    -bsf:v h264_mp4toannexb \
+                    -rtsp_transport tcp \
+                    -rtbufsize 10M \
+                    -max_delay 0 \
+                    -fflags nobuffer \
+                    -flags low_delay \
+                    -f rtsp \
+                    "${rtsp_url}"
+            fi
+        else
+            # MPEG-4 or other codecs: Re-encode to H.264
+            echo -e "  ${YELLOW}⚠ Video is ${codec}, re-encoding to H.264 for RTSP compatibility${NC}" >&2
+            echo -e "  ${YELLOW}  Recommendation: Re-render with 'make prerender-videos-force' for better performance${NC}" >&2
+            ffmpeg \
+                -re \
+                -stream_loop -1 \
+                -i "${video_path}" \
+                -c:v libx264 \
+                -preset ultrafast \
+                -tune zerolatency \
+                -profile:v baseline \
+                -level 3.1 \
+                -b:v 4M \
+                -maxrate 4M \
+                -bufsize 2M \
+                -g 30 \
+                -keyint_min 30 \
+                -sc_threshold 0 \
+                -fflags nobuffer \
+                -flags low_delay \
+                -rtsp_transport tcp \
+                -rtbufsize 10M \
+                -max_delay 0 \
+                -f rtsp \
+                "${rtsp_url}"
+        fi
     else
-        # Source videos: Re-encode with low latency settings
+        # Source videos: Re-encode with optimized low latency settings
         ffmpeg \
             -re \
             -stream_loop -1 \
@@ -151,13 +220,21 @@ stream_camera() {
             -c:v libx264 \
             -preset ultrafast \
             -tune zerolatency \
-            -b:v 2M \
-            -maxrate 2M \
-            -bufsize 4M \
+            -profile:v baseline \
+            -level 3.1 \
+            -b:v 4M \
+            -maxrate 4M \
+            -bufsize 2M \
             -g 30 \
+            -keyint_min 30 \
+            -sc_threshold 0 \
+            -fflags nobuffer \
+            -flags low_delay \
             -c:a aac \
             -b:a 128k \
             -rtsp_transport tcp \
+            -rtbufsize 10M \
+            -max_delay 0 \
             -f rtsp \
             "${rtsp_url}"
     fi

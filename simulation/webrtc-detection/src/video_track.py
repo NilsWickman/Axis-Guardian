@@ -74,14 +74,14 @@ class DetectionVideoTrack(VideoStreamTrack):
         self.frame_time = 1.0 / self.fps
         self.target_frame_time = 1.0 / self.fps
 
-        # Adaptive FPS control
-        self.current_fps_limit = 30  # Start at max, will be adjusted dynamically
-        self.min_fps = 10  # Never go below 10 FPS
+        # Adaptive FPS control - Optimized for higher FPS
+        self.current_fps_limit = 60  # Start at 60 FPS (optimized), will be adjusted dynamically
+        self.min_fps = 15  # Never go below 15 FPS (increased from 10)
         self.overload_counter = 0  # Track consecutive overload frames
         self.underload_counter = 0  # Track consecutive underload frames
 
-        # Frame queue for async processing
-        self.frame_queue = deque(maxlen=5)  # Max 5 frames buffered
+        # Frame queue for async processing - Reduced for lower latency
+        self.frame_queue = deque(maxlen=2)  # Max 2 frames buffered (reduced from 5)
         self.detection_cache = {}  # frame_number -> detections
         self.last_detection_frame = -1
         self.frames_since_detection = 0
@@ -90,13 +90,13 @@ class DetectionVideoTrack(VideoStreamTrack):
 
         # Performance tracking
         self.last_frame_time = time.time()
-        self.avg_processing_time = 0.033  # Initial estimate: 33ms
+        self.avg_processing_time = 0.016  # Initial estimate: 16ms (60 FPS target)
         self.dropped_frames = 0
         self.corrupted_frames = 0
         self.last_valid_frame = None  # Cache last good frame for error recovery
 
-        # Adaptive buffer sizing
-        self.buffer_size = 2  # Start with low latency (2 frames)
+        # Adaptive buffer sizing - Optimized for stability/latency balance
+        self.buffer_size = 4  # Start with balanced buffer (increased from 2 for stability)
         self.frame_loss_count = 0
         self.total_frames_attempted = 0
         self.last_buffer_adjustment = time.time()
@@ -124,9 +124,16 @@ class DetectionVideoTrack(VideoStreamTrack):
         try:
             logger.info(f"Connecting to {self.rtsp_url}")
 
-            # Set FFmpeg environment variables for better RTSP reliability
+            # Set FFmpeg environment variables for better RTSP reliability and low latency
             # Use TCP transport instead of UDP to prevent packet loss
-            os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;tcp|fflags;nobuffer|flags;low_delay'
+            os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = (
+                'rtsp_transport;tcp|'
+                'buffer_size;5000000|'      # 5MB buffer for stability
+                'max_delay;0|'              # No artificial delay
+                'fflags;nobuffer|'
+                'flags;low_delay|'
+                'tune;zerolatency'
+            )
 
             self.cap = cv2.VideoCapture(self.rtsp_url, cv2.CAP_FFMPEG)
 
@@ -383,15 +390,15 @@ class DetectionVideoTrack(VideoStreamTrack):
 
         old_buffer_size = self.buffer_size
 
-        # Adjust buffer based on loss rate
-        if frame_loss_rate > 0.05:  # > 5% loss - increase buffer
+        # Adjust buffer based on loss rate - Optimized thresholds
+        if frame_loss_rate > 0.03:  # > 3% loss - increase buffer (reduced from 5%)
             self.buffer_size = min(10, self.buffer_size + 2)
             logger.info(
                 f"[{self.camera_id}] High frame loss ({frame_loss_rate*100:.1f}%), "
                 f"increasing buffer: {old_buffer_size} → {self.buffer_size}"
             )
-        elif frame_loss_rate < 0.02 and self.buffer_size > 2:  # < 2% loss - reduce buffer
-            self.buffer_size = max(2, self.buffer_size - 1)
+        elif frame_loss_rate < 0.01 and self.buffer_size > 3:  # < 1% loss - reduce buffer (reduced from 2%)
+            self.buffer_size = max(3, self.buffer_size - 1)  # Don't go below 3 (increased from 2)
             logger.info(
                 f"[{self.camera_id}] Low frame loss ({frame_loss_rate*100:.1f}%), "
                 f"reducing buffer for lower latency: {old_buffer_size} → {self.buffer_size}"

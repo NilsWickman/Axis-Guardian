@@ -85,14 +85,27 @@ stop-infrastructure: ## Stop MediaMTX media server
 dev: cleanup-ports ## Start complete surveillance system (optimized with pre-rendered detections)
 	@echo "$(BLUE)Starting complete surveillance system (optimized mode)...$(NC)"
 	@echo ""
+	@echo "$(YELLOW)Checking pre-rendered videos...$(NC)"
+	@if [ ! -d "shared/cameras/rendered" ] || [ -z "$$(ls -A shared/cameras/rendered/*.mp4 2>/dev/null)" ]; then \
+		echo "$(RED)Error: No pre-rendered videos found!$(NC)"; \
+		echo "$(YELLOW)Pre-rendered videos are required for optimized mode.$(NC)"; \
+		echo ""; \
+		echo "$(YELLOW)Options:$(NC)"; \
+		echo "  1. Generate pre-rendered videos: make prerender-videos"; \
+		echo "  2. Use real-time mode instead: make dev-realtime"; \
+		echo ""; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)✓ Pre-rendered videos found$(NC)"
+	@echo ""
 	@echo "$(YELLOW)Starting infrastructure...$(NC)"
 	@$(MAKE) infrastructure
-	@sleep 1
+	@sleep 2
 	@echo ""
 	@echo "$(YELLOW)Starting services:$(NC)"
 	@echo "  Frontend:          http://localhost:5173"
-	@echo "  Cameras:           rtsp://localhost:8554/camera{1,2,3}"
-	@echo "  HLS Streams:       http://localhost:8888/camera{1,2,3}"
+	@echo "  Cameras:           rtsp://localhost:8554/camera{1,2,3,4}"
+	@echo "  HLS Streams:       http://localhost:8888/camera{1,2,3,4}"
 	@echo "  WebRTC Detection:  http://localhost:8080 (signaling + data channels)"
 	@echo ""
 	@echo "$(GREEN)Mode: Optimized with pre-rendered detections (default)$(NC)"
@@ -103,6 +116,9 @@ dev: cleanup-ports ## Start complete surveillance system (optimized with pre-ren
 	@echo "$(YELLOW)For real-time inference mode, use: make dev-realtime$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Access WebRTC Detection view at: http://localhost:5173/webrtc-detection$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Starting camera streams, WebRTC service, and frontend...$(NC)"
+	@echo "$(YELLOW)Note: Camera streams will start in background. Check logs if cameras don't appear.$(NC)"
 	@echo ""
 	@yarn dev
 
@@ -233,6 +249,12 @@ prerender-videos: ## Pre-render detection videos for optimized streaming
 		$(MAKE) setup; \
 	fi
 	@echo "$(YELLOW)Auto-detecting videos in shared/cameras/$(NC)"
+	@if [ -n "$$RENDER_RESOLUTION" ]; then \
+		echo "$(YELLOW)Resolution: $$RENDER_RESOLUTION (from RENDER_RESOLUTION env variable)$(NC)"; \
+	else \
+		echo "$(YELLOW)Resolution: Source resolution (set RENDER_RESOLUTION=720p in .env for optimized streaming)$(NC)"; \
+	fi
+	@echo ""
 	@cd simulation/scripts && \
 		../webrtc-detection/venv/bin/python prerender_detections.py --batch-all
 	@echo ""
@@ -254,6 +276,12 @@ prerender-videos-force: ## Force re-render all videos (ignore existing)
 		$(MAKE) setup; \
 	fi
 	@echo "$(YELLOW)Auto-detecting videos in shared/cameras/$(NC)"
+	@if [ -n "$$RENDER_RESOLUTION" ]; then \
+		echo "$(YELLOW)Resolution: $$RENDER_RESOLUTION (from RENDER_RESOLUTION env variable)$(NC)"; \
+	else \
+		echo "$(YELLOW)Resolution: Source resolution (set RENDER_RESOLUTION=720p in .env for optimized streaming)$(NC)"; \
+	fi
+	@echo ""
 	@cd simulation/scripts && \
 		../webrtc-detection/venv/bin/python prerender_detections.py --batch-all --force
 	@echo ""

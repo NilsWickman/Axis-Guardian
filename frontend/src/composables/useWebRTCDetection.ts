@@ -93,6 +93,10 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
   // Stats monitoring interval
   let statsMonitorInterval: number | null = null
 
+  // Debug logging throttle (once per second)
+  let lastDebugLogTime = 0
+  const DEBUG_LOG_INTERVAL = 1000 // 1 second
+
   // Callback for detection updates
   let onDetectionUpdate: ((metadata: DetectionMetadata) => void) | null = null
 
@@ -318,15 +322,16 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     // Monitor every 2 seconds
     statsMonitorInterval = window.setInterval(async () => {
       if (!peerConnection.value || peerConnection.value.connectionState !== 'connected') {
+        console.log(`[WebRTC] ${cameraId} - Stats monitoring skipped: connection state is ${peerConnection.value?.connectionState}`)
         return
       }
 
       try {
-        const stats = await peerConnection.value.getStats()
+        const webrtcStats = await peerConnection.value.getStats()
         let inboundRtp: RTCStatsReport | null = null
         let candidatePair: RTCStatsReport | null = null
 
-        stats.forEach((report: any) => {
+        webrtcStats.forEach((report: any) => {
           // Find inbound RTP stats for video
           if (report.type === 'inbound-rtp' && report.kind === 'video') {
             inboundRtp = report
@@ -363,6 +368,13 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
           previousFramesDecoded = currentFramesDecoded
           previousFpsTimestamp = currentTimestamp
 
+          // Throttled debug logging (once per second)
+          const now = Date.now()
+          if (now - lastDebugLogTime >= DEBUG_LOG_INTERVAL) {
+            console.log(`[WebRTC] ${cameraId} - Stats: fps=${fps}, framesDecoded=${currentFramesDecoded}, latency=${stats.value.latencyMs.toFixed(1)}ms`)
+            lastDebugLogTime = now
+          }
+
           // Update connection quality stats
           connectionQuality.value = {
             packetLoss: Math.round(packetLoss * 100) / 100,
@@ -381,6 +393,8 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
           // Log warnings for poor connection quality
           // Packet loss and RTT are tracked in stats, no need to log warnings
+        } else {
+          console.log(`[WebRTC] ${cameraId} - No inbound RTP stats found`)
         }
       } catch (error) {
         console.error('[WebRTC] Error getting connection stats:', error)
@@ -452,9 +466,9 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
     // Helper function to process metadata (avoid duplication for async case)
     function processMetadata(metadata: DetectionMetadata) {
-      const now = performance.now()
+      const now = Date.now()
 
-      // Calculate latency
+      // Calculate latency (metadata.timestamp is in seconds, convert to ms)
       const latency = now - (metadata.timestamp * 1000)
       stats.value.latencyMs = latency
 

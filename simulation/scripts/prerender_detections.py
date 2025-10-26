@@ -29,6 +29,7 @@ Author: Axis-Guardian Team
 import argparse
 import json
 import gzip
+import os
 import sys
 import time
 from pathlib import Path
@@ -452,6 +453,7 @@ class DetectionRenderer:
         input_path: Path,
         output_path: Path,
         progress_callback=None,
+        output_resolution: Optional[str] = None,
     ) -> Tuple[int, int]:
         """
         Process video: detect objects and render with bounding boxes.
@@ -460,6 +462,7 @@ class DetectionRenderer:
             input_path: Path to source video
             output_path: Path to save rendered video
             progress_callback: Optional callback(frame_num, total_frames)
+            output_resolution: Optional resolution preset ('720p', '1080p', '480p')
 
         Returns:
             Tuple of (total_frames, total_detections)
@@ -473,48 +476,67 @@ class DetectionRenderer:
 
         # Get video properties
         fps = cap.get(cv2.CAP_PROP_FPS)
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        source_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        source_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-        logger.info(f"Video properties: {width}x{height} @ {fps:.2f} FPS ({total_frames} frames)")
+        # Calculate output resolution
+        width, height = source_width, source_height
+        scale_factor = 1.0
+
+        if output_resolution:
+            resolution_presets = {
+                '480p': (854, 480),
+                '720p': (1280, 720),
+                '1080p': (1920, 1080),
+            }
+
+            if output_resolution in resolution_presets:
+                target_width, target_height = resolution_presets[output_resolution]
+                # Maintain aspect ratio
+                aspect_ratio = source_width / source_height
+                target_aspect = target_width / target_height
+
+                if abs(aspect_ratio - target_aspect) < 0.01:
+                    # Aspect ratios match, use preset directly
+                    width, height = target_width, target_height
+                else:
+                    # Scale to fit height, maintain aspect ratio
+                    height = target_height
+                    width = int(height * aspect_ratio)
+
+                scale_factor = width / source_width
+                logger.info(f"Output resolution: {width}x{height} (scaled {scale_factor:.2f}x from source)")
+            else:
+                logger.warning(f"Unknown resolution preset: {output_resolution}, using source resolution")
+
+        logger.info(f"Source properties: {source_width}x{source_height} @ {fps:.2f} FPS ({total_frames} frames)")
+        if scale_factor != 1.0:
+            logger.info(f"Output properties: {width}x{height} @ {fps:.2f} FPS (optimized for {output_resolution} streaming)")
 
         # Create output directory
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Setup video writer with optimized settings
-        # Try different codecs in order of preference
-        codecs_to_try = [
-            ('avc1', 'H.264 (avc1)'),
-            ('h264', 'H.264 (h264)'),
-            ('x264', 'H.264 (x264)'),
-            ('mp4v', 'MPEG-4'),
-        ]
+        # Setup video writer - use XVID for compatibility, then convert to H.264 with FFmpeg
+        # OpenCV often has issues with H.264 directly, so we use a two-step process
+        temp_output_path = output_path.with_suffix('.temp.mp4')
 
-        out = None
-        for codec_str, codec_name in codecs_to_try:
-            try:
-                fourcc = cv2.VideoWriter_fourcc(*codec_str)
-                out = cv2.VideoWriter(
-                    str(output_path),
-                    fourcc,
-                    fps,
-                    (width, height)
-                )
-                if out.isOpened():
-                    logger.info(f"Using codec: {codec_name}")
-                    break
-                out.release()
-                out = None
-            except Exception as e:
-                logger.debug(f"Codec {codec_name} failed: {e}")
-                continue
+        logger.info(f"Using two-step encoding: XVID → H.264 conversion")
+        logger.info(f"  Step 1: Render with detections using XVID codec")
+        logger.info(f"  Step 2: Convert to H.264 with FFmpeg for optimal streaming")
 
-        if out is None or not out.isOpened():
+        fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        out = cv2.VideoWriter(
+            str(temp_output_path),
+            fourcc,
+            fps,
+            (width, height)
+        )
+
+        if not out.isOpened():
             raise ValueError(
-                f"Failed to create output video: {output_path}\n"
-                f"No supported codec found. Install ffmpeg with H.264 support:\n"
-                f"  sudo apt-get install ffmpeg libx264-dev"
+                f"Failed to create temporary output video: {temp_output_path}\n"
+                f"OpenCV VideoWriter initialization failed."
             )
 
         # Process frames
@@ -533,7 +555,7 @@ class DetectionRenderer:
             # Calculate frame timestamp
             frame_timestamp = frame_number / fps
 
-            # Run detection
+            # Run detection on original resolution
             detections = self.detect_frame(frame, frame_timestamp, frame_number)
             total_detection_count += len(detections)
 
@@ -551,9 +573,17 @@ class DetectionRenderer:
                 "detections": detections_for_json,
             })
 
-            # Draw detections on frame
+            # Draw detections on frame at original resolution
             if detections:
                 frame = self.draw_detections(frame, detections)
+
+            # Scale frame to output resolution if needed
+            if scale_factor != 1.0:
+                frame = cv2.resize(
+                    frame,
+                    (width, height),
+                    interpolation=cv2.INTER_LINEAR if scale_factor < 1.0 else cv2.INTER_CUBIC
+                )
 
             # Write frame
             out.write(frame)
@@ -577,11 +607,52 @@ class DetectionRenderer:
         out.release()
 
         processing_time = time.time() - start_time
-        logger.info(f"✓ Video processing complete!")
+        logger.info(f"✓ Video rendering complete!")
         logger.info(f"  Processed: {frame_number} frames in {processing_time:.1f}s")
         logger.info(f"  Average FPS: {frame_number/processing_time:.1f}")
         logger.info(f"  Total detections: {total_detection_count}")
-        logger.info(f"  Output: {output_path}")
+
+        # Step 2: Convert to H.264 with FFmpeg
+        logger.info(f"Converting to H.264 with FFmpeg...")
+        import subprocess
+
+        ffmpeg_cmd = [
+            'ffmpeg',
+            '-i', str(temp_output_path),
+            '-c:v', 'libx264',
+            '-preset', 'medium',
+            '-crf', '23',
+            '-profile:v', 'baseline',
+            '-level', '3.1',
+            '-pix_fmt', 'yuv420p',
+            '-movflags', '+faststart',
+            '-y',  # Overwrite output file
+            str(output_path)
+        ]
+
+        try:
+            result = subprocess.run(
+                ffmpeg_cmd,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            logger.info(f"✓ H.264 conversion complete!")
+            logger.info(f"  Final output: {output_path}")
+
+            # Remove temporary file
+            temp_output_path.unlink()
+            logger.debug(f"Removed temporary file: {temp_output_path}")
+
+        except subprocess.CalledProcessError as e:
+            logger.error(f"FFmpeg conversion failed: {e}")
+            logger.error(f"FFmpeg stderr: {e.stderr}")
+            raise ValueError(
+                f"Failed to convert video to H.264.\n"
+                f"Temporary XVID file saved at: {temp_output_path}\n"
+                f"You can manually convert with:\n"
+                f"  ffmpeg -i {temp_output_path} -c:v libx264 -preset medium -crf 23 {output_path}"
+            )
 
         # Save detection metadata with all improvements
         self._save_enhanced_metadata(
@@ -720,8 +791,23 @@ Examples:
         action="store_true",
         help="Force re-rendering even if output files already exist"
     )
+    parser.add_argument(
+        "--resolution", "-r",
+        type=str,
+        choices=['480p', '720p', '1080p'],
+        default=os.getenv('RENDER_RESOLUTION'),
+        help="Output resolution preset (default: from RENDER_RESOLUTION env var or source resolution). 720p recommended for balance of quality and performance."
+    )
 
     args = parser.parse_args()
+
+    # Show resolution being used
+    if args.resolution:
+        logger.info(f"Using resolution preset: {args.resolution}")
+        if os.getenv('RENDER_RESOLUTION') and not any('--resolution' in arg or '-r' in arg for arg in sys.argv):
+            logger.info(f"  (from RENDER_RESOLUTION environment variable)")
+    else:
+        logger.info("Using source video resolution (no preset specified)")
 
     # List videos
     if args.list:
@@ -787,7 +873,7 @@ Examples:
             output_path = RENDERED_VIDEOS_DIR / output_name
 
             try:
-                renderer.process_video(video, output_path)
+                renderer.process_video(video, output_path, output_resolution=args.resolution)
                 processed += 1
             except Exception as e:
                 logger.error(f"Failed to process {video.name}: {e}")
@@ -831,8 +917,10 @@ Examples:
 
     # Process video
     try:
-        renderer.process_video(input_path, output_path)
+        renderer.process_video(input_path, output_path, output_resolution=args.resolution)
         logger.info("\n✓ Success! Video ready for streaming.")
+        if args.resolution:
+            logger.info(f"Rendered at {args.resolution} for optimized performance")
     except Exception as e:
         logger.error(f"Failed to process video: {e}")
         import traceback
