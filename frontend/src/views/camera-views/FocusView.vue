@@ -181,11 +181,6 @@ const isConnected = computed(() => connectionState.value === 'connected')
 const currentConnection = computed(() => {
   if (!selectedCamera.value) return null
   const conn = getConnection(selectedCamera.value.id)
-  console.log(`[FocusView] currentConnection for ${selectedCamera.value.id}:`, conn?.connection)
-  if (conn?.connection) {
-    console.log(`[FocusView] - connectionQuality:`, conn.connection.connectionQuality)
-    console.log(`[FocusView] - stats:`, conn.connection.stats)
-  }
   return conn?.connection || null
 })
 
