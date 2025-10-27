@@ -166,6 +166,9 @@ shared/dist/
 shared/axis_shared.egg-info/
 frontend/src/types/generated/
 frontend/src/api/generated/
+# Video files (large, can be regenerated or stored elsewhere)
+shared/cameras/*.mp4
+shared/cameras/**/*.mp4
 # Ignore preprocessed videos (can be regenerated)
 shared/cameras/preprocessed/*/*.mp4
 # Keep detection metadata and directory structure
@@ -173,6 +176,13 @@ shared/cameras/preprocessed/*/*.mp4
 !shared/cameras/preprocessed/*/*.json.gz
 # Old rendered directory (backward compat symlink)
 shared/cameras/rendered
+
+# YOLO model files (large, auto-downloaded)
+shared/models/**/*.pt
+*.pt
+
+# Hugging Face model cache
+**/models--*/
 
 # MediaMTX runtime files
 simulation/mediamtx/*.log
