@@ -23,6 +23,14 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/cameras/snapshot',
+    name: 'SnapshotView',
+    component: () => import('@/views/camera-views/SnapshotView.vue'),
+    meta: {
+      title: 'Snapshots (Low Bandwidth)',
+    },
+  },
+  {
     path: '/cameras/focus',
     name: 'FocusView',
     component: () => import('@/views/camera-views/FocusView.vue'),
@@ -46,21 +54,57 @@ const routes: RouteRecordRaw[] = [
       title: 'Manage Cameras',
     },
   },
+  // Site Maps - New unified approach
   {
-    path: '/site-config',
-    name: 'SiteMapViewer',
-    component: () => import('@/views/SiteMapViewer.vue'),
+    path: '/site-maps',
+    name: 'SiteMapIndex',
+    component: () => import('@/views/site-maps/SiteMapIndex.vue'),
     meta: {
-      title: 'Site Configuration',
+      title: 'Site Maps',
     },
   },
   {
-    path: '/generated-site-map',
-    name: 'GeneratedSiteMapViewer',
-    component: () => import('@/views/GeneratedSiteMapViewer.vue'),
+    path: '/site-maps/generate',
+    name: 'SiteMapGenerator',
+    component: () => import('@/views/site-maps/SiteMapGenerator.vue'),
     meta: {
-      title: 'Auto-Generated Site Map',
+      title: 'Generate Site Map',
+      roles: ['admin'],
     },
+  },
+  {
+    path: '/site-maps/:id/view-2d',
+    name: 'SiteMap2DViewer',
+    component: () => import('@/views/site-maps/viewers/SiteMap2DViewer.vue'),
+    meta: {
+      title: '2D Site Map',
+    },
+  },
+  {
+    path: '/site-maps/:id/view-3d',
+    name: 'SiteMap3DViewer',
+    component: () => import('@/views/site-maps/viewers/SiteMap3DViewer.vue'),
+    meta: {
+      title: '3D Site Map',
+    },
+  },
+  {
+    path: '/site-maps/:id/edit',
+    name: 'SiteMapEditor',
+    component: () => import('@/views/SiteMapEditor.vue'),
+    meta: {
+      title: 'Edit Site Map',
+      roles: ['admin'],
+    },
+  },
+  // Legacy routes (deprecated, redirect to new)
+  {
+    path: '/site-config',
+    redirect: '/site-maps',
+  },
+  {
+    path: '/generated-site-map',
+    redirect: '/site-maps',
   },
   {
     path: '/users',
