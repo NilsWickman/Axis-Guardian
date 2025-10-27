@@ -1,0 +1,277 @@
+================================================================================
+  AXIS-GUARDIAN VPS DEPLOYMENT PACKAGE
+  Complete Production Setup for Hetzner VPS
+================================================================================
+
+📦 ALL FILES CREATED & READY TO USE
+
+✅ Configuration Files (4)
+   • .env.production - Production environment variables
+   • simulation/mediamtx/mediamtx.production.yml - Media server config
+   • nginx/axis-guardian.conf - Reverse proxy with SSL
+   • systemd/*.service - 5 service files for auto-start
+
+✅ Deployment Scripts (4)
+   • scripts/vps-setup.sh - Initial VPS hardening (20-30 min)
+   • scripts/deploy.sh - Application deployment (5-10 min)
+   • scripts/ssl-setup.sh - Let's Encrypt SSL setup (2-3 min)
+   • scripts/ufw-setup.sh - Firewall configuration (1 min)
+
+✅ Authentication System
+   • backend/auth-service/ - Complete Node.js JWT auth service
+   • frontend/src/api/auth/authService.ts - Auth API client
+   • frontend/src/views/auth/LoginView.vue - Beautiful login page
+   • frontend/src/middleware/auth.ts - Route protection
+
+✅ Docker Support
+   • Dockerfile.frontend - Vue.js production build
+   • Dockerfile.webrtc - WebRTC detection service
+   • Dockerfile.auth - Authentication service
+   • docker-compose.prod.yml - Complete stack
+
+✅ Documentation
+   • docs/DEPLOYMENT.md - Complete step-by-step guide (150+ steps)
+   • docs/QUICK_DEPLOY.md - Quick reference commands
+   • DEPLOYMENT_README.md - Overview and architecture
+   • backend/auth-service/README.md - API documentation
+
+================================================================================
+  QUICK START COMMANDS
+================================================================================
+
+1. VPS Setup (One-Time)
+   ─────────────────────
+   sudo bash scripts/vps-setup.sh
+
+
+2. Configure Environment
+   ──────────────────────
+   vim .env.production
+
+   Update:
+   - DOMAIN=your-domain.com
+   - VPS_PUBLIC_IP=123.45.67.89
+   - JWT_SECRET=$(openssl rand -hex 32)
+   - All passwords with: $(openssl rand -base64 24)
+
+
+3. Firewall Setup
+   ──────────────
+   sudo bash scripts/ufw-setup.sh
+
+
+4. SSL Certificate
+   ───────────────
+   sudo bash scripts/ssl-setup.sh your-domain.com
+
+
+5. Deploy Application
+   ──────────────────
+   sudo bash scripts/deploy.sh
+
+
+6. Access Application
+   ──────────────────
+   https://your-domain.com
+
+   Login:
+   - Username: admin
+   - Password: <ADMIN_PASSWORD from .env.production>
+
+================================================================================
+  DEPLOYMENT CHECKLIST
+================================================================================
+
+Before Deployment:
+  [ ] Hetzner VPS created (Ubuntu 22.04)
+  [ ] Domain registered and DNS configured
+  [ ] SSH key added to VPS
+  [ ] Repository cloned to /var/www/axis-guardian
+
+Configuration:
+  [ ] .env.production updated with domain
+  [ ] .env.production updated with VPS IP
+  [ ] JWT_SECRET and SESSION_SECRET generated
+  [ ] All passwords changed from defaults
+  [ ] Firewall configured
+  [ ] SSL certificate obtained
+
+Post-Deployment:
+  [ ] All services running (systemctl status)
+  [ ] HTTPS working (https://your-domain.com)
+  [ ] Login successful
+  [ ] Camera streams visible
+  [ ] Default password changed
+  [ ] Backups scheduled (daily 2 AM)
+
+================================================================================
+  SECURITY FEATURES INCLUDED
+================================================================================
+
+Network:
+  ✓ UFW Firewall (only essential ports)
+  ✓ Fail2ban (SSH brute-force protection)
+  ✓ Rate limiting (5 login attempts/15min)
+  ✓ SSL/TLS with Let's Encrypt
+  ✓ HSTS with preload
+
+Application:
+  ✓ JWT authentication
+  ✓ bcrypt password hashing
+  ✓ Redis session storage
+  ✓ CORS protection
+  ✓ Security headers (Helmet.js)
+
+System:
+  ✓ SSH hardening (key-only, no root)
+  ✓ Automatic security updates
+  ✓ Systemd sandboxing
+  ✓ Log rotation
+
+================================================================================
+  EXPOSED SERVICES
+================================================================================
+
+Public (Internet-Facing):
+  • HTTPS (443) - Frontend
+  • HTTP (80) - Redirects to HTTPS
+  • WebRTC Signaling (8080/TCP) - HTTPS
+  • WebRTC Media (8189/UDP) - Media streams
+
+Internal Only (Localhost):
+  • Auth Service (3000)
+  • PostgreSQL (5432)
+  • Redis (6379)
+  • MediaMTX API (9997)
+  • Prometheus (9090)
+  • Grafana (3000 on VPS IP)
+
+================================================================================
+  MONITORING & MAINTENANCE
+================================================================================
+
+View Service Status:
+  sudo systemctl status mediamtx webrtc-detection auth-service nginx
+
+View Logs:
+  sudo journalctl -f                    # All logs
+  sudo journalctl -u SERVICE_NAME -f    # Specific service
+
+Grafana Dashboard:
+  http://YOUR_VPS_IP:3000
+  Login: admin / <GRAFANA_ADMIN_PASSWORD>
+
+Backups:
+  Automatic: Daily at 2 AM
+  Location: /var/backups/axis-guardian/
+  Manual: sudo /usr/local/bin/axis-guardian-backup.sh
+
+Update Application:
+  cd /var/www/axis-guardian
+  git pull origin main
+  sudo bash scripts/deploy.sh
+
+================================================================================
+  TROUBLESHOOTING QUICK FIXES
+================================================================================
+
+Services won't start:
+  → Check logs: sudo journalctl -u SERVICE_NAME -n 50
+
+SSL failed:
+  → Verify DNS: dig +short your-domain.com
+  → Ensure port 80 open: sudo ufw allow 80/tcp
+
+Login not working:
+  → Check auth service: sudo systemctl status auth-service
+  → Verify DB: sudo -u postgres psql surveillance
+
+Cameras not loading:
+  → Check MediaMTX: sudo systemctl status mediamtx
+  → Check streams: sudo systemctl status camera-streams
+  → Verify VPS_PUBLIC_IP in .env.production
+
+Firewall blocking:
+  → Review rules: sudo ufw status verbose
+  → Check blocked IPs: sudo axis-guardian-firewall blocked
+
+================================================================================
+  ESTIMATED COSTS
+================================================================================
+
+Hetzner VPS:
+  • CX21 (2 vCPU, 4GB RAM): €5.83/month
+  • CPX21 (3 vCPU, 4GB RAM): €8.21/month ← RECOMMENDED
+  • CPX31 (4 vCPU, 8GB RAM): €13.90/month (for real-time detection)
+
+Domain Name:
+  • $10-15/year (varies by registrar)
+
+SSL Certificate:
+  • FREE (Let's Encrypt)
+
+Total Monthly Cost:
+  • €8-14/month + domain (~€1/month)
+  • Approximately $10-20 USD/month
+
+================================================================================
+  NEXT STEPS AFTER DEPLOYMENT
+================================================================================
+
+1. Change default admin password immediately
+2. Configure email notifications for alarms
+3. Set up additional user accounts (if needed)
+4. Replace mock cameras with real feeds (if desired)
+5. Configure advanced monitoring alerts
+6. Review and customize security policies
+7. Set up offsite backup solution
+8. Test disaster recovery procedures
+
+================================================================================
+  DOCUMENTATION LOCATIONS
+================================================================================
+
+📖 Complete Guide: docs/DEPLOYMENT.md
+⚡ Quick Commands: docs/QUICK_DEPLOY.md
+📦 Overview: DEPLOYMENT_README.md
+🔐 Auth API: backend/auth-service/README.md
+
+================================================================================
+  IMPORTANT SECURITY NOTES
+================================================================================
+
+⚠️  CRITICAL - DO IMMEDIATELY AFTER FIRST LOGIN:
+    1. Change default admin password
+    2. Review firewall rules
+    3. Verify SSH key-only auth is working
+    4. Test SSH from new terminal before closing root session
+
+🔒  RECOMMENDED ENHANCEMENTS:
+    - Enable 2FA (future feature)
+    - Set up VPN for camera network access
+    - Configure email alerts
+    - Implement IP whitelisting for sensitive endpoints
+    - Set up external monitoring (UptimeRobot, Pingdom)
+
+================================================================================
+  SUPPORT & RESOURCES
+================================================================================
+
+Hetzner Docs:    https://docs.hetzner.com/
+Let's Encrypt:   https://letsencrypt.org/docs/
+Nginx Guide:     https://nginx.org/en/docs/
+UFW Tutorial:    https://help.ubuntu.com/community/UFW
+
+Project Issues:  https://github.com/YOUR_USERNAME/Axis-Guardian/issues
+
+================================================================================
+
+🎉 ALL DEPLOYMENT FILES ARE READY!
+
+Total deployment time: 30-45 minutes (including DNS propagation)
+
+For detailed step-by-step instructions, see: docs/DEPLOYMENT.md
+
+Happy deploying! 🚀
+
+================================================================================

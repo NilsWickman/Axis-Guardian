@@ -242,7 +242,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
@@ -344,6 +344,12 @@ async function loadSiteMap() {
       updatedAt: new Date().toISOString()
     }
 
+    // Set loading to false first so the canvas element is rendered in the DOM
+    loading.value = false
+
+    // Wait for the DOM to update before initializing Three.js
+    await nextTick()
+
     await initThreeJS()
     await loadPointCloudData()
     renderCameras()
@@ -353,7 +359,6 @@ async function loadSiteMap() {
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load site map'
     console.error('Error loading site map:', err)
-  } finally {
     loading.value = false
   }
 }

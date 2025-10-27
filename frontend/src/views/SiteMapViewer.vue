@@ -3,7 +3,7 @@
     <!-- Left Panel - Changes based on mode -->
     <!-- Viewer Mode: Site Map Selector -->
     <SiteMapSelector
-      v-if="!isEditingMode"
+      v-if="!isEditingMode && !hideSelector"
       :site-maps="siteMaps"
       :selected-map-id="selectedMapId"
       @select="selectMap"
@@ -15,8 +15,10 @@
           <MapControls
             :show-grid="canvasOptions.showGrid"
             :show-labels="canvasOptions.showCameraLabels"
+            :show-person-positions="showPersonPositions"
             @toggle-grid="canvasOptions.showGrid = !canvasOptions.showGrid"
             @toggle-labels="canvasOptions.showCameraLabels = !canvasOptions.showCameraLabels"
+            @toggle-person-positions="showPersonPositions = !showPersonPositions"
           />
         </div>
       </template>
@@ -138,11 +140,46 @@
             :style="canvasStyle"
           ></canvas>
 
+          <!-- Person Position Overlay -->
+          <PersonPositionOverlay
+            v-if="currentMap && !isEditingMode && showPersonPositions"
+            :site-map="currentMap"
+            :canvas-width="metersToPixels(extractValue(currentMap.width))"
+            :canvas-height="metersToPixels(extractValue(currentMap.height))"
+            :show-trails="personOverlayOptions.showTrails"
+            :show-confidence="personOverlayOptions.showConfidence"
+            :show-person-icon="personOverlayOptions.showPersonIcon"
+            :show-stats="personOverlayOptions.showStats"
+            :show-heatmap="personOverlayOptions.showHeatmap"
+            :marker-radius="8"
+            :max-trail-length="20"
+            :style="{
+              position: 'absolute',
+              left: `${offsetX}px`,
+              top: `${offsetY}px`,
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+              pointerEvents: 'none',
+            }"
+          />
+
           <!-- Coordinates and Zoom Display -->
           <CanvasOverlay position="bottom-left">
-            <div class="bg-black/70 text-white px-3 py-1.5 rounded text-sm font-mono space-y-0.5">
-              <div>Mouse: ({{ Math.round((interaction.mouseX.value - offsetX) / scale) }}, {{ Math.round((interaction.mouseY.value - offsetY) / scale) }})</div>
-              <div>Zoom: {{ (scale * 100).toFixed(0) }}%</div>
+            <div class="bg-black/90 text-white px-4 py-2.5 rounded-lg border-2 border-cyan-500">
+              <div class="text-xs text-gray-400 mb-1 font-semibold">POSITION</div>
+              <div class="font-bold text-base text-cyan-400">
+                {{ (((interaction.mouseX.value - offsetX) / scale) / canvasOptions.pixelsPerMeter).toFixed(2) }}m ×
+                {{ (((interaction.mouseY.value - offsetY) / scale) / canvasOptions.pixelsPerMeter).toFixed(2) }}m
+              </div>
+              <div class="text-[10px] text-gray-400 mt-1">
+                ({{ Math.round((interaction.mouseX.value - offsetX) / scale) }}, {{ Math.round((interaction.mouseY.value - offsetY) / scale) }}) px
+              </div>
+              <div class="text-[10px] text-gray-500 mt-1.5 pt-1.5 border-t border-gray-700">
+                Grid: {{ canvasOptions.pixelsPerMeter }} px = 1 meter
+              </div>
+              <div class="text-[10px] text-gray-400 mt-1">
+                Zoom: {{ (scale * 100).toFixed(0) }}%
+              </div>
             </div>
           </CanvasOverlay>
 
@@ -304,14 +341,24 @@ import { useRouter } from 'vue-router'
 import { useSiteMapStore } from '../stores/siteMaps'
 import { useCameraStore } from '../stores/cameras'
 import { useSiteMapCanvas, type CanvasRenderOptions } from '../composables/useSiteMapCanvas'
+import { extractValue, metersToPixels, RENDER_SCALE } from '../utils/siteMapConversion'
 import { useCanvasInteraction } from '../composables/useCanvasInteraction'
 import { useWallEditor } from '../composables/useWallEditor'
+import { usePersonPositionTracking } from '../composables/usePersonPositionTracking'
 import type { CameraPlacement, Wall } from '../stores/siteMaps'
 import type { Camera } from '../types/generated'
 import MapControls from '../components/features/site-map/MapControls.vue'
+import PersonPositionOverlay from '../components/features/site-map/PersonPositionOverlay.vue'
 import SiteMapSelector from '../components/features/site-map/SiteMapSelector.vue'
 import CameraList from '../components/features/camera/CameraList.vue'
 import CameraDetailsPanel from '../components/features/camera/CameraDetailsPanel.vue'
+
+// Props
+withDefaults(defineProps<{
+  hideSelector?: boolean
+}>(), {
+  hideSelector: false
+})
 import CanvasOverlay from '../components/layout/CanvasOverlay.vue'
 import WallToolbar from '../components/features/site-map/WallToolbar.vue'
 import CameraConfigPopup from '../components/features/site-map/CameraConfigPopup.vue'
@@ -331,8 +378,22 @@ const isEditingMode = ref(false)
 const editingMapId = ref<string | null>(null)
 
 const siteMaps = computed(() => siteMapStore.siteMaps)
-const selectedMapId = ref(siteMapStore.activeSiteMapId.value)
-const currentMap = computed(() => siteMaps.value.find(m => m.id === selectedMapId.value))
+// Make selectedMapId reactive to store changes - use computed instead of ref
+const selectedMapId = computed({
+  get: () => siteMapStore.activeSiteMapId || siteMapStore.activeSiteMap?.id || null,
+  set: (value: string | null) => {
+    if (value) siteMapStore.setActiveSiteMap(value)
+  }
+})
+const currentMap = computed(() => {
+  const map = siteMaps.value.find(m => m.id === selectedMapId.value)
+  if (map) {
+    const widthMeters = extractValue(map.width)
+    const heightMeters = extractValue(map.height)
+    console.log(`[SiteMapViewer] currentMap computed: selectedMapId=${selectedMapId.value}, map dimensions=${widthMeters}m x ${heightMeters}m`)
+  }
+  return map
+})
 
 // Track if initial render is complete to prevent visual snap
 const isInitialRenderComplete = ref(false)
@@ -373,7 +434,7 @@ const canvasOptions = reactive<CanvasRenderOptions>({
   showGrid: true,
   showScaleReference: true,
   showCameraLabels: true,
-  pixelsPerMeter: 50
+  pixelsPerMeter: RENDER_SCALE // Use fixed render scale of 100 px/m
 })
 
 // Camera feed modal
@@ -387,6 +448,23 @@ const activePeerConnection = ref<RTCPeerConnection | null>(null)
 const canvas = useSiteMapCanvas(mapCanvas, ref(canvasOptions))
 const interaction = useCanvasInteraction(mapCanvas, canvas.findCameraAtPoint)
 const wallEditor = useWallEditor()
+
+// Person position tracking
+const showPersonPositions = ref(true)
+const personOverlayOptions = reactive({
+  showTrails: true,
+  showConfidence: true,
+  showPersonIcon: false,
+  showStats: true,
+  showHeatmap: false,
+})
+
+// Initialize person position tracking (only in viewer mode)
+const positionTracking = usePersonPositionTracking({
+  enabled: !isEditingMode.value,
+  updateIntervalMs: 500,
+  minConfidence: 0.5,
+})
 
 // Camera drag state
 const draggedCamera = ref<Camera | null>(null)
@@ -532,16 +610,14 @@ const redo = () => {
 }
 
 const selectMap = async (mapId: string) => {
-  selectedMapId.value = mapId
-  siteMapStore.setActiveSiteMap(mapId)
+  siteMapStore.setActiveSiteMap(mapId) // selectedMapId will reactively update from store
   selectedCamera.value = null
 }
 
 const editMap = (mapId: string) => {
   // Select the map if not already selected
   if (selectedMapId.value !== mapId) {
-    selectedMapId.value = mapId
-    siteMapStore.setActiveSiteMap(mapId)
+    siteMapStore.setActiveSiteMap(mapId) // selectedMapId will reactively update from store
   }
 
   isEditingMode.value = true
@@ -1061,8 +1137,8 @@ const resetZoom = () => {
 
   const containerWidth = container.clientWidth
   const containerHeight = container.clientHeight
-  const mapWidth = currentMap.value.width
-  const mapHeight = currentMap.value.height
+  const mapWidth = metersToPixels(extractValue(currentMap.value.width))
+  const mapHeight = metersToPixels(extractValue(currentMap.value.height))
 
   offsetX.value = (containerWidth - mapWidth) / 2
   offsetY.value = (containerHeight - mapHeight) / 2
@@ -1118,8 +1194,8 @@ const fitToView = () => {
 
   const containerWidth = container.clientWidth
   const containerHeight = container.clientHeight
-  const mapWidth = currentMap.value.width
-  const mapHeight = currentMap.value.height
+  const mapWidth = metersToPixels(extractValue(currentMap.value.width))
+  const mapHeight = metersToPixels(extractValue(currentMap.value.height))
 
   // Skip if container is too small (not ready yet)
   if (containerWidth < 100 || containerHeight < 100) return
@@ -1267,9 +1343,14 @@ const openAddMapDialog = () => {
 
 const resizeCanvas = () => {
   const canvasEl = mapCanvas.value
-  if (!canvasEl || !currentMap.value) return
+  if (!currentMap.value) return
 
-  canvas.resizeCanvas(currentMap.value.width, currentMap.value.height)
+  // Convert UnitValue meters to pixels for rendering
+  const widthPixels = metersToPixels(extractValue(currentMap.value.width))
+  const heightPixels = metersToPixels(extractValue(currentMap.value.height))
+
+  console.log(`[SiteMapViewer] resizeCanvas: resizing to ${widthPixels}x${heightPixels} (${extractValue(currentMap.value.width)}m x ${extractValue(currentMap.value.height)}m) for map ${currentMap.value.id}`)
+  canvas.resizeCanvas(widthPixels, heightPixels)
   drawMap()
 
   // Mark initial render as complete after first successful draw
@@ -1330,6 +1411,15 @@ watch(currentMap, async (newMap, oldMap) => {
   }
 })
 
+// Watch edit mode changes to enable/disable position tracking
+watch(isEditingMode, (editing) => {
+  if (editing) {
+    positionTracking.stopTracking()
+  } else {
+    positionTracking.startTracking()
+  }
+})
+
 // Real-time camera status update interval
 let statusUpdateInterval: number | null = null
 
@@ -1340,13 +1430,19 @@ const handleResize = () => {
 }
 
 onMounted(() => {
+  console.log(`[SiteMapViewer] onMounted: selectedMapId=${selectedMapId.value}, currentMap=${currentMap.value?.id}, activeSiteMapId=${siteMapStore.activeSiteMapId}`)
+
   if (!canvas.initCanvas()) return
 
   // Auto-select first site map if none is currently selected or valid
   if ((!selectedMapId.value || !currentMap.value) && siteMaps.value.length > 0) {
+    console.log(`[SiteMapViewer] No map selected, selecting first map: ${siteMaps.value[0].id}`)
     selectMap(siteMaps.value[0].id)
   } else if (currentMap.value) {
     // Map is already selected, render it
+    const widthMeters = extractValue(currentMap.value.width)
+    const heightMeters = extractValue(currentMap.value.height)
+    console.log(`[SiteMapViewer] Map already selected: ${currentMap.value.id}, dimensions: ${widthMeters}m x ${heightMeters}m`)
     resizeCanvas()
     drawMap()
     setTimeout(() => {

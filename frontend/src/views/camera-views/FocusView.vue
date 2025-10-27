@@ -4,8 +4,8 @@
     <div class="flex-1 flex overflow-hidden">
       <!-- Primary Camera Feed -->
       <div class="flex-1">
-        <div v-if="selectedCamera" class="camera-container h-full">
-          <div class="video-wrapper">
+        <div class="flex flex-col bg-background overflow-hidden w-full h-full">
+          <div class="relative bg-background w-full h-full overflow-hidden">
             <video
               ref="primaryVideoRef"
               autoplay
@@ -13,14 +13,16 @@
               playsinline
               @loadedmetadata="onVideoLoaded"
               @play="startDrawing"
+              class="w-full h-full object-cover block"
             />
 
             <!-- Detection Overlay (Canvas) -->
-            <canvas ref="primaryCanvasRef" class="canvas-overlay" />
+            <canvas ref="primaryCanvasRef" class="absolute top-0 left-0 w-full h-full pointer-events-none" />
 
-            <div v-if="!videoDimensions" class="no-stream">
-              <div class="spinner"></div>
-              <p>Initializing WebRTC...</p>
+            <div v-if="!selectedCamera || !videoDimensions" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-muted-foreground">
+              <div class="w-12 h-12 border-4 border-muted border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
+              <p v-if="!selectedCamera">Loading camera...</p>
+              <p v-else>Initializing WebRTC...</p>
             </div>
 
             <!-- Video Metrics Overlay -->
@@ -33,37 +35,42 @@
             />
           </div>
         </div>
-        <div v-else class="h-full flex items-center justify-center text-muted-foreground">
-          Select a camera to view
-        </div>
       </div>
 
       <!-- Thumbnail Strip -->
-      <div class="w-64 border-l bg-card p-2 overflow-y-auto">
-        <h3 class="text-sm font-semibold mb-2 px-2">All Cameras</h3>
+      <div class="w-64 border-l border-border bg-card p-2 overflow-y-auto">
+        <h3 class="text-sm font-semibold mb-2 px-2 text-foreground">All Cameras</h3>
         <div class="space-y-2">
           <div
             v-for="camera in cameras"
             :key="camera.id"
             @click="selectCamera(camera)"
             :class="[
-              'camera-thumbnail',
-              { 'selected': selectedCamera?.id === camera.id }
+              'p-2 rounded-lg cursor-pointer transition-all duration-200 border-2',
+              'bg-muted/30',
+              selectedCamera?.id === camera.id
+                ? 'bg-background border-primary/30'
+                : 'border-transparent hover:bg-accent hover:border-primary/30'
             ]"
           >
-            <div class="thumbnail-header">
-              <span class="thumbnail-name">{{ camera.name }}</span>
+            <div class="mb-1.5 flex justify-between items-center">
+              <span class="text-xs font-semibold text-foreground flex-1">{{ camera.name }}</span>
               <div
-                :class="['thumbnail-status', { connected: connectionStatuses[camera.id] }]"
+                :class="[
+                  'w-2 h-2 rounded-full flex-shrink-0 transition-all duration-200',
+                  connectionStatuses[camera.id]
+                    ? 'bg-green-500'
+                    : 'destructive'
+                ]"
               />
             </div>
-            <div class="thumbnail-video-container">
+            <div class="bg-background rounded-md overflow-hidden aspect-video relative border border-border/30">
               <video
                 :ref="el => thumbnailVideoRefs[camera.id] = el as HTMLVideoElement"
                 autoplay
                 muted
                 playsinline
-                class="thumbnail-video"
+                class="w-full h-full object-cover block"
               />
             </div>
           </div>
@@ -203,10 +210,13 @@ function drawDetections() {
   })
 }
 
-// Attach thumbnail videos to global connections
+// Attach thumbnail videos to global connections with robust retry logic
 async function attachThumbnailVideos() {
+  console.log('[FocusView] Starting video attachment process')
+
   // If connections aren't initialized yet, wait (only happens on first load)
   if (!isInitialized.value) {
+    console.log('[FocusView] Waiting for connections to initialize...')
     const maxWait = 10000 // 10 seconds
     const startTime = Date.now()
     while (!isInitialized.value && Date.now() - startTime < maxWait) {
@@ -217,29 +227,40 @@ async function attachThumbnailVideos() {
       console.error('[FocusView] Timeout waiting for connections to initialize')
       return
     }
+    console.log('[FocusView] Connections initialized successfully')
   }
 
-  // Minimal wait for video elements to be in DOM
-  await new Promise(resolve => setTimeout(resolve, 50))
+  // Robust retry logic for DOM element availability
+  const maxRetries = 10
+  const retryDelay = 100 // ms
 
   // Attach each thumbnail video to its corresponding global connection
   for (const camera of cameras.value) {
-    const thumbnailVideo = thumbnailVideoRefs.value[camera.id]
-    if (!thumbnailVideo) {
-      // Retry once after a short delay
-      await new Promise(resolve => setTimeout(resolve, 50))
-      const retryVideo = thumbnailVideoRefs.value[camera.id]
-      if (!retryVideo) {
-        console.error(`[FocusView] No video element for ${camera.id}`)
-        continue
+    let videoElement: HTMLVideoElement | null = null
+    let retries = 0
+
+    // Retry until we find the video element or max retries reached
+    while (!videoElement && retries < maxRetries) {
+      videoElement = thumbnailVideoRefs.value[camera.id]
+      if (!videoElement) {
+        retries++
+        console.log(`[FocusView] Waiting for ${camera.id} video element (attempt ${retries}/${maxRetries})`)
+        await new Promise(resolve => setTimeout(resolve, retryDelay))
       }
     }
 
-    const videoElement = thumbnailVideoRefs.value[camera.id]
-    if (!videoElement) continue
+    if (!videoElement) {
+      console.error(`[FocusView] Failed to find video element for ${camera.id} after ${maxRetries} retries`)
+      continue
+    }
+
+    console.log(`[FocusView] Attaching stream to ${camera.id} thumbnail`)
 
     // Attach to global connection (stream already flowing!)
-    attachToVideoElement(camera.id, videoElement)
+    const attached = attachToVideoElement(camera.id, videoElement)
+    if (!attached) {
+      console.warn(`[FocusView] Failed to attach stream to ${camera.id}`)
+    }
 
     // Set up detection callback for this camera (idempotent - safe to call multiple times)
     const conn = getConnection(camera.id)
@@ -261,6 +282,8 @@ async function attachThumbnailVideos() {
     }
   }
 
+  console.log('[FocusView] All thumbnails attached successfully')
+
   // Monitor connection state for selected camera
   setInterval(() => {
     if (selectedCamera.value) {
@@ -274,6 +297,7 @@ async function attachThumbnailVideos() {
 
 // Select camera (instant switch - no reconnection needed)
 function selectCamera(camera: Camera) {
+  console.log(`[FocusView] Selecting camera: ${camera.id}`)
 
   selectedCamera.value = camera
   videoDimensions.value = null
@@ -285,9 +309,25 @@ function selectCamera(camera: Camera) {
     return
   }
 
-  // Attach stream to main video
+  // Attach stream to main video with retry logic
   if (primaryVideoRef.value) {
-    attachToVideoElement(camera.id, primaryVideoRef.value)
+    const attached = attachToVideoElement(camera.id, primaryVideoRef.value)
+    if (attached) {
+      console.log(`[FocusView] Successfully attached ${camera.id} to primary video`)
+    } else {
+      console.warn(`[FocusView] Failed to attach ${camera.id} to primary video, will retry...`)
+      // Retry after a short delay
+      setTimeout(() => {
+        if (primaryVideoRef.value && selectedCamera.value?.id === camera.id) {
+          const retryAttached = attachToVideoElement(camera.id, primaryVideoRef.value)
+          if (retryAttached) {
+            console.log(`[FocusView] Retry successful for ${camera.id}`)
+          } else {
+            console.error(`[FocusView] Retry failed for ${camera.id}`)
+          }
+        }
+      }, 200)
+    }
   }
 
   // Update state immediately
@@ -302,9 +342,21 @@ onMounted(async () => {
   // Attach thumbnails to global connections (connections are already initialized globally)
   await attachThumbnailVideos()
 
+  // Wait a tick to ensure primary video ref is ready in DOM
+  await new Promise(resolve => setTimeout(resolve, 50))
+
   // Auto-select first camera
-  if (cameras.value.length > 0) {
+  if (cameras.value.length > 0 && primaryVideoRef.value) {
+    console.log('[FocusView] Auto-selecting first camera on mount')
     selectCamera(cameras.value[0])
+  } else if (!primaryVideoRef.value) {
+    console.warn('[FocusView] Primary video ref not ready, retrying...')
+    // Retry after a short delay
+    setTimeout(() => {
+      if (cameras.value.length > 0 && primaryVideoRef.value) {
+        selectCamera(cameras.value[0])
+      }
+    }, 200)
   }
 })
 
@@ -313,142 +365,3 @@ onUnmounted(() => {
   // They stay active for instant loading on other pages
 })
 </script>
-
-<style scoped>
-.status-indicator {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #64748b;
-  animation: pulse 2s infinite;
-}
-
-.status-indicator.connected {
-  background: #22c55e;
-}
-
-.camera-container {
-  display: flex;
-  flex-direction: column;
-  background: #000;
-  overflow: hidden;
-  width: 100%;
-  height: 100%;
-}
-
-.video-wrapper {
-  position: relative;
-  background: #000;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-}
-
-video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.canvas-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
-.no-stream {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  text-align: center;
-  color: #64748b;
-}
-
-.spinner {
-  width: 50px;
-  height: 50px;
-  border: 4px solid #334155;
-  border-top-color: #3b82f6;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 16px;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.camera-thumbnail {
-  padding: 8px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 2px solid transparent;
-}
-
-.camera-thumbnail:hover {
-  background: rgba(59, 130, 246, 0.1);
-  border-color: #3b82f6;
-}
-
-.camera-thumbnail.selected {
-  background: rgba(59, 130, 246, 0.2);
-  border-color: #3b82f6;
-}
-
-.thumbnail-header {
-  margin-bottom: 6px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.thumbnail-name {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #e2e8f0;
-  flex: 1;
-}
-
-.thumbnail-status {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #64748b;
-  flex-shrink: 0;
-}
-
-.thumbnail-status.connected {
-  background: #22c55e;
-  box-shadow: 0 0 8px #22c55e;
-}
-
-.thumbnail-video-container {
-  background: #000;
-  border-radius: 4px;
-  overflow: hidden;
-  aspect-ratio: 16 / 9;
-  position: relative;
-}
-
-.thumbnail-video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.6;
-  }
-}
-</style>

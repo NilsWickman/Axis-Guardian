@@ -1,12 +1,17 @@
 import { ref, type Ref } from 'vue'
 import type { CameraPlacement, Wall } from '../stores/siteMaps'
 import { calculateVisibleFOV, drawPolygon, type LineSegment } from './useGeometry'
+import {
+  extractValue,
+  metersToPixels,
+  RENDER_SCALE
+} from '../utils/siteMapConversion'
 
 export interface CanvasRenderOptions {
   showGrid: boolean
   showScaleReference: boolean
   showCameraLabels: boolean
-  pixelsPerMeter: number
+  pixelsPerMeter: number // Note: This is used for display but internal is always RENDER_SCALE
 }
 
 // Tailwind color map for canvas rendering
@@ -151,54 +156,115 @@ export function useSiteMapCanvas(
     const canvas = canvasRef.value
     if (!canvas || !ctx.value || !options.value.showGrid) return
 
-    const { pixelsPerMeter } = options.value
+    // Always use RENDER_SCALE for grid rendering
+    const pixelsPerMeter = RENDER_SCALE
     const context = ctx.value
 
     context.save()
-    context.strokeStyle = '#2a2a3e'
-    context.lineWidth = 1
 
-    // Vertical lines
-    for (let x = 0; x < canvas.width; x += pixelsPerMeter) {
-      const meters = x / pixelsPerMeter
-      const isMajorLine = meters % 5 === 0
+    // Calculate actual canvas dimensions in meters
+    const widthInMeters = Math.ceil(canvas.width / pixelsPerMeter)
+    const heightInMeters = Math.ceil(canvas.height / pixelsPerMeter)
 
-      context.lineWidth = isMajorLine ? 2 : 1
-      context.strokeStyle = isMajorLine ? '#3a3a4e' : '#2a2a3e'
+    console.log(`Drawing grid: ${widthInMeters}m × ${heightInMeters}m (${canvas.width}px × ${canvas.height}px) at ${RENDER_SCALE}px/m`)
+
+    // Draw vertical lines - every meter
+    for (let meters = 0; meters <= widthInMeters; meters++) {
+      const x = meters * pixelsPerMeter
+      const isMajorLine = meters % 10 === 0  // Major lines every 10m for large grids
+      const isMinorMajorLine = meters % 5 === 0  // Minor major every 5m
+
+      if (isMajorLine) {
+        context.strokeStyle = '#4a4a5e'
+        context.lineWidth = 3
+      } else if (isMinorMajorLine) {
+        context.strokeStyle = '#3a3a4e'
+        context.lineWidth = 2
+      } else {
+        context.strokeStyle = '#2a2a3e'
+        context.lineWidth = 1
+      }
 
       context.beginPath()
       context.moveTo(x, 0)
       context.lineTo(x, canvas.height)
       context.stroke()
 
+      // Draw labels on major lines
       if (isMajorLine && meters > 0) {
-        context.fillStyle = '#6a6a7e'
-        context.font = '10px monospace'
+        context.fillStyle = '#9a9aae'
+        context.font = 'bold 14px monospace'
         context.textAlign = 'center'
-        context.fillText(`${meters}m`, x, 15)
+        context.fillText(`${meters}m`, x, 20)
       }
     }
 
-    // Horizontal lines
-    for (let y = 0; y < canvas.height; y += pixelsPerMeter) {
-      const meters = y / pixelsPerMeter
-      const isMajorLine = meters % 5 === 0
+    // Draw horizontal lines - every meter
+    for (let meters = 0; meters <= heightInMeters; meters++) {
+      const y = meters * pixelsPerMeter
+      const isMajorLine = meters % 10 === 0
+      const isMinorMajorLine = meters % 5 === 0
 
-      context.lineWidth = isMajorLine ? 2 : 1
-      context.strokeStyle = isMajorLine ? '#3a3a4e' : '#2a2a3e'
+      if (isMajorLine) {
+        context.strokeStyle = '#4a4a5e'
+        context.lineWidth = 3
+      } else if (isMinorMajorLine) {
+        context.strokeStyle = '#3a3a4e'
+        context.lineWidth = 2
+      } else {
+        context.strokeStyle = '#2a2a3e'
+        context.lineWidth = 1
+      }
 
       context.beginPath()
       context.moveTo(0, y)
       context.lineTo(canvas.width, y)
       context.stroke()
 
+      // Draw labels on major lines
       if (isMajorLine && meters > 0) {
-        context.fillStyle = '#6a6a7e'
-        context.font = '10px monospace'
+        context.fillStyle = '#9a9aae'
+        context.font = 'bold 14px monospace'
         context.textAlign = 'left'
-        context.fillText(`${meters}m`, 5, y - 3)
+        context.fillText(`${meters}m`, 8, y - 5)
       }
     }
+
+    // Draw grid scale legend in top-left corner
+    const legendX = 10
+    const legendY = 50
+    const legendSize = pixelsPerMeter
+
+    // Draw background for legend
+    context.fillStyle = 'rgba(0, 0, 0, 0.9)'
+    context.fillRect(legendX - 5, legendY - 30, legendSize + 80, 60)
+
+    // Draw 1-meter reference line
+    context.strokeStyle = '#ffffff'
+    context.lineWidth = 3
+    context.beginPath()
+    context.moveTo(legendX, legendY)
+    context.lineTo(legendX + legendSize, legendY)
+    context.stroke()
+
+    // Draw tick marks at ends
+    context.beginPath()
+    context.moveTo(legendX, legendY - 5)
+    context.lineTo(legendX, legendY + 5)
+    context.moveTo(legendX + legendSize, legendY - 5)
+    context.lineTo(legendX + legendSize, legendY + 5)
+    context.stroke()
+
+    // Draw label
+    context.fillStyle = '#ffffff'
+    context.font = 'bold 14px monospace'
+    context.textAlign = 'center'
+    context.fillText('1 METER', legendX + legendSize / 2, legendY + 20)
+
+    // Add canvas dimensions info
+    context.fillStyle = '#aaaaaa'
+    context.font = '11px monospace'
+    context.fillText(`${widthInMeters}m × ${heightInMeters}m`, legendX + legendSize / 2, legendY + 35)
 
     context.restore()
   }
@@ -277,15 +343,21 @@ export function useSiteMapCanvas(
     context.save()
 
     walls.forEach((wall) => {
-      const { start, end, type = 'internal', thickness = 4, id } = wall
+      const { start, end, type = 'internal', id } = wall
       const isSelected = selectedWallId === id
       const isHovered = hoveredWallId === id
 
-      // Wall styling based on type
+      // Convert meter coordinates to pixels for rendering
+      const startX = metersToPixels(extractValue(start.x))
+      const startY = metersToPixels(extractValue(start.y))
+      const endX = metersToPixels(extractValue(end.x))
+      const endY = metersToPixels(extractValue(end.y))
+
+      // Wall styling based on type (fixed line widths)
       const wallStyles = {
-        external: { color: '#ffffff', width: thickness + 2 },
-        internal: { color: '#cccccc', width: thickness },
-        door: { color: '#60a5fa', width: thickness - 1 },
+        external: { color: '#ffffff', width: 6 },
+        internal: { color: '#cccccc', width: 4 },
+        door: { color: '#60a5fa', width: 3 },
       }
 
       const style = wallStyles[type] || wallStyles.internal
@@ -316,8 +388,8 @@ export function useSiteMapCanvas(
       }
 
       context.beginPath()
-      context.moveTo(start.x, start.y)
-      context.lineTo(end.x, end.y)
+      context.moveTo(startX, startY)
+      context.lineTo(endX, endY)
       context.stroke()
 
       context.setLineDash([])
@@ -331,13 +403,13 @@ export function useSiteMapCanvas(
 
         // Start endpoint
         context.beginPath()
-        context.arc(start.x, start.y, 7, 0, Math.PI * 2)
+        context.arc(startX, startY, 7, 0, Math.PI * 2)
         context.fill()
         context.stroke()
 
         // End endpoint
         context.beginPath()
-        context.arc(end.x, end.y, 7, 0, Math.PI * 2)
+        context.arc(endX, endY, 7, 0, Math.PI * 2)
         context.fill()
         context.stroke()
       }
@@ -349,7 +421,7 @@ export function useSiteMapCanvas(
         if (hoveredPart === 'start') {
           // Highlight start endpoint
           context.beginPath()
-          context.arc(start.x, start.y, 10, 0, Math.PI * 2)
+          context.arc(startX, startY, 10, 0, Math.PI * 2)
           context.fill()
 
           // Draw label
@@ -357,11 +429,11 @@ export function useSiteMapCanvas(
           context.font = 'bold 11px sans-serif'
           context.textAlign = 'center'
           context.textBaseline = 'middle'
-          context.fillText('DRAG', start.x, start.y - 18)
+          context.fillText('DRAG', startX, startY - 18)
         } else if (hoveredPart === 'end') {
           // Highlight end endpoint
           context.beginPath()
-          context.arc(end.x, end.y, 10, 0, Math.PI * 2)
+          context.arc(endX, endY, 10, 0, Math.PI * 2)
           context.fill()
 
           // Draw label
@@ -369,7 +441,7 @@ export function useSiteMapCanvas(
           context.font = 'bold 11px sans-serif'
           context.textAlign = 'center'
           context.textBaseline = 'middle'
-          context.fillText('DRAG', end.x, end.y - 18)
+          context.fillText('DRAG', endX, endY - 18)
         } else if (hoveredPart === 'body') {
           // Show that the whole wall can be moved (future feature)
           // For now, just show a subtle highlight
@@ -380,17 +452,28 @@ export function useSiteMapCanvas(
     context.restore()
   }
 
-  const drawPreviewWall = (start: { x: number; y: number }, end: { x: number; y: number }, wallType: 'external' | 'internal' | 'door', thickness: number) => {
+  const drawPreviewWall = (
+    start: { x: number; y: number },
+    end: { x: number; y: number },
+    wallType: 'external' | 'internal' | 'door',
+    _thickness: number // Ignored - we use fixed widths
+  ) => {
     if (!ctx.value) return
 
     const context = ctx.value
 
     context.save()
 
+    // Convert meter coordinates to pixels for rendering
+    const startX = metersToPixels(start.x)
+    const startY = metersToPixels(start.y)
+    const endX = metersToPixels(end.x)
+    const endY = metersToPixels(end.y)
+
     const wallStyles = {
-      external: { color: '#ffffff', width: thickness + 2 },
-      internal: { color: '#cccccc', width: thickness },
-      door: { color: '#60a5fa', width: thickness - 1 },
+      external: { color: '#ffffff', width: 6 },
+      internal: { color: '#cccccc', width: 4 },
+      door: { color: '#60a5fa', width: 3 },
     }
 
     const style = wallStyles[wallType] || wallStyles.internal
@@ -405,8 +488,8 @@ export function useSiteMapCanvas(
     }
 
     context.beginPath()
-    context.moveTo(start.x, start.y)
-    context.lineTo(end.x, end.y)
+    context.moveTo(startX, startY)
+    context.lineTo(endX, endY)
     context.stroke()
 
     context.setLineDash([])
@@ -414,73 +497,124 @@ export function useSiteMapCanvas(
     // Draw endpoints
     context.fillStyle = style.color
     context.beginPath()
-    context.arc(start.x, start.y, 4, 0, Math.PI * 2)
+    context.arc(startX, startY, 4, 0, Math.PI * 2)
     context.fill()
     context.beginPath()
-    context.arc(end.x, end.y, 4, 0, Math.PI * 2)
+    context.arc(endX, endY, 4, 0, Math.PI * 2)
     context.fill()
 
     context.restore()
   }
 
-  const drawWallMeasurements = (start: { x: number; y: number }, end: { x: number; y: number }, pixelsPerMeter: number = 50) => {
+  const drawWallMeasurements = (
+    start: { x: number; y: number },
+    end: { x: number; y: number },
+    _pixelsPerMeter: number = RENDER_SCALE // Ignored, always use RENDER_SCALE
+  ) => {
     if (!ctx.value) return
 
     const context = ctx.value
     context.save()
 
-    // Calculate distance and angle
+    // Convert meter coordinates to pixels for rendering
+    const startX = metersToPixels(start.x)
+    const startY = metersToPixels(start.y)
+    const endX = metersToPixels(end.x)
+    const endY = metersToPixels(end.y)
+
+    // Calculate distance in meters directly
     const dx = end.x - start.x
     const dy = end.y - start.y
-    const distancePixels = Math.sqrt(dx * dx + dy * dy)
-    const distanceMeters = distancePixels / pixelsPerMeter
-    const angleDegrees = Math.atan2(dy, dx) * (180 / Math.PI)
+    const distanceMeters = Math.sqrt(dx * dx + dy * dy)
+    const distanceCentimeters = distanceMeters * 100
+    const angleDegrees = Math.atan2(endY - startY, endX - startX) * (180 / Math.PI)
 
-    // Calculate midpoint
-    const midX = (start.x + end.x) / 2
-    const midY = (start.y + end.y) / 2
+    // Calculate midpoint in pixels
+    const midX = (startX + endX) / 2
+    const midY = (startY + endY) / 2
 
-    // Draw distance label
-    context.font = 'bold 12px monospace'
-    context.fillStyle = '#ffffff'
-    context.strokeStyle = '#000000'
-    context.lineWidth = 3
+    // Format distance display with both meters and centimeters
+    const metersWhole = Math.floor(distanceMeters)
+    const centimetersRemainder = Math.round((distanceMeters - metersWhole) * 100)
+
+    let distanceText: string
+    let distanceSubtext: string
+
+    if (distanceMeters >= 1) {
+      // Display as "X.XXm" for primary, "X cm" for secondary
+      distanceText = `${distanceMeters.toFixed(2)}m`
+      distanceSubtext = `(${metersWhole}m ${centimetersRemainder}cm)`
+    } else {
+      // Display in cm if less than 1 meter
+      distanceText = `${distanceCentimeters.toFixed(0)}cm`
+      distanceSubtext = `(${distanceMeters.toFixed(3)}m)`
+    }
+
+    // Draw distance label with larger, more prominent styling
+    context.font = 'bold 14px monospace'
     context.textAlign = 'center'
     context.textBaseline = 'middle'
 
-    const distanceText = `${distanceMeters.toFixed(2)}m`
-
-    // Draw background for text
+    // Measure text for background
     const metrics = context.measureText(distanceText)
-    const padding = 4
-    context.fillStyle = 'rgba(0, 0, 0, 0.7)'
+    const padding = 6
+
+    // Draw background box for distance
+    context.fillStyle = 'rgba(6, 182, 212, 0.95)' // cyan-500 with high opacity
+    const boxHeight = 42
+    const boxWidth = Math.max(metrics.width + padding * 2, 140)
     context.fillRect(
-      midX - metrics.width / 2 - padding,
-      midY - 20 - 8,
-      metrics.width + padding * 2,
-      16
+      midX - boxWidth / 2,
+      midY - 30,
+      boxWidth,
+      boxHeight
     )
 
-    // Draw text with stroke for better visibility
-    context.strokeText(distanceText, midX, midY - 20)
+    // Draw border
+    context.strokeStyle = '#ffffff'
+    context.lineWidth = 2
+    context.strokeRect(
+      midX - boxWidth / 2,
+      midY - 30,
+      boxWidth,
+      boxHeight
+    )
+
+    // Draw main distance text
     context.fillStyle = '#ffffff'
-    context.fillText(distanceText, midX, midY - 20)
+    context.fillText(distanceText, midX, midY - 18)
+
+    // Draw subtext with meters and centimeters
+    context.font = '11px monospace'
+    context.fillStyle = '#e0f7fa'
+    context.fillText(distanceSubtext, midX, midY - 2)
 
     // Draw angle label
     const angleText = `${angleDegrees.toFixed(1)}°`
     const angleMetrics = context.measureText(angleText)
 
-    context.fillStyle = 'rgba(0, 0, 0, 0.7)'
+    context.fillStyle = 'rgba(245, 158, 11, 0.95)' // amber-500
+    const angleBoxWidth = angleMetrics.width + padding * 2
     context.fillRect(
-      midX - angleMetrics.width / 2 - padding,
-      midY + 4,
-      angleMetrics.width + padding * 2,
-      16
+      midX - angleBoxWidth / 2,
+      midY + 16,
+      angleBoxWidth,
+      20
     )
 
-    context.strokeText(angleText, midX, midY + 12)
-    context.fillStyle = '#ffdd57'
-    context.fillText(angleText, midX, midY + 12)
+    // Draw border for angle
+    context.strokeStyle = '#ffffff'
+    context.lineWidth = 2
+    context.strokeRect(
+      midX - angleBoxWidth / 2,
+      midY + 16,
+      angleBoxWidth,
+      20
+    )
+
+    context.font = 'bold 12px monospace'
+    context.fillStyle = '#ffffff'
+    context.fillText(angleText, midX, midY + 26)
 
     context.restore()
   }
@@ -498,16 +632,31 @@ export function useSiteMapCanvas(
     if (!canvas) return
 
     const context = ctx.value
-    const { x, y, rotation, angle, fov, viewDistance, color } = placement
+
+    // Extract values from unit objects
+    const x = metersToPixels(extractValue(placement.position.x))
+    const y = metersToPixels(extractValue(placement.position.y))
+    const rotation = extractValue(placement.rotation)
+    const angle = extractValue(placement.angle)
+    const fov = extractValue(placement.fov)
+    const viewDistance = metersToPixels(extractValue(placement.viewDistance))
+    const color = placement.color
+
     const isHovered = hoveredCameraId.value === placement.cameraId
 
     // Convert Tailwind color to hex
     const hexColor = tailwindColorToHex(color)
 
-    // Convert walls to line segments for ray-casting
+    // Convert walls to line segments for ray-casting (in pixels)
     const wallSegments: LineSegment[] = walls.map(wall => ({
-      start: wall.start,
-      end: wall.end
+      start: {
+        x: metersToPixels(extractValue(wall.start.x)),
+        y: metersToPixels(extractValue(wall.start.y))
+      },
+      end: {
+        x: metersToPixels(extractValue(wall.end.x)),
+        y: metersToPixels(extractValue(wall.end.y))
+      }
     }))
 
     // Calculate visible FOV with wall occlusion
@@ -604,8 +753,12 @@ export function useSiteMapCanvas(
     y: number,
     cameras: CameraPlacement[]
   ): CameraPlacement | null => {
+    // x, y are in pixels from mouse position
     for (const camera of cameras) {
-      const distance = Math.sqrt(Math.pow(x - camera.x, 2) + Math.pow(y - camera.y, 2))
+      // Convert camera position from meters to pixels
+      const cameraX = metersToPixels(extractValue(camera.position.x))
+      const cameraY = metersToPixels(extractValue(camera.position.y))
+      const distance = Math.sqrt(Math.pow(x - cameraX, 2) + Math.pow(y - cameraY, 2))
       if (distance < 20) {
         return camera
       }

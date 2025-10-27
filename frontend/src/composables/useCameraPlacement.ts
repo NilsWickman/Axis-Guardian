@@ -1,52 +1,58 @@
 import { ref, computed } from 'vue'
 import type { CameraPlacement } from '../stores/siteMaps'
+import {
+  extractValue,
+  createMeterUnit,
+  createDegreeUnit,
+  pixelsToMeters,
+  metersToPixels
+} from '../utils/siteMapConversion'
 
 export interface CameraConfig {
-  x: number
-  y: number
-  rotation: number
-  angle: number
-  height: number
-  fov: number
-  viewDistance: number
+  x: number // meters
+  y: number // meters
+  rotation: number // degrees
+  angle: number // degrees
+  height: number // meters
+  fov: number // degrees
+  viewDistance: number // meters
   autoCalculateDistance: boolean
   color: string
   notes: string
 }
 
 const DEFAULT_CONFIG: CameraConfig = {
-  x: 400,
-  y: 300,
+  x: 4,
+  y: 3,
   rotation: 0,
   angle: 35,
   height: 2.4,
   fov: 90,
-  viewDistance: 200,
+  viewDistance: 20, // meters
   autoCalculateDistance: true,
   color: 'blue-500',
   notes: ''
 }
 
-export function useCameraPlacement(pixelsPerMeter: number = 50) {
+export function useCameraPlacement() {
   const selectedCameraId = ref<string>('')
   const cameraConfig = ref<CameraConfig>({ ...DEFAULT_CONFIG })
   const isUpdating = ref(false)
   const selectedPlacedCamera = ref<CameraPlacement | null>(null)
 
-  // Calculate viewing distance based on height and angle
+  // Calculate viewing distance based on height and angle (in meters)
   const calculatedDistance = computed(() => {
     const height = cameraConfig.value.height
     const angle = cameraConfig.value.angle
 
-    if (height <= 0) return 200
-    if (angle <= 0) return 500
-    if (angle >= 90) return 50
+    if (height <= 0) return 20
+    if (angle <= 0) return 100
+    if (angle >= 90) return 5
 
     const angleRad = angle * (Math.PI / 180)
     const distanceMeters = height / Math.tan(angleRad)
-    const distancePixels = distanceMeters * pixelsPerMeter
 
-    return Math.max(50, Math.min(500, distancePixels))
+    return Math.max(5, Math.min(200, distanceMeters))
   })
 
   const effectiveViewDistance = computed(() => {
@@ -68,14 +74,15 @@ export function useCameraPlacement(pixelsPerMeter: number = 50) {
     selectedPlacedCamera.value = camera
     isUpdating.value = true
 
+    // Extract values from unit objects
     cameraConfig.value = {
-      x: camera.x,
-      y: camera.y,
-      rotation: camera.rotation,
-      angle: camera.angle,
-      height: camera.height,
-      fov: camera.fov,
-      viewDistance: camera.viewDistance,
+      x: extractValue(camera.position.x),
+      y: extractValue(camera.position.y),
+      rotation: extractValue(camera.rotation),
+      angle: extractValue(camera.angle),
+      height: extractValue(camera.height),
+      fov: extractValue(camera.fov),
+      viewDistance: extractValue(camera.viewDistance),
       autoCalculateDistance: camera.autoCalculateDistance,
       color: camera.color,
       notes: camera.notes || ''
@@ -85,13 +92,15 @@ export function useCameraPlacement(pixelsPerMeter: number = 50) {
   const createPlacement = (cameraId?: string): CameraPlacement => {
     return {
       cameraId: cameraId || selectedCameraId.value,
-      x: cameraConfig.value.x,
-      y: cameraConfig.value.y,
-      rotation: cameraConfig.value.rotation,
-      angle: cameraConfig.value.angle,
-      height: cameraConfig.value.height,
-      fov: cameraConfig.value.fov,
-      viewDistance: effectiveViewDistance.value,
+      position: {
+        x: createMeterUnit(cameraConfig.value.x),
+        y: createMeterUnit(cameraConfig.value.y)
+      },
+      rotation: createDegreeUnit(cameraConfig.value.rotation),
+      angle: createDegreeUnit(cameraConfig.value.angle),
+      height: createMeterUnit(cameraConfig.value.height),
+      fov: createDegreeUnit(cameraConfig.value.fov),
+      viewDistance: createMeterUnit(effectiveViewDistance.value),
       autoCalculateDistance: cameraConfig.value.autoCalculateDistance,
       color: cameraConfig.value.color,
       notes: cameraConfig.value.notes
@@ -123,8 +132,8 @@ export function useCameraPlacement(pixelsPerMeter: number = 50) {
     }
 
     if (!cameraConfig.value.autoCalculateDistance) {
-      if (cameraConfig.value.viewDistance < 50 || cameraConfig.value.viewDistance > 500) {
-        errors.viewDistance = 'View distance must be between 50-500px'
+      if (cameraConfig.value.viewDistance < 5 || cameraConfig.value.viewDistance > 200) {
+        errors.viewDistance = 'View distance must be between 5-200m'
       }
     }
 

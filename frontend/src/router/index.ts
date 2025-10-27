@@ -64,6 +64,10 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/site-maps/viewer',
+    redirect: '/site-maps',
+  },
+  {
     path: '/site-maps/generate',
     name: 'SiteMapGenerator',
     component: () => import('@/views/site-maps/SiteMapGenerator.vue'),
