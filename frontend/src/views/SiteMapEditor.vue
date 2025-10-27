@@ -40,9 +40,13 @@
           :show-grid="canvasOptions.showGrid"
           :show-labels="canvasOptions.showCameraLabels"
           :show-save="hasUnsavedChanges"
+          show-export
+          show-import
           @toggle-grid="canvasOptions.showGrid = !canvasOptions.showGrid; interaction.snapToGrid.value = canvasOptions.showGrid; wallEditor.setSnapOptions({ snapToGrid: canvasOptions.showGrid }); drawMap()"
           @toggle-labels="canvasOptions.showCameraLabels = !canvasOptions.showCameraLabels"
           @save="saveConfiguration"
+          @export="handleExport"
+          @import="handleImport"
         />
       </div>
 
@@ -72,26 +76,68 @@
           ></textarea>
         </div>
 
+        <!-- Building Size Presets -->
+        <div>
+          <label class="block text-[10px] font-medium mb-1">Building Size Preset</label>
+          <select
+            v-model="selectedPreset"
+            @change="applyPreset"
+            class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background"
+          >
+            <option value="custom">Custom Size</option>
+            <option value="small">Small (20m × 20m) - Retail/Office</option>
+            <option value="medium">Medium (50m × 50m) - Warehouse</option>
+            <option value="large">Large (100m × 100m) - Factory</option>
+            <option value="xlarge">Extra Large (200m × 200m) - Industrial Park</option>
+            <option value="campus">Campus (500m × 500m) - Large Facility</option>
+            <option value="auditorium">Auditorium (21m × 28m)</option>
+          </select>
+        </div>
+
         <div class="grid grid-cols-2 gap-2">
           <div>
-            <label class="block text-[10px] font-medium mb-1">Width (px)</label>
+            <label class="block text-[10px] font-medium mb-1">Width (meters)</label>
             <input
-              v-model.number="siteMapForm.width"
+              v-model.number="siteMapMeters.width"
               type="number"
+              step="0.1"
+              min="1"
               class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background"
-              placeholder="Width"
-              @input="markAsChanged"
+              placeholder="Width in meters"
+              @input="updateFromMeters"
             />
+            <div class="text-[10px] text-muted-foreground mt-1">
+              {{ siteMapForm.width }} px
+            </div>
           </div>
           <div>
-            <label class="block text-[10px] font-medium mb-1">Height (px)</label>
+            <label class="block text-[10px] font-medium mb-1">Height (meters)</label>
             <input
-              v-model.number="siteMapForm.height"
+              v-model.number="siteMapMeters.height"
               type="number"
+              step="0.1"
+              min="1"
               class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background"
-              placeholder="Height"
-              @input="markAsChanged"
+              placeholder="Height in meters"
+              @input="updateFromMeters"
             />
+            <div class="text-[10px] text-muted-foreground mt-1">
+              {{ siteMapForm.height }} px
+            </div>
+          </div>
+        </div>
+
+        <!-- Scale Information -->
+        <div class="p-2 bg-muted rounded-lg">
+          <div class="text-[10px] font-medium text-muted-foreground mb-1">Grid Scale</div>
+          <div class="text-sm font-bold text-cyan-600">
+            {{ PIXELS_PER_METER }} pixels = 1 meter
+          </div>
+          <div class="text-[10px] text-muted-foreground mt-1">
+            Each grid square represents 1m × 1m
+          </div>
+          <div class="text-[10px] text-amber-600 mt-1.5 pt-1.5 border-t border-border">
+            Canvas: {{ siteMapMeters.width }}m × {{ siteMapMeters.height }}m
           </div>
         </div>
 
@@ -174,11 +220,53 @@
         />
 
         <!-- Coordinates Display -->
-        <div class="absolute bottom-4 left-4 bg-black/70 text-white px-3 py-1.5 rounded text-sm font-mono">
-          <div>Mouse: ({{ Math.round(interaction.mouseX.value / interaction.scale.value) }}, {{ Math.round(interaction.mouseY.value / interaction.scale.value) }}) px</div>
-          <div class="text-[10px] text-gray-300">
-            {{ (interaction.mouseX.value / interaction.scale.value / PIXELS_PER_METER).toFixed(2) }}m,
-            {{ (interaction.mouseY.value / interaction.scale.value / PIXELS_PER_METER).toFixed(2) }}m
+        <div class="absolute bottom-4 left-4 bg-black/90 text-white px-4 py-2.5 rounded-lg border-2 border-cyan-500">
+          <div class="text-xs text-gray-400 mb-1 font-semibold">POSITION</div>
+          <div class="font-bold text-base text-cyan-400">
+            {{ pixelsToMeters(interaction.mouseX.value / interaction.scale.value).toFixed(2) }}m ×
+            {{ pixelsToMeters(interaction.mouseY.value / interaction.scale.value).toFixed(2) }}m
+          </div>
+          <div class="text-[10px] text-gray-400 mt-1">
+            Rendering: {{ RENDER_SCALE }} px/m ({{ Math.round(interaction.mouseX.value / interaction.scale.value) }}, {{ Math.round(interaction.mouseY.value / interaction.scale.value) }}) px
+          </div>
+          <div class="text-[10px] text-gray-500 mt-1.5 pt-1.5 border-t border-gray-700">
+            Grid: 1m × 1m squares
+          </div>
+        </div>
+
+        <!-- Precision Popup - Shows while drawing walls -->
+        <div
+          v-if="wallEditor.drawState.value.isDrawing && wallEditor.drawState.value.startPoint && wallEditor.drawState.value.currentPoint"
+          class="absolute bg-gradient-to-br from-cyan-600 to-blue-600 text-white px-6 py-4 rounded-xl shadow-2xl border-2 border-white/50 pointer-events-none"
+          :style="{
+            left: `${interaction.mouseX.value + 20}px`,
+            top: `${interaction.mouseY.value - 100}px`,
+            zIndex: 1000
+          }"
+        >
+          <div class="text-xs font-semibold text-cyan-100 mb-2 uppercase tracking-wider">Drawing Precision</div>
+          <div class="space-y-2">
+            <!-- Distance -->
+            <div class="bg-white/20 rounded-lg px-3 py-2">
+              <div class="text-[10px] text-cyan-100 mb-0.5">Length</div>
+              <div class="font-bold text-2xl">
+                {{ getWallDistanceMeters() }}<span class="text-base">m</span>
+              </div>
+              <div class="text-xs text-cyan-100 mt-0.5">
+                {{ getWallDistanceBreakdown() }}
+              </div>
+            </div>
+            <!-- Angle -->
+            <div class="bg-white/20 rounded-lg px-3 py-2">
+              <div class="text-[10px] text-cyan-100 mb-0.5">Angle</div>
+              <div class="font-bold text-xl">
+                {{ getWallAngle() }}<span class="text-base">°</span>
+              </div>
+            </div>
+            <!-- Grid Accuracy -->
+            <div class="text-[10px] text-cyan-100 text-center pt-1 border-t border-white/30">
+              {{ canvasOptions.showGrid ? '✓ Snapped to grid' : 'Free drawing' }}
+            </div>
           </div>
         </div>
 
@@ -284,12 +372,13 @@ import CameraConfigForm from '../components/features/site-map/CameraConfigForm.v
 import MapControls from '../components/features/site-map/MapControls.vue'
 import WallToolbar from '../components/features/site-map/WallToolbar.vue'
 import BulkEditPanel from '../components/features/site-map/BulkEditPanel.vue'
+import { RENDER_SCALE, extractValue, metersToPixels, pixelsToMeters } from '../utils/siteMapConversion'
 
 const siteMapStore = useSiteMapStore()
 const cameraStore = useCameraStore()
 const toast = useToast()
 
-const PIXELS_PER_METER = 50
+const PIXELS_PER_METER = RENDER_SCALE // Fixed at 100 pixels per meter
 
 // Data
 const siteMaps = computed(() => siteMapStore.siteMaps)
@@ -307,6 +396,25 @@ const siteMapForm = reactive({
   width: 0,
   height: 0,
 })
+
+// Site map in meters (for easier editing)
+const siteMapMeters = reactive({
+  width: 0,
+  height: 0,
+})
+
+// Building size presets
+const selectedPreset = ref('custom')
+
+const buildingPresets = {
+  small: { width: 20, height: 20 },
+  medium: { width: 50, height: 50 },
+  large: { width: 100, height: 100 },
+  xlarge: { width: 200, height: 200 },
+  auditorium: { width: 21, height: 28 },
+  campus: { width: 500, height: 500 },
+  custom: { width: 500, height: 500 }
+}
 
 // Canvas
 const mapCanvas = ref<HTMLCanvasElement | null>(null)
@@ -328,16 +436,16 @@ const canvasStyle = computed(() => ({
 
 // Composables
 const canvas = useSiteMapCanvas(mapCanvas, ref(canvasOptions))
-const placement = useCameraPlacement(PIXELS_PER_METER)
+const placement = useCameraPlacement() // No longer needs pixelsPerMeter parameter
 const interaction = useCanvasInteraction(mapCanvas, canvas.findCameraAtPoint)
 const history = useConfigHistory<CameraPlacement[]>()
 const wallEditor = useWallEditor()
 const cameraSelection = useCameraSelection()
 const cameraValidation = useCameraValidation()
 
-// Set grid size from pixels per meter
-interaction.gridSize.value = PIXELS_PER_METER
-wallEditor.setSnapOptions({ gridSize: PIXELS_PER_METER })
+// Grid size is already set to RENDER_SCALE in composables
+interaction.gridSize.value = RENDER_SCALE
+wallEditor.setSnapOptions({ gridSize: RENDER_SCALE })
 
 // Camera warnings
 const cameraWarnings = computed(() => {
@@ -488,6 +596,59 @@ const handleKeyDown = (e: KeyboardEvent) => {
     // Door wall type
     wallEditor.setWallType('door')
   }
+}
+
+// Building size preset functions
+const applyPreset = () => {
+  const preset = buildingPresets[selectedPreset.value as keyof typeof buildingPresets]
+  siteMapMeters.width = preset.width
+  siteMapMeters.height = preset.height
+  updateFromMeters()
+}
+
+const updateFromMeters = () => {
+  siteMapForm.width = Math.round(siteMapMeters.width * PIXELS_PER_METER)
+  siteMapForm.height = Math.round(siteMapMeters.height * PIXELS_PER_METER)
+  markAsChanged()
+}
+
+const updateToMeters = () => {
+  siteMapMeters.width = Math.round((siteMapForm.width / PIXELS_PER_METER) * 10) / 10
+  siteMapMeters.height = Math.round((siteMapForm.height / PIXELS_PER_METER) * 10) / 10
+}
+
+// Wall drawing precision functions (wall points are already in meters)
+const getWallDistanceMeters = (): string => {
+  if (!wallEditor.drawState.value.startPoint || !wallEditor.drawState.value.currentPoint) return '0.00'
+
+  const dx = wallEditor.drawState.value.currentPoint.x - wallEditor.drawState.value.startPoint.x
+  const dy = wallEditor.drawState.value.currentPoint.y - wallEditor.drawState.value.startPoint.y
+  const distanceMeters = Math.sqrt(dx * dx + dy * dy)
+
+  return distanceMeters.toFixed(2)
+}
+
+const getWallDistanceBreakdown = (): string => {
+  if (!wallEditor.drawState.value.startPoint || !wallEditor.drawState.value.currentPoint) return '0m 0cm'
+
+  const dx = wallEditor.drawState.value.currentPoint.x - wallEditor.drawState.value.startPoint.x
+  const dy = wallEditor.drawState.value.currentPoint.y - wallEditor.drawState.value.startPoint.y
+  const distanceMeters = Math.sqrt(dx * dx + dy * dy)
+
+  const meters = Math.floor(distanceMeters)
+  const centimeters = Math.round((distanceMeters - meters) * 100)
+
+  return `${meters}m ${centimeters}cm`
+}
+
+const getWallAngle = (): string => {
+  if (!wallEditor.drawState.value.startPoint || !wallEditor.drawState.value.currentPoint) return '0.0'
+
+  const dx = wallEditor.drawState.value.currentPoint.x - wallEditor.drawState.value.startPoint.x
+  const dy = wallEditor.drawState.value.currentPoint.y - wallEditor.drawState.value.startPoint.y
+  const angleDegrees = Math.atan2(dy, dx) * (180 / Math.PI)
+
+  return angleDegrees.toFixed(1)
 }
 
 // Camera functions
@@ -679,11 +840,13 @@ const handleBulkApplyAll = (config: any) => {
 // Canvas interaction handlers
 const handleMouseDown = (event: MouseEvent) => {
   const coords = interaction.getCanvasCoordinates(event)
-  // getCanvasCoordinates already accounts for canvas position, just need to account for scale
-  const canvasX = coords.x / interaction.scale.value
-  const canvasY = coords.y / interaction.scale.value
+  // getCanvasCoordinates returns screen pixels, need to convert to canvas pixels then to meters
+  const canvasPixelX = coords.x / interaction.scale.value
+  const canvasPixelY = coords.y / interaction.scale.value
+  const canvasX = pixelsToMeters(canvasPixelX)
+  const canvasY = pixelsToMeters(canvasPixelY)
 
-  console.log('MouseDown - Wall editor active:', wallEditor.isActive.value, 'Mode:', wallEditor.mode.value, 'Coords:', canvasX, canvasY)
+  console.log('MouseDown - Wall editor active:', wallEditor.isActive.value, 'Mode:', wallEditor.mode.value, 'Coords (meters):', canvasX, canvasY)
 
   // Wall editor mode - but allow camera interaction in edit mode
   if (wallEditor.isActive.value) {
@@ -691,12 +854,13 @@ const handleMouseDown = (event: MouseEvent) => {
     if (wallEditor.mode.value === 'draw') {
       const walls = currentSiteMap.value?.walls || []
       const snapped = wallEditor.snapPoint(canvasX, canvasY, walls)
-      console.log('Starting to draw wall at', snapped.x, snapped.y)
+      console.log('Starting to draw wall at (meters)', snapped.x, snapped.y)
       wallEditor.startDrawing(snapped.x, snapped.y)
       return
     } else if (wallEditor.mode.value === 'delete') {
       if (!currentSiteMap.value) return
-      const wall = wallEditor.findWallAtPoint(canvasX, canvasY, currentSiteMap.value.walls)
+      // findWallAtPoint expects pixels for hit detection
+      const wall = wallEditor.findWallAtPoint(canvasPixelX, canvasPixelY, currentSiteMap.value.walls)
       if (wall) {
         siteMapStore.updateSiteMap(currentSiteMap.value.id, {
           walls: currentSiteMap.value.walls.filter(w => w.id !== wall.id)
@@ -709,10 +873,11 @@ const handleMouseDown = (event: MouseEvent) => {
     } else if (wallEditor.mode.value === 'edit') {
       // In edit mode, first check for walls, then allow camera interaction
       if (!currentSiteMap.value) return
-      const wall = wallEditor.findWallAtPoint(canvasX, canvasY, currentSiteMap.value.walls)
+      // findWallAtPoint expects pixels for hit detection
+      const wall = wallEditor.findWallAtPoint(canvasPixelX, canvasPixelY, currentSiteMap.value.walls)
       if (wall) {
         // Edit mode - check if clicking on an endpoint
-        const endpoint = wallEditor.findEndpointAtPoint(canvasX, canvasY, wall)
+        const endpoint = wallEditor.findEndpointAtPoint(canvasPixelX, canvasPixelY, wall)
         if (endpoint) {
           wallEditor.startDraggingEndpoint(wall, endpoint)
         } else {
@@ -731,8 +896,8 @@ const handleMouseDown = (event: MouseEvent) => {
     return
   }
 
-  // Camera interaction
-  const camera = canvas.findCameraAtPoint(canvasX, canvasY, placedCameras.value)
+  // Camera interaction - findCameraAtPoint expects pixels
+  const camera = canvas.findCameraAtPoint(canvasPixelX, canvasPixelY, placedCameras.value)
   if (camera) {
     // Multi-select with Ctrl/Cmd
     if (event.ctrlKey || event.metaKey) {
@@ -757,9 +922,11 @@ const handleMouseMove = (event: MouseEvent) => {
 
   const screenX = interaction.mouseX.value
   const screenY = interaction.mouseY.value
-  // mouseX/mouseY are already relative to canvas, just need to account for scale
-  const canvasX = screenX / interaction.scale.value
-  const canvasY = screenY / interaction.scale.value
+  // mouseX/mouseY are already relative to canvas, convert to canvas pixels then meters
+  const canvasPixelX = screenX / interaction.scale.value
+  const canvasPixelY = screenY / interaction.scale.value
+  const canvasX = pixelsToMeters(canvasPixelX)
+  const canvasY = pixelsToMeters(canvasPixelY)
 
   // Handle panning
   if (interaction.panState.value.isPanning) {
@@ -768,17 +935,17 @@ const handleMouseMove = (event: MouseEvent) => {
     return
   }
 
-  // Handle wall drawing
+  // Handle wall drawing (snapPoint expects and returns meters)
   if (wallEditor.drawState.value.isDrawing) {
     const walls = currentSiteMap.value?.walls || []
     const snapped = wallEditor.snapPoint(canvasX, canvasY, walls)
-    console.log('Updating wall drawing position to', snapped.x, snapped.y)
+    console.log('Updating wall drawing position to (meters)', snapped.x, snapped.y)
     wallEditor.updateDrawing(snapped.x, snapped.y)
     canvas.requestRedraw(drawMap)
     return
   }
 
-  // Handle wall endpoint dragging
+  // Handle wall endpoint dragging (expects meters)
   if (wallEditor.dragState.value.isDragging) {
     const walls = currentSiteMap.value?.walls || []
     const updatedWall = wallEditor.updateDraggingEndpoint(canvasX, canvasY, walls)
@@ -789,45 +956,47 @@ const handleMouseMove = (event: MouseEvent) => {
     return
   }
 
-  // Update wall hover state when in edit mode
+  // Update wall hover state when in edit mode (expects pixels)
   if (wallEditor.isActive.value && wallEditor.mode.value === 'edit' && currentSiteMap.value) {
-    wallEditor.updateHoverState(canvasX, canvasY, currentSiteMap.value.walls, true)
+    wallEditor.updateHoverState(canvasPixelX, canvasPixelY, currentSiteMap.value.walls, true)
   } else {
     wallEditor.clearHoverState()
   }
 
-  // Update hovered camera
-  const hovered = canvas.findCameraAtPoint(canvasX, canvasY, placedCameras.value)
+  // Update hovered camera (findCameraAtPoint expects pixels)
+  const hovered = canvas.findCameraAtPoint(canvasPixelX, canvasPixelY, placedCameras.value)
   canvas.hoveredCameraId.value = hovered?.cameraId || null
 
-  // Handle dragging
+  // Handle camera dragging (placement.updatePosition expects meters)
   if (interaction.dragState.value.isDragging && placement.selectedCameraId.value) {
     const newPos = interaction.onDragMove(event)
     if (newPos) {
-      let adjustedX = (newPos.x - interaction.offsetX.value) / interaction.scale.value
-      let adjustedY = (newPos.y - interaction.offsetY.value) / interaction.scale.value
+      let adjustedPixelX = (newPos.x - interaction.offsetX.value) / interaction.scale.value
+      let adjustedPixelY = (newPos.y - interaction.offsetY.value) / interaction.scale.value
 
-      // Apply snap to grid
+      // Convert to meters for placement
+      let adjustedX = pixelsToMeters(adjustedPixelX)
+      let adjustedY = pixelsToMeters(adjustedPixelY)
+
+      // Apply snap to grid (in meters)
       if (interaction.snapToGrid.value) {
-        const snapped = interaction.snapToGridPoint(adjustedX, adjustedY)
-        adjustedX = snapped.x
-        adjustedY = snapped.y
+        adjustedX = Math.round(adjustedX)
+        adjustedY = Math.round(adjustedY)
       }
 
       placement.updatePosition(adjustedX, adjustedY)
     }
   }
 
-  // Handle preview (new placement mode)
+  // Handle preview (new placement mode) - placement.updatePosition expects meters
   if (placement.selectedCameraId.value && !placement.isUpdating.value) {
     let previewX = canvasX
     let previewY = canvasY
 
-    // Apply snap to grid
+    // Apply snap to grid (in meters)
     if (interaction.snapToGrid.value) {
-      const snapped = interaction.snapToGridPoint(canvasX, canvasY)
-      previewX = snapped.x
-      previewY = snapped.y
+      previewX = Math.round(canvasX)
+      previewY = Math.round(canvasY)
     }
 
     placement.updatePosition(previewX, previewY)
@@ -889,14 +1058,17 @@ const handleCanvasClick = (event: MouseEvent) => {
   // Only place on click if in new placement mode (not updating/editing)
   if (placement.selectedCameraId.value && !placement.isUpdating.value) {
     const coords = interaction.getCanvasCoordinates(event)
-    let canvasX = coords.x / interaction.scale.value
-    let canvasY = coords.y / interaction.scale.value
+    let canvasPixelX = coords.x / interaction.scale.value
+    let canvasPixelY = coords.y / interaction.scale.value
 
-    // Apply snap to grid
+    // Convert to meters
+    let canvasX = pixelsToMeters(canvasPixelX)
+    let canvasY = pixelsToMeters(canvasPixelY)
+
+    // Apply snap to grid (in meters)
     if (interaction.snapToGrid.value) {
-      const snapped = interaction.snapToGridPoint(canvasX, canvasY)
-      canvasX = snapped.x
-      canvasY = snapped.y
+      canvasX = Math.round(canvasX)
+      canvasY = Math.round(canvasY)
     }
 
     placement.updatePosition(canvasX, canvasY)
@@ -991,11 +1163,28 @@ const loadSiteMapCameras = () => {
     placement.resetConfig()
     history.initialize([...placedCameras.value])
 
-    // Update form with current site map details
+    // Update form with current site map details (extracting values from unit objects)
     siteMapForm.name = currentSiteMap.value.name
     siteMapForm.description = currentSiteMap.value.description || ''
-    siteMapForm.width = currentSiteMap.value.width
-    siteMapForm.height = currentSiteMap.value.height
+    siteMapForm.width = metersToPixels(extractValue(currentSiteMap.value.width))
+    siteMapForm.height = metersToPixels(extractValue(currentSiteMap.value.height))
+
+    // Update meters view
+    siteMapMeters.width = extractValue(currentSiteMap.value.width)
+    siteMapMeters.height = extractValue(currentSiteMap.value.height)
+
+    // Detect which preset matches (if any)
+    const widthM = siteMapMeters.width
+    const heightM = siteMapMeters.height
+    let matchedPreset = 'custom'
+
+    for (const [key, preset] of Object.entries(buildingPresets)) {
+      if (Math.abs(preset.width - widthM) < 0.5 && Math.abs(preset.height - heightM) < 0.5) {
+        matchedPreset = key
+        break
+      }
+    }
+    selectedPreset.value = matchedPreset
 
     resizeCanvas()
     setTimeout(() => {
@@ -1025,11 +1214,48 @@ const saveConfiguration = () => {
       cameras: placedCameras.value,
       name: siteMapForm.name,
       description: siteMapForm.description,
-      width: siteMapForm.width,
-      height: siteMapForm.height,
+      width: { value: siteMapMeters.width, unit: 'm' },
+      height: { value: siteMapMeters.height, unit: 'm' },
     })
     hasUnsavedChanges.value = false
     toast.success('Configuration saved successfully!')
+  }
+}
+
+const handleExport = () => {
+  if (currentSiteMap.value) {
+    try {
+      siteMapStore.downloadSiteMapJSON(currentSiteMap.value.id)
+      toast.success('Site map exported successfully!')
+    } catch (error) {
+      console.error('Export failed:', error)
+      toast.error('Failed to export site map')
+    }
+  }
+}
+
+const handleImport = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  if (!input.files || !input.files[0]) return
+
+  const file = input.files[0]
+
+  try {
+    const importedMap = await siteMapStore.importSiteMapFromFile(file)
+
+    // Switch to the imported map
+    selectedSiteMapId.value = importedMap.id
+    siteMapStore.setActiveSiteMap(importedMap.id)
+    loadSiteMapCameras()
+
+    toast.success(`Site map "${importedMap.name}" imported successfully!`)
+
+    // Reset the file input
+    input.value = ''
+  } catch (error) {
+    console.error('Import failed:', error)
+    toast.error(`Failed to import site map: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    input.value = ''
   }
 }
 

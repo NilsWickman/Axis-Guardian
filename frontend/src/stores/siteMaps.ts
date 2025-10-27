@@ -1,15 +1,19 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import type { UnitValue } from '../utils/siteMapConversion'
+import { RENDER_SCALE, createMeterUnit, createDegreeUnit } from '../utils/siteMapConversion'
 
 export interface CameraPlacement {
   cameraId: string
-  x: number
-  y: number
-  rotation: number
-  angle: number
-  height: number
-  fov: number
-  viewDistance: number
+  position: {
+    x: UnitValue
+    y: UnitValue
+  }
+  rotation: UnitValue
+  angle: UnitValue
+  height: UnitValue
+  fov: UnitValue
+  viewDistance: UnitValue
   autoCalculateDistance: boolean
   color: string
   notes?: string
@@ -17,10 +21,15 @@ export interface CameraPlacement {
 
 export interface Wall {
   id: string
-  start: { x: number; y: number }
-  end: { x: number; y: number }
+  start: {
+    x: UnitValue
+    y: UnitValue
+  }
+  end: {
+    x: UnitValue
+    y: UnitValue
+  }
   type?: 'external' | 'internal' | 'door'
-  thickness?: number
 }
 
 export interface SiteMap {
@@ -28,9 +37,9 @@ export interface SiteMap {
   name: string
   description?: string
   imagePath?: string
-  width: number
-  height: number
-  scale: number // pixels per meter
+  width: UnitValue
+  height: UnitValue
+  renderScale: number // Fixed at 100 pixels per meter
   cameras: CameraPlacement[]
   walls: Wall[]
   createdAt: Date
@@ -38,94 +47,21 @@ export interface SiteMap {
 }
 
 export const useSiteMapStore = defineStore('siteMaps', () => {
-  const siteMaps = ref<SiteMap[]>([
-    {
-      id: 'map-auditorium',
-      name: 'Auditorium - Main Hall',
-      description: 'UCLA Auditorium with 4-camera multi-view tracking setup (21m x 28m)',
-      width: 1260, // 21m * 60 pixels/meter
-      height: 1680, // 28m * 60 pixels/meter
-      scale: 60, // 60 pixels per meter
-      walls: [
-        // External perimeter walls
-        { id: 'w-ext-1', start: { x: 60, y: 60 }, end: { x: 1200, y: 60 }, type: 'external', thickness: 8 },
-        { id: 'w-ext-2', start: { x: 1200, y: 60 }, end: { x: 1200, y: 1620 }, type: 'external', thickness: 8 },
-        { id: 'w-ext-3', start: { x: 1200, y: 1620 }, end: { x: 60, y: 1620 }, type: 'external', thickness: 8 },
-        { id: 'w-ext-4', start: { x: 60, y: 1620 }, end: { x: 60, y: 60 }, type: 'external', thickness: 8 },
+  console.log('[SiteMapStore] Initializing store')
+  const siteMaps = ref<SiteMap[]>([])
 
-        // Stage area (front of auditorium, 0-3m depth)
-        { id: 'w-stage-1', start: { x: 60, y: 240 }, end: { x: 1200, y: 240 }, type: 'internal', thickness: 4 },
+  const activeSiteMapId = ref<string | null>(null)
+  console.log('[SiteMapStore] Initial activeSiteMapId:', activeSiteMapId.value)
+  console.log('[SiteMapStore] Initial siteMaps count:', siteMaps.value.length)
 
-        // Seating area dividers (approximate rows)
-        { id: 'w-aisle-1', start: { x: 420, y: 240 }, end: { x: 420, y: 1620 }, type: 'internal', thickness: 3 },
-        { id: 'w-aisle-2', start: { x: 840, y: 240 }, end: { x: 840, y: 1620 }, type: 'internal', thickness: 3 },
-      ],
-      cameras: [
-        {
-          cameraId: 'camera1',
-          x: 1033, // 16.22m * 60 + 60 (offset)
-          y: 78,   // 0.3m * 60 + 60 (offset)
-          rotation: 18, // Azimuth angle
-          angle: 1,     // Elevation angle (positive = looking slightly up)
-          height: 1.68,
-          fov: 90,
-          viewDistance: 240, // ~4m viewing distance at 60px/m
-          autoCalculateDistance: true,
-          color: 'emerald-400',
-          notes: 'High Corner View 3 - Front-Right position covering stage area',
-        },
-        {
-          cameraId: 'camera2',
-          x: 114,  // 0.9m * 60 + 60
-          y: 90,   // 0.5m * 60 + 60
-          rotation: 313, // Azimuth angle (northwest)
-          angle: -5,     // Elevation angle (negative = looking slightly down)
-          height: 1.67,
-          fov: 90,
-          viewDistance: 240,
-          autoCalculateDistance: true,
-          color: 'blue-500',
-          notes: 'High Corner View 4 - Front-Left position with downward angle',
-        },
-        {
-          cameraId: 'camera3',
-          x: 1296,  // 20.6m * 60 + 60
-          y: 1758,  // 28.31m * 60 + 60
-          rotation: 140, // Azimuth angle (southeast)
-          angle: -9,     // Elevation angle (looking down from highest mount)
-          height: 2.62,  // Tallest camera mounting
-          fov: 90,
-          viewDistance: 300, // Longer distance from elevated position
-          autoCalculateDistance: true,
-          color: 'red-500',
-          notes: 'IP Camera View 2 - Back-Right elevated position (highest mount at 2.62m)',
-        },
-        {
-          cameraId: 'camera4',
-          x: 694,   // 10.57m * 60 + 60
-          y: 1039,  // 16.31m * 60 + 60
-          rotation: 339, // Azimuth angle (nearly north)
-          angle: 0,      // Elevation angle (level)
-          height: 1.84,
-          fov: 90,
-          viewDistance: 270,
-          autoCalculateDistance: true,
-          color: 'amber-400',
-          notes: 'IP Camera View 5 - Center-Back position with level view angle',
-        },
-      ],
-      createdAt: new Date('2025-01-26'),
-      updatedAt: new Date('2025-01-26'),
-    },
-  ])
-
-  const activeSiteMapId = ref<string>('map-auditorium')
-
-  const activeSiteMap = computed(() =>
-    siteMaps.value.find(map => map.id === activeSiteMapId.value) || siteMaps.value[0]
-  )
+  const activeSiteMap = computed(() => {
+    if (!activeSiteMapId.value) return null
+    return siteMaps.value.find(map => map.id === activeSiteMapId.value) || null
+  })
 
   const setActiveSiteMap = (mapId: string) => {
+    console.log(`[SiteMapStore] setActiveSiteMap called: ${activeSiteMapId.value} -> ${mapId}`)
+    console.trace() // Show the call stack
     activeSiteMapId.value = mapId
   }
 
@@ -136,6 +72,8 @@ export const useSiteMapStore = defineStore('siteMaps', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     }
+    console.log('[SiteMapStore] addSiteMap called - creating new map:', newMap.id)
+    console.trace()
     siteMaps.value.push(newMap)
     return newMap
   }
@@ -211,6 +149,112 @@ export const useSiteMapStore = defineStore('siteMaps', () => {
     }
   }
 
+  /**
+   * Export a site map to JSON string with proper formatting
+   */
+  const exportSiteMapToJSON = (mapId: string): string => {
+    const map = siteMaps.value.find(m => m.id === mapId)
+    if (!map) {
+      throw new Error(`Site map with ID "${mapId}" not found`)
+    }
+
+    // Create a serializable copy (dates will be converted to ISO strings)
+    const exportData = {
+      ...map,
+      createdAt: map.createdAt.toISOString(),
+      updatedAt: map.updatedAt.toISOString()
+    }
+
+    return JSON.stringify(exportData, null, 2)
+  }
+
+  /**
+   * Download a site map as a JSON file
+   */
+  const downloadSiteMapJSON = (mapId: string, filename?: string) => {
+    try {
+      const json = exportSiteMapToJSON(mapId)
+      const blob = new Blob([json], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+
+      const map = siteMaps.value.find(m => m.id === mapId)
+      const safeName = (map?.name || mapId).replace(/[^a-z0-9]/gi, '-').toLowerCase()
+      link.href = url
+      link.download = filename || `sitemap-${safeName}-${Date.now()}.json`
+
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Failed to download site map:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Import a site map from JSON string
+   */
+  const importSiteMapFromJSON = (jsonString: string): SiteMap => {
+    try {
+      const data = JSON.parse(jsonString)
+
+      // Validate required fields
+      if (!data.id || !data.name || !data.width || !data.height) {
+        throw new Error('Invalid site map format: missing required fields')
+      }
+
+      // Convert date strings back to Date objects
+      const siteMap: SiteMap = {
+        ...data,
+        createdAt: new Date(data.createdAt),
+        updatedAt: new Date(data.updatedAt),
+        renderScale: data.renderScale || RENDER_SCALE // Default to current scale if missing
+      }
+
+      // Check if a map with this ID already exists
+      const existingIndex = siteMaps.value.findIndex(m => m.id === siteMap.id)
+      if (existingIndex !== -1) {
+        // Update existing map
+        siteMaps.value[existingIndex] = siteMap
+      } else {
+        // Add as new map
+        siteMaps.value.push(siteMap)
+      }
+
+      return siteMap
+    } catch (error) {
+      console.error('Failed to import site map:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Import site map from a File object
+   */
+  const importSiteMapFromFile = (file: File): Promise<SiteMap> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+
+      reader.onload = (e) => {
+        try {
+          const jsonString = e.target?.result as string
+          const siteMap = importSiteMapFromJSON(jsonString)
+          resolve(siteMap)
+        } catch (error) {
+          reject(error)
+        }
+      }
+
+      reader.onerror = () => {
+        reject(new Error('Failed to read file'))
+      }
+
+      reader.readAsText(file)
+    })
+  }
+
   return {
     siteMaps,
     activeSiteMapId,
@@ -225,5 +269,9 @@ export const useSiteMapStore = defineStore('siteMaps', () => {
     addWallToSiteMap,
     updateWallInSiteMap,
     removeWallFromSiteMap,
+    exportSiteMapToJSON,
+    downloadSiteMapJSON,
+    importSiteMapFromJSON,
+    importSiteMapFromFile,
   }
 })

@@ -1,14 +1,21 @@
 import { ref, computed } from 'vue'
 import type { Wall } from '../stores/siteMaps'
+import {
+  RENDER_SCALE,
+  pixelsToMeters,
+  createMeterUnit,
+  extractValue,
+  metersToPixels
+} from '../utils/siteMapConversion'
 
 export type WallEditorMode = 'none' | 'draw' | 'edit' | 'delete'
 
 export interface WallDrawState {
   isDrawing: boolean
-  startPoint: { x: number; y: number } | null
-  currentPoint: { x: number; y: number } | null
+  startPoint: { x: number; y: number } | null // In meters during drawing
+  currentPoint: { x: number; y: number } | null // In meters during drawing
   wallType: 'external' | 'internal' | 'door'
-  thickness: number
+  thickness: number // Ignored - walls don't have thickness
 }
 
 export interface WallDragState {
@@ -35,7 +42,7 @@ export function useWallEditor() {
   const snapOptions = ref<WallSnapOptions>({
     snapToGrid: true,
     snapToWalls: true,
-    gridSize: 50,
+    gridSize: RENDER_SCALE, // Fixed at 100 pixels per meter
     snapThreshold: 10
   })
   const drawState = ref<WallDrawState>({
@@ -43,7 +50,7 @@ export function useWallEditor() {
     startPoint: null,
     currentPoint: null,
     wallType: 'internal',
-    thickness: 4
+    thickness: 4 // Ignored
   })
   const dragState = ref<WallDragState>({
     isDragging: false,
@@ -94,19 +101,25 @@ export function useWallEditor() {
     const start = drawState.value.startPoint
     const end = drawState.value.currentPoint
 
-    // Check if the wall is too short (less than 10 pixels)
+    // Check if the wall is too short (less than 0.1 meters = 10cm)
     const distance = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2))
-    if (distance < 10) {
+    if (distance < 0.1) {
       resetDrawing()
       return null
     }
 
+    // Create wall with meter-based unit objects
     const newWall: Wall = {
       id: `wall-${Date.now()}`,
-      start,
-      end,
-      type: drawState.value.wallType,
-      thickness: drawState.value.thickness
+      start: {
+        x: createMeterUnit(start.x),
+        y: createMeterUnit(start.y)
+      },
+      end: {
+        x: createMeterUnit(end.x),
+        y: createMeterUnit(end.y)
+      },
+      type: drawState.value.wallType
     }
 
     resetDrawing()
@@ -120,17 +133,17 @@ export function useWallEditor() {
   }
 
   const findWallAtPoint = (x: number, y: number, walls: Wall[]): Wall | null => {
+    // x, y are in pixels from mouse position
     for (const wall of walls) {
-      const distance = pointToLineDistance(
-        x,
-        y,
-        wall.start.x,
-        wall.start.y,
-        wall.end.x,
-        wall.end.y
-      )
+      // Convert wall coordinates from meters to pixels
+      const startX = metersToPixels(extractValue(wall.start.x))
+      const startY = metersToPixels(extractValue(wall.start.y))
+      const endX = metersToPixels(extractValue(wall.end.x))
+      const endY = metersToPixels(extractValue(wall.end.y))
 
-      const threshold = (wall.thickness || 4) + 5 // Add 5px tolerance
+      const distance = pointToLineDistance(x, y, startX, startY, endX, endY)
+
+      const threshold = 10 // 10px tolerance
       if (distance < threshold) {
         return wall
       }
@@ -152,22 +165,29 @@ export function useWallEditor() {
   }
 
   const findNearestWallEndpoint = (x: number, y: number, walls: Wall[]): { x: number; y: number } | null => {
+    // x, y are in meters
     let nearestPoint: { x: number; y: number } | null = null
-    let minDistance = snapOptions.value.snapThreshold
+    let minDistance = pixelsToMeters(snapOptions.value.snapThreshold)
 
     for (const wall of walls) {
+      // Extract meter values from walls
+      const startX = extractValue(wall.start.x)
+      const startY = extractValue(wall.start.y)
+      const endX = extractValue(wall.end.x)
+      const endY = extractValue(wall.end.y)
+
       // Check start point
-      const startDist = Math.sqrt(Math.pow(wall.start.x - x, 2) + Math.pow(wall.start.y - y, 2))
+      const startDist = Math.sqrt(Math.pow(startX - x, 2) + Math.pow(startY - y, 2))
       if (startDist < minDistance) {
         minDistance = startDist
-        nearestPoint = wall.start
+        nearestPoint = { x: startX, y: startY }
       }
 
       // Check end point
-      const endDist = Math.sqrt(Math.pow(wall.end.x - x, 2) + Math.pow(wall.end.y - y, 2))
+      const endDist = Math.sqrt(Math.pow(endX - x, 2) + Math.pow(endY - y, 2))
       if (endDist < minDistance) {
         minDistance = endDist
-        nearestPoint = wall.end
+        nearestPoint = { x: endX, y: endY }
       }
     }
 

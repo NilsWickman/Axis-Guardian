@@ -41,6 +41,11 @@ const MAX_SYNC_DRIFT = 0.5 // Maximum allowed drift in seconds before correction
 const SYNC_ENABLED = true // Enable/disable sync monitoring
 let syncCorrectionCount = 0 // Track number of corrections for debugging
 
+// Connection health monitoring
+let healthMonitorInterval: number | null = null
+const HEALTH_CHECK_INTERVAL = 5000 // Check connection health every 5 seconds
+const RECONNECT_DELAY = 2000 // Wait 2 seconds before attempting reconnect
+
 /**
  * Initialize all camera connections in the background
  * This is called automatically on first use
@@ -108,6 +113,11 @@ async function initializeConnections() {
     if (SYNC_ENABLED) {
       startSyncMonitoring()
     }
+
+    // Start connection health monitoring
+    startHealthMonitoring()
+
+    console.log('[ConnectionManager] All connections initialized and monitoring started')
   } catch (error) {
     console.error('[ConnectionManager] Failed to initialize connections:', error)
   } finally {
@@ -270,11 +280,147 @@ function synchronizeVideos() {
 }
 
 /**
+ * Start monitoring connection health for all cameras
+ */
+function startHealthMonitoring() {
+  if (healthMonitorInterval !== null) {
+    return // Already monitoring
+  }
+
+  console.log('[ConnectionManager] Starting connection health monitoring')
+
+  healthMonitorInterval = window.setInterval(() => {
+    checkConnectionHealth()
+  }, HEALTH_CHECK_INTERVAL)
+}
+
+/**
+ * Stop monitoring connection health
+ */
+function stopHealthMonitoring() {
+  if (healthMonitorInterval !== null) {
+    clearInterval(healthMonitorInterval)
+    healthMonitorInterval = null
+    console.log('[ConnectionManager] Stopped connection health monitoring')
+  }
+}
+
+/**
+ * Check health of all connections and attempt recovery if needed
+ */
+function checkConnectionHealth() {
+  for (const [id, conn] of Object.entries(cameraConnections)) {
+    const connectionState = conn.connection.connectionState.value
+    const videoElement = conn.videoElement
+
+    // Check for failed or disconnected connections
+    if (connectionState === 'failed' || connectionState === 'disconnected') {
+      console.warn(`[ConnectionManager] Connection to ${id} is ${connectionState}, attempting recovery...`)
+      attemptReconnection(id)
+      continue
+    }
+
+    // Check for frozen video streams
+    if (videoElement && connectionState === 'connected') {
+      // Check if video is playing but time isn't advancing (frozen stream)
+      const currentTime = videoElement.currentTime
+      const readyState = videoElement.readyState
+
+      // Store last known time for drift detection
+      if (!conn.connection.lastHealthCheckTime) {
+        conn.connection.lastHealthCheckTime = currentTime
+        continue
+      }
+
+      const timeDelta = currentTime - conn.connection.lastHealthCheckTime
+      conn.connection.lastHealthCheckTime = currentTime
+
+      // If video claims to be ready but time hasn't advanced in 5 seconds, it's frozen
+      if (readyState >= 2 && timeDelta === 0 && !videoElement.paused) {
+        conn.connection.frozenCheckCount = (conn.connection.frozenCheckCount || 0) + 1
+
+        // If frozen for 2 consecutive checks (10 seconds), attempt recovery
+        if (conn.connection.frozenCheckCount >= 2) {
+          console.warn(`[ConnectionManager] Video stream for ${id} appears frozen, attempting recovery...`)
+          attemptStreamRecovery(id)
+          conn.connection.frozenCheckCount = 0
+        }
+      } else {
+        // Stream is healthy, reset counter
+        conn.connection.frozenCheckCount = 0
+      }
+    }
+  }
+}
+
+/**
+ * Attempt to reconnect a failed camera connection
+ */
+async function attemptReconnection(cameraId: string) {
+  const conn = cameraConnections[cameraId]
+  if (!conn) return
+
+  console.log(`[ConnectionManager] Reconnecting ${cameraId}...`)
+
+  try {
+    // Wait a bit before reconnecting
+    await new Promise(resolve => setTimeout(resolve, RECONNECT_DELAY))
+
+    // Disconnect and reconnect
+    conn.connection.disconnect()
+
+    // Create a new video element if the old one is broken
+    if (conn.videoElement) {
+      conn.videoElement.remove()
+    }
+
+    const videoElement = document.createElement('video')
+    videoElement.autoplay = true
+    videoElement.muted = true
+    videoElement.playsInline = true
+    videoElement.style.display = 'none'
+    document.body.appendChild(videoElement)
+
+    conn.videoElement = videoElement
+
+    // Reconnect
+    await conn.connection.connect(videoElement)
+    console.log(`[ConnectionManager] Successfully reconnected ${cameraId}`)
+
+    // Re-attach to any visible video elements
+    // This will be handled by the views automatically via their attachment logic
+  } catch (error) {
+    console.error(`[ConnectionManager] Failed to reconnect ${cameraId}:`, error)
+  }
+}
+
+/**
+ * Attempt to recover a frozen video stream
+ */
+async function attemptStreamRecovery(cameraId: string) {
+  const conn = cameraConnections[cameraId]
+  if (!conn?.videoElement) return
+
+  console.log(`[ConnectionManager] Attempting stream recovery for ${cameraId}`)
+
+  try {
+    // Try to restart playback
+    await conn.videoElement.play()
+    console.log(`[ConnectionManager] Stream recovery successful for ${cameraId}`)
+  } catch (error) {
+    // If playback restart fails, attempt full reconnection
+    console.warn(`[ConnectionManager] Playback restart failed, attempting full reconnection for ${cameraId}`)
+    await attemptReconnection(cameraId)
+  }
+}
+
+/**
  * Cleanup all connections (call on app unmount)
  */
 function cleanup() {
-  // Stop sync monitoring
+  // Stop all monitoring
   stopSyncMonitoring()
+  stopHealthMonitoring()
 
   for (const [id, conn] of Object.entries(cameraConnections)) {
     conn.connection.disconnect()

@@ -343,7 +343,7 @@ function handleFullscreen(cameraId: string) {
   }
 }
 
-// Attach video elements to global connections
+// Attach video elements to global connections with robust retry logic
 async function attachVideosToConnections() {
   console.log('[WebRTCDetectionView] Attaching videos to global connections...')
 
@@ -360,25 +360,43 @@ async function attachVideosToConnections() {
       console.error('[WebRTCDetectionView] Timeout waiting for connections to initialize')
       return
     }
+    console.log('[WebRTCDetectionView] Connections initialized successfully')
   } else {
     console.log('[WebRTCDetectionView] Connections already initialized - instant attach!')
   }
 
-  // Minimal wait for video elements to be in DOM
-  await new Promise(resolve => setTimeout(resolve, 50))
+  // Robust retry logic for DOM element availability
+  const maxRetries = 10
+  const retryDelay = 100 // ms
 
   // Attach each video to its corresponding global connection
   for (const camera of cameras) {
-    const videoEl = videoRefs.value[camera.id]
+    let videoEl: HTMLVideoElement | null = null
+    let retries = 0
+
+    // Retry until we find the video element or max retries reached
+    while (!videoEl && retries < maxRetries) {
+      videoEl = videoRefs.value[camera.id]
+      if (!videoEl) {
+        retries++
+        console.log(`[WebRTCDetectionView] Waiting for ${camera.id} video element (attempt ${retries}/${maxRetries})`)
+        await new Promise(resolve => setTimeout(resolve, retryDelay))
+      }
+    }
+
     if (!videoEl) {
-      console.warn(`[WebRTCDetectionView] Video element not found for ${camera.id}`)
+      console.error(`[WebRTCDetectionView] Failed to find video element for ${camera.id} after ${maxRetries} retries`)
       continue
     }
+
+    console.log(`[WebRTCDetectionView] Attaching stream to ${camera.id}`)
 
     // Attach to global connection (stream already flowing!)
     const attached = attachToVideoElement(camera.id, videoEl)
     if (attached) {
-      console.log(`[WebRTCDetectionView] ✓ Instantly attached ${camera.id} (stream was ready)`)
+      console.log(`[WebRTCDetectionView] ✓ Successfully attached ${camera.id} (stream was ready)`)
+    } else {
+      console.warn(`[WebRTCDetectionView] Failed to attach stream to ${camera.id}`)
     }
 
     // Get connection and set up callbacks
@@ -414,6 +432,8 @@ async function attachVideosToConnections() {
     })
   }
 
+  console.log('[WebRTCDetectionView] All videos attached successfully')
+
   // Monitor connection states for all cameras
   setInterval(() => {
     cameras.forEach(camera => {
@@ -424,8 +444,6 @@ async function attachVideosToConnections() {
       }
     })
   }, 100)
-
-  console.log('[WebRTCDetectionView] All videos attached')
 }
 
 // Lifecycle

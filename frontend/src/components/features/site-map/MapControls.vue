@@ -21,6 +21,16 @@
     </button>
 
     <button
+      v-if="showPersonPositionsToggle"
+      @click="$emit('togglePersonPositions')"
+      class="px-3 py-1.5 border rounded-lg hover:bg-accent text-xs transition-colors"
+      :class="showPersonPositions ? 'bg-accent' : ''"
+      title="Toggle Person Positions (P)"
+    >
+      👤 Positions
+    </button>
+
+    <button
       v-if="showSnapToggle"
       @click="$emit('toggleSnap')"
       class="px-3 py-1.5 border rounded-lg hover:bg-accent text-xs transition-colors"
@@ -114,6 +124,29 @@
     >
       Save
     </button>
+
+    <button
+      v-if="showExport"
+      @click="$emit('export')"
+      class="px-3 py-1.5 border border-primary text-primary rounded-lg hover:bg-primary/10 text-xs font-medium"
+      title="Export as JSON"
+    >
+      📥 Export
+    </button>
+
+    <label
+      v-if="showImport"
+      class="px-3 py-1.5 border border-primary text-primary rounded-lg hover:bg-primary/10 text-xs font-medium cursor-pointer inline-block"
+      title="Import from JSON"
+    >
+      📤 Import
+      <input
+        type="file"
+        accept="application/json,.json"
+        class="hidden"
+        @change="$emit('import', $event)"
+      />
+    </label>
   </div>
 </template>
 
@@ -123,6 +156,8 @@ interface Props {
   showScaleReference?: boolean
   showLabels?: boolean
   showLabelsToggle?: boolean
+  showPersonPositions?: boolean
+  showPersonPositionsToggle?: boolean
   snapToGrid?: boolean
   showSnapToggle?: boolean
   showHistory?: boolean
@@ -131,6 +166,8 @@ interface Props {
   showFitToView?: boolean
   showResetView?: boolean
   showSave?: boolean
+  showExport?: boolean
+  showImport?: boolean
   showZoomControls?: boolean
   showResetZoom?: boolean
 }
@@ -140,6 +177,8 @@ withDefaults(defineProps<Props>(), {
   showScaleReference: true,
   showLabels: true,
   showLabelsToggle: true,
+  showPersonPositions: true,
+  showPersonPositionsToggle: true,
   snapToGrid: false,
   showSnapToggle: false,
   showHistory: false,
@@ -148,6 +187,8 @@ withDefaults(defineProps<Props>(), {
   showFitToView: false,
   showResetView: false,
   showSave: false,
+  showExport: false,
+  showImport: false,
   showZoomControls: false,
   showResetZoom: false
 })
@@ -156,12 +197,15 @@ defineEmits<{
   toggleGrid: []
   toggleScale: []
   toggleLabels: []
+  togglePersonPositions: []
   toggleSnap: []
   undo: []
   redo: []
   fitToView: []
   resetView: []
   save: []
+  export: []
+  import: [event: Event]
   zoomIn: []
   zoomOut: []
   resetZoom: []

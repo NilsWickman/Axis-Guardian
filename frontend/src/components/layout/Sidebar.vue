@@ -16,6 +16,8 @@
     Bell,
     Settings,
     Archive,
+    Layers,
+    Box,
   } from 'lucide-vue-next'
   import { useTheme } from '@/composables/useTheme'
   import { useAuthStore } from '@/stores/auth'
@@ -71,14 +73,25 @@
         icon: Cctv,
       },
       {
-        name: 'Site Map',
-        path: '/site-config',
+        name: 'Site Maps',
         icon: Map,
-      },
-      {
-        name: 'Generated Map',
-        path: '/generated-site-map',
-        icon: MapPin,
+        children: [
+          {
+            name: '2D Viewer',
+            path: '/site-maps/map-auditorium/view-2d',
+            icon: Layers,
+          },
+          {
+            name: '3D Viewer',
+            path: '/site-maps/map-auditorium/view-3d',
+            icon: Box,
+          },
+          {
+            name: 'Editor',
+            path: '/site-config',
+            icon: MapPin,
+          },
+        ],
       },
       {
         name: 'Alarms',

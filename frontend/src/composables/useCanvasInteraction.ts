@@ -1,5 +1,6 @@
 import { ref, type Ref } from 'vue'
 import type { CameraPlacement } from '../stores/siteMaps'
+import { RENDER_SCALE, extractValue, metersToPixels, pixelsToMeters } from '../utils/siteMapConversion'
 
 export interface DragState {
   isDragging: boolean
@@ -45,7 +46,7 @@ export function useCanvasInteraction(
   const offsetX = ref(0)
   const offsetY = ref(0)
   const snapToGrid = ref(false)
-  const gridSize = ref(50) // pixels per meter
+  const gridSize = ref(RENDER_SCALE) // Fixed at RENDER_SCALE (100 pixels per meter)
 
   const getCanvasCoordinates = (event: MouseEvent): { x: number; y: number } => {
     const canvas = canvasRef.value
@@ -65,13 +66,17 @@ export function useCanvasInteraction(
   }
 
   const startDrag = (camera: CameraPlacement, startX: number, startY: number) => {
+    // Convert camera position from meters to pixels for drag calculations
+    const cameraX = metersToPixels(extractValue(camera.position.x))
+    const cameraY = metersToPixels(extractValue(camera.position.y))
+
     dragState.value = {
       isDragging: true,
       draggedCamera: camera,
       startX,
       startY,
-      offsetX: startX - camera.x,
-      offsetY: startY - camera.y
+      offsetX: startX - cameraX,
+      offsetY: startY - cameraY
     }
   }
 

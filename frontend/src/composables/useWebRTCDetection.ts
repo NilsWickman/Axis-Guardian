@@ -9,6 +9,7 @@ import { ref, computed, onUnmounted, type Ref } from 'vue'
 import msgpack from 'msgpack-lite'
 import type { Detection } from '@/types/detection.types'
 import { useToast } from '@/composables/useToast'
+import { emitWebRTCDetection } from './usePersonPositionTracking'
 
 export interface DetectionMetadata {
   camera_id: string
@@ -447,6 +448,9 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     // Helper function to process metadata (avoid duplication for async case)
     function processMetadata(metadata: DetectionMetadata) {
       const now = Date.now()
+
+      // Emit detection metadata for person position tracking
+      emitWebRTCDetection(metadata)
 
       // Calculate instantaneous latency (metadata.timestamp is in seconds, convert to ms)
       const latency = now - (metadata.timestamp * 1000)
