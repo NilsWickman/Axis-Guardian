@@ -105,58 +105,80 @@ stop-infrastructure: ## Stop MediaMTX media server
 
 
 .PHONY: dev
-dev: cleanup-ports ## Start complete surveillance system (optimized with pre-processed detections)
-	@echo "$(BLUE)Starting complete surveillance system (optimized mode)...$(NC)"
+dev: cleanup-ports ## Start complete surveillance system (auto-detects mode from .env)
+	@echo "$(BLUE)Starting complete surveillance system...$(NC)"
 	@echo ""
-	@echo "$(YELLOW)Checking pre-processed videos...$(NC)"
-	@if [ ! -d "shared/cameras/preprocessed" ] || [ -z "$$(find shared/cameras/preprocessed -name '*.mp4' 2>/dev/null)" ]; then \
-		echo "$(RED)Error: No pre-processed videos found!$(NC)"; \
-		echo "$(YELLOW)Pre-processed videos are required for optimized mode.$(NC)"; \
+	@if [ "$(USE_SNAPSHOT_MODE)" = "true" ]; then \
+		echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"; \
+		echo "$(GREEN)  SNAPSHOT MODE ENABLED (Low Bandwidth)$(NC)"; \
+		echo "$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(NC)"; \
 		echo ""; \
-		echo "$(YELLOW)Options:$(NC)"; \
-		echo "  1. Generate pre-processed videos: make preprocess-videos"; \
-		echo "  2. Use real-time mode instead: make dev-realtime"; \
+		echo "$(YELLOW)Configuration:$(NC)"; \
+		echo "  Interval: $(SNAPSHOT_INTERVAL)s"; \
+		echo "  Quality:  $(SNAPSHOT_QUALITY)"; \
+		echo "  Width:    $(SNAPSHOT_WIDTH)px"; \
 		echo ""; \
-		exit 1; \
-	fi
-	@echo "$(GREEN)✓ Pre-processed videos found$(NC)"
-	@echo ""
-	@echo "$(YELLOW)Starting infrastructure...$(NC)"
-	@$(MAKE) infrastructure
-	@echo ""
-	@echo "$(YELLOW)Waiting for MediaMTX to be ready...$(NC)"
-	@for i in 1 2 3 4 5; do \
-		if curl -s http://localhost:9997/v3/config/global/get > /dev/null 2>&1; then \
-			echo "$(GREEN)✓ MediaMTX is ready$(NC)"; \
-			break; \
+		echo "$(YELLOW)Snapshot Endpoints:$(NC)"; \
+		echo "  http://localhost:8080/snapshot/camera{1,2,3,4}"; \
+		echo ""; \
+		echo "$(YELLOW)Frontend View:$(NC)"; \
+		echo "  http://localhost:5173/cameras/snapshot"; \
+		echo ""; \
+		echo "$(YELLOW)Starting services...$(NC)"; \
+		yarn dev; \
+	else \
+		echo "$(YELLOW)Checking pre-processed videos...$(NC)"; \
+		if [ ! -d "shared/cameras/preprocessed" ] || [ -z "$$(find shared/cameras/preprocessed -name '*.mp4' 2>/dev/null)" ]; then \
+			echo "$(RED)Error: No pre-processed videos found!$(NC)"; \
+			echo "$(YELLOW)Pre-processed videos are required for optimized mode.$(NC)"; \
+			echo ""; \
+			echo "$(YELLOW)Options:$(NC)"; \
+			echo "  1. Generate pre-processed videos: make preprocess-videos"; \
+			echo "  2. Use real-time mode instead: make dev-realtime"; \
+			echo "  3. Use snapshot mode: Set USE_SNAPSHOT_MODE=true in .env"; \
+			echo ""; \
+			exit 1; \
 		fi; \
-		echo "  Waiting... ($$i/5)"; \
-		sleep 1; \
-	done
-	@if ! curl -s http://localhost:9997/v3/config/global/get > /dev/null 2>&1; then \
-		echo "$(RED)Error: MediaMTX failed to start$(NC)"; \
-		echo "$(YELLOW)Check logs with: make infrastructure$(NC)"; \
-		exit 1; \
+		echo "$(GREEN)✓ Pre-processed videos found$(NC)"; \
+		echo ""; \
+		echo "$(YELLOW)Starting infrastructure...$(NC)"; \
+		$(MAKE) infrastructure; \
+		echo ""; \
+		echo "$(YELLOW)Waiting for MediaMTX to be ready...$(NC)"; \
+		for i in 1 2 3 4 5; do \
+			if curl -s http://localhost:9997/v3/config/global/get > /dev/null 2>&1; then \
+				echo "$(GREEN)✓ MediaMTX is ready$(NC)"; \
+				break; \
+			fi; \
+			echo "  Waiting... ($$i/5)"; \
+			sleep 1; \
+		done; \
+		if ! curl -s http://localhost:9997/v3/config/global/get > /dev/null 2>&1; then \
+			echo "$(RED)Error: MediaMTX failed to start$(NC)"; \
+			echo "$(YELLOW)Check logs with: make infrastructure$(NC)"; \
+			exit 1; \
+		fi; \
+		echo ""; \
+		echo "$(YELLOW)Starting services:$(NC)"; \
+		echo "  Frontend:          http://localhost:5173"; \
+		echo "  Cameras:           rtsp://localhost:8554/camera{1,2,3,4}"; \
+		echo "  HLS Streams:       http://localhost:8888/camera{1,2,3,4}"; \
+		echo "  WebRTC Detection:  http://localhost:8080 (signaling + data channels)"; \
+		echo ""; \
+		echo "$(GREEN)Mode: Optimized with pre-processed detections (default)$(NC)"; \
+		echo "  • Pre-processed videos with baked-in detections"; \
+		echo "  • Minimal CPU usage, maximum performance"; \
+		echo "  • Run 'make preprocess-videos' to generate/update preprocessed videos"; \
+		echo ""; \
+		echo "$(YELLOW)For real-time inference mode, use: make dev-realtime$(NC)"; \
+		echo "$(YELLOW)For low bandwidth mode, set: USE_SNAPSHOT_MODE=true in .env$(NC)"; \
+		echo ""; \
+		echo "$(YELLOW)Access WebRTC Detection view at: http://localhost:5173/webrtc-detection$(NC)"; \
+		echo ""; \
+		echo "$(YELLOW)Starting camera streams, WebRTC service, and frontend...$(NC)"; \
+		echo ""; \
+		yarn dev; \
 	fi
-	@echo ""
-	@echo "$(YELLOW)Starting services:$(NC)"
-	@echo "  Frontend:          http://localhost:5173"
-	@echo "  Cameras:           rtsp://localhost:8554/camera{1,2,3,4}"
-	@echo "  HLS Streams:       http://localhost:8888/camera{1,2,3,4}"
-	@echo "  WebRTC Detection:  http://localhost:8080 (signaling + data channels)"
-	@echo ""
-	@echo "$(GREEN)Mode: Optimized with pre-processed detections (default)$(NC)"
-	@echo "  • Pre-processed videos with baked-in detections"
-	@echo "  • Minimal CPU usage, maximum performance"
-	@echo "  • Run 'make preprocess-videos' to generate/update preprocessed videos"
-	@echo ""
-	@echo "$(YELLOW)For real-time inference mode, use: make dev-realtime$(NC)"
-	@echo ""
-	@echo "$(YELLOW)Access WebRTC Detection view at: http://localhost:5173/webrtc-detection$(NC)"
-	@echo ""
-	@echo "$(YELLOW)Starting camera streams, WebRTC service, and frontend...$(NC)"
-	@echo ""
-	@yarn dev
 
 .PHONY: dev-realtime
 dev-realtime: cleanup-ports ## Start surveillance system with real-time inference
@@ -239,6 +261,33 @@ cameras: ## Stream mock camera feeds to MediaMTX (requires FFmpeg)
 	@echo "  WebRTC: http://localhost:8889/camera{1,2,3}"
 	@echo ""
 	@bash simulation/scripts/stream-mock-cameras.sh all
+
+.PHONY: snapshot-mode
+snapshot-mode: ## Generate periodic snapshots for low-bandwidth mode (requires FFmpeg)
+	@echo "$(BLUE)Starting snapshot generation mode (low bandwidth)...$(NC)"
+	@if ! which ffmpeg > /dev/null 2>&1; then \
+		echo "$(RED)Error: FFmpeg is not installed$(NC)"; \
+		echo "$(YELLOW)Install with: sudo apt-get install ffmpeg$(NC)"; \
+		exit 1; \
+	fi
+	@echo ""
+	@echo "$(YELLOW)Snapshot Configuration (.env):$(NC)"
+	@echo "  Interval: $(SNAPSHOT_INTERVAL)s"
+	@echo "  Quality:  $(SNAPSHOT_QUALITY)"
+	@echo "  Width:    $(SNAPSHOT_WIDTH)px"
+	@echo ""
+	@echo "$(YELLOW)Snapshot Endpoints:$(NC)"
+	@echo "  http://localhost:8080/snapshot/camera1"
+	@echo "  http://localhost:8080/snapshot/camera2"
+	@echo "  http://localhost:8080/snapshot/camera3"
+	@echo "  http://localhost:8080/snapshot/camera4"
+	@echo ""
+	@echo "$(YELLOW)Frontend View:$(NC)"
+	@echo "  http://localhost:5173/cameras/snapshot"
+	@echo ""
+	@echo "$(GREEN)Generating snapshots (press Ctrl+C to stop)...$(NC)"
+	@echo ""
+	@bash simulation/scripts/stream-mock-cameras-snapshot.sh all
 
 .PHONY: test
 test: ## Run all tests

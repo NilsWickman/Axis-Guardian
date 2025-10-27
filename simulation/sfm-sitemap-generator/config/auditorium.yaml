@@ -1,0 +1,64 @@
+# Auditorium Site Map Configuration for Structure from Motion
+
+name: "Auditorium Site Map (SfM)"
+description: "Auto-generated from 4 camera views using Structure from Motion"
+
+# Camera images directory
+images_dir: "config/auditorium"
+
+# Camera metadata
+# Note: Only image paths and heights are required for SfM
+# Camera positions and orientations are automatically computed from features
+# Optional: local_position [x, y, z] for scale calibration
+cameras:
+  - id: camera1  # view-HC3
+    image: "camera1.jpg"
+    height_m: 1.68  # Mount height above ground
+    local_position: [16.22, 0.3, 1.68]  # Known position for scale calibration
+
+  - id: camera2  # view-HC4
+    image: "camera2.jpg"
+    height_m: 1.67
+    local_position: [0.9, 0.5, 1.67]
+
+  - id: camera3  # view-IP2
+    image: "camera3.jpg"
+    height_m: 2.62
+    local_position: [20.60, 28.31, 2.62]
+
+  - id: camera4  # view-IP5
+    image: "camera4.jpg"
+    height_m: 1.84
+    local_position: [10.57, 16.31, 1.84]
+
+# Generation parameters
+generation:
+  # Feature extraction
+  feature_type: "sift"  # Options: sift (best quality), orb (fastest), akaze (balanced)
+  max_features: 8000    # More features = better reconstruction but slower
+
+  # Feature matching
+  match_ratio_threshold: 0.75  # Lowe's ratio test (0.7-0.8 typical)
+  min_matches: 50              # Minimum matches to estimate pose
+
+  # Camera pose estimation
+  ransac_threshold: 2.0        # RANSAC inlier threshold (pixels)
+  min_triangulation_angle: 3.0 # Minimum angle for triangulation (degrees)
+
+  # Ground plane projection
+  ground_plane_tolerance: 0.5  # Height tolerance for ground (meters)
+
+  # Occupancy grid
+  grid_resolution_m: 0.05      # Grid cell size (5cm for indoor precision)
+
+  # Wall extraction
+  min_wall_length_m: 0.5       # Minimum wall length
+  wall_merge_threshold: 0.3    # Merge nearby parallel walls
+  wall_detection_threshold: 0.5  # Confidence threshold for walls (lowered from 0.6)
+
+  # Scale calibration
+  use_known_distances: true    # Use known camera distances for scale calibration
+  use_known_heights: true      # Use known camera heights for scale calibration
+
+  # Output formatting
+  output_scale_px_per_m: 50    # Pixels per meter in output (50 = 1m = 50px)
