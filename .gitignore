@@ -183,6 +183,7 @@ shared/models/**/*.pt
 
 # Hugging Face model cache
 **/models--*/
+simulation/site-map-generation/models/
 
 # MediaMTX runtime files
 simulation/mediamtx/*.log
