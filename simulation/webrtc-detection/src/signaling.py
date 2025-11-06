@@ -106,8 +106,6 @@ class WebRTCSignalingServer:
             camera_urls = {
                 "camera1": settings.camera1_url,
                 "camera2": settings.camera2_url,
-                "camera3": settings.camera3_url,
-                "camera4": settings.camera4_url,
             }
             rtsp_url = camera_urls.get(camera_id, settings.camera1_url)
 

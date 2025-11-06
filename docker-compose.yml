@@ -1,0 +1,181 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: axis-guardian-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-surveillance}
+      POSTGRES_USER: ${POSTGRES_USER:-dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dev}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - axis-guardian
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: axis-guardian-redis
+    command: redis-server --requirepass devpassword
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "devpassword", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - axis-guardian
+
+  # MediaMTX - Real-time Media Server
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: axis-guardian-mediamtx
+    ports:
+      - "${MEDIAMTX_RTSP_PORT:-8554}:8554"        # RTSP
+      - "${MEDIAMTX_HLS_PORT:-8888}:8888"         # HLS
+      - "${MEDIAMTX_WEBRTC_PORT:-8889}:8889"      # WebRTC
+      - "1935:1935"                                # RTMP
+      - "8890:8890/udp"                            # SRT
+      - "${MEDIAMTX_API_PORT:-9997}:9997"         # API
+      - "${MEDIAMTX_METRICS_PORT:-9998}:9998"     # Metrics
+    volumes:
+      - ./simulation/mediamtx/mediamtx.custom.yml:/mediamtx.yml:ro
+      - mediamtx_recordings:/recordings
+    environment:
+      - MTX_LOGLEVEL=info
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9997/v3/config/global/get"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - axis-guardian
+    restart: unless-stopped
+
+  # Prometheus - Metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: axis-guardian-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts:/etc/prometheus/alerts:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - axis-guardian
+    restart: unless-stopped
+
+  # Grafana - Metrics visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: axis-guardian-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - axis-guardian
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  # Node Exporter - System metrics
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: axis-guardian-node-exporter
+    ports:
+      - "9100:9100"
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/host'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host:ro
+    networks:
+      - axis-guardian
+    restart: unless-stopped
+
+  # Vue Frontend (Development)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: axis-guardian-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - ./.env:/app/.env:ro
+    environment:
+      - NODE_ENV=development
+      - VITE_API_BASE_URL=http://localhost:3000
+      - VITE_WS_URL=ws://localhost:3000
+      - VITE_RTSP_PROXY_URL=http://localhost:8080
+      - VITE_VAPIX_API_URL=http://localhost:8090
+    networks:
+      - axis-guardian
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5173"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  postgres_data:
+    name: axis-guardian_postgres_data
+  redis_data:
+    name: axis-guardian_redis_data
+  mediamtx_recordings:
+    name: axis-guardian_mediamtx_recordings
+  prometheus_data:
+    name: axis-guardian_prometheus_data
+  grafana_data:
+    name: axis-guardian_grafana_data
+
+networks:
+  axis-guardian:
+    name: axis-guardian-network
+    driver: bridge
