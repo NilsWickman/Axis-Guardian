@@ -66,10 +66,12 @@ export function useCanvasInteraction(
   }
 
   const startDrag = (camera: CameraPlacement, startX: number, startY: number) => {
+    // startX and startY are already in canvas pixel coordinates (scaled)
     // Convert camera position from meters to pixels for drag calculations
     const cameraX = metersToPixels(extractValue(camera.position.x))
     const cameraY = metersToPixels(extractValue(camera.position.y))
 
+    // Calculate offset between mouse position and camera center
     dragState.value = {
       isDragging: true,
       draggedCamera: camera,
@@ -183,7 +185,12 @@ export function useCanvasInteraction(
     const padding = 40
     const scaleX = (containerWidth - padding * 2) / canvasWidth
     const scaleY = (containerHeight - padding * 2) / canvasHeight
-    const newScale = Math.min(scaleX, scaleY, 1)
+    const fitScale = Math.min(scaleX, scaleY)
+
+    // Start at 40% zoom (0.4) for a good balance between seeing the whole grid and detail
+    // This gives a nice initial view where grid cells are visible but you can see a good portion
+    const initialScale = 0.4
+    const newScale = Math.max(fitScale, initialScale) // Use whichever is larger
 
     scale.value = newScale
     offsetX.value = (containerWidth - canvasWidth * newScale) / 2

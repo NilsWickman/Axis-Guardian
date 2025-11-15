@@ -201,20 +201,20 @@ const mockCommandData = {
     ],
     build: [
       {
-        value: 'npm-install',
+        value: 'pnpm-install',
         label: 'Install Dependencies',
         icon: Download,
-        command: 'npm install',
+        command: 'pnpm install',
       },
-      { value: 'npm-dev', label: 'Start Dev Server', icon: Zap, command: 'npm run dev' },
+      { value: 'pnpm-dev', label: 'Start Dev Server', icon: Zap, command: 'pnpm run dev' },
       {
-        value: 'npm-build',
+        value: 'pnpm-build',
         label: 'Build for Production',
         icon: Settings,
-        command: 'npm run build',
+        command: 'pnpm run build',
       },
-      { value: 'npm-test', label: 'Run Tests', icon: CheckCircle, command: 'npm test' },
-      { value: 'npm-lint', label: 'Lint Code', icon: Search, command: 'npm run lint' },
+      { value: 'pnpm-test', label: 'Run Tests', icon: CheckCircle, command: 'pnpm test' },
+      { value: 'pnpm-lint', label: 'Lint Code', icon: Search, command: 'pnpm run lint' },
     ],
     tools: [
       { value: 'open-terminal', label: 'Open Terminal', icon: Terminal, shortcut: 'Ctrl+`' },

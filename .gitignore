@@ -58,6 +58,8 @@ lerna-debug.log*
 .pnp.*
 package-lock.json
 yarn.lock
+# Keep pnpm-lock.yaml in version control
+# pnpm-lock.yaml should be committed
 
 # Environment variables
 .env

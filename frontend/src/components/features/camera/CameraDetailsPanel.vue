@@ -11,11 +11,11 @@
       <div class="grid grid-cols-2 gap-1.5 text-xs">
         <div class="flex justify-between">
           <span class="text-muted-foreground">X:</span>
-          <span class="font-mono">{{ camera.x }}px</span>
+          <span class="font-mono">{{ extractValue(camera.position.x) }}m</span>
         </div>
         <div class="flex justify-between">
           <span class="text-muted-foreground">Y:</span>
-          <span class="font-mono">{{ camera.y }}px</span>
+          <span class="font-mono">{{ extractValue(camera.position.y) }}m</span>
         </div>
       </div>
     </div>
@@ -26,23 +26,23 @@
       <div class="space-y-0.5 text-xs">
         <div class="flex justify-between">
           <span class="text-muted-foreground">Rotation:</span>
-          <span class="font-mono">{{ camera.rotation }}°</span>
+          <span class="font-mono">{{ extractValue(camera.rotation) }}°</span>
         </div>
         <div class="flex justify-between">
           <span class="text-muted-foreground">Down Angle:</span>
-          <span class="font-mono">{{ camera.angle }}°</span>
+          <span class="font-mono">{{ extractValue(camera.angle) }}°</span>
         </div>
         <div class="flex justify-between">
           <span class="text-muted-foreground">Height:</span>
-          <span class="font-mono">{{ camera.height }}m</span>
+          <span class="font-mono">{{ extractValue(camera.height) }}m</span>
         </div>
         <div class="flex justify-between">
           <span class="text-muted-foreground">FOV:</span>
-          <span class="font-mono">{{ camera.fov }}°</span>
+          <span class="font-mono">{{ extractValue(camera.fov) }}°</span>
         </div>
         <div class="flex justify-between">
           <span class="text-muted-foreground">View Distance:</span>
-          <span class="font-mono">{{ camera.viewDistance }}px ({{ (camera.viewDistance / scale).toFixed(1) }}m)</span>
+          <span class="font-mono">{{ extractValue(camera.viewDistance) }}m</span>
         </div>
         <div class="flex justify-between items-center">
           <span class="text-muted-foreground">Color:</span>
@@ -85,6 +85,7 @@
 
 <script setup lang="ts">
 import type { CameraPlacement } from '@/stores/siteMaps'
+import { extractValue } from '@/utils/siteMapConversion'
 
 withDefaults(defineProps<{
   camera: CameraPlacement | null

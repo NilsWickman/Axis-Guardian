@@ -157,10 +157,10 @@ export function useWallEditor() {
 
   // Snapping utilities
   const snapToGridPoint = (x: number, y: number): { x: number; y: number } => {
-    const gridSize = snapOptions.value.gridSize
+    // Input x, y are in meters, snap to 1-meter grid
     return {
-      x: Math.round(x / gridSize) * gridSize,
-      y: Math.round(y / gridSize) * gridSize
+      x: Math.round(x),
+      y: Math.round(y)
     }
   }
 

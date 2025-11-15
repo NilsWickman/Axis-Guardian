@@ -82,31 +82,48 @@ brew install ffmpeg
 ffmpeg -version  # Should show 7.x or higher
 ```
 
-#### 3. Install Python Dependencies
+#### 3. Install uv (Python Package Manager)
 
 ```bash
-# Create virtual environments for each service
-cd simulation/webrtc-detection
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-deactivate
+# Install uv (fast Python package manager)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-cd ../object-detection
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-deactivate
+# Add to PATH (if not already)
+export PATH="$HOME/.local/bin:$PATH"
+
+# Verify installation
+uv --version
 ```
 
-#### 4. Install Node.js Dependencies
+#### 4. Install Python Dependencies
+
+```bash
+# Create virtual environments for each service using uv
+cd simulation/webrtc-detection
+uv venv
+uv pip install -r requirements.txt
+
+cd ../object-detection
+uv venv
+uv pip install -r requirements.txt
+
+cd ../onvif-emulator
+uv venv
+uv pip install -r requirements.txt
+
+cd ../vapix-api
+uv venv
+uv pip install -r requirements.txt
+```
+
+#### 5. Install Node.js Dependencies
 
 ```bash
 # From project root
-npm install
+pnpm install
 ```
 
-#### 5. Configure Environment
+#### 6. Configure Environment
 
 ```bash
 # Copy environment template
@@ -296,13 +313,85 @@ Video Files → FFmpeg → MediaMTX (RTSP) → WebRTC Detection Service → Brow
 - Loops video infinitely for continuous testing and development
 - TCP transport for reliable RTSP delivery
 
+## 3D Site Map Generator
+
+Automated 3D reconstruction from camera videos for initial site configuration.
+
+### Overview
+
+The 3D site map generator creates visual representations of your surveillance site using monocular depth estimation and plane detection. This is used for **one-time configuration** to help visualize camera positions and coverage areas.
+
+**Quick Start (Docker):**
+```bash
+# Build Docker image
+make sitemap3d-build
+
+# Start service
+make sitemap3d-up
+
+# Generate 3D site map
+make sitemap3d-generate
+
+# Check status
+make sitemap3d-status
+
+# View in browser: http://localhost:5173/site-maps/3d-reconstruction
+```
+
+### How It Works
+
+```
+Camera Videos → Depth Estimation → Point Cloud → Plane Detection → GLTF Model → Three.js Viewer
+     (MP4)         (MiDaS)          (3D XYZ)      (RANSAC)         (JSON)        (Browser)
+```
+
+1. **Depth Estimation**: MiDaS model converts video frames to depth maps
+2. **3D Backprojection**: Depth maps become 3D point clouds
+3. **Plane Detection**: RANSAC algorithm finds floor and wall surfaces
+4. **GLTF Export**: Geometry exported as web-compatible 3D model
+5. **Visualization**: Three.js renders interactive 3D view in browser
+
+### Features
+
+- **Monocular depth estimation** using Intel MiDaS models
+- **RANSAC plane detection** for floor and walls
+- **Camera frustum visualization** showing field of view
+- **Interactive 3D viewer** with orbit controls
+- **REST API** for remote generation and file serving
+- **GLTF export** for compatibility with 3D tools
+
+### Use Cases
+
+- **Initial site configuration**: Visualize camera placement before deployment
+- **Coverage analysis**: Identify blind spots in 3D space
+- **Documentation**: Export 3D models for reports and presentations
+- **Training**: Help operators understand site layout
+
+### Configuration
+
+Edit `.env`:
+```bash
+SITE_MAP_GEN_PORT=8081
+DEPTH_MODEL=MiDaS_small       # Options: MiDaS_small, DPT_Hybrid, DPT_Large
+DEPTH_DEVICE=cpu              # Options: cpu, cuda
+RANSAC_THRESHOLD=0.1          # Plane fitting tolerance (meters)
+DEFAULT_FOV=60.0              # Camera field of view (degrees)
+```
+
+### Documentation
+
+- Quick Start: `simulation/site-map-generator/QUICKSTART.md`
+- Full Guide: `simulation/site-map-generator/README.md`
+- API Reference: http://localhost:8081/health
+
 ### Port Reference Table
 
 | Port | Service | Protocol | Purpose |
 |------|---------|----------|---------|
 | 5173 | Frontend | HTTP | Vue.js development server |
 | 8000 | Mock Server | HTTP | Mock backend APIs for frontend development |
-| 8081 | WebRTC Detection | HTTP/WebRTC | Signaling server + detection service |
+| 8080 | WebRTC Detection | HTTP/WebRTC | Signaling server + detection service |
+| 8081 | 3D Site Map Generator | HTTP | Site map generation API server |
 | 5432 | PostgreSQL | PostgreSQL | Database (user: dev, password: dev) |
 | 8554 | MediaMTX | RTSP | RTSP camera streams |
 | 8888 | MediaMTX | HLS | HTTP Live Streaming (browser-compatible) |
@@ -393,7 +482,7 @@ python -c "import cv2; import torch; print('Dependencies OK')"
 ```bash
 # Node.js dependencies
 rm -rf node_modules frontend/node_modules
-npm install
+pnpm install
 
 # Python dependencies
 cd simulation/webrtc-detection

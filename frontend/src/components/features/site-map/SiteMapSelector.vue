@@ -78,9 +78,9 @@ const emit = defineEmits<{
 }>()
 
 const formatSize = (map: SiteMap): string => {
-  // Convert pixels to meters using the scale (pixels per meter)
-  const widthMeters = map.width / map.scale
-  const heightMeters = map.height / map.scale
+  // Extract values from UnitValue objects
+  const widthMeters = typeof map.width === 'number' ? map.width : map.width.value
+  const heightMeters = typeof map.height === 'number' ? map.height : map.height.value
 
   // Format to 1 decimal place
   return `${widthMeters.toFixed(1)} × ${heightMeters.toFixed(1)} m`

@@ -188,11 +188,11 @@ log_info "Installing Node.js 20 LTS..."
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 apt-get install -y nodejs
 
-# Install Yarn
-npm install -g yarn
+# Install pnpm
+npm install -g pnpm
 
 node --version
-yarn --version
+pnpm --version
 
 ###############################################
 # 8. Install Python 3.11

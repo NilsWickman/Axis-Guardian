@@ -15,7 +15,7 @@
             </svg>
           </router-link>
           <div>
-            <h1 class="text-xl font-bold text-foreground">{{ activeSiteMap.name }}</h1>
+            <h1 class="text-xl font-bold text-foreground">{{ activeSiteMap?.name || 'Loading...' }}</h1>
             <p class="text-xs text-muted-foreground">2D Site Map Viewer with Person Position Tracking</p>
           </div>
         </div>

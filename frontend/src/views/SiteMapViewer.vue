@@ -95,21 +95,23 @@
 
           <div class="grid grid-cols-2 gap-2">
             <div>
-              <label class="block text-[10px] font-medium mb-1">Width (px)</label>
+              <label class="block text-[10px] font-medium mb-1">Width (m)</label>
               <input
                 v-model.number="siteMapForm.width"
                 type="number"
+                step="0.1"
                 class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background"
-                placeholder="Width"
+                placeholder="Width in meters"
               />
             </div>
             <div>
-              <label class="block text-[10px] font-medium mb-1">Height (px)</label>
+              <label class="block text-[10px] font-medium mb-1">Height (m)</label>
               <input
                 v-model.number="siteMapForm.height"
                 type="number"
+                step="0.1"
                 class="w-full px-2 py-1.5 text-sm border rounded-lg bg-background"
-                placeholder="Height"
+                placeholder="Height in meters"
               />
             </div>
           </div>
@@ -341,7 +343,7 @@ import { useRouter } from 'vue-router'
 import { useSiteMapStore } from '../stores/siteMaps'
 import { useCameraStore } from '../stores/cameras'
 import { useSiteMapCanvas, type CanvasRenderOptions } from '../composables/useSiteMapCanvas'
-import { extractValue, metersToPixels, RENDER_SCALE } from '../utils/siteMapConversion'
+import { extractValue, metersToPixels, pixelsToMeters, RENDER_SCALE } from '../utils/siteMapConversion'
 import { useCanvasInteraction } from '../composables/useCanvasInteraction'
 import { useWallEditor } from '../composables/useWallEditor'
 import { usePersonPositionTracking } from '../composables/usePersonPositionTracking'
@@ -629,8 +631,8 @@ const editMap = (mapId: string) => {
     if (currentMap.value) {
       siteMapForm.name = currentMap.value.name
       siteMapForm.description = currentMap.value.description || ''
-      siteMapForm.width = currentMap.value.width
-      siteMapForm.height = currentMap.value.height
+      siteMapForm.width = extractValue(currentMap.value.width)
+      siteMapForm.height = extractValue(currentMap.value.height)
 
       // Create local working copies (deep clone)
       localWalls.value = JSON.parse(JSON.stringify(currentMap.value.walls))
@@ -640,8 +642,8 @@ const editMap = (mapId: string) => {
       originalData.value = {
         name: currentMap.value.name,
         description: currentMap.value.description || '',
-        width: currentMap.value.width,
-        height: currentMap.value.height,
+        width: extractValue(currentMap.value.width),
+        height: extractValue(currentMap.value.height),
         walls: JSON.parse(JSON.stringify(currentMap.value.walls)),
         cameras: JSON.parse(JSON.stringify(currentMap.value.cameras))
       }
@@ -668,8 +670,8 @@ const saveConfiguration = () => {
     siteMapStore.updateSiteMap(currentMap.value.id, {
       name: siteMapForm.name,
       description: siteMapForm.description,
-      width: siteMapForm.width,
-      height: siteMapForm.height,
+      width: { value: siteMapForm.width, unit: 'm' },
+      height: { value: siteMapForm.height, unit: 'm' },
       walls: JSON.parse(JSON.stringify(localWalls.value)),
       cameras: JSON.parse(JSON.stringify(localCameras.value)),
     })
@@ -1031,15 +1033,21 @@ const onCanvasDrop = (event: DragEvent) => {
 const handleCameraConfigConfirm = (config: { height: number; angle: number; rotation: number }) => {
   if (!pendingCameraPlacement.value) return
 
+  // Convert canvas pixel coordinates to meters
+  const xMeters = pixelsToMeters(pendingCameraPlacement.value.x)
+  const yMeters = pixelsToMeters(pendingCameraPlacement.value.y)
+
   const newPlacement: CameraPlacement = {
     cameraId: pendingCameraPlacement.value.camera.id,
-    x: pendingCameraPlacement.value.x,
-    y: pendingCameraPlacement.value.y,
-    rotation: config.rotation,
-    angle: config.angle,
-    height: config.height,
-    fov: 90,
-    viewDistance: 200,
+    position: {
+      x: { value: xMeters, unit: 'm' },
+      y: { value: yMeters, unit: 'm' }
+    },
+    rotation: { value: config.rotation, unit: 'deg' },
+    angle: { value: config.angle, unit: 'deg' },
+    height: { value: config.height, unit: 'm' },
+    fov: { value: 90, unit: 'deg' },
+    viewDistance: { value: 10, unit: 'm' }, // Default 10 meter view distance
     autoCalculateDistance: true,
     color: 'blue-500'
   }
@@ -1325,14 +1333,14 @@ const closeCameraModal = () => {
 }
 
 const openAddMapDialog = () => {
-  // Create a new blank site map
+  // Create a new blank site map with 25m x 25m grid
   const newMap = siteMapStore.addSiteMap({
     name: 'New Site Map',
     description: '',
     imagePath: undefined,
-    width: 1000,
-    height: 800,
-    scale: 50, // Default scale: 50 pixels per meter
+    width: { value: 25, unit: 'm' }, // 25 meters wide (2500px at 100px/m)
+    height: { value: 25, unit: 'm' }, // 25 meters tall (2500px at 100px/m)
+    renderScale: RENDER_SCALE, // Use fixed render scale of 100 px/m
     cameras: [],
     walls: [],
   })

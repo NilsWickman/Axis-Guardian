@@ -21,6 +21,16 @@
     </button>
 
     <button
+      v-if="showWallEditor"
+      @click="$emit('toggleWallEditor')"
+      class="px-3 py-1.5 border rounded-lg hover:bg-accent text-xs transition-colors font-medium"
+      :class="wallEditorActive ? 'bg-primary text-primary-foreground' : ''"
+      title="Toggle Wall Editor (W)"
+    >
+      🧱 Walls
+    </button>
+
+    <button
       v-if="showPersonPositionsToggle"
       @click="$emit('togglePersonPositions')"
       class="px-3 py-1.5 border rounded-lg hover:bg-accent text-xs transition-colors"
@@ -126,6 +136,15 @@
     </button>
 
     <button
+      v-if="showDebug"
+      @click="$emit('debug')"
+      class="px-3 py-1.5 border border-amber-500 text-amber-600 rounded-lg hover:bg-amber-50 text-xs font-medium"
+      title="Log Configuration to Console"
+    >
+      🐛 Debug
+    </button>
+
+    <button
       v-if="showExport"
       @click="$emit('export')"
       class="px-3 py-1.5 border border-primary text-primary rounded-lg hover:bg-primary/10 text-xs font-medium"
@@ -156,6 +175,8 @@ interface Props {
   showScaleReference?: boolean
   showLabels?: boolean
   showLabelsToggle?: boolean
+  showWallEditor?: boolean
+  wallEditorActive?: boolean
   showPersonPositions?: boolean
   showPersonPositionsToggle?: boolean
   snapToGrid?: boolean
@@ -166,6 +187,7 @@ interface Props {
   showFitToView?: boolean
   showResetView?: boolean
   showSave?: boolean
+  showDebug?: boolean
   showExport?: boolean
   showImport?: boolean
   showZoomControls?: boolean
@@ -177,6 +199,8 @@ withDefaults(defineProps<Props>(), {
   showScaleReference: true,
   showLabels: true,
   showLabelsToggle: true,
+  showWallEditor: false,
+  wallEditorActive: false,
   showPersonPositions: true,
   showPersonPositionsToggle: true,
   snapToGrid: false,
@@ -187,6 +211,7 @@ withDefaults(defineProps<Props>(), {
   showFitToView: false,
   showResetView: false,
   showSave: false,
+  showDebug: false,
   showExport: false,
   showImport: false,
   showZoomControls: false,
@@ -197,6 +222,7 @@ defineEmits<{
   toggleGrid: []
   toggleScale: []
   toggleLabels: []
+  toggleWallEditor: []
   togglePersonPositions: []
   toggleSnap: []
   undo: []
@@ -204,6 +230,7 @@ defineEmits<{
   fitToView: []
   resetView: []
   save: []
+  debug: []
   export: []
   import: [event: Event]
   zoomIn: []

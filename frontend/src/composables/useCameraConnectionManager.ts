@@ -26,13 +26,17 @@ const cameraConnections = reactive<Record<string, CameraConnection>>({})
 const isInitialized = ref(false)
 const isInitializing = ref(false)
 
-// Available cameras
+// Available cameras with their WebRTC endpoints
 const cameras = ref<Camera[]>([
   { id: 'camera1', name: 'Camera 1 - Auditorium HC3' },
-  { id: 'camera2', name: 'Camera 2 - Auditorium HC4' },
-  { id: 'camera3', name: 'Camera 3 - Auditorium IP2' },
-  { id: 'camera4', name: 'Camera 4 - Auditorium IP5' }
+  { id: 'camera2', name: 'Camera 2 - Auditorium HC4' }
 ])
+
+// Camera-specific WebRTC URLs (from ONVIF emulators)
+const cameraWebRTCUrls: Record<string, string> = {
+  camera1: import.meta.env.VITE_CAMERA1_WEBRTC_URL || 'http://localhost:9001',
+  camera2: import.meta.env.VITE_CAMERA2_WEBRTC_URL || 'http://localhost:9002'
+}
 
 // Video synchronization state
 let syncMonitorInterval: number | null = null
@@ -72,9 +76,15 @@ async function initializeConnections() {
       videoElement.style.display = 'none'
       document.body.appendChild(videoElement)
 
-      // Create WebRTC connection
+      // Create WebRTC connection to camera-specific ONVIF emulator
+      const signalingUrl = cameraWebRTCUrls[camera.id]
+      if (!signalingUrl) {
+        console.error(`No WebRTC URL configured for ${camera.id}`)
+        return
+      }
+
       const connection = useWebRTCDetection(camera.id, {
-        signalingUrl: 'http://localhost:8080',
+        signalingUrl,
         autoReconnect: true,
         reconnectDelay: 3000
       })
@@ -441,10 +451,8 @@ function cleanup() {
  * Main composable export
  */
 export function useCameraConnectionManager() {
-  // Auto-initialize on first use
-  if (!isInitialized.value && !isInitializing.value) {
-    initializeConnections()
-  }
+  // Auto-initialization removed - connections must be manually initialized
+  // Call initializeConnections() when needed
 
   return {
     // State

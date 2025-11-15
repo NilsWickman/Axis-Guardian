@@ -50,7 +50,13 @@ class CameraDiscovery:
         self._running = False
         self._discovery_task: Optional[asyncio.Task] = None
 
+        # Extract MediaMTX host from API URL for RTSP connections
+        from urllib.parse import urlparse
+        parsed = urlparse(self.api_url)
+        self.mediamtx_host = parsed.hostname or "localhost"
+
         logger.info(f"Camera Discovery initialized: {self.api_url}")
+        logger.info(f"MediaMTX RTSP host: {self.mediamtx_host}")
 
     async def start(self):
         """Start automatic camera discovery."""
@@ -131,10 +137,31 @@ class CameraDiscovery:
 
         except aiohttp.ClientError as e:
             logger.warning(f"Failed to connect to MediaMTX API: {e}")
-            return self._cameras
+            # Fallback to default camera configuration
+            return self._use_fallback_cameras()
         except Exception as e:
             logger.error(f"Error discovering cameras: {e}")
-            return self._cameras
+            # Fallback to default camera configuration
+            return self._use_fallback_cameras()
+
+    def _use_fallback_cameras(self) -> Dict[str, DiscoveredCamera]:
+        """Use fallback camera configuration when API is unavailable."""
+        if not self._cameras:
+            # Populate with default cameras
+            default_cameras = ["camera1", "camera2"]
+            for camera_id in default_cameras:
+                self._cameras[camera_id] = DiscoveredCamera(
+                    path=camera_id,
+                    name=self._generate_camera_name(camera_id),
+                    source="rtsp",
+                    ready=True,
+                    readers=0,
+                    tracks=["video"],
+                    bytes_sent=0,
+                    rtsp_url=self._build_rtsp_url(camera_id),
+                )
+            logger.info(f"Using fallback configuration with {len(self._cameras)} cameras")
+        return self._cameras
 
     def get_cameras(self) -> Dict[str, DiscoveredCamera]:
         """Get currently discovered cameras."""
@@ -202,18 +229,20 @@ class CameraDiscovery:
 
         return tracks
 
-    def _build_rtsp_url(self, path: str, host: str = "localhost", port: int = 8554) -> str:
+    def _build_rtsp_url(self, path: str, host: str = None, port: int = 8554) -> str:
         """
         Build RTSP URL for camera path.
 
         Args:
             path: Camera path name
-            host: MediaMTX RTSP host
+            host: MediaMTX RTSP host (defaults to self.mediamtx_host)
             port: MediaMTX RTSP port
 
         Returns:
             Full RTSP URL
         """
+        if host is None:
+            host = self.mediamtx_host
         return f"rtsp://{host}:{port}/{path}"
 
     def get_statistics(self) -> Dict:

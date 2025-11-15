@@ -19,12 +19,14 @@ if [ ! -f ".env" ]; then
 fi
 
 # Activate virtual environment
-if [ -f "venv/bin/activate" ]; then
+if [ -f ".venv/bin/activate" ]; then
     echo -e "${GREEN}Activating virtual environment...${NC}"
-    source venv/bin/activate
+    source .venv/bin/activate
 else
-    echo -e "${YELLOW}Virtual environment not found. Please run: make webrtc-detect-install${NC}"
-    exit 1
+    echo -e "${YELLOW}Virtual environment not found. Creating with uv...${NC}"
+    uv venv
+    uv pip install -r requirements.txt
+    source .venv/bin/activate
 fi
 
 # Start the service

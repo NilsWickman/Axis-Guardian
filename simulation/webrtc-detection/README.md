@@ -53,16 +53,17 @@ This service provides ultra-low latency video streaming with perfectly synchroni
 
 ### Setup
 
-1. **Create Python virtual environment**:
+1. **Create Python virtual environment with uv**:
 ```bash
 cd simulation/webrtc-detection
-python3 -m venv .venv
+# Install uv if not already installed: curl -LsSf https://astral.sh/uv/install.sh | sh
+uv venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```
 
 2. **Install dependencies**:
 ```bash
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 ```
 
 3. **Download YOLOv8 model** (if not already present):
@@ -381,7 +382,7 @@ curl http://localhost:8080/health
 # Test WebRTC connection (using frontend)
 # In a separate terminal:
 cd frontend
-npm run dev
+pnpm run dev
 # Navigate to WebRTC Detection view in browser
 ```
 

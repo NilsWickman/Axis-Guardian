@@ -60,9 +60,8 @@ source venv/bin/activate  # Linux/macOS
 # or
 venv\Scripts\activate     # Windows
 
-# Install dependencies
-pip install --upgrade pip
-pip install -r requirements.txt
+# Install dependencies using uv
+uv pip install -r requirements.txt
 ```
 
 **Note**: First run will download YOLOv8 model weights (~6MB for nano model).
@@ -295,7 +294,7 @@ CONFIDENCE_THRESHOLD=0.3
 
 **PyTorch with CUDA:**
 ```bash
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 ```
 
 **Verify:**

@@ -2,7 +2,7 @@
  * Camera Status WebSocket Service
  *
  * Auto-generated WebSocket client from AsyncAPI specification.
- * DO NOT EDIT MANUALLY - run 'npm run generate:all' to regenerate.
+ * DO NOT EDIT MANUALLY - run 'pnpm run generate:all' to regenerate.
  *
  *  * Real-time camera status monitoring service via WebSocket.
  * Broadcasts camera status changes (online, offline, error) to subscribed clients.
@@ -10,7 +10,6 @@
  *
  */
 
-import { SecureStorage } from '@/utils/storage'
 import { config } from '@/config/environment'
 
 export interface CameraStatusWebSocketClientOptions {
@@ -18,8 +17,6 @@ export interface CameraStatusWebSocketClientOptions {
   host?: string;
   /** Use secure WebSocket (wss://) instead of ws:// */
   secure?: boolean;
-  /** JWT authentication token (auto-retrieved from storage if not provided) */
-  token?: string;
   /** Auto-reconnect on disconnect */
   autoReconnect?: boolean;
   /** Reconnect interval in milliseconds */
@@ -71,7 +68,6 @@ export class CameraStatusWebSocketClient {
     this.options = {
       host: options.host || defaultHost,
       secure: options.secure ?? config.wsCameraStatusUrl.startsWith('wss://'),
-      token: options.token || SecureStorage.getToken() || '',
       autoReconnect: options.autoReconnect ?? true,
       reconnectInterval: options.reconnectInterval || 5000,
       maxReconnectAttempts: options.maxReconnectAttempts || 0,
@@ -84,8 +80,7 @@ export class CameraStatusWebSocketClient {
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       const proto = this.options.secure ? 'wss' : 'ws';
-      const token = this.options.token ? `?token=${this.options.token}` : '';
-      const url = `${proto}://${this.options.host}/ws/cameras/status${token}`;
+      const url = `${proto}://${this.options.host}/ws/cameras/status`;
 
       try {
         this.ws = new WebSocket(url);

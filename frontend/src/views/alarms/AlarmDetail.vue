@@ -340,7 +340,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
 import { useAlarms } from '@/composables/useAlarms'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -354,7 +353,6 @@ type Alarm = components['schemas']['Alarm']
 
 const route = useRoute()
 const router = useRouter()
-const authStore = useAuthStore()
 const { store, getSeverityColor, formatTimestamp, getRelativeTime } = useAlarms()
 
 const alarm = ref<Alarm | null>(null)
@@ -406,13 +404,13 @@ const handleVideoError = (event: Event) => {
 }
 
 const handleAcknowledge = async () => {
-  if (!alarm.value || !authStore.currentUser) return
+  if (!alarm.value) return
 
   isProcessing.value = true
   try {
     // Mock acknowledgment - in real implementation, call API
     alarm.value.acknowledged = true
-    alarm.value.acknowledgedBy = authStore.currentUser.username
+    alarm.value.acknowledgedBy = 'System'
     alarm.value.acknowledgedAt = new Date().toISOString()
     alarm.value.status = 'acknowledged' as any
   } catch (error) {
@@ -423,13 +421,13 @@ const handleAcknowledge = async () => {
 }
 
 const handleConfirm = async () => {
-  if (!alarm.value || !authStore.currentUser) return
+  if (!alarm.value) return
 
   isProcessing.value = true
   try {
     // Mock confirmation - in real implementation, call API
     alarm.value.status = 'confirmed' as any
-    alarm.value.confirmedBy = authStore.currentUser.username
+    alarm.value.confirmedBy = 'System'
     alarm.value.confirmedAt = new Date().toISOString()
     alarm.value.outcomeCategory = confirmForm.value.outcomeCategory as any
     alarm.value.closureNotes = confirmForm.value.notes
@@ -444,13 +442,13 @@ const handleConfirm = async () => {
 }
 
 const handleDismiss = async () => {
-  if (!alarm.value || !authStore.currentUser) return
+  if (!alarm.value) return
 
   isProcessing.value = true
   try {
     // Mock dismissal - in real implementation, call API
     alarm.value.status = 'dismissed' as any
-    alarm.value.dismissedBy = authStore.currentUser.username
+    alarm.value.dismissedBy = 'System'
     alarm.value.dismissedAt = new Date().toISOString()
     alarm.value.dismissalReason = dismissForm.value.reason
     alarm.value.outcomeCategory = dismissForm.value.outcomeCategory as any

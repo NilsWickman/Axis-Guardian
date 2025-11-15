@@ -16,6 +16,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, computed } from 'vue'
 import type { SiteMap } from '@/stores/siteMaps'
+import { extractValue } from '@/utils/siteMapConversion'
 
 const props = withDefaults(defineProps<{
   siteMap: SiteMap
@@ -39,7 +40,7 @@ const emit = defineEmits<{
 const miniMapCanvas = ref<HTMLCanvasElement | null>(null)
 
 const aspectRatio = computed(() => {
-  return props.siteMap ? `${props.siteMap.width} / ${props.siteMap.height}` : '1'
+  return props.siteMap ? `${extractValue(props.siteMap.width)} / ${extractValue(props.siteMap.height)}` : '1'
 })
 
 const drawMiniMap = () => {
@@ -53,8 +54,8 @@ const drawMiniMap = () => {
   canvas.width = rect.width
   canvas.height = rect.height
 
-  const mapWidth = props.siteMap.width
-  const mapHeight = props.siteMap.height
+  const mapWidth = extractValue(props.siteMap.width)
+  const mapHeight = extractValue(props.siteMap.height)
   const canvasWidth = canvas.width
   const canvasHeight = canvas.height
 
@@ -78,15 +79,15 @@ const drawMiniMap = () => {
   ctx.lineWidth = 1
   props.siteMap.walls.forEach(wall => {
     ctx.beginPath()
-    ctx.moveTo(offsetXMini + wall.start.x * miniScale, offsetYMini + wall.start.y * miniScale)
-    ctx.lineTo(offsetXMini + wall.end.x * miniScale, offsetYMini + wall.end.y * miniScale)
+    ctx.moveTo(offsetXMini + extractValue(wall.start.x) * miniScale, offsetYMini + extractValue(wall.start.y) * miniScale)
+    ctx.lineTo(offsetXMini + extractValue(wall.end.x) * miniScale, offsetYMini + extractValue(wall.end.y) * miniScale)
     ctx.stroke()
   })
 
   // Cameras
   props.siteMap.cameras.forEach(camera => {
-    const x = offsetXMini + camera.x * miniScale
-    const y = offsetYMini + camera.y * miniScale
+    const x = offsetXMini + extractValue(camera.position.x) * miniScale
+    const y = offsetYMini + extractValue(camera.position.y) * miniScale
 
     ctx.fillStyle = props.getColorHex(camera.color)
     ctx.beginPath()
@@ -132,8 +133,8 @@ const handleClick = (event: MouseEvent) => {
   const clickX = event.clientX - rect.left
   const clickY = event.clientY - rect.top
 
-  const mapWidth = props.siteMap.width
-  const mapHeight = props.siteMap.height
+  const mapWidth = extractValue(props.siteMap.width)
+  const mapHeight = extractValue(props.siteMap.height)
   const canvasWidth = rect.width
   const canvasHeight = rect.height
 

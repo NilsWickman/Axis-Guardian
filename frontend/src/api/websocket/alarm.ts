@@ -2,15 +2,13 @@
  * Alarm WebSocket Service
  *
  * Auto-generated WebSocket client from AsyncAPI specification.
- * DO NOT EDIT MANUALLY - run 'npm run generate:all' to regenerate.
+ * DO NOT EDIT MANUALLY - run 'pnpm run generate:all' to regenerate.
  *
  *  * Real-time alarm notification service via WebSocket.
  * Broadcasts alarm events (new, acknowledged, resolved) to subscribed clients.
- * Requires JWT authentication.
  *
  */
 
-import { SecureStorage } from '@/utils/storage'
 import { config } from '@/config/environment'
 
 export interface AlarmWebSocketClientOptions {
@@ -18,8 +16,6 @@ export interface AlarmWebSocketClientOptions {
   host?: string;
   /** Use secure WebSocket (wss://) instead of ws:// */
   secure?: boolean;
-  /** JWT authentication token (auto-retrieved from storage if not provided) */
-  token?: string;
   /** Auto-reconnect on disconnect */
   autoReconnect?: boolean;
   /** Reconnect interval in milliseconds */
@@ -52,7 +48,7 @@ export type AlarmWebSocketClientEventHandler<K extends keyof AlarmWebSocketClien
  *
  * @example
  * ```typescript
- * const client = new AlarmWebSocketClient({ token: 'your-jwt-token' });
+ * const client = new AlarmWebSocketClient();
  *
  * client.on('alarm.new', (data) => {
  *   console.log('Received:', data);
@@ -75,7 +71,6 @@ export class AlarmWebSocketClient {
     this.options = {
       host: options.host || defaultHost,
       secure: options.secure ?? config.wsAlarmUrl.startsWith('wss://'),
-      token: options.token || SecureStorage.getToken() || '',
       autoReconnect: options.autoReconnect ?? true,
       reconnectInterval: options.reconnectInterval || 5000,
       maxReconnectAttempts: options.maxReconnectAttempts || 0,
@@ -88,8 +83,7 @@ export class AlarmWebSocketClient {
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       const proto = this.options.secure ? 'wss' : 'ws';
-      const token = this.options.token ? `?token=${this.options.token}` : '';
-      const url = `${proto}://${this.options.host}/ws/alarms${token}`;
+      const url = `${proto}://${this.options.host}/ws/alarms`;
 
       try {
         this.ws = new WebSocket(url);
