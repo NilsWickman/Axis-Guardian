@@ -34,6 +34,12 @@ class WebRTCSignalingServer:
                 expose_headers="*",
                 allow_headers="*",
                 allow_methods=["GET", "POST", "OPTIONS"]
+            ),
+            "http://localhost:5174": aiohttp_cors.ResourceOptions(
+                allow_credentials=True,
+                expose_headers="*",
+                allow_headers="*",
+                allow_methods=["GET", "POST", "OPTIONS"]
             )
         })
 
@@ -102,12 +108,8 @@ class WebRTCSignalingServer:
             # Set remote description (offer) FIRST
             await pc.setRemoteDescription(offer)
 
-            # Get camera RTSP URL
-            camera_urls = {
-                "camera1": settings.camera1_url,
-                "camera2": settings.camera2_url,
-            }
-            rtsp_url = camera_urls.get(camera_id, settings.camera1_url)
+            # Get camera RTSP URL using settings method (builds from mediamtx_host if not explicitly set)
+            rtsp_url = settings.get_camera_url(camera_id)
 
             # Get interface mode for this camera
             interface_mode = settings.get_interface_mode(camera_id)
@@ -181,6 +183,9 @@ class WebRTCSignalingServer:
                 # and add our sending track to it
                 for transceiver in pc.getTransceivers():
                     if transceiver.kind == "video" and transceiver.direction == "recvonly":
+                        # Set _offerDirection to match the client's offer direction
+                        # This is required by aiortc to properly calculate direction
+                        transceiver._offerDirection = "recvonly"
                         # Change direction to sendrecv so we can send video
                         transceiver.direction = "sendrecv"
                         # Replace the track
@@ -273,10 +278,10 @@ class WebRTCSignalingServer:
                 "rtsp_pool": pool_stats,
                 "camera_discovery": discovery_stats,
                 "configured_sources": {
-                    "camera1": settings.camera1_url,
-                    "camera2": settings.camera2_url,
-                    "camera3": settings.camera3_url,
-                    "camera4": settings.camera4_url,
+                    "camera1": settings.get_camera_url("camera1"),
+                    "camera2": settings.get_camera_url("camera2"),
+                    "camera3": settings.get_camera_url("camera3"),
+                    "camera4": settings.get_camera_url("camera4"),
                 },
             }
         )

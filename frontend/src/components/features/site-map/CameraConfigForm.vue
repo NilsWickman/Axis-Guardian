@@ -201,7 +201,7 @@ interface Props {
   pixelsPerMeter?: number
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   pixelsPerMeter: 50
 })
 

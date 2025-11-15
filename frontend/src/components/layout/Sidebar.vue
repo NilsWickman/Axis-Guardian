@@ -1,8 +1,7 @@
 <script setup lang="ts">
-  import { computed, ref } from 'vue'
-  import { useRouter, useRoute } from 'vue-router'
+  import { ref } from 'vue'
+  import { useRoute } from 'vue-router'
   import {
-    LogOut as LogOutIcon,
     Sun,
     Moon,
     ChevronDown,
@@ -10,7 +9,6 @@
     Clock,
     Palette,
     Cctv,
-    Users,
     Map,
     MapPin,
     Bell,
@@ -20,33 +18,11 @@
     Box,
   } from 'lucide-vue-next'
   import { useTheme } from '@/composables/useTheme'
-  import { useAuthStore } from '@/stores/auth'
 
-  const router = useRouter()
   const route = useRoute()
-  const authStore = useAuthStore()
   const { currentTheme, setTheme, themes } = useTheme()
   const isThemeMenuOpen = ref(false)
   const expandedMenus = ref<Set<string>>(new Set())
-
-  const user = computed(() => authStore.currentUser)
-
-  const userInitials = computed(() => {
-    if (!user.value) return 'U'
-    return user.value.username
-      .substring(0, 2)
-      .toUpperCase()
-  })
-
-  const userDisplayName = computed(() => {
-    if (!user.value) return 'Guest'
-    return user.value.username.charAt(0).toUpperCase() + user.value.username.slice(1)
-  })
-
-  const userRole = computed(() => {
-    if (!user.value) return 'Guest'
-    return user.value.role.charAt(0).toUpperCase() + user.value.role.slice(1)
-  })
 
   interface NavigationItem {
     name: string
@@ -55,76 +31,59 @@
     children?: NavigationItem[]
   }
 
-  const navigationItems = computed<NavigationItem[]>(() => {
-    const items: NavigationItem[] = [
-      {
-        name: 'Video',
-        path: '/cameras/focus',
-        icon: Focus,
-      },
-      {
-        name: 'Timeline',
-        path: '/cameras/timeline',
-        icon: Clock,
-      },
-      {
-        name: 'Manage Cameras',
-        path: '/cameras/manage',
-        icon: Cctv,
-      },
-      {
-        name: 'Site Maps',
-        icon: Map,
-        children: [
-          {
-            name: '2D Viewer',
-            path: '/site-maps/map-auditorium/view-2d',
-            icon: Layers,
-          },
-          {
-            name: '3D Viewer',
-            path: '/site-maps/map-auditorium/view-3d',
-            icon: Box,
-          },
-          {
-            name: 'Editor',
-            path: '/site-config',
-            icon: MapPin,
-          },
-        ],
-      },
-      {
-        name: 'Alarms',
-        path: '/alarms',
-        icon: Bell,
-      },
-      {
-        name: 'Users',
-        path: '/users',
-        icon: Users,
-      },
-    ]
-
-    // Add Archive for admins only
-    if (authStore.isAdmin) {
-      items.push({
-        name: 'Archive',
-        path: '/archive',
-        icon: Archive,
-      })
-    }
-
-    // Add Settings for admins only
-    if (authStore.isAdmin) {
-      items.push({
-        name: 'Settings',
-        path: '/settings',
-        icon: Settings,
-      })
-    }
-
-    return items
-  })
+  const navigationItems: NavigationItem[] = [
+    {
+      name: 'Video',
+      path: '/cameras/focus',
+      icon: Focus,
+    },
+    {
+      name: 'Timeline',
+      path: '/cameras/timeline',
+      icon: Clock,
+    },
+    {
+      name: 'Manage Cameras',
+      path: '/cameras/manage',
+      icon: Cctv,
+    },
+    {
+      name: 'Site Maps',
+      icon: Map,
+      children: [
+        {
+          name: '2D Viewer',
+          path: '/site-maps/map-auditorium/view-2d',
+          icon: Layers,
+        },
+        {
+          name: '3D Viewer',
+          path: '/site-maps/map-auditorium/view-3d',
+          icon: Box,
+        },
+        {
+          name: 'Editor',
+          path: '/site-config',
+          icon: MapPin,
+        },
+      ],
+    },
+    {
+      name: 'Alarms',
+      path: '/alarms',
+      icon: Bell,
+    },
+    {
+      name: 'Archive',
+      path: '/archive',
+      icon: Archive,
+    },
+    {
+      name: 'Settings',
+      path: '/settings',
+      icon: Settings,
+    },
+  ]
 
   const toggleMenu = (itemName: string) => {
     if (expandedMenus.value.has(itemName)) {
@@ -148,11 +107,6 @@
       return item.children.some(child => child.path && isActiveRoute(child.path))
     }
     return false
-  }
-
-  const logout = async () => {
-    await authStore.logout()
-    router.push('/login')
   }
 
   const formatThemeName = (theme: string): string => {
@@ -287,28 +241,5 @@
       </div>
     </div>
 
-    <!-- User Section -->
-    <div class="p-4 border-t border-sidebar-border flex-shrink-0">
-      <!-- User Avatar and Info -->
-      <div class="flex items-center gap-3">
-        <div class="w-8 h-8 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
-          <span class="text-primary-foreground font-medium text-xs">{{ userInitials }}</span>
-        </div>
-        <div class="flex-1 min-w-0">
-          <p class="text-xs font-medium text-sidebar-foreground truncate">{{ userDisplayName }}</p>
-          <p class="text-xs text-muted-foreground truncate">{{ userRole }}</p>
-        </div>
-        <!-- Action Buttons (Icon Only) -->
-        <div class="flex items-center gap-1 flex-shrink-0">
-          <button
-            class="p-2 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
-            @click="logout"
-            title="Logout"
-          >
-            <LogOutIcon class="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-    </div>
   </aside>
 </template>

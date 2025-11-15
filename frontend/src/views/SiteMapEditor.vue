@@ -39,12 +39,17 @@
         <MapControls
           :show-grid="canvasOptions.showGrid"
           :show-labels="canvasOptions.showCameraLabels"
+          show-wall-editor
+          :wall-editor-active="wallEditor.isActive.value"
           :show-save="hasUnsavedChanges"
+          show-debug
           show-export
           show-import
           @toggle-grid="canvasOptions.showGrid = !canvasOptions.showGrid; interaction.snapToGrid.value = canvasOptions.showGrid; wallEditor.setSnapOptions({ snapToGrid: canvasOptions.showGrid }); drawMap()"
           @toggle-labels="canvasOptions.showCameraLabels = !canvasOptions.showCameraLabels"
+          @toggle-wall-editor="handleToggleWallEditor"
           @save="saveConfiguration"
+          @debug="handleDebugConfig"
           @export="handleExport"
           @import="handleImport"
         />
@@ -349,14 +354,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, reactive } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useCameraStore } from '../stores/cameras'
 import { useSiteMapStore, type CameraPlacement, type Wall } from '../stores/siteMaps'
 
-interface Props {
-  mapId: string
-}
+const route = useRoute()
+const router = useRouter()
 
-const props = defineProps<Props>()
 const emit = defineEmits<{
   back: []
 }>()
@@ -382,8 +386,8 @@ const PIXELS_PER_METER = RENDER_SCALE // Fixed at 100 pixels per meter
 
 // Data
 const siteMaps = computed(() => siteMapStore.siteMaps)
-// Use prop mapId
-const selectedSiteMapId = ref(props.mapId)
+// Get mapId from route params
+const selectedSiteMapId = ref(route.params.id as string)
 const currentSiteMap = computed(() => siteMaps.value.find(m => m.id === selectedSiteMapId.value))
 const availableCameras = computed(() => cameraStore.cameras)
 const placedCameras = ref<CameraPlacement[]>([])
@@ -772,6 +776,19 @@ const handleRedo = () => {
 }
 
 // Wall editor handlers
+const handleToggleWallEditor = () => {
+  if (wallEditor.isActive.value) {
+    // Deactivate wall editor
+    wallEditor.setMode('none')
+    toast.info('Wall editor deactivated')
+  } else {
+    // Activate wall editor in draw mode
+    wallEditor.setMode('draw')
+    toast.success('Wall editor activated - Click to start drawing')
+  }
+  drawMap()
+}
+
 const handleActivateWallEditor = () => {
   console.log('Activating wall editor')
   wallEditor.setMode('draw')
@@ -904,7 +921,10 @@ const handleMouseDown = (event: MouseEvent) => {
       cameraSelection.toggleSelection(camera.cameraId, true)
     } else {
       cameraSelection.clearSelection()
-      interaction.startDrag(camera, coords.x, coords.y)
+      // Convert screen coordinates to scaled canvas coordinates
+      const scaledX = (coords.x - interaction.offsetX.value) / interaction.scale.value
+      const scaledY = (coords.y - interaction.offsetY.value) / interaction.scale.value
+      interaction.startDrag(camera, scaledX, scaledY)
       placement.loadPlacedCamera(camera)
     }
     canvas.requestRedraw(drawMap)
@@ -1222,6 +1242,81 @@ const saveConfiguration = () => {
   }
 }
 
+const handleDebugConfig = () => {
+  if (!currentSiteMap.value) {
+    console.warn('No site map selected')
+    return
+  }
+
+  // Calculate room boundaries from walls
+  const walls = currentSiteMap.value.walls
+  if (walls.length !== 4) {
+    console.warn(`Expected 4 walls for a room, but found ${walls.length} walls`)
+  }
+
+  // Get all unique points from walls to find room boundaries
+  const points: Array<{ x: number, y: number }> = []
+  walls.forEach(wall => {
+    const startX = extractValue(wall.start.x)
+    const startY = extractValue(wall.start.y)
+    const endX = extractValue(wall.end.x)
+    const endY = extractValue(wall.end.y)
+
+    // Add unique points
+    if (!points.some(p => p.x === startX && p.y === startY)) {
+      points.push({ x: startX, y: startY })
+    }
+    if (!points.some(p => p.x === endX && p.y === endY)) {
+      points.push({ x: endX, y: endY })
+    }
+  })
+
+  // Calculate room bounds
+  const minX = Math.min(...points.map(p => p.x))
+  const maxX = Math.max(...points.map(p => p.x))
+  const minY = Math.min(...points.map(p => p.y))
+  const maxY = Math.max(...points.map(p => p.y))
+  const roomWidth = maxX - minX
+  const roomHeight = maxY - minY
+
+  console.group('🏠 Room Configuration')
+
+  // Room boundaries
+  console.group('📐 Room Boundaries')
+  console.log('Dimensions:', `${roomWidth.toFixed(2)}m × ${roomHeight.toFixed(2)}m`)
+  console.log('Min Point (Top-Left):', `(${minX.toFixed(2)}m, ${minY.toFixed(2)}m)`)
+  console.log('Max Point (Bottom-Right):', `(${maxX.toFixed(2)}m, ${maxY.toFixed(2)}m)`)
+  console.log('Area:', `${(roomWidth * roomHeight).toFixed(2)}m²`)
+  console.groupEnd()
+
+  // Filter cameras inside the room
+  const camerasInRoom = placedCameras.value.filter(camera => {
+    const x = extractValue(camera.position.x)
+    const y = extractValue(camera.position.y)
+    return x >= minX && x <= maxX && y >= minY && y <= maxY
+  })
+
+  // Cameras in room
+  console.group(`📹 Cameras in Room (${camerasInRoom.length}/${placedCameras.value.length})`)
+  camerasInRoom.forEach((camera, index) => {
+    const x = extractValue(camera.position.x)
+    const y = extractValue(camera.position.y)
+
+    console.log(`${index + 1}. ${getCameraName(camera.cameraId)}:`, {
+      position: `(${x.toFixed(2)}m, ${y.toFixed(2)}m)`,
+      rotation: `${extractValue(camera.rotation)}°`,
+      height: `${extractValue(camera.height)}m`,
+      fov: `${extractValue(camera.fov)}°`,
+      viewDistance: `${extractValue(camera.viewDistance)}m`
+    })
+  })
+  console.groupEnd()
+
+  console.groupEnd()
+
+  toast.success('Room configuration logged to console')
+}
+
 const handleExport = () => {
   if (currentSiteMap.value) {
     try {
@@ -1268,9 +1363,15 @@ const fitToView = () => {
   const container = canvasContainer.value
   if (!canvasEl || !container || !currentSiteMap.value) return
 
+  // Extract values from UnitValue and convert to pixels
+  const widthMeters = extractValue(currentSiteMap.value.width)
+  const heightMeters = extractValue(currentSiteMap.value.height)
+  const widthPixels = metersToPixels(widthMeters)
+  const heightPixels = metersToPixels(heightMeters)
+
   interaction.resetView(
-    currentSiteMap.value.width,
-    currentSiteMap.value.height,
+    widthPixels,
+    heightPixels,
     container.clientWidth,
     container.clientHeight
   )
@@ -1317,7 +1418,13 @@ const resizeCanvas = () => {
   const canvasEl = mapCanvas.value
   if (!canvasEl || !currentSiteMap.value) return
 
-  canvas.resizeCanvas(currentSiteMap.value.width, currentSiteMap.value.height)
+  // Extract values from UnitValue and convert to pixels
+  const widthMeters = extractValue(currentSiteMap.value.width)
+  const heightMeters = extractValue(currentSiteMap.value.height)
+  const widthPixels = metersToPixels(widthMeters)
+  const heightPixels = metersToPixels(heightMeters)
+
+  canvas.resizeCanvas(widthPixels, heightPixels)
   drawMap()
 }
 
@@ -1330,7 +1437,7 @@ watch([
 })
 
 // Watch for mapId changes
-watch(() => props.mapId, (newMapId) => {
+watch(() => route.params.id, (newMapId) => {
   selectedSiteMapId.value = newMapId
   loadSiteMapCameras()
 })
@@ -1355,14 +1462,18 @@ onMounted(async () => {
 
   loadSiteMapCameras()
 
+  // Initial canvas setup
+  resizeCanvas()
+  fitToView()
+
   window.addEventListener('resize', () => {
     resizeCanvas()
     fitToView()
   })
   window.addEventListener('keydown', handleKeyDown)
 
-  // Activate wall editor by default
-  wallEditor.setMode('draw')
+  // Don't activate wall editor by default - let user choose
+  wallEditor.setMode('none')
 })
 
 onUnmounted(() => {

@@ -166,14 +166,12 @@ start_python_services() {
     echo "  Starting WebRTC Detection Service..."
     cd "$PROJECT_ROOT/simulation/webrtc-detection"
 
-    if [[ ! -d "venv" ]]; then
-        echo "    Creating virtual environment..."
-        python3 -m venv venv
-        source venv/bin/activate
-        pip install -r requirements.txt
-    else
-        source venv/bin/activate
+    if [[ ! -d ".venv" ]]; then
+        echo "    Creating virtual environment with uv..."
+        uv venv
+        uv pip install -r requirements.txt
     fi
+    source .venv/bin/activate
 
     nohup python src/main.py > logs/webrtc-detection.log 2>&1 &
     echo $! > /tmp/axis-guardian-webrtc.pid
@@ -183,14 +181,12 @@ start_python_services() {
     echo "  Starting VAPIX API Simulator..."
     cd "$PROJECT_ROOT/simulation/vapix-api"
 
-    if [[ ! -d "venv" ]]; then
-        echo "    Creating virtual environment..."
-        python3 -m venv venv
-        source venv/bin/activate
-        pip install -r requirements.txt
-    else
-        source venv/bin/activate
+    if [[ ! -d ".venv" ]]; then
+        echo "    Creating virtual environment with uv..."
+        uv venv
+        uv pip install -r requirements.txt
     fi
+    source .venv/bin/activate
 
     nohup python src/main.py > logs/vapix-api.log 2>&1 &
     echo $! > /tmp/axis-guardian-vapix.pid

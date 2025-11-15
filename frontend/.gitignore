@@ -11,7 +11,6 @@ node_modules
 dist
 dist-ssr
 *.local
-yarn.lock
 
 # Editor directories and files
 .idea
@@ -25,8 +24,9 @@ yarn.lock
 *storybook.log
 storybook-static
 
-# Lock files (keep yarn.lock, ignore package-lock.json)
+# Lock files (keep pnpm-lock.yaml, ignore others)
 package-lock.json
+yarn.lock
 
 # Playwright MCP folder
 .playwright-mcp

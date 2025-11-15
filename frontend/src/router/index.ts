@@ -4,7 +4,7 @@ import type { RouteRecordRaw } from 'vue-router'
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
-    redirect: '/cameras/webrtc-detection',
+    redirect: '/cameras/focus',
   },
   {
     path: '/cameras/live-detection',
@@ -12,14 +12,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/camera-views/LiveDetectionView.vue'),
     meta: {
       title: 'Live Detection (HLS)',
-    },
-  },
-  {
-    path: '/cameras/webrtc-detection',
-    name: 'WebRTCDetectionView',
-    component: () => import('@/views/camera-views/WebRTCDetectionView.vue'),
-    meta: {
-      title: 'Live Detection (WebRTC)',
     },
   },
   {
@@ -73,7 +65,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/site-maps/SiteMapGenerator.vue'),
     meta: {
       title: 'Generate Site Map',
-      roles: ['admin'],
     },
   },
   {
@@ -93,12 +84,19 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/site-maps/3d-reconstruction',
+    name: 'SiteMap3DReconstruction',
+    component: () => import('@/views/SiteMap3D.vue'),
+    meta: {
+      title: '3D Site Map Reconstruction',
+    },
+  },
+  {
     path: '/site-maps/:id/edit',
     name: 'SiteMapEditor',
     component: () => import('@/views/SiteMapEditor.vue'),
     meta: {
       title: 'Edit Site Map',
-      roles: ['admin'],
     },
   },
   // Legacy routes (deprecated, redirect to new)
@@ -109,14 +107,6 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/generated-site-map',
     redirect: '/site-maps',
-  },
-  {
-    path: '/users',
-    name: 'Users',
-    component: () => import('@/views/UserManagement.vue'),
-    meta: {
-      title: 'User Management',
-    },
   },
   // Alarms
   {
@@ -141,7 +131,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/alarms/AlarmArchive.vue'),
     meta: {
       title: 'Alarm Archive',
-      roles: ['admin'],
     },
   },
   // Settings
@@ -151,7 +140,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/Settings.vue'),
     meta: {
       title: 'System Settings',
-      roles: ['admin'],
     },
   },
 ]
@@ -176,30 +164,13 @@ router.beforeEach((to, _from, next) => {
     document.title = `${to.meta.title} | AXIS Surveillance`
   }
 
-  // Check role-based access
-  if (to.meta.roles) {
-    // Import auth store dynamically to avoid circular dependencies
-    import('@/stores/auth').then(({ useAuthStore }) => {
-      const authStore = useAuthStore()
-      const userRole = authStore.userRole
-
-      if (!userRole || !to.meta.roles?.includes(userRole)) {
-        // User doesn't have required role, redirect to home
-        next({ path: '/cameras/focus' })
-      } else {
-        next()
-      }
-    })
-  } else {
-    next()
-  }
+  next()
 })
 
 // TypeScript module augmentation for route meta
 declare module 'vue-router' {
   interface RouteMeta {
     title?: string
-    roles?: string[]
   }
 }
 

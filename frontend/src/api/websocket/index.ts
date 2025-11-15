@@ -2,7 +2,7 @@
  * Generated WebSocket Clients - TypeScript
  *
  * Auto-generated from AsyncAPI schemas.
- * DO NOT EDIT MANUALLY - run 'npm run generate:all' to regenerate.
+ * DO NOT EDIT MANUALLY - run 'pnpm run generate:all' to regenerate.
  */
 
 export * from './alarm';

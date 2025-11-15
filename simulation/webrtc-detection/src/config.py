@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     host: str = Field(default="0.0.0.0", description="Server host", alias="webrtc_detection_host")
     port: int = Field(default=8080, description="Server port", alias="webrtc_detection_port")
 
+    # MediaMTX configuration
+    mediamtx_host: str = Field(default="localhost", description="MediaMTX host")
+    mediamtx_rtsp_port: int = Field(default=8554, description="MediaMTX RTSP port")
+    mediamtx_api_port: int = Field(default=9997, description="MediaMTX API port")
+
     # WebRTC ICE servers
     stun_server: str = Field(
         default="stun:stun.l.google.com:19302", description="STUN server URL"
@@ -122,19 +127,28 @@ class Settings(BaseSettings):
         default=None, description="Camera 4 interface mode override"
     )
 
-    # Camera sources
-    camera1_url: str = Field(
-        default="rtsp://localhost:8554/camera1", description="Camera 1 RTSP URL (Auditorium HC3)"
+    # Camera sources (defaults use mediamtx_host, can be overridden via env vars)
+    camera1_url: Optional[str] = Field(
+        default=None, description="Camera 1 RTSP URL (Auditorium HC3)"
     )
-    camera2_url: str = Field(
-        default="rtsp://localhost:8554/camera2", description="Camera 2 RTSP URL (Auditorium HC4)"
+    camera2_url: Optional[str] = Field(
+        default=None, description="Camera 2 RTSP URL (Auditorium HC4)"
     )
-    camera3_url: str = Field(
-        default="rtsp://localhost:8554/camera3", description="Camera 3 RTSP URL (Auditorium IP2)"
+    camera3_url: Optional[str] = Field(
+        default=None, description="Camera 3 RTSP URL (Auditorium IP2)"
     )
-    camera4_url: str = Field(
-        default="rtsp://localhost:8554/camera4", description="Camera 4 RTSP URL (Auditorium IP5)"
+    camera4_url: Optional[str] = Field(
+        default=None, description="Camera 4 RTSP URL (Auditorium IP5)"
     )
+
+    def get_camera_url(self, camera_id: str) -> str:
+        """Get camera RTSP URL, building from mediamtx_host if not explicitly set."""
+        url_attr = f"{camera_id}_url"
+        url = getattr(self, url_attr, None)
+        if url:
+            return url
+        # Build URL from mediamtx_host
+        return f"rtsp://{self.mediamtx_host}:{self.mediamtx_rtsp_port}/{camera_id}"
 
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")

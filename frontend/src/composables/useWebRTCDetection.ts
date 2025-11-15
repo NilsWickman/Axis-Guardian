@@ -6,6 +6,7 @@
  */
 
 import { ref, computed, onUnmounted, type Ref } from 'vue'
+import { useRouter } from 'vue-router'
 import msgpack from 'msgpack-lite'
 import type { Detection } from '@/types/detection.types'
 import { useToast } from '@/composables/useToast'
@@ -28,7 +29,7 @@ export interface WebRTCDetectionOptions {
 }
 
 const DEFAULT_OPTIONS: WebRTCDetectionOptions = {
-  signalingUrl: import.meta.env.VITE_RTSP_PROXY_URL || 'http://localhost:8081',
+  signalingUrl: import.meta.env.VITE_RTSP_PROXY_URL || 'http://localhost:9001',
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' }
   ],
@@ -39,11 +40,28 @@ const DEFAULT_OPTIONS: WebRTCDetectionOptions = {
 export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOptions = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...options }
   const toast = useToast()
+  const router = useRouter()
+
+  /**
+   * Check if current route is a camera page where toast messages should be shown
+   */
+  const shouldShowToast = () => {
+    const cameraRoutes = [
+      'LiveDetectionView',
+      'WebRTCDetectionView',
+      'SnapshotView',
+      'FocusView',
+      'TimelineView',
+      'CameraManagement'
+    ]
+    return router.currentRoute.value.name && cameraRoutes.includes(router.currentRoute.value.name as string)
+  }
 
   // State
   const peerConnection = ref<RTCPeerConnection | null>(null)
   const dataChannel = ref<RTCDataChannel | null>(null)
   const videoElement = ref<HTMLVideoElement | null>(null)
+  const signalingWebSocket = ref<WebSocket | null>(null)
   const isConnected = ref(false)
   const isDataChannelOpen = ref(false)
   const connectionState = ref<RTCPeerConnectionState>('new')
@@ -137,20 +155,23 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
         // Toast notifications for connection state changes
         if (pc.connectionState === 'connected') {
-          toast.success(`Camera ${cameraId} connected`, 3000)
+          if (shouldShowToast()) {
+            toast.success(`Camera ${cameraId} connected`, 3000)
+          }
         } else if (pc.connectionState === 'failed') {
-          toast.error(`Camera ${cameraId} connection failed`, 5000)
+          if (shouldShowToast()) {
+            toast.error(`Camera ${cameraId} connection failed`, 5000)
+          }
           handleDisconnect()
         } else if (pc.connectionState === 'closed') {
-          toast.warning(`Camera ${cameraId} disconnected`, 4000)
+          if (shouldShowToast()) {
+            toast.warning(`Camera ${cameraId} disconnected`, 4000)
+          }
           handleDisconnect()
         }
       }
 
-      // Handle ICE candidates
-      pc.onicecandidate = (event) => {
-        // ICE candidates being gathered
-      }
+      // ICE candidate handler will be set up after WebSocket connection
 
       // Handle incoming tracks (video)
       pc.ontrack = (event) => {
@@ -270,25 +291,63 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
       await pc.setLocalDescription(offer)
 
-      // Send offer to signaling server
-      const response = await fetch(`${opts.signalingUrl}/offer`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sdp: offer.sdp,
-          type: offer.type,
-          camera_id: cameraId
-        })
+      // Connect to WebSocket signaling server
+      const wsUrl = `${opts.signalingUrl.replace(/^http/, 'ws')}/ws/webrtc`
+      signalingWebSocket.value = new WebSocket(wsUrl)
+      const ws = signalingWebSocket.value
+
+      // Wait for WebSocket to open
+      await new Promise<void>((resolve, reject) => {
+        ws.onopen = () => resolve()
+        ws.onerror = (error) => reject(new Error('WebSocket connection failed'))
+        setTimeout(() => reject(new Error('WebSocket connection timeout')), 10000)
       })
 
-      if (!response.ok) {
-        throw new Error(`Signaling failed: ${response.statusText}`)
-      }
+      // Send offer via WebSocket
+      ws.send(JSON.stringify({
+        type: 'offer',
+        sdp: offer.sdp
+      }))
 
-      const answer = await response.json()
+      // Wait for answer
+      const answer = await new Promise<RTCSessionDescriptionInit>((resolve, reject) => {
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data)
+            if (data.type === 'answer') {
+              resolve(data)
+            }
+          } catch (error) {
+            reject(new Error('Failed to parse answer'))
+          }
+        }
+        setTimeout(() => reject(new Error('Answer timeout')), 10000)
+      })
 
       // Set remote description (answer)
       await pc.setRemoteDescription(new RTCSessionDescription(answer))
+
+      // Keep WebSocket connection alive for ICE candidates
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          if (data.type === 'ice-candidate' && data.candidate) {
+            pc.addIceCandidate(data.candidate)
+          }
+        } catch (error) {
+          console.error('[WebRTC] Error handling WebSocket message:', error)
+        }
+      }
+
+      // Send ICE candidates via WebSocket
+      pc.onicecandidate = (event) => {
+        if (event.candidate && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'ice-candidate',
+            candidate: event.candidate
+          }))
+        }
+      }
 
       // Reset reconnect attempts on successful connection
       reconnectAttempts.value = 0
@@ -403,7 +462,9 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
     channel.onopen = () => {
       isDataChannelOpen.value = true
-      toast.success(`Data channel for ${cameraId} ready`, 2000)
+      if (shouldShowToast()) {
+        toast.success(`Data channel for ${cameraId} ready`, 2000)
+      }
     }
 
     channel.onclose = () => {
@@ -412,7 +473,9 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
     channel.onerror = (error) => {
       console.error('[WebRTC] Data channel error:', error)
-      toast.error(`Data channel error on ${cameraId}`, 5000)
+      if (shouldShowToast()) {
+        toast.error(`Data channel error on ${cameraId}`, 5000)
+      }
     }
 
     // Receive detection metadata (MessagePack or JSON for backwards compatibility)
@@ -563,10 +626,12 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
         `[WebRTC] Reconnecting in ${exponentialDelay}ms... (attempt ${reconnectAttempts.value}/${maxReconnectAttempts})`
       )
 
-      toast.info(
-        `Reconnecting ${cameraId} (attempt ${reconnectAttempts.value}/${maxReconnectAttempts})...`,
-        Math.min(exponentialDelay, 5000)
-      )
+      if (shouldShowToast()) {
+        toast.info(
+          `Reconnecting ${cameraId} (attempt ${reconnectAttempts.value}/${maxReconnectAttempts})...`,
+          Math.min(exponentialDelay, 5000)
+        )
+      }
 
       reconnectTimer.value = window.setTimeout(() => {
         if (videoElement.value) {
@@ -592,6 +657,11 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
     isReconnecting.value = false
     reconnectAttempts.value = 0 // Reset attempts on manual disconnect
+
+    if (signalingWebSocket.value) {
+      signalingWebSocket.value.close()
+      signalingWebSocket.value = null
+    }
 
     if (dataChannel.value) {
       dataChannel.value.close()
@@ -680,11 +750,15 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
     // Reconnect
     try {
-      toast.info(`Manually reconnecting ${cameraId}...`, 2000)
+      if (shouldShowToast()) {
+        toast.info(`Manually reconnecting ${cameraId}...`, 2000)
+      }
       await connect(videoElement.value)
     } catch (error) {
       console.error('[WebRTC] Manual retry failed:', error)
-      toast.error(`Failed to reconnect ${cameraId}`, 5000)
+      if (shouldShowToast()) {
+        toast.error(`Failed to reconnect ${cameraId}`, 5000)
+      }
     }
   }
 

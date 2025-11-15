@@ -9,10 +9,10 @@
   // This ensures connections are ready before any view needs them
   const connectionManager = useCameraConnectionManager()
 
-  onMounted(() => {
+  onMounted(async () => {
     console.log('[App] Initializing global camera connections on startup')
-    // Connection manager will initialize automatically on first use
-    // This just triggers it early so all views have instant access
+    await connectionManager.initializeConnections()
+    console.log('[App] Camera connections initialized')
   })
 </script>
 

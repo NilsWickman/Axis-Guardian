@@ -4,7 +4,6 @@ import type { Ref } from 'vue'
 import type { DateRange } from 'reka-ui'
 import { useRouter } from 'vue-router'
 import { useAlarms } from '@/composables/useAlarms'
-import { useAuthStore } from '@/stores/auth'
 import { Map, AlertTriangle, Bell, X, Loader2, CalendarIcon } from 'lucide-vue-next'
 import type { components } from '@/types/generated'
 import { DateFormatter, getLocalTimeZone } from '@internationalized/date'
@@ -17,7 +16,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 type Alarm = components['schemas']['Alarm']
 
 const router = useRouter()
-const authStore = useAuthStore()
 const { store, loadAlarms, acknowledgeAlarm, getSeverityColor, formatTimestamp, getRelativeTime } = useAlarms()
 
 const df = new DateFormatter('en-US', {
@@ -131,9 +129,7 @@ onMounted(async () => {
 })
 
 const handleAcknowledge = async (alarmId: string) => {
-  if (authStore.currentUser) {
-    await acknowledgeAlarm(alarmId, authStore.currentUser.username)
-  }
+  await acknowledgeAlarm(alarmId, 'System')
 }
 
 const viewAlarmDetails = (alarmId: string) => {

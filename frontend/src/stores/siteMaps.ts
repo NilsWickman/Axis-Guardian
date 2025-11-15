@@ -48,9 +48,104 @@ export interface SiteMap {
 
 export const useSiteMapStore = defineStore('siteMaps', () => {
   console.log('[SiteMapStore] Initializing store')
-  const siteMaps = ref<SiteMap[]>([])
 
-  const activeSiteMapId = ref<string | null>(null)
+  // Initialize with rectangular room mock data
+  const siteMaps = ref<SiteMap[]>([
+    {
+      id: 'rectangular-room-001',
+      name: 'Rectangular Room',
+      description: 'Simple 18m × 12m rectangular room with two cameras',
+      width: createMeterUnit(18),
+      height: createMeterUnit(12),
+      renderScale: RENDER_SCALE,
+      cameras: [
+        {
+          cameraId: 'camera1',
+          position: {
+            x: createMeterUnit(1.3),
+            y: createMeterUnit(10.9)
+          },
+          rotation: createDegreeUnit(321),
+          angle: createDegreeUnit(0),
+          height: createMeterUnit(1.5),
+          fov: createDegreeUnit(60),
+          viewDistance: createMeterUnit(100),
+          autoCalculateDistance: false,
+          color: 'cyan-500',
+          notes: 'Front-left corner camera'
+        },
+        {
+          cameraId: 'camera2',
+          position: {
+            x: createMeterUnit(15.75),
+            y: createMeterUnit(10.9)
+          },
+          rotation: createDegreeUnit(253),
+          angle: createDegreeUnit(0),
+          height: createMeterUnit(1.5),
+          fov: createDegreeUnit(60),
+          viewDistance: createMeterUnit(100),
+          autoCalculateDistance: false,
+          color: 'purple-500',
+          notes: 'Front-right corner camera'
+        }
+      ],
+      walls: [
+        {
+          id: 'wall-top',
+          start: {
+            x: createMeterUnit(0),
+            y: createMeterUnit(12)
+          },
+          end: {
+            x: createMeterUnit(18),
+            y: createMeterUnit(12)
+          },
+          type: 'external'
+        },
+        {
+          id: 'wall-right',
+          start: {
+            x: createMeterUnit(18),
+            y: createMeterUnit(12)
+          },
+          end: {
+            x: createMeterUnit(18),
+            y: createMeterUnit(0)
+          },
+          type: 'external'
+        },
+        {
+          id: 'wall-bottom',
+          start: {
+            x: createMeterUnit(18),
+            y: createMeterUnit(0)
+          },
+          end: {
+            x: createMeterUnit(0),
+            y: createMeterUnit(0)
+          },
+          type: 'external'
+        },
+        {
+          id: 'wall-left',
+          start: {
+            x: createMeterUnit(0),
+            y: createMeterUnit(0)
+          },
+          end: {
+            x: createMeterUnit(0),
+            y: createMeterUnit(12)
+          },
+          type: 'external'
+        }
+      ],
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }
+  ])
+
+  const activeSiteMapId = ref<string | null>('rectangular-room-001')
   console.log('[SiteMapStore] Initial activeSiteMapId:', activeSiteMapId.value)
   console.log('[SiteMapStore] Initial siteMaps count:', siteMaps.value.length)
 

@@ -3,7 +3,6 @@
  */
 
 import { config } from '@/config/environment'
-import { SecureStorage } from '@/utils/storage'
 import { ApiErrorHandler, type ApiError } from '@/types/errors'
 
 export interface RequestOptions extends RequestInit {
@@ -146,7 +145,7 @@ export class HttpClient {
   }
 
   /**
-   * Build request headers with authentication
+   * Build request headers
    */
   private buildHeaders(customHeaders?: HeadersInit): Headers {
     const headers = new Headers(customHeaders)
@@ -154,12 +153,6 @@ export class HttpClient {
     // Add Content-Type if not present
     if (!headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json')
-    }
-
-    // Add Authorization header if token exists
-    const token = SecureStorage.getToken()
-    if (token && !headers.has('Authorization')) {
-      headers.set('Authorization', `Bearer ${token}`)
     }
 
     return headers

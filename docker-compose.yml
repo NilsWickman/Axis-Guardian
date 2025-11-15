@@ -1,6 +1,11 @@
 services:
+  # ============================================================================
+  # Core Infrastructure Services (base profile)
+  # ============================================================================
+
   # PostgreSQL Database
   postgres:
+    profiles: ["base", "full", "monitoring"]
     image: postgres:15-alpine
     container_name: axis-guardian-postgres
     environment:
@@ -21,6 +26,7 @@ services:
 
   # Redis Cache
   redis:
+    profiles: ["base", "full"]
     image: redis:7-alpine
     container_name: axis-guardian-redis
     command: redis-server --requirepass devpassword
@@ -38,6 +44,7 @@ services:
 
   # MediaMTX - Real-time Media Server
   mediamtx:
+    profiles: ["base", "full", "onvif"]
     image: bluenviron/mediamtx:latest
     container_name: axis-guardian-mediamtx
     ports:
@@ -62,8 +69,74 @@ services:
       - axis-guardian
     restart: unless-stopped
 
+  # Vue Frontend (Development)
+  frontend:
+    profiles: ["base", "full"]
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: axis-guardian-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - ./.env:/app/.env:ro
+    environment:
+      - NODE_ENV=development
+      - VITE_API_BASE_URL=http://localhost:3000
+      - VITE_WS_URL=ws://localhost:3000
+      - VITE_RTSP_PROXY_URL=http://localhost:8083
+      - VITE_VAPIX_API_URL=http://localhost:8090
+    networks:
+      - axis-guardian
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5173"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # WebRTC Detection Service
+  webrtc-detection:
+    profiles: ["base", "full", "onvif"]
+    build:
+      context: ./simulation/webrtc-detection
+      dockerfile: Dockerfile
+    container_name: axis-guardian-webrtc-detection
+    network_mode: "host"
+    volumes:
+      - ./shared/models:/app/shared/models:ro
+      - ./.env:/app/.env:ro
+    environment:
+      - WEBRTC_DETECTION_HOST=0.0.0.0
+      - WEBRTC_DETECTION_PORT=8083
+      - MEDIAMTX_HOST=localhost
+      - MEDIAMTX_RTSP_PORT=${MEDIAMTX_RTSP_PORT:-8554}
+      - MEDIAMTX_API_PORT=${MEDIAMTX_API_PORT:-9997}
+      - REALTIME_MODEL_PATH=/app/shared/models/yolov8n.pt
+      - CONFIDENCE_THRESHOLD=${CONFIDENCE_THRESHOLD:-0.5}
+      - ENABLE_TRACKING=${ENABLE_TRACKING:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      - mediamtx
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8083/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ============================================================================
+  # Monitoring Services (monitoring profile)
+  # ============================================================================
+
   # Prometheus - Metrics collection
   prometheus:
+    profiles: ["monitoring", "full"]
     image: prom/prometheus:latest
     container_name: axis-guardian-prometheus
     ports:
@@ -90,6 +163,7 @@ services:
 
   # Grafana - Metrics visualization
   grafana:
+    profiles: ["monitoring", "full"]
     image: grafana/grafana:latest
     container_name: axis-guardian-grafana
     ports:
@@ -117,6 +191,7 @@ services:
 
   # Node Exporter - System metrics
   node-exporter:
+    profiles: ["monitoring", "full"]
     image: prom/node-exporter:latest
     container_name: axis-guardian-node-exporter
     ports:
@@ -134,34 +209,138 @@ services:
       - axis-guardian
     restart: unless-stopped
 
-  # Vue Frontend (Development)
-  frontend:
+  # ============================================================================
+  # ONVIF Camera Emulators (onvif profile)
+  # ============================================================================
+
+  onvif-camera1:
+    profiles: ["onvif", "full"]
     build:
-      context: ./frontend
+      context: ./simulation/onvif-emulator
       dockerfile: Dockerfile
-      target: development
-    container_name: axis-guardian-frontend
-    ports:
-      - "5173:5173"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - ./.env:/app/.env:ro
+    container_name: onvif-camera1
+    hostname: camera1
+    network_mode: "host"
+    # networks:
+    #   axis-guardian:
+    #     ipv4_address: 172.20.0.11
+    # ports:
+    #   - "9001:80"
     environment:
-      - NODE_ENV=development
-      - VITE_API_BASE_URL=http://localhost:3000
-      - VITE_WS_URL=ws://localhost:3000
-      - VITE_RTSP_PROXY_URL=http://localhost:8080
-      - VITE_VAPIX_API_URL=http://localhost:8090
-    networks:
-      - axis-guardian
+      - CAMERA_ID=camera1
+      - ONVIF_HOST=0.0.0.0
+      - ONVIF_PORT=9001
+      - ONVIF_ENABLE_AUTH=true
+      - ONVIF_USERNAME=admin
+      - ONVIF_PASSWORD=axis123
+      - MEDIAMTX_HOST=host.docker.internal
+      - MEDIAMTX_RTSP_PORT=8554
+      - MEDIAMTX_API_PORT=9997
+      - RTSP_URL=rtsp://host.docker.internal:8554/camera1
+      - ONVIF_EVENT_MOTION_INTERVAL=45
+      - ONVIF_EVENT_OBJECT_INTERVAL=180
+      - LOG_LEVEL=INFO
+      - PREPROCESSED_MODE=true
+      - PREPROCESSED_DIR=/data/preprocessed/1080p
+      - PREPROCESSED_QUALITY=1080p
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./simulation/config/cameras.yaml:/config/cameras.yaml:ro
+      - ./simulation/onvif-emulator/wsdl:/app/wsdl:ro
+      - ./shared/cameras/preprocessed/1080p:/data/preprocessed/1080p:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5173"]
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:80/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 10s
+
+  onvif-camera2:
+    profiles: ["onvif", "full"]
+    build:
+      context: ./simulation/onvif-emulator
+      dockerfile: Dockerfile
+    container_name: onvif-camera2
+    hostname: camera2
+    network_mode: "host"
+    # networks:
+    #   axis-guardian:
+    #     ipv4_address: 172.20.0.12
+    # ports:
+    #   - "9002:80"
+    environment:
+      - CAMERA_ID=camera2
+      - ONVIF_HOST=0.0.0.0
+      - ONVIF_PORT=9002
+      - ONVIF_ENABLE_AUTH=true
+      - ONVIF_USERNAME=admin
+      - ONVIF_PASSWORD=axis123
+      - MEDIAMTX_HOST=host.docker.internal
+      - MEDIAMTX_RTSP_PORT=8554
+      - MEDIAMTX_API_PORT=9997
+      - RTSP_URL=rtsp://host.docker.internal:8554/camera2
+      - ONVIF_EVENT_MOTION_INTERVAL=45
+      - ONVIF_EVENT_OBJECT_INTERVAL=180
+      - LOG_LEVEL=INFO
+      - PREPROCESSED_MODE=true
+      - PREPROCESSED_DIR=/data/preprocessed/1080p
+      - PREPROCESSED_QUALITY=1080p
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./simulation/config/cameras.yaml:/config/cameras.yaml:ro
+      - ./simulation/onvif-emulator/wsdl:/app/wsdl:ro
+      - ./shared/cameras/preprocessed/1080p:/data/preprocessed/1080p:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:80/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ============================================================================
+  # 3D Site Map Generator (sitemap3d profile)
+  # ============================================================================
+
+  sitemap-generator:
+    profiles: ["sitemap3d", "full"]
+    build:
+      context: ./simulation/site-map-generator
+      dockerfile: Dockerfile
+    container_name: axis-sitemap-generator
+    ports:
+      - "${SITE_MAP_GEN_PORT:-8081}:8081"
+    volumes:
+      - ./shared/cameras:/app/cameras:ro
+      - ./frontend/public/site-maps:/app/output:rw
+      - sitemap_models:/app/models
+    environment:
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8081
+      - CAMERAS_DIR=/app/cameras
+      - OUTPUT_DIR=/app/output
+      - MODELS_DIR=/app/models
+      - DEPTH_MODEL=${DEPTH_MODEL:-MiDaS_small}
+      - DEPTH_DEVICE=${DEPTH_DEVICE:-cpu}
+      - SITE_MAP_FRAME_SAMPLE_RATE=${SITE_MAP_FRAME_SAMPLE_RATE:-30}
+      - MIN_DEPTH=${MIN_DEPTH:-0.1}
+      - MAX_DEPTH=${MAX_DEPTH:-50.0}
+      - RANSAC_THRESHOLD=${RANSAC_THRESHOLD:-0.1}
+      - MIN_PLANE_POINTS=${MIN_PLANE_POINTS:-1000}
+      - DEFAULT_FOV=${DEFAULT_FOV:-60.0}
+      - CAMERA_HEIGHT=${CAMERA_HEIGHT:-3.0}
+    restart: unless-stopped
+    networks:
+      - axis-guardian
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8081/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 volumes:
   postgres_data:
@@ -174,8 +353,13 @@ volumes:
     name: axis-guardian_prometheus_data
   grafana_data:
     name: axis-guardian_grafana_data
+  sitemap_models:
+    name: axis-guardian_sitemap_models
 
 networks:
   axis-guardian:
     name: axis-guardian-network
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24

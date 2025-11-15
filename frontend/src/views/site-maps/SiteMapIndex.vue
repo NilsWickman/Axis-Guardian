@@ -10,6 +10,16 @@
           </p>
         </div>
         <div class="flex items-center gap-3">
+          <button
+            @click="createManualMap"
+            class="px-4 py-2 border border-border rounded-lg hover:bg-accent transition-colors flex items-center gap-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 5v14"/>
+              <path d="M5 12h14"/>
+            </svg>
+            Create Manual Map
+          </button>
           <router-link
             to="/site-maps/generate"
             class="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2"
@@ -57,18 +67,30 @@
           </div>
           <h3 class="text-lg font-semibold text-foreground mb-2">No Site Maps Found</h3>
           <p class="text-sm text-muted-foreground mb-6">
-            Create your first site map by generating one from camera images
+            Create your first site map manually or generate one from camera images
           </p>
-          <router-link
-            to="/site-maps/generate"
-            class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 5v14"/>
-              <path d="M5 12h14"/>
-            </svg>
-            Generate Site Map
-          </router-link>
+          <div class="flex items-center gap-3 justify-center">
+            <button
+              @click="createManualMap"
+              class="inline-flex items-center gap-2 px-4 py-2 border border-border rounded-lg hover:bg-accent transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 5v14"/>
+                <path d="M5 12h14"/>
+              </svg>
+              Create Manual Map
+            </button>
+            <router-link
+              to="/site-maps/generate"
+              class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 5v14"/>
+                <path d="M5 12h14"/>
+              </svg>
+              Generate Site Map
+            </router-link>
+          </div>
         </div>
       </div>
 
@@ -177,9 +199,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useSiteMapStore } from '@/stores/siteMaps'
 import type { EnhancedSiteMap, SiteMapSource } from '@/types/sitemap'
 
 const router = useRouter()
+const siteMapStore = useSiteMapStore()
 
 // Mock data - will be replaced with actual store/API
 const siteMaps = ref<EnhancedSiteMap[]>([
@@ -327,6 +351,23 @@ function view3D(map: EnhancedSiteMap) {
 function showOptions(map: EnhancedSiteMap) {
   console.log('Show options for', map.id)
   // TODO: Implement options menu (edit, delete, export)
+}
+
+function createManualMap() {
+  // Create a new blank site map with 25m x 25m grid
+  const newMap = siteMapStore.addSiteMap({
+    name: 'New Site Map',
+    description: 'Manually created site map',
+    imagePath: undefined,
+    width: { value: 25, unit: 'm' }, // 25 meters wide (2500px at 100px/m)
+    height: { value: 25, unit: 'm' }, // 25 meters tall (2500px at 100px/m)
+    renderScale: 100, // Fixed render scale of 100 px/m
+    cameras: [],
+    walls: [],
+  })
+
+  // Navigate to editor
+  router.push(`/site-maps/${newMap.id}/edit`)
 }
 
 onMounted(() => {
