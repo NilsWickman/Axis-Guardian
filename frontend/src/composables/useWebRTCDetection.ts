@@ -293,14 +293,21 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
       // Connect to WebSocket signaling server
       const wsUrl = `${opts.signalingUrl.replace(/^http/, 'ws')}/ws/webrtc`
+      console.log(`[WebRTC] ${cameraId}: Attempting WebSocket connection to:`, wsUrl)
       signalingWebSocket.value = new WebSocket(wsUrl)
       const ws = signalingWebSocket.value
 
       // Wait for WebSocket to open
       await new Promise<void>((resolve, reject) => {
-        ws.onopen = () => resolve()
-        ws.onerror = (error) => reject(new Error('WebSocket connection failed'))
-        setTimeout(() => reject(new Error('WebSocket connection timeout')), 10000)
+        ws.onopen = () => {
+          console.log(`[WebRTC] ${cameraId}: WebSocket connected successfully`)
+          resolve()
+        }
+        ws.onerror = (error) => {
+          console.error(`[WebRTC] ${cameraId}: WebSocket error:`, error)
+          reject(new Error(`WebSocket connection failed to ${wsUrl}`))
+        }
+        setTimeout(() => reject(new Error(`WebSocket connection timeout after 10s to ${wsUrl}`)), 10000)
       })
 
       // Send offer via WebSocket
