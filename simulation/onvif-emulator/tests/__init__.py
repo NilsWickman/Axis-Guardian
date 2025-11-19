@@ -1,1 +1,0 @@
-"""ONVIF Emulator Tests."""
