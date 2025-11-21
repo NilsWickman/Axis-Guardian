@@ -15,6 +15,14 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/cameras/webrtc-detection',
+    name: 'WebRTCDetectionView',
+    component: () => import('@/views/camera-views/WebRTCDetectionView.vue'),
+    meta: {
+      title: 'WebRTC Detection',
+    },
+  },
+  {
     path: '/cameras/snapshot',
     name: 'SnapshotView',
     component: () => import('@/views/camera-views/SnapshotView.vue'),

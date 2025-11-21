@@ -5,9 +5,10 @@
  * Connections are established once and reused across all views for instant loading.
  */
 
-import { ref, reactive, computed, onUnmounted, watch } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { useWebRTCDetection, type DetectionMetadata } from './useWebRTCDetection'
 import type { Detection } from '@/types/detection.types'
+import { config } from '@/config/environment'
 
 interface Camera {
   id: string
@@ -19,6 +20,7 @@ interface CameraConnection {
   videoElement: HTMLVideoElement | null
   isConnected: boolean
   latestMetadata: DetectionMetadata | null
+  stateWatchStop: (() => void) | null  // Store watch cleanup function
 }
 
 // Global state (singleton pattern - shared across all components)
@@ -32,10 +34,10 @@ const cameras = ref<Camera[]>([
   { id: 'camera2', name: 'Camera 2 - Auditorium HC4' }
 ])
 
-// Camera-specific WebRTC URLs (from ONVIF emulators)
+// Camera-specific WebRTC URLs (from centralized config - HTTP WHEP protocol)
 const cameraWebRTCUrls: Record<string, string> = {
-  camera1: import.meta.env.VITE_CAMERA1_WEBRTC_URL || 'http://localhost:9001',
-  camera2: import.meta.env.VITE_CAMERA2_WEBRTC_URL || 'http://localhost:9002'
+  camera1: config.camera1WebRTCUrl,
+  camera2: config.camera2WebRTCUrl
 }
 
 // Video synchronization state
@@ -94,7 +96,8 @@ async function initializeConnections() {
         connection,
         videoElement,
         isConnected: false,
-        latestMetadata: null
+        latestMetadata: null,
+        stateWatchStop: null
       }
 
       // Set up detection callback to store latest metadata
@@ -102,18 +105,27 @@ async function initializeConnections() {
         cameraConnections[camera.id].latestMetadata = metadata
       })
 
-      // Monitor connection state
-      const stateInterval = setInterval(() => {
-        cameraConnections[camera.id].isConnected =
-          connection.connectionState.value === 'connected'
-      }, 100)
+      // Monitor connection state reactively (not polling)
+      const stateWatchStop = watch(
+        () => connection.connectionState.value,
+        (newState) => {
+          cameraConnections[camera.id].isConnected = newState === 'connected'
+          console.log(`[ConnectionManager] ${camera.id} connection state: ${newState}`)
+        },
+        { immediate: true }
+      )
+
+      // Store cleanup function
+      cameraConnections[camera.id].stateWatchStop = stateWatchStop
 
       // Connect WebRTC
       try {
         await connection.connect(videoElement)
       } catch (error) {
         console.error(`[ConnectionManager] Failed to connect ${camera.id}:`, error)
-        clearInterval(stateInterval)
+        // Cleanup watch on connection failure
+        stateWatchStop()
+        cameraConnections[camera.id].stateWatchStop = null
       }
     }))
 
@@ -376,8 +388,8 @@ async function attemptReconnection(cameraId: string) {
     // Wait a bit before reconnecting
     await new Promise(resolve => setTimeout(resolve, RECONNECT_DELAY))
 
-    // Disconnect and reconnect
-    conn.connection.disconnect()
+    // Disconnect with externalReconnecting=true to prevent duplicate reconnection attempts
+    conn.connection.disconnect(true)
 
     // Create a new video element if the old one is broken
     if (conn.videoElement) {
@@ -433,7 +445,15 @@ function cleanup() {
   stopHealthMonitoring()
 
   for (const [id, conn] of Object.entries(cameraConnections)) {
+    // Stop reactive state watchers
+    if (conn.stateWatchStop) {
+      conn.stateWatchStop()
+    }
+
+    // Disconnect WebRTC
     conn.connection.disconnect()
+
+    // Remove video element from DOM
     if (conn.videoElement) {
       conn.videoElement.remove()
     }
@@ -445,6 +465,7 @@ function cleanup() {
   })
 
   isInitialized.value = false
+  console.log('[ConnectionManager] All connections cleaned up')
 }
 
 /**

@@ -5,11 +5,18 @@ export const config = {
   wsUrl: import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws',
   rtspProxyUrl: import.meta.env.VITE_RTSP_PROXY_URL || 'http://localhost:8081',
 
-  // WebSocket endpoints
-  wsAlarmUrl: import.meta.env.VITE_WS_ALARM_URL || 'ws://localhost:3001',
-  wsDetectionUrl: import.meta.env.VITE_WS_DETECTION_URL || 'ws://localhost:3002',
-  wsCameraStatusUrl: import.meta.env.VITE_WS_CAMERA_URL || 'ws://localhost:3007',
-  webrtcUrl: import.meta.env.VITE_WEBRTC_URL || 'ws://localhost:8080',
+  // WebSocket endpoints (complete URLs - do NOT append paths to these)
+  wsAlarmUrl: import.meta.env.VITE_WS_ALARM_URL || 'ws://localhost:3001/ws/alarms',
+  wsDetectionUrl: import.meta.env.VITE_WS_DETECTION_URL || 'ws://localhost:3002/ws/detections',
+  wsCameraStatusUrl: import.meta.env.VITE_WS_CAMERA_URL || 'ws://localhost:3007/ws/camera-status',
+
+  // WebRTC signaling endpoints
+  // Camera emulators use HTTP WHEP protocol (not WebSocket)
+  camera1WebRTCUrl: import.meta.env.VITE_CAMERA1_WEBRTC_URL || 'http://localhost:9101',
+  camera2WebRTCUrl: import.meta.env.VITE_CAMERA2_WEBRTC_URL || 'http://localhost:9102',
+
+  // MediaMTX WebSocket signaling (if needed for other cameras)
+  mediaMTXSignalingUrl: import.meta.env.VITE_WEBRTC_URL || 'ws://localhost:8080',
 
   // Site map generation
   siteMapGenerationUrl: import.meta.env.VITE_SITEMAP_URL || 'http://localhost:8091',
