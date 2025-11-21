@@ -26,16 +26,16 @@ config/
 
 ## Usage
 
-All npm scripts in package.json directly reference these configuration files:
+All pnpm scripts in package.json directly reference these configuration files:
 
 ```bash
 # Development
-yarn dev                # Uses config/build/vite.config.ts
-yarn type-check         # Uses config/types/tsconfig.json
+pnpm dev                # Uses config/build/vite.config.ts
+pnpm type-check         # Uses config/types/tsconfig.json
 
 # Code Quality
-yarn lint               # Uses config/lint/eslint.config.js
-yarn format             # Uses config/lint/.prettierrc.json
+pnpm lint               # Uses config/lint/eslint.config.js
+pnpm format             # Uses config/lint/.prettierrc.json
 ```
 
 ## Benefits
