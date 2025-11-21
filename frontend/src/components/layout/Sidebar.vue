@@ -38,6 +38,11 @@
       icon: Focus,
     },
     {
+      name: 'WebRTC Cameras',
+      path: '/cameras/webrtc-detection',
+      icon: Cctv,
+    },
+    {
       name: 'Timeline',
       path: '/cameras/timeline',
       icon: Clock,

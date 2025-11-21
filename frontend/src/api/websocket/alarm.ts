@@ -65,7 +65,7 @@ export class AlarmWebSocketClient {
   private reconnectTimer: NodeJS.Timeout | null = null;
 
   constructor(options: AlarmWebSocketClientOptions = {}) {
-    // Extract host from config URL (remove protocol)
+    // Use complete URL from config (do NOT reconstruct or append paths)
     const defaultHost = config.wsAlarmUrl.replace(/^wss?:\/\//, '')
 
     this.options = {
@@ -82,8 +82,9 @@ export class AlarmWebSocketClient {
    */
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
+      // Use complete URL from config (already includes path)
       const proto = this.options.secure ? 'wss' : 'ws';
-      const url = `${proto}://${this.options.host}/ws/alarms`;
+      const url = `${proto}://${this.options.host}`;
 
       try {
         this.ws = new WebSocket(url);

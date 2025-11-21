@@ -30,9 +30,9 @@ export interface WebRTCDetectionOptions {
 
 const DEFAULT_OPTIONS: WebRTCDetectionOptions = {
   signalingUrl: import.meta.env.VITE_RTSP_PROXY_URL || 'http://localhost:9001',
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' }
-  ],
+  // Empty iceServers array for localhost-only connections (no STUN/TURN)
+  // This forces both peers to only use host candidates (127.0.0.1)
+  iceServers: [],
   autoReconnect: true,
   reconnectDelay: 3000
 }
@@ -61,11 +61,12 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
   const peerConnection = ref<RTCPeerConnection | null>(null)
   const dataChannel = ref<RTCDataChannel | null>(null)
   const videoElement = ref<HTMLVideoElement | null>(null)
-  const signalingWebSocket = ref<WebSocket | null>(null)
+  // No signalingWebSocket needed - using HTTP WHEP signaling
   const isConnected = ref(false)
   const isDataChannelOpen = ref(false)
   const connectionState = ref<RTCPeerConnectionState>('new')
   const isReconnecting = ref(false)
+  const isExternalReconnecting = ref(false) // Tracks if ConnectionManager is handling reconnection
   const reconnectTimer = ref<number | null>(null)
   const reconnectAttempts = ref(0)
   const maxReconnectAttempts = 10
@@ -150,8 +151,11 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
       // Handle connection state changes
       pc.onconnectionstatechange = () => {
+        const prevState = connectionState.value
         connectionState.value = pc.connectionState
         isConnected.value = pc.connectionState === 'connected'
+
+        console.log(`[WebRTC] ${cameraId}: Connection state changed: ${prevState} → ${pc.connectionState}`)
 
         // Toast notifications for connection state changes
         if (pc.connectionState === 'connected') {
@@ -159,16 +163,28 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
             toast.success(`Camera ${cameraId} connected`, 3000)
           }
         } else if (pc.connectionState === 'failed') {
+          console.warn(`[WebRTC] ${cameraId}: Connection FAILED, triggering handleDisconnect()`)
           if (shouldShowToast()) {
             toast.error(`Camera ${cameraId} connection failed`, 5000)
           }
           handleDisconnect()
         } else if (pc.connectionState === 'closed') {
+          console.warn(`[WebRTC] ${cameraId}: Connection CLOSED, triggering handleDisconnect()`)
           if (shouldShowToast()) {
             toast.warning(`Camera ${cameraId} disconnected`, 4000)
           }
           handleDisconnect()
         }
+      }
+
+      // Handle ICE connection state changes for debugging
+      pc.oniceconnectionstatechange = () => {
+        console.log(`[WebRTC] ${cameraId}: ICE connection state: ${pc.iceConnectionState}`)
+      }
+
+      // Handle ICE gathering state changes for debugging
+      pc.onicegatheringstatechange = () => {
+        console.log(`[WebRTC] ${cameraId}: ICE gathering state: ${pc.iceGatheringState}`)
       }
 
       // ICE candidate handler will be set up after WebSocket connection
@@ -289,75 +305,50 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
       offer.sdp = modifiedSdp.join('\r\n')
 
+      // Set local description FIRST (this triggers ICE gathering)
       await pc.setLocalDescription(offer)
+      console.log(`[WebRTC] ${cameraId}: Local description set`)
 
-      // Connect to WebSocket signaling server
-      const wsUrl = `${opts.signalingUrl.replace(/^http/, 'ws')}/ws/webrtc`
-      console.log(`[WebRTC] ${cameraId}: Attempting WebSocket connection to:`, wsUrl)
-      signalingWebSocket.value = new WebSocket(wsUrl)
-      const ws = signalingWebSocket.value
+      // HTTP WHEP signaling: send offer via HTTP POST and receive answer
+      // Camera emulators (ports 9101, 9102) use this simple HTTP-based protocol
+      const offerUrl = `${opts.signalingUrl}/offer`
+      console.log(`[WebRTC] ${cameraId}: Sending offer to ${offerUrl}`)
 
-      // Wait for WebSocket to open
-      await new Promise<void>((resolve, reject) => {
-        ws.onopen = () => {
-          console.log(`[WebRTC] ${cameraId}: WebSocket connected successfully`)
-          resolve()
-        }
-        ws.onerror = (error) => {
-          console.error(`[WebRTC] ${cameraId}: WebSocket error:`, error)
-          reject(new Error(`WebSocket connection failed to ${wsUrl}`))
-        }
-        setTimeout(() => reject(new Error(`WebSocket connection timeout after 10s to ${wsUrl}`)), 10000)
+      const response = await fetch(offerUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sdp: pc.localDescription!.sdp,
+          type: pc.localDescription!.type
+        })
       })
 
-      // Send offer via WebSocket
-      ws.send(JSON.stringify({
-        type: 'offer',
-        sdp: offer.sdp
-      }))
+      if (!response.ok) {
+        throw new Error(`HTTP signaling failed: ${response.status} ${response.statusText}`)
+      }
 
-      // Wait for answer
-      const answer = await new Promise<RTCSessionDescriptionInit>((resolve, reject) => {
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data)
-            if (data.type === 'answer') {
-              resolve(data)
-            }
-          } catch (error) {
-            reject(new Error('Failed to parse answer'))
-          }
-        }
-        setTimeout(() => reject(new Error('Answer timeout')), 10000)
-      })
+      const answerData = await response.json() as RTCSessionDescriptionInit
+      console.log(`[WebRTC] ${cameraId}: Received answer from server`)
 
       // Set remote description (answer)
-      await pc.setRemoteDescription(new RTCSessionDescription(answer))
+      console.log(`[WebRTC] ${cameraId}: Setting remote description`)
+      await pc.setRemoteDescription(new RTCSessionDescription(answerData))
+      console.log(`[WebRTC] ${cameraId}: Remote description set successfully`)
 
-      // Keep WebSocket connection alive for ICE candidates
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          if (data.type === 'ice-candidate' && data.candidate) {
-            pc.addIceCandidate(data.candidate)
-          }
-        } catch (error) {
-          console.error('[WebRTC] Error handling WebSocket message:', error)
-        }
+      // Log remote candidates that were embedded in SDP
+      const remoteCandidates = answerData.sdp?.match(/a=candidate:.+/g) || []
+      if (remoteCandidates.length > 0) {
+        console.log(`[WebRTC] ${cameraId}: Found ${remoteCandidates.length} remote candidates in SDP:`)
+        remoteCandidates.forEach(c => console.log(`[WebRTC] ${cameraId}:   ${c}`))
+      } else {
+        console.warn(`[WebRTC] ${cameraId}: No remote candidates found in SDP answer!`)
       }
 
-      // Send ICE candidates via WebSocket
-      pc.onicecandidate = (event) => {
-        if (event.candidate && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
-            type: 'ice-candidate',
-            candidate: event.candidate
-          }))
-        }
-      }
-
-      // Reset reconnect attempts on successful connection
+      // Reset reconnect attempts and external reconnect flag on successful connection
       reconnectAttempts.value = 0
+      isExternalReconnecting.value = false
 
       // Start monitoring connection quality
       startQualityMonitoring()
@@ -594,7 +585,9 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
   /**
    * Handle disconnection and cleanup
    */
-  function handleDisconnect(): void {
+  function handleDisconnect(skipAutoReconnect = false): void {
+    console.log(`[WebRTC] ${cameraId}: handleDisconnect called (skipAutoReconnect=${skipAutoReconnect}, isExternalReconnecting=${isExternalReconnecting.value})`)
+
     isConnected.value = false
     isDataChannelOpen.value = false
 
@@ -613,7 +606,8 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     }
 
     // Auto-reconnect logic with exponential backoff
-    if (opts.autoReconnect && videoElement.value && !isReconnecting.value) {
+    // Skip if external reconnection is in progress or explicitly disabled
+    if (opts.autoReconnect && videoElement.value && !isReconnecting.value && !skipAutoReconnect && !isExternalReconnecting.value) {
       // Check if we've exceeded max attempts
       if (reconnectAttempts.value >= maxReconnectAttempts) {
         console.error(
@@ -654,8 +648,9 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
   /**
    * Disconnect and cleanup
+   * @param externalReconnecting - If true, indicates external reconnection in progress (prevents auto-reconnect)
    */
-  function disconnect(): void {
+  function disconnect(externalReconnecting = false): void {
     // Clear reconnect timer
     if (reconnectTimer.value !== null) {
       clearTimeout(reconnectTimer.value)
@@ -663,12 +658,11 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     }
 
     isReconnecting.value = false
+    isExternalReconnecting.value = externalReconnecting // Signal to handleDisconnect
     reconnectAttempts.value = 0 // Reset attempts on manual disconnect
 
-    if (signalingWebSocket.value) {
-      signalingWebSocket.value.close()
-      signalingWebSocket.value = null
-    }
+    // No WebSocket to close (using HTTP WHEP signaling)
+    // signalingWebSocket not used with HTTP signaling
 
     if (dataChannel.value) {
       dataChannel.value.close()
