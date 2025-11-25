@@ -1,10 +1,14 @@
-.PHONY: setup dev help clean check-pnpm check-python
+.PHONY: setup dev help clean check-pnpm check-python kill-ports
 
 # Colors for output
 CYAN := \033[0;36m
 GREEN := \033[0;32m
 YELLOW := \033[0;33m
+RED := \033[0;31m
 NC := \033[0m # No Color
+
+# Ports used by development servers
+DEV_PORTS := 5173 9101 9102
 
 help: ## Show this help message
 	@echo "$(CYAN)Axis-Guardian Development Makefile$(NC)"
@@ -41,15 +45,39 @@ setup: check-pnpm check-python ## Install all dependencies (frontend + Python en
 
 	@echo "$(GREEN)Setup complete! Run 'make dev' to start development servers.$(NC)"
 
-dev: ## Start all development servers (frontend + camera-emulator)
+kill-ports: ## Kill any processes using development ports (5173, 9101, 9102)
+	@echo "$(CYAN)Checking for processes on development ports...$(NC)"
+	@for port in $(DEV_PORTS); do \
+		pid=$$(lsof -t -i:$$port 2>/dev/null); \
+		if [ -n "$$pid" ]; then \
+			echo "$(YELLOW)Killing process $$pid on port $$port$(NC)"; \
+			kill -9 $$pid 2>/dev/null || true; \
+		fi; \
+	done
+	@echo "$(GREEN)✓ Ports cleared$(NC)"
+
+dev: kill-ports ## Start all development servers (frontend + camera-emulator)
 	@echo "$(CYAN)Starting development servers...$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Starting frontend dev server (port 5173)...$(NC)"
 	@echo "$(YELLOW)Starting camera-emulator...$(NC)"
 	@echo ""
-	@trap 'kill 0' EXIT; \
-	(cd frontend && pnpm run dev) & \
-	(cd camera-emulator && . venv/bin/activate && CAMERA_DATA_PATH=../shared/cameras/preprocessed/1080p python src/main.py) & \
+	@FRONTEND_PID=0; \
+	CAMERA_PID=0; \
+	cleanup() { \
+		echo ""; \
+		echo "$(CYAN)Shutting down development servers...$(NC)"; \
+		[ $$FRONTEND_PID -ne 0 ] && kill $$FRONTEND_PID 2>/dev/null; \
+		[ $$CAMERA_PID -ne 0 ] && kill $$CAMERA_PID 2>/dev/null; \
+		wait 2>/dev/null; \
+		echo "$(GREEN)✓ All servers stopped$(NC)"; \
+		exit 0; \
+	}; \
+	trap cleanup INT TERM; \
+	(cd frontend && exec pnpm run dev) & \
+	FRONTEND_PID=$$!; \
+	(cd camera-emulator && . venv/bin/activate && CAMERA_DATA_PATH=../shared/cameras/preprocessed/1080p exec python src/main.py) & \
+	CAMERA_PID=$$!; \
 	wait
 
 dev-frontend: ## Start only the frontend dev server
@@ -58,7 +86,7 @@ dev-frontend: ## Start only the frontend dev server
 
 dev-camera: ## Start only the camera emulator
 	@echo "$(CYAN)Starting camera emulator...$(NC)"
-	@cd camera-emulator && . venv/bin/activate && CAMERA_DATA_PATH=../shared/cameras/preprocessed/1080p python src/main.py
+	@cd camera-emulator && . venv/bin/activate && python src/main.py
 
 clean: ## Remove node_modules and Python virtual environments
 	@echo "$(CYAN)Cleaning up...$(NC)"
