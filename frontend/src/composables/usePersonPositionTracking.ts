@@ -4,15 +4,22 @@
  * This composable listens to both:
  * 1. Detection store (for mock/API detections)
  * 2. WebRTC data channel detections (for real-time streaming)
+ *
+ * It routes all detections through the global track store for cross-camera correlation.
  */
 
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useDetectionStore } from '../stores/detections'
 import { usePersonPositionStore, type PersonPosition } from '../stores/personPositions'
+import { useGlobalTrackStore } from '../stores/globalTracks'
 import { useSiteMapStore } from '../stores/siteMaps'
 import type { Detection } from '../types/generated'
 import type { DetectionMetadata } from './useWebRTCDetection'
-import { detectionToWorldCoordinates, getBBoxBottomCenter } from '../utils/cameraTransform'
+import { projectDetectionToWorld } from '../utils/projectionBridge'
+import { normalizedToApiBbox } from '../types/detection.types'
+
+// Only track HC3 camera (camera1) for now
+const TRACKED_CAMERA_ID: string | null = 'camera1'
 
 export interface UsePersonPositionTrackingOptions {
   enabled?: boolean
@@ -22,13 +29,21 @@ export interface UsePersonPositionTrackingOptions {
 }
 
 // Global event bus for WebRTC detections
-const webrtcDetectionHandlers: Array<(metadata: DetectionMetadata) => void> = []
+// Use a Set for O(1) add/remove and automatic deduplication
+const webrtcDetectionHandlers = new Set<(metadata: DetectionMetadata) => void>()
 
 export function registerWebRTCDetectionHandler(handler: (metadata: DetectionMetadata) => void) {
-  webrtcDetectionHandlers.push(handler)
+  // Prevent duplicate registrations
+  if (webrtcDetectionHandlers.has(handler)) {
+    console.warn('[PersonPositionTracking] Handler already registered, skipping duplicate')
+    return () => {
+      webrtcDetectionHandlers.delete(handler)
+    }
+  }
+
+  webrtcDetectionHandlers.add(handler)
   return () => {
-    const index = webrtcDetectionHandlers.indexOf(handler)
-    if (index > -1) webrtcDetectionHandlers.splice(index, 1)
+    webrtcDetectionHandlers.delete(handler)
   }
 }
 
@@ -36,16 +51,32 @@ export function emitWebRTCDetection(metadata: DetectionMetadata) {
   webrtcDetectionHandlers.forEach(handler => handler(metadata))
 }
 
+// Camera ID mapping (emulator uses camera-HC3/HC4, frontend uses camera1/camera2)
+const CAMERA_ID_MAP: Record<string, string> = {
+  'camera-HC3': 'camera1',
+  'camera-HC4': 'camera2',
+  'camera-IP2': 'camera3',
+  'camera-IP5': 'camera4',
+}
+
+/**
+ * Normalize camera ID from emulator format to frontend format
+ */
+function normalizeCameraId(cameraId: string): string {
+  return CAMERA_ID_MAP[cameraId] || cameraId
+}
+
 export function usePersonPositionTracking(options: UsePersonPositionTrackingOptions = {}) {
   const {
     enabled = true,
-    updateIntervalMs = 500, // Update every 500ms
+    updateIntervalMs = 1000, // Update every 1000ms (was 500ms - reduced CPU pressure)
     minConfidence = 0.5,
     enableWebRTCIntegration = true,
   } = options
 
   const detectionStore = useDetectionStore()
   const positionStore = usePersonPositionStore()
+  const globalTrackStore = useGlobalTrackStore()
   const siteMapStore = useSiteMapStore()
 
   const isTracking = ref(enabled)
@@ -62,12 +93,20 @@ export function usePersonPositionTracking(options: UsePersonPositionTrackingOpti
    */
   function processWebRTCDetections(metadata: DetectionMetadata) {
     try {
+      // Normalize camera ID from emulator format to frontend format
+      const normalizedCameraId = normalizeCameraId(metadata.camera_id)
+
+      // Skip if not the tracked camera (single camera mode)
+      if (TRACKED_CAMERA_ID !== null && normalizedCameraId !== TRACKED_CAMERA_ID) {
+        return
+      }
+
       // Skip if this frame was already processed
-      const lastFrame = lastProcessedFrames.value.get(metadata.camera_id)
+      const lastFrame = lastProcessedFrames.value.get(normalizedCameraId)
       if (lastFrame !== undefined && metadata.frame_number <= lastFrame) {
         return
       }
-      lastProcessedFrames.value.set(metadata.camera_id, metadata.frame_number)
+      lastProcessedFrames.value.set(normalizedCameraId, metadata.frame_number)
 
       // Get current site map
       const siteMap = siteMapStore.activeSiteMap
@@ -75,8 +114,8 @@ export function usePersonPositionTracking(options: UsePersonPositionTrackingOpti
         return
       }
 
-      // Find camera placement on site map
-      const cameraPlacement = siteMap.cameras.find(c => c.cameraId === metadata.camera_id)
+      // Find camera placement on site map using normalized camera ID
+      const cameraPlacement = siteMap.cameras.find(c => c.cameraId === normalizedCameraId)
       if (!cameraPlacement) {
         return
       }
@@ -90,41 +129,56 @@ export function usePersonPositionTracking(options: UsePersonPositionTrackingOpti
         return
       }
 
-      // Transform each detection to world coordinates
+      // Transform each detection to world coordinates and route through global track store
       const newPositions: PersonPosition[] = []
 
       personDetections.forEach((detection, idx) => {
         try {
+          // Convert normalized bbox (0-1) to pixel coordinates for transform
+          const pixelBbox = normalizedToApiBbox(detection.bbox, 1920, 1080)
+
           // Create a Detection object compatible with our transform function
           const det = {
-            id: `${metadata.camera_id}-${metadata.frame_number}-${idx}`,
+            id: `${normalizedCameraId}-${metadata.frame_number}-${idx}`,
             timestamp: new Date(metadata.timestamp * 1000).toISOString(),
-            cameraId: metadata.camera_id,
+            cameraId: normalizedCameraId,
             type: 'person' as const,
             confidence: detection.confidence,
-            bbox: {
-              x: detection.bbox.left,
-              y: detection.bbox.top,
-              width: detection.bbox.right - detection.bbox.left,
-              height: detection.bbox.bottom - detection.bbox.top,
-            }
+            bbox: pixelBbox,
           }
 
-          const worldPos = detectionToWorldCoordinates(
-            det,
-            cameraPlacement,
-            { scale: siteMap.scale }
+          // Transform using the new projection bridge
+          const result = projectDetectionToWorld(det, cameraPlacement, false)
+
+          // Skip invalid projections (outside FOV or too close)
+          if (!result.isValid) {
+            return // Skip this detection
+          }
+
+          // worldX and worldY are already in meters from the new projection
+          const worldX = result.worldX
+          const worldY = result.worldY
+
+          // Route through global track store for cross-camera correlation
+          // Use track_id from ByteTrack if available, otherwise use index
+          const trackId = detection.track_id ?? idx
+          globalTrackStore.processDetection(
+            normalizedCameraId,
+            trackId,
+            worldX,
+            worldY,
+            detection.confidence
           )
 
-          // Calculate image center for reference
+          // Also maintain legacy position store for backward compatibility
           const imageCenterX = det.bbox.x + det.bbox.width / 2
           const imageCenterY = det.bbox.y + det.bbox.height / 2
 
           const position: PersonPosition = {
             detectionId: det.id,
             cameraId: det.cameraId,
-            worldX: (worldPos.x - 60) / siteMap.scale, // Convert to meters
-            worldY: (worldPos.y - 60) / siteMap.scale,
+            worldX,
+            worldY,
             confidence: det.confidence,
             timestamp: det.timestamp,
             imageX: imageCenterX,
@@ -137,7 +191,7 @@ export function usePersonPositionTracking(options: UsePersonPositionTrackingOpti
         }
       })
 
-      // Add positions to store
+      // Add positions to legacy store for backward compatibility
       if (newPositions.length > 0) {
         positionStore.addPositions(newPositions)
       }
@@ -195,23 +249,41 @@ export function usePersonPositionTracking(options: UsePersonPositionTrackingOpti
         }
 
         // Transform each detection
-        detections.forEach(detection => {
+        detections.forEach((detection, idx) => {
           try {
-            const worldPos = detectionToWorldCoordinates(
-              detection,
-              cameraPlacement,
-              { scale: siteMap.scale }
+            // Transform using the new projection bridge
+            const result = projectDetectionToWorld(detection, cameraPlacement, false)
+
+            // Skip invalid projections (outside FOV or too close)
+            if (!result.isValid) {
+              lastProcessedDetectionIds.value.add(detection.id) // Still mark as processed
+              return
+            }
+
+            // worldX and worldY are already in meters from the new projection
+            const worldX = result.worldX
+            const worldY = result.worldY
+
+            // Route through global track store for cross-camera correlation
+            // Use track ID from detection if available, otherwise use index
+            const trackId = detection.trackId ?? idx
+            globalTrackStore.processDetection(
+              cameraId,
+              trackId,
+              worldX,
+              worldY,
+              detection.confidence
             )
 
-            // Calculate image center for reference
+            // Also maintain legacy position store for backward compatibility
             const imageCenterX = detection.bbox.x + detection.bbox.width / 2
             const imageCenterY = detection.bbox.y + detection.bbox.height / 2
 
             const position: PersonPosition = {
               detectionId: detection.id,
               cameraId: detection.cameraId,
-              worldX: (worldPos.x - 60) / siteMap.scale, // Convert to meters
-              worldY: (worldPos.y - 60) / siteMap.scale,
+              worldX,
+              worldY,
               confidence: detection.confidence,
               timestamp: detection.timestamp,
               imageX: imageCenterX,
@@ -226,7 +298,7 @@ export function usePersonPositionTracking(options: UsePersonPositionTrackingOpti
         })
       })
 
-      // Add positions to store
+      // Add positions to legacy store for backward compatibility
       if (newPositions.length > 0) {
         positionStore.addPositions(newPositions)
       }
@@ -259,7 +331,6 @@ export function usePersonPositionTracking(options: UsePersonPositionTrackingOpti
     // Register WebRTC detection handler if enabled
     if (enableWebRTCIntegration) {
       unregisterWebRTC = registerWebRTCDetectionHandler(processWebRTCDetections)
-      console.log('[PersonPositionTracking] Registered WebRTC detection handler')
     }
 
     // Set up periodic updates for detection store
@@ -269,9 +340,15 @@ export function usePersonPositionTracking(options: UsePersonPositionTrackingOpti
       }
     }, updateIntervalMs)
 
-    // Set up periodic cleanup of expired positions
+    // Set up periodic cleanup of expired positions and tracks
     cleanupInterval = setInterval(() => {
       positionStore.cleanupExpiredPositions()
+      globalTrackStore.cleanupExpiredTracks()
+
+      // Prevent memory leak: limit frame tracking map size
+      if (lastProcessedFrames.value.size > 50) {
+        lastProcessedFrames.value.clear()
+      }
     }, 5000) // Cleanup every 5 seconds
   }
 
@@ -285,7 +362,6 @@ export function usePersonPositionTracking(options: UsePersonPositionTrackingOpti
     if (unregisterWebRTC) {
       unregisterWebRTC()
       unregisterWebRTC = null
-      console.log('[PersonPositionTracking] Unregistered WebRTC detection handler')
     }
 
     if (updateInterval) {
@@ -297,6 +373,9 @@ export function usePersonPositionTracking(options: UsePersonPositionTrackingOpti
       clearInterval(cleanupInterval)
       cleanupInterval = null
     }
+
+    // Clear tracking state to free memory
+    lastProcessedFrames.value.clear()
   }
 
   /**
@@ -305,6 +384,7 @@ export function usePersonPositionTracking(options: UsePersonPositionTrackingOpti
   function resetTracking() {
     lastProcessedDetectionIds.value.clear()
     positionStore.clearAllPositions()
+    globalTrackStore.clearAllTracks()
     processingError.value = null
   }
 

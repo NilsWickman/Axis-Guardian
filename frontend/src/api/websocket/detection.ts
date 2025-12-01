@@ -72,7 +72,7 @@ export class DetectionWebSocketClient {
       secure: options.secure ?? config.wsDetectionUrl.startsWith('wss://'),
       autoReconnect: options.autoReconnect ?? true,
       reconnectInterval: options.reconnectInterval || 5000,
-      maxReconnectAttempts: options.maxReconnectAttempts || 0,
+      maxReconnectAttempts: options.maxReconnectAttempts ?? 10,
     };
   }
 

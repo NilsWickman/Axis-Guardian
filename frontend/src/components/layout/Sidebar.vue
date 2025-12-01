@@ -11,6 +11,7 @@
     Cctv,
     Map,
     MapPin,
+    MapPinned,
     Bell,
     Settings,
     Archive,
@@ -38,9 +39,9 @@
       icon: Focus,
     },
     {
-      name: 'WebRTC Cameras',
-      path: '/cameras/webrtc-detection',
-      icon: Cctv,
+      name: 'Site Tracking',
+      path: '/site-tracking',
+      icon: MapPinned,
     },
     {
       name: 'Timeline',

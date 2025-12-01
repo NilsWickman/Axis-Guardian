@@ -7,12 +7,13 @@
 
 import { ref, reactive, computed, watch } from 'vue'
 import { useWebRTCDetection, type DetectionMetadata } from './useWebRTCDetection'
-import type { Detection } from '@/types/detection.types'
 import { config } from '@/config/environment'
+import { loadSiteMapConfig } from '@/utils/siteMapConfigLoader'
 
 interface Camera {
   id: string
   name: string
+  webrtcUrl?: string
 }
 
 interface CameraConnection {
@@ -23,34 +24,108 @@ interface CameraConnection {
   stateWatchStop: (() => void) | null  // Store watch cleanup function
 }
 
+// Camera ID mapping (emulator uses camera-HC3/HC4, frontend uses camera1/camera2)
+const CAMERA_ID_MAP: Record<string, string> = {
+  'camera-HC3': 'camera1',
+  'camera-HC4': 'camera2',
+  'camera-IP2': 'camera3',
+  'camera-IP5': 'camera4',
+}
+
+/**
+ * Normalize camera ID from emulator format to frontend format
+ */
+function normalizeCameraId(cameraId: string): string {
+  return CAMERA_ID_MAP[cameraId] || cameraId
+}
+
+/**
+ * Normalize metadata to use frontend camera IDs
+ */
+function normalizeMetadata(metadata: DetectionMetadata): DetectionMetadata {
+  return {
+    ...metadata,
+    camera_id: normalizeCameraId(metadata.camera_id)
+  }
+}
+
 // Global state (singleton pattern - shared across all components)
 const cameraConnections = reactive<Record<string, CameraConnection>>({})
 const isInitialized = ref(false)
 const isInitializing = ref(false)
 
-// Available cameras with their WebRTC endpoints
-const cameras = ref<Camera[]>([
-  { id: 'camera1', name: 'Camera 1 - Auditorium HC3' },
-  { id: 'camera2', name: 'Camera 2 - Auditorium HC4' }
-])
+// Available cameras - populated from JSON config
+const cameras = ref<Camera[]>([])
 
-// Camera-specific WebRTC URLs (from centralized config - HTTP WHEP protocol)
-const cameraWebRTCUrls: Record<string, string> = {
+// Fallback WebRTC URLs (from centralized config - HTTP WHEP protocol)
+// Used if JSON config doesn't specify webrtcUrl
+const fallbackWebRTCUrls: Record<string, string> = {
   camera1: config.camera1WebRTCUrl,
   camera2: config.camera2WebRTCUrl
 }
 
+/**
+ * Get WebRTC URL for a camera
+ * Uses URL from config if available, otherwise falls back to environment config
+ */
+function getWebRTCUrl(camera: Camera): string | undefined {
+  return camera.webrtcUrl || fallbackWebRTCUrls[camera.id]
+}
+
 // Video synchronization state
 let syncMonitorInterval: number | null = null
-const SYNC_CHECK_INTERVAL = 2000 // Check sync every 2 seconds
+const SYNC_CHECK_INTERVAL = 5000 // Check sync every 5 seconds (was 2s - reduced CPU pressure)
 const MAX_SYNC_DRIFT = 0.5 // Maximum allowed drift in seconds before correction (reduced from 1.0)
 const SYNC_ENABLED = true // Enable/disable sync monitoring
 let syncCorrectionCount = 0 // Track number of corrections for debugging
 
 // Connection health monitoring
 let healthMonitorInterval: number | null = null
-const HEALTH_CHECK_INTERVAL = 5000 // Check connection health every 5 seconds
+const HEALTH_CHECK_INTERVAL = 10000 // Check connection health every 10 seconds (was 5s - reduced CPU pressure)
 const RECONNECT_DELAY = 2000 // Wait 2 seconds before attempting reconnect
+
+// Single camera mode - only connect to HC3 (camera1) for testing
+// Set to null to connect to all cameras
+const SINGLE_CAMERA_MODE: string | null = 'camera1'
+
+// Video element pool for reuse (prevents orphaned elements)
+const videoElementPool: HTMLVideoElement[] = []
+const MAX_POOL_SIZE = 10
+
+/**
+ * Get a video element from the pool or create a new one
+ */
+function getPooledVideoElement(): HTMLVideoElement {
+  let element = videoElementPool.pop()
+  if (!element) {
+    element = document.createElement('video')
+  }
+  element.autoplay = true
+  element.muted = true
+  element.playsInline = true
+  element.style.display = 'none'
+  document.body.appendChild(element)
+  return element
+}
+
+/**
+ * Release a video element back to the pool
+ */
+function releaseVideoElement(element: HTMLVideoElement): void {
+  // Stop playback and clear source
+  element.pause()
+  element.srcObject = null
+  element.removeAttribute('src')
+  element.load() // Reset the element
+
+  // Remove from DOM
+  element.remove()
+
+  // Add to pool if not full
+  if (videoElementPool.length < MAX_POOL_SIZE) {
+    videoElementPool.push(element)
+  }
+}
 
 /**
  * Initialize all camera connections in the background
@@ -64,22 +139,34 @@ async function initializeConnections() {
   isInitializing.value = true
 
   try {
+    // Load cameras from JSON config (single source of truth)
+    const siteMapConfig = await loadSiteMapConfig()
+    let loadedCameras = siteMapConfig.cameras.map(cam => ({
+      id: cam.id,
+      name: cam.name,
+      webrtcUrl: cam.webrtcUrl
+    }))
+
+    // Filter to single camera if in single camera mode
+    if (SINGLE_CAMERA_MODE !== null) {
+      loadedCameras = loadedCameras.filter(cam => cam.id === SINGLE_CAMERA_MODE)
+      console.log(`[ConnectionManager] Single camera mode: only connecting to ${SINGLE_CAMERA_MODE}`)
+    }
+
+    cameras.value = loadedCameras
+    console.log('[ConnectionManager] Loaded cameras from config:', cameras.value.length)
+
     // Create connections for all cameras
     await Promise.all(cameras.value.map(async (camera) => {
       if (cameraConnections[camera.id]) {
         return
       }
 
-      // Create a hidden video element for this connection
-      const videoElement = document.createElement('video')
-      videoElement.autoplay = true
-      videoElement.muted = true
-      videoElement.playsInline = true
-      videoElement.style.display = 'none'
-      document.body.appendChild(videoElement)
+      // Get a video element from pool (or create new one)
+      const videoElement = getPooledVideoElement()
 
       // Create WebRTC connection to camera-specific ONVIF emulator
-      const signalingUrl = cameraWebRTCUrls[camera.id]
+      const signalingUrl = getWebRTCUrl(camera)
       if (!signalingUrl) {
         console.error(`No WebRTC URL configured for ${camera.id}`)
         return
@@ -101,8 +188,9 @@ async function initializeConnections() {
       }
 
       // Set up detection callback to store latest metadata
+      // Normalize camera_id in metadata to match frontend camera IDs
       connection.setDetectionCallback((metadata) => {
-        cameraConnections[camera.id].latestMetadata = metadata
+        cameraConnections[camera.id].latestMetadata = normalizeMetadata(metadata)
       })
 
       // Monitor connection state reactively (not polling)
@@ -208,8 +296,10 @@ function getConnectionStatuses(): Record<string, boolean> {
  * Start monitoring video synchronization across all cameras
  */
 function startSyncMonitoring() {
+  // Always clear existing interval first to prevent multiplication
   if (syncMonitorInterval !== null) {
-    return // Already monitoring
+    clearInterval(syncMonitorInterval)
+    syncMonitorInterval = null
   }
 
   console.log('[ConnectionManager] Starting video synchronization monitoring')
@@ -305,8 +395,10 @@ function synchronizeVideos() {
  * Start monitoring connection health for all cameras
  */
 function startHealthMonitoring() {
+  // Always clear existing interval first to prevent multiplication
   if (healthMonitorInterval !== null) {
-    return // Already monitoring
+    clearInterval(healthMonitorInterval)
+    healthMonitorInterval = null
   }
 
   console.log('[ConnectionManager] Starting connection health monitoring')
@@ -391,18 +483,13 @@ async function attemptReconnection(cameraId: string) {
     // Disconnect with externalReconnecting=true to prevent duplicate reconnection attempts
     conn.connection.disconnect(true)
 
-    // Create a new video element if the old one is broken
+    // Release old video element back to pool
     if (conn.videoElement) {
-      conn.videoElement.remove()
+      releaseVideoElement(conn.videoElement)
     }
 
-    const videoElement = document.createElement('video')
-    videoElement.autoplay = true
-    videoElement.muted = true
-    videoElement.playsInline = true
-    videoElement.style.display = 'none'
-    document.body.appendChild(videoElement)
-
+    // Get a fresh video element from pool
+    const videoElement = getPooledVideoElement()
     conn.videoElement = videoElement
 
     // Reconnect
@@ -437,6 +524,28 @@ async function attemptStreamRecovery(cameraId: string) {
 }
 
 /**
+ * Set loop duration for a specific camera
+ * @param cameraId - Camera ID to configure
+ * @param durationSeconds - Loop after N seconds (null to disable)
+ * @param onLoop - Callback when video loops
+ */
+function setLoopForCamera(
+  cameraId: string,
+  durationSeconds: number | null,
+  onLoop?: () => void
+): boolean {
+  const conn = cameraConnections[cameraId]
+  if (!conn) {
+    console.warn(`[ConnectionManager] Cannot set loop for unknown camera: ${cameraId}`)
+    return false
+  }
+
+  conn.connection.setLoopDuration(durationSeconds, onLoop)
+  console.log(`[ConnectionManager] Loop set for ${cameraId}: ${durationSeconds}s`)
+  return true
+}
+
+/**
  * Cleanup all connections (call on app unmount)
  */
 function cleanup() {
@@ -453,9 +562,9 @@ function cleanup() {
     // Disconnect WebRTC
     conn.connection.disconnect()
 
-    // Remove video element from DOM
+    // Release video element back to pool
     if (conn.videoElement) {
-      conn.videoElement.remove()
+      releaseVideoElement(conn.videoElement)
     }
   }
 
@@ -490,6 +599,7 @@ export function useCameraConnectionManager() {
     getVideoStream,
     attachToVideoElement,
     areConnectionsReady,
+    setLoopForCamera,
     cleanup
   }
 }

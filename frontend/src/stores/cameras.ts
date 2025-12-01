@@ -4,89 +4,31 @@ import { ref, computed } from 'vue'
 import type { Camera } from '../types/generated'
 import type { ApiError } from '../types/errors'
 import { cameraService } from '../api/services/cameraService'
+import { loadSiteMapConfig, type SiteMapConfigCamera } from '../utils/siteMapConfigLoader'
+
+/**
+ * Transform config camera to Camera type
+ */
+function transformConfigToCamera(configCamera: SiteMapConfigCamera): Camera {
+  return {
+    id: configCamera.id,
+    name: configCamera.name,
+    rtspUrl: configCamera.rtspUrl,
+    status: 'online', // Default status, updated by WebSocket
+    model: configCamera.model,
+    ipAddress: configCamera.ipAddress,
+    position: {
+      x: configCamera.position.x,
+      y: configCamera.position.y,
+      z: configCamera.height,
+      azimuth: configCamera.rotation
+    }
+  }
+}
 
 export const useCameraStore = defineStore('cameras', () => {
-  // State - Initialize with mock cameras for development
-  const cameras = ref<Camera[]>([
-    {
-      id: 'camera1',
-      name: 'Front Entrance',
-      status: 'online',
-      model: 'AXIS P3245-LVE',
-      ip_address: '192.168.1.101',
-      location: 'Building A - Front',
-      stream_url: 'rtsp://localhost:8554/camera1',
-      resolution: '1920x1080',
-      fps: 30,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: 'camera2',
-      name: 'Parking Lot',
-      status: 'online',
-      model: 'AXIS M3046-V',
-      ip_address: '192.168.1.102',
-      location: 'Building A - Parking',
-      stream_url: 'rtsp://localhost:8554/camera2',
-      resolution: '1920x1080',
-      fps: 30,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: 'camera3',
-      name: 'Back Entrance',
-      status: 'online',
-      model: 'AXIS P3245-LVE',
-      ip_address: '192.168.1.103',
-      location: 'Building A - Back',
-      stream_url: 'rtsp://localhost:8554/camera3',
-      resolution: '1920x1080',
-      fps: 30,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: 'camera4',
-      name: 'Loading Dock',
-      status: 'online',
-      model: 'AXIS Q1656-LE',
-      ip_address: '192.168.1.104',
-      location: 'Building B - Loading',
-      stream_url: 'rtsp://localhost:8554/camera4',
-      resolution: '2560x1440',
-      fps: 30,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: 'camera5',
-      name: 'Hallway West',
-      status: 'online',
-      model: 'AXIS M3046-V',
-      ip_address: '192.168.1.105',
-      location: 'Building A - Hallway',
-      stream_url: 'rtsp://localhost:8554/camera5',
-      resolution: '1920x1080',
-      fps: 30,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: 'camera6',
-      name: 'Hallway East',
-      status: 'offline',
-      model: 'AXIS M3046-V',
-      ip_address: '192.168.1.106',
-      location: 'Building A - Hallway',
-      stream_url: 'rtsp://localhost:8554/camera6',
-      resolution: '1920x1080',
-      fps: 30,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  ])
+  // State - Start empty, populated from JSON config
+  const cameras = ref<Camera[]>([])
   const selectedCameraId = ref<string | null>(null)
   const loading = ref(false)
   const error = ref<ApiError | null>(null)
@@ -137,6 +79,25 @@ export const useCameraStore = defineStore('cameras', () => {
     return cameras.value.filter((c) => c.status === status)
   }
 
+  /**
+   * Initialize cameras from JSON config (single source of truth)
+   */
+  async function initializeFromConfig() {
+    loading.value = true
+    error.value = null
+    try {
+      const config = await loadSiteMapConfig()
+      cameras.value = config.cameras.map(transformConfigToCamera)
+      console.log('[CameraStore] Initialized from config:', cameras.value.length, 'cameras')
+    } catch (err) {
+      console.error('[CameraStore] Failed to initialize from config:', err)
+      error.value = err as ApiError
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     // State
     cameras,
@@ -156,5 +117,6 @@ export const useCameraStore = defineStore('cameras', () => {
     fetchCameras,
     updateCameraStatus,
     filterByStatus,
+    initializeFromConfig,
   }
 })

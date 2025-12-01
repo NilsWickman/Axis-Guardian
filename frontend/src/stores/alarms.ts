@@ -10,6 +10,9 @@ import { config } from '../config/environment'
 // WebSocket client instance
 const wsClient = new AlarmWebSocketClient()
 
+// Resource limits to prevent memory exhaustion
+const MAX_ALARMS = 500
+
 export const useAlarmStore = defineStore('alarms', () => {
   // State
   const alarms = ref<Alarm[]>([])
@@ -34,6 +37,10 @@ export const useAlarmStore = defineStore('alarms', () => {
     wsClient.on('alarm.new', (alarm: Alarm) => {
       // Add new alarm to the beginning of the list
       alarms.value.unshift(alarm)
+      // Trim alarms array to prevent unbounded growth
+      if (alarms.value.length > MAX_ALARMS) {
+        alarms.value = alarms.value.slice(0, MAX_ALARMS)
+      }
     })
 
     wsClient.on('alarm.acknowledged', (data: { id: string; acknowledgedBy: string; acknowledgedAt: string }) => {

@@ -9,6 +9,7 @@ export interface Detection {
   confidence: number // 0-1
   bbox: BoundingBox
   attributes?: Record<string, any>
+  trackId?: number // Optional tracking ID from ByteTrack
 }
 
 export interface BoundingBox {

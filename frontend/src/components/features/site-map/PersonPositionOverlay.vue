@@ -1,8 +1,8 @@
 <template>
   <div class="person-position-overlay">
-    <!-- Person position markers -->
+    <!-- Global track markers (cross-camera tracking) -->
     <svg
-      v-if="positions.length > 0"
+      v-if="globalTracks.length > 0"
       :width="canvasWidth"
       :height="canvasHeight"
       class="absolute inset-0 pointer-events-none"
@@ -11,10 +11,10 @@
       <!-- Trails (if enabled) -->
       <g v-if="showTrails">
         <path
-          v-for="track in visibleTracks"
-          :key="track.trackId"
-          :d="getTrailPath(track)"
-          stroke="#3b82f6"
+          v-for="track in visibleGlobalTracks"
+          :key="`trail-${track.globalTrackId}`"
+          :d="getGlobalTrailPath(track)"
+          :stroke="track.color"
           stroke-width="2"
           fill="none"
           opacity="0.4"
@@ -23,24 +23,24 @@
         />
       </g>
 
-      <!-- Position markers -->
-      <g v-for="position in visiblePositions" :key="position.detectionId">
+      <!-- Global track position markers -->
+      <g v-for="track in visibleGlobalTracks" :key="track.globalTrackId">
         <!-- Outer glow -->
         <circle
-          :cx="worldToCanvasX(position.worldX)"
-          :cy="worldToCanvasY(position.worldY)"
+          :cx="worldToCanvasX(track.currentPosition.x)"
+          :cy="worldToCanvasY(track.currentPosition.y)"
           :r="markerRadius + 4"
-          :fill="getMarkerColor(position)"
+          :fill="track.color"
           opacity="0.2"
         />
 
         <!-- Main marker -->
         <circle
-          :cx="worldToCanvasX(position.worldX)"
-          :cy="worldToCanvasY(position.worldY)"
+          :cx="worldToCanvasX(track.currentPosition.x)"
+          :cy="worldToCanvasY(track.currentPosition.y)"
           :r="markerRadius"
-          :fill="getMarkerColor(position)"
-          :opacity="getMarkerOpacity(position)"
+          :fill="track.color"
+          :opacity="getGlobalTrackOpacity(track)"
           stroke="white"
           stroke-width="2"
           class="person-marker"
@@ -49,20 +49,20 @@
         <!-- Confidence indicator ring -->
         <circle
           v-if="showConfidence"
-          :cx="worldToCanvasX(position.worldX)"
-          :cy="worldToCanvasY(position.worldY)"
+          :cx="worldToCanvasX(track.currentPosition.x)"
+          :cy="worldToCanvasY(track.currentPosition.y)"
           :r="markerRadius + 6"
           fill="none"
-          :stroke="getMarkerColor(position)"
+          :stroke="track.color"
           :stroke-width="2"
-          :opacity="position.confidence"
-          :stroke-dasharray="`${position.confidence * 40} 40`"
+          :opacity="track.confidence"
+          :stroke-dasharray="`${track.confidence * 40} 40`"
         />
 
         <!-- Person icon (optional) -->
         <g
           v-if="showPersonIcon"
-          :transform="`translate(${worldToCanvasX(position.worldX) - 6}, ${worldToCanvasY(position.worldY) - 8})`"
+          :transform="`translate(${worldToCanvasX(track.currentPosition.x) - 6}, ${worldToCanvasY(track.currentPosition.y) - 8})`"
         >
           <path
             d="M6 2a2 2 0 100 4 2 2 0 000-4zm0 6c-2 0-4 1-4 2v2h8v-2c0-1-2-2-4-2z"
@@ -86,6 +86,34 @@
           class="heatmap-cell"
         />
       </g>
+
+      <!-- Debug: Unconfirmed tracks (dashed outline) -->
+      <g v-if="showDebugMode && unconfirmedTracks.length > 0">
+        <g v-for="track in unconfirmedTracks" :key="`unconfirmed-${track.globalTrackId}`">
+          <!-- Dashed circle for unconfirmed -->
+          <circle
+            :cx="worldToCanvasX(track.currentPosition.x)"
+            :cy="worldToCanvasY(track.currentPosition.y)"
+            :r="markerRadius"
+            fill="none"
+            stroke="#fbbf24"
+            stroke-width="2"
+            stroke-dasharray="4 2"
+            opacity="0.6"
+          />
+          <!-- Detection count label -->
+          <text
+            :x="worldToCanvasX(track.currentPosition.x)"
+            :y="worldToCanvasY(track.currentPosition.y) + markerRadius + 12"
+            text-anchor="middle"
+            font-size="10"
+            fill="#fbbf24"
+            opacity="0.8"
+          >
+            {{ track.detectionCount }}/3
+          </text>
+        </g>
+      </g>
     </svg>
 
     <!-- Position count overlay -->
@@ -96,11 +124,13 @@
     >
       <div class="flex items-center gap-2 mb-1">
         <div class="w-3 h-3 rounded-full bg-blue-500"></div>
-        <span class="font-semibold">Active Persons: {{ activePersonCount }}</span>
+        <span class="font-semibold">Tracked Persons: {{ globalTrackCount }}</span>
       </div>
       <div class="text-xs text-gray-300">
-        <div>Total Positions: {{ positions.length }}</div>
-        <div v-if="showTrails">Tracks: {{ tracks.length }}</div>
+        <div>Active Tracks: {{ globalTracks.length }}</div>
+        <div v-if="showDebugMode && pendingTrackCount > 0" class="text-amber-400">
+          Pending: {{ pendingTrackCount }}
+        </div>
       </div>
     </div>
   </div>
@@ -108,7 +138,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { usePersonPositionStore, type PersonPosition, type PersonTrack } from '../../../stores/personPositions'
+import { useGlobalTrackStore, type GlobalTrack } from '../../../stores/globalTracks'
 import type { SiteMap } from '../../../stores/siteMaps'
 
 export interface PersonPositionOverlayProps {
@@ -120,6 +150,7 @@ export interface PersonPositionOverlayProps {
   showPersonIcon?: boolean
   showStats?: boolean
   showHeatmap?: boolean
+  showDebugMode?: boolean // Show unconfirmed tracks and FOV cones
   markerRadius?: number
   maxTrailLength?: number
 }
@@ -130,30 +161,39 @@ const props = withDefaults(defineProps<PersonPositionOverlayProps>(), {
   showPersonIcon: false,
   showStats: true,
   showHeatmap: false,
+  showDebugMode: false,
   markerRadius: 8,
   maxTrailLength: 20,
 })
 
-const positionStore = usePersonPositionStore()
+const globalTrackStore = useGlobalTrackStore()
 
-// Computed data from store
-const positions = computed(() => positionStore.activePositions)
-const tracks = computed(() => positionStore.activeTracks)
-const activePersonCount = computed(() => positionStore.activePersonCount)
+// Computed data from global track store
+const globalTracks = computed(() => globalTrackStore.activeTracks)
+const globalTrackCount = computed(() => globalTrackStore.activeTrackCount)
+const pendingTrackCount = computed(() => globalTrackStore.pendingTrackCount)
 
-// Filter positions that are within the canvas bounds
-const visiblePositions = computed(() => {
-  return positions.value.filter(pos => {
-    const x = worldToCanvasX(pos.worldX)
-    const y = worldToCanvasY(pos.worldY)
+// Get all active tracks including unconfirmed (for debug mode)
+const allActiveTracks = computed(() => globalTrackStore.allActiveTracks)
+
+// Filter global tracks that are within the canvas bounds
+const visibleGlobalTracks = computed(() => {
+  return globalTracks.value.filter(track => {
+    const x = worldToCanvasX(track.currentPosition.x)
+    const y = worldToCanvasY(track.currentPosition.y)
     return x >= 0 && x <= props.canvasWidth && y >= 0 && y <= props.canvasHeight
   })
 })
 
-// Filter tracks with visible positions
-const visibleTracks = computed(() => {
-  if (!props.showTrails) return []
-  return tracks.value.filter(track => track.positions.length > 1)
+// Unconfirmed tracks for debug mode (visible but not confirmed yet)
+const unconfirmedTracks = computed(() => {
+  if (!props.showDebugMode) return []
+  return allActiveTracks.value.filter(track => {
+    if (track.isConfirmed) return false // Skip confirmed
+    const x = worldToCanvasX(track.currentPosition.x)
+    const y = worldToCanvasY(track.currentPosition.y)
+    return x >= 0 && x <= props.canvasWidth && y >= 0 && y <= props.canvasHeight
+  })
 })
 
 // Heatmap data (simplified grid-based heatmap)
@@ -172,10 +212,10 @@ const heatmapData = computed<HeatmapCell[]>(() => {
   const cellSize = 30 // 30 pixels per cell
   const grid = new Map<string, number>()
 
-  // Accumulate positions into grid cells
-  positions.value.forEach(pos => {
-    const cellX = Math.floor(worldToCanvasX(pos.worldX) / cellSize) * cellSize
-    const cellY = Math.floor(worldToCanvasY(pos.worldY) / cellSize) * cellSize
+  // Accumulate global track positions into grid cells
+  globalTracks.value.forEach(track => {
+    const cellX = Math.floor(worldToCanvasX(track.currentPosition.x) / cellSize) * cellSize
+    const cellY = Math.floor(worldToCanvasY(track.currentPosition.y) / cellSize) * cellSize
     const key = `${cellX},${cellY}`
     grid.set(key, (grid.get(key) || 0) + 1)
   })
@@ -210,34 +250,19 @@ const heatmapData = computed<HeatmapCell[]>(() => {
  * Convert world coordinates (meters) to canvas coordinates (pixels)
  */
 function worldToCanvasX(worldX: number): number {
-  return worldX * props.siteMap.scale + 60 // Add offset
+  return worldX * props.siteMap.renderScale + 60 // Add offset
 }
 
 function worldToCanvasY(worldY: number): number {
-  return worldY * props.siteMap.scale + 60 // Add offset
+  return worldY * props.siteMap.renderScale + 60 // Add offset
 }
 
 /**
- * Get marker color based on camera ID
+ * Get global track marker opacity based on age
  */
-function getMarkerColor(position: PersonPosition): string {
-  // Use a consistent color per camera
-  const cameraColors: Record<string, string> = {
-    'camera1': '#10b981', // emerald
-    'camera2': '#3b82f6', // blue
-    'camera3': '#ef4444', // red
-    'camera4': '#f59e0b', // amber
-  }
-  return cameraColors[position.cameraId] || '#6366f1' // default indigo
-}
-
-/**
- * Get marker opacity based on age
- */
-function getMarkerOpacity(position: PersonPosition): number {
+function getGlobalTrackOpacity(track: GlobalTrack): number {
   const now = Date.now()
-  const posTime = new Date(position.timestamp).getTime()
-  const ageMs = now - posTime
+  const ageMs = now - track.lastSeen
 
   // Fade out over 10 seconds
   const fadeMs = 10000
@@ -246,15 +271,15 @@ function getMarkerOpacity(position: PersonPosition): number {
 }
 
 /**
- * Generate SVG path for a trail
+ * Generate SVG path for a global track trail
  */
-function getTrailPath(track: PersonTrack): string {
-  const positions = track.positions.slice(0, props.maxTrailLength)
-  if (positions.length < 2) return ''
+function getGlobalTrailPath(track: GlobalTrack): string {
+  const trailPositions = track.trail.slice(0, props.maxTrailLength)
+  if (trailPositions.length < 2) return ''
 
-  const pathSegments = positions.map((pos, index) => {
-    const x = worldToCanvasX(pos.worldX)
-    const y = worldToCanvasY(pos.worldY)
+  const pathSegments = trailPositions.map((pos, index) => {
+    const x = worldToCanvasX(pos.x)
+    const y = worldToCanvasY(pos.y)
     return index === 0 ? `M ${x} ${y}` : `L ${x} ${y}`
   })
 

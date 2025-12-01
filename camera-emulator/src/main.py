@@ -8,17 +8,22 @@ import json
 import logging
 from pathlib import Path
 from typing import Dict, Optional
+import uuid
 import msgpack
-from aiohttp import web
+from aiohttp import web, ClientSession, ClientTimeout
 from aiohttp import WSMsgType
 from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack, RTCConfiguration, RTCIceServer
 from aiortc.sdp import candidate_from_sdp
 from aiortc.contrib.media import MediaPlayer
 from av import VideoFrame
 import time
+import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Tracking service URL (can be set via environment variable)
+TRACKING_SERVICE_URL = os.getenv('TRACKING_SERVICE_URL', 'http://localhost:3010')
 
 
 def rewrite_sdp_for_localhost(sdp: str) -> str:
@@ -32,42 +37,50 @@ def rewrite_sdp_for_localhost(sdp: str) -> str:
 
 class DetectionVideoTrack(VideoStreamTrack):
     """
-    Video track that streams from MP4 file with looping support
+    Video track that streams from MP4 file with looping support.
+    Uses stream_loop option to let FFmpeg handle looping natively without creating new encoders.
     """
 
     def __init__(self, video_path: str):
         super().__init__()
         self.video_path = video_path
-        self.player: Optional[MediaPlayer] = None
         self._start_time = time.time()
         self._frame_count = 0
-        self._restart_player()
+        self._stopped = False
 
-    def _restart_player(self):
-        """Restart the video player for looping"""
-        if self.player:
-            self.player.audio = None  # Clean up old player
-
+        # Use FFmpeg's native loop with stream_loop=-1 for infinite looping
+        # This avoids creating new encoder instances on each loop
         self.player = MediaPlayer(
             self.video_path,
             format='mp4',
-            options={'fflags': 'nobuffer'}
+            options={
+                'fflags': 'nobuffer',
+                'stream_loop': '-1',  # Infinite loop at FFmpeg level
+            }
         )
-        logger.info(f"Started/restarted video player for {self.video_path}")
+        logger.info(f"Started video player with native looping for {self.video_path}")
+
+    def stop(self):
+        """Stop the video track and release resources"""
+        self._stopped = True
+        if self.player:
+            try:
+                if hasattr(self.player, '_container') and self.player._container:
+                    self.player._container.close()
+            except Exception:
+                pass
+            self.player = None
 
     async def recv(self) -> VideoFrame:
-        """Receive next video frame, loop when finished"""
-        try:
-            frame = await self.player.video.recv()
-            self._frame_count += 1
-            return frame
-        except Exception as e:
-            # Video ended, restart for looping
-            logger.info(f"Video ended, looping... (played {self._frame_count} frames)")
-            self._restart_player()
-            self._frame_count = 0
-            frame = await self.player.video.recv()
-            return frame
+        """Receive next video frame"""
+        if self._stopped:
+            raise Exception("Track stopped")
+        frame = await self.player.video.recv()
+        self._frame_count += 1
+        # Log every 5000 frames for monitoring
+        if self._frame_count % 5000 == 0:
+            logger.info(f"Streamed {self._frame_count} frames")
+        return frame
 
 
 class CameraEmulator:
@@ -81,13 +94,22 @@ class CameraEmulator:
         video_path: str,
         detections_path: str,
         port: int,
-        vapix_metadata: Optional[Dict] = None
+        vapix_metadata: Optional[Dict] = None,
+        tracking_service_url: Optional[str] = None,
+        tracking_camera_id: Optional[str] = None
     ):
         self.camera_id = camera_id
         self.video_path = Path(video_path)
         self.detections_path = Path(detections_path)
         self.port = port
         self.vapix_metadata = vapix_metadata or {}
+
+        # Tracking service integration
+        self.tracking_service_url = tracking_service_url or TRACKING_SERVICE_URL
+        # Map emulator camera_id to tracking service camera_id (e.g., camera-HC3 -> camera1)
+        self.tracking_camera_id = tracking_camera_id
+        self.http_session: Optional[ClientSession] = None
+        self._tracking_enabled = bool(tracking_camera_id)
 
         # Load detection data
         self.detection_data = self._load_detections()
@@ -96,6 +118,7 @@ class CameraEmulator:
         # WebRTC connections
         self.pcs: Dict[str, RTCPeerConnection] = {}
         self.detection_channels: Dict[str, any] = {}
+        self.video_tracks: Dict[str, DetectionVideoTrack] = {}  # Track video tracks for cleanup
 
         # App server
         self.app = web.Application()
@@ -163,7 +186,7 @@ class CameraEmulator:
                             configuration=RTCConfiguration(iceServers=[])
                         )
 
-                        pc_id = f"ws_pc_{len(self.pcs)}"
+                        pc_id = f"ws_pc_{uuid.uuid4().hex[:8]}"
                         self.pcs[pc_id] = pc
 
                         logger.info(f"Created WebRTC connection {pc_id} for camera {self.camera_id}")
@@ -177,6 +200,7 @@ class CameraEmulator:
                         # Add video track
                         video_track = DetectionVideoTrack(str(self.video_path))
                         pc.addTrack(video_track)
+                        self.video_tracks[pc_id] = video_track
 
                         # Create data channel for detections
                         detection_channel = pc.createDataChannel('detections')
@@ -264,7 +288,7 @@ class CameraEmulator:
             )
         )
 
-        pc_id = f"pc_{len(self.pcs)}"
+        pc_id = f"pc_{uuid.uuid4().hex[:8]}"
         self.pcs[pc_id] = pc
 
         logger.info(f"Created WebRTC connection {pc_id} for camera {self.camera_id}")
@@ -278,6 +302,7 @@ class CameraEmulator:
         # Add video track
         video_track = DetectionVideoTrack(str(self.video_path))
         pc.addTrack(video_track)
+        self.video_tracks[pc_id] = video_track
 
         # Create data channel for detections
         detection_channel = pc.createDataChannel('detections')
@@ -350,15 +375,52 @@ class CameraEmulator:
                 except Exception as e:
                     logger.error(f"Error sending detection data: {e}")
 
+                # Also POST to tracking service if enabled
+                if self._tracking_enabled and frame_data.get('detections'):
+                    await self._post_to_tracking_service(frame_data['detections'])
+
             # Sync with video frame rate
             await asyncio.sleep(frame_duration)
+
+    async def _post_to_tracking_service(self, detections: list):
+        """POST detections to the tracking service"""
+        if not self.http_session:
+            return
+
+        try:
+            # Format for /api/emulator-detections endpoint
+            payload = {
+                'camera_id': self.tracking_camera_id,
+                'detections': detections
+            }
+
+            async with self.http_session.post(
+                f'{self.tracking_service_url}/api/emulator-detections',
+                json=payload
+            ) as response:
+                if response.status != 200:
+                    text = await response.text()
+                    logger.warning(f"Tracking service error: {response.status} - {text[:100]}")
+        except asyncio.TimeoutError:
+            logger.warning("Tracking service request timed out")
+        except Exception as e:
+            logger.debug(f"Error posting to tracking service: {e}")
 
     async def _cleanup_connection(self, pc_id: str):
         """Clean up peer connection resources"""
         # Check if connection exists before cleanup to prevent duplicate cleanup
-        if pc_id not in self.pcs and pc_id not in self.detection_channels:
+        if pc_id not in self.pcs and pc_id not in self.detection_channels and pc_id not in self.video_tracks:
             logger.debug(f"Connection {pc_id} already cleaned up, skipping")
             return
+
+        # Stop video track first to release FFmpeg/x264 resources
+        if pc_id in self.video_tracks:
+            try:
+                self.video_tracks[pc_id].stop()
+            except Exception as e:
+                logger.warning(f"Error stopping video track {pc_id}: {e}")
+            finally:
+                del self.video_tracks[pc_id]
 
         if pc_id in self.pcs:
             try:
@@ -371,7 +433,7 @@ class CameraEmulator:
         if pc_id in self.detection_channels:
             del self.detection_channels[pc_id]
 
-        logger.info(f"Cleaned up connection {pc_id}")
+        logger.info(f"Cleaned up connection {pc_id} (active: {len(self.pcs)})")
 
     async def handle_vapix_info(self, request: web.Request) -> web.Response:
         """Emulate VAPIX camera info endpoint"""
@@ -414,8 +476,43 @@ class CameraEmulator:
             'detections_loaded': len(self.detection_data.get('frames', [])) > 0
         })
 
+    async def _stream_detections_to_tracking(self):
+        """Continuously stream detections to tracking service (independent of WebRTC)"""
+        fps = self.video_info.get('fps', 30)
+        frame_duration = 1.0 / fps
+        frames_data = self.detection_data.get('frames', [])
+        total_frames = len(frames_data)
+
+        if total_frames == 0:
+            logger.warning("No detection frames to stream")
+            return
+
+        frame_index = 0
+        logger.info(f"Starting detection stream to tracking service ({total_frames} frames at {fps} fps)")
+
+        while True:
+            frame_data = frames_data[frame_index]
+
+            if frame_data.get('detections'):
+                await self._post_to_tracking_service(frame_data['detections'])
+
+            frame_index = (frame_index + 1) % total_frames
+            await asyncio.sleep(frame_duration)
+
     async def start(self):
         """Start the emulator server"""
+        # Create HTTP session for tracking service
+        if self._tracking_enabled:
+            self.http_session = ClientSession(
+                timeout=ClientTimeout(total=2.0)  # 2 second timeout
+            )
+            logger.info(f"Tracking service integration enabled:")
+            logger.info(f"  URL: {self.tracking_service_url}")
+            logger.info(f"  Camera ID: {self.tracking_camera_id}")
+
+            # Start detection streaming task (runs independently of WebRTC)
+            asyncio.create_task(self._stream_detections_to_tracking())
+
         runner = web.AppRunner(self.app)
         await runner.setup()
         site = web.TCPSite(runner, '0.0.0.0', self.port)
@@ -428,10 +525,8 @@ class CameraEmulator:
 
 async def main():
     """Start multiple camera emulators"""
-    import os
 
-    # Configuration from environment or defaults
-    base_path = Path(os.getenv('CAMERA_DATA_PATH', '/shared/cameras/preprocessed/1080p'))
+    base_path = Path('/home/nilwi971/projects/Axis-Guardian/shared/cameras/preprocessed/1080p')
 
     cameras = [
         {
@@ -445,20 +540,8 @@ async def main():
                 'analytics_module': 'AXIS Object Analytics',
                 'analytics_version': '1.0.0',
                 'scenario': 'object_detection'
-            }
-        },
-        {
-            'camera_id': 'camera-HC4',
-            'video_path': base_path / 'view-HC4-preprocessed.mp4',
-            'detections_path': base_path / 'view-HC4-preprocessed.detections.json.gz',
-            'port': 9102,
-            'vapix_metadata': {
-                'camera_model': 'AXIS M3046-V',
-                'camera_serial': 'ACCC8EF12346',
-                'analytics_module': 'AXIS Object Analytics',
-                'analytics_version': '1.0.0',
-                'scenario': 'object_detection'
-            }
+            },
+            'tracking_camera_id': 'camera1'
         }
     ]
 

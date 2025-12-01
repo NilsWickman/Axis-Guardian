@@ -1,123 +1,31 @@
 // Centralized Mock Data for Prototyping
 // This file contains all mock data used across the application during development
+//
+// NOTE: Camera configuration has been moved to the single source of truth:
+//       /public/sitemap-rectangular-room.json
+//       Use the camera store (useCameraStore) to access camera data.
 
 import type {
-  Camera,
   Alarm,
   Detection,
-  User,
   Zone,
   Track,
-  AlarmSource,
-  Role,
 } from '../types/generated'
 
-// ============================================================================
-// CAMERAS
-// ============================================================================
+// Local types for mock data (not exported from generated.ts)
+interface Role {
+  id: string
+  name: string
+  description: string
+  permissions: string[]
+}
 
-export const mockCameras: Camera[] = [
-  {
-    id: 'camera1',
-    name: 'Auditorium - High Corner View 3',
-    rtspUrl: 'rtsp://localhost:8554/camera1',
-    status: 'online',
-    capabilities: {
-      ptz: false,
-      audio: false,
-      analytics: true,
-      resolution: '1920x1080',
-      fps: 30,
-    },
-    position: {
-      x: 16.22,
-      y: 0.3,
-      z: 1.68,
-      azimuth: 18,
-      elevation: 1,
-    },
-    ipAddress: '192.168.1.101',
-    macAddress: 'AC:CC:8E:12:34:60',
-    model: 'AXIS P3245-LVE',
-    serialNumber: 'ACCC8E123460',
-    firmwareVersion: '11.8.67',
-  },
-  {
-    id: 'camera2',
-    name: 'Auditorium - High Corner View 4',
-    rtspUrl: 'rtsp://localhost:8554/camera2',
-    status: 'online',
-    capabilities: {
-      ptz: false,
-      audio: false,
-      analytics: true,
-      resolution: '1920x1080',
-      fps: 30,
-    },
-    position: {
-      x: 0.9,
-      y: 0.5,
-      z: 1.67,
-      azimuth: 313,
-      elevation: -5,
-    },
-    ipAddress: '192.168.1.102',
-    macAddress: 'AC:CC:8E:12:34:61',
-    model: 'AXIS P3245-LVE',
-    serialNumber: 'ACCC8E123461',
-    firmwareVersion: '11.8.67',
-  },
-  {
-    id: 'camera3',
-    name: 'Auditorium - IP Camera View 2',
-    rtspUrl: 'rtsp://localhost:8554/camera3',
-    status: 'online',
-    capabilities: {
-      ptz: false,
-      audio: false,
-      analytics: true,
-      resolution: '1920x1080',
-      fps: 30,
-    },
-    position: {
-      x: 20.6,
-      y: 28.31,
-      z: 2.62,
-      azimuth: 140,
-      elevation: -9,
-    },
-    ipAddress: '192.168.1.103',
-    macAddress: 'AC:CC:8E:12:34:62',
-    model: 'AXIS P3245-LVE',
-    serialNumber: 'ACCC8E123462',
-    firmwareVersion: '11.8.67',
-  },
-  {
-    id: 'camera4',
-    name: 'Auditorium - IP Camera View 5',
-    rtspUrl: 'rtsp://localhost:8554/camera4',
-    status: 'online',
-    capabilities: {
-      ptz: false,
-      audio: false,
-      analytics: true,
-      resolution: '1920x1080',
-      fps: 30,
-    },
-    position: {
-      x: 10.57,
-      y: 16.31,
-      z: 1.84,
-      azimuth: 339,
-      elevation: 0,
-    },
-    ipAddress: '192.168.1.104',
-    macAddress: 'AC:CC:8E:12:34:63',
-    model: 'AXIS P3245-LVE',
-    serialNumber: 'ACCC8E123463',
-    firmwareVersion: '11.8.67',
-  },
-]
+interface User {
+  id: string
+  username: string
+  email: string
+  role: string
+}
 
 // ============================================================================
 // ALARMS
@@ -606,20 +514,6 @@ export const mockTracks: Track[] = [
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
-
-/**
- * Get camera by ID
- */
-export function getCameraById(id: string): Camera | undefined {
-  return mockCameras.find((camera) => camera.id === id)
-}
-
-/**
- * Get cameras by status
- */
-export function getCamerasByStatus(status: Camera['status']): Camera[] {
-  return mockCameras.filter((camera) => camera.status === status)
-}
 
 /**
  * Get alarms by acknowledgement status

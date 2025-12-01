@@ -10,6 +10,10 @@ import { config } from '../config/environment'
 // WebSocket client instance
 const wsClient = new DetectionWebSocketClient()
 
+// Resource limits to prevent memory exhaustion
+const MAX_DETECTIONS = 1000
+const MAX_TRACKS = 500
+
 export const useDetectionStore = defineStore('detections', () => {
   // State
   const detections = ref<Detection[]>([])
@@ -25,20 +29,83 @@ export const useDetectionStore = defineStore('detections', () => {
     minConfidence: 0,
   })
 
+  // Mock detection generator for simulating live detections
+  let mockDetectionInterval: ReturnType<typeof setInterval> | null = null
+
+  function startMockDetectionGenerator() {
+    if (mockDetectionInterval) return
+
+    console.log('[DetectionStore] Starting mock detection generator')
+
+    // Generate initial detections
+    generateMockDetections()
+
+    // Generate new detections every 2 seconds
+    mockDetectionInterval = setInterval(() => {
+      generateMockDetections()
+    }, 2000)
+  }
+
+  function generateMockDetections() {
+    const cameras = ['camera1', 'camera2']
+    const now = new Date().toISOString()
+
+    cameras.forEach((cameraId, cameraIndex) => {
+      // Generate 1-2 person detections per camera
+      const numDetections = Math.floor(Math.random() * 2) + 1
+
+      for (let i = 0; i < numDetections; i++) {
+        const trackId = cameraIndex * 10 + i + 1 // Consistent track IDs per camera
+
+        // Generate bbox in normalized-ish range (simulating person positions)
+        // These will be converted to world coordinates by the tracking system
+        const baseX = 0.2 + Math.random() * 0.6 // 0.2-0.8 range
+        const baseY = 0.3 + Math.random() * 0.4 // 0.3-0.7 range
+        const width = 0.05 + Math.random() * 0.05
+        const height = 0.15 + Math.random() * 0.1
+
+        const detection: Detection = {
+          id: `mock-${cameraId}-${Date.now()}-${i}`,
+          timestamp: now,
+          cameraId,
+          type: 'person',
+          confidence: 0.85 + Math.random() * 0.1,
+          bbox: {
+            x: baseX * 1920, // Scale to pixel coordinates
+            y: baseY * 1080,
+            width: width * 1920,
+            height: height * 1080,
+          },
+          trackId: trackId,
+        }
+
+        addDetection(detection)
+      }
+    })
+  }
+
+  function stopMockDetectionGenerator() {
+    if (mockDetectionInterval) {
+      clearInterval(mockDetectionInterval)
+      mockDetectionInterval = null
+    }
+  }
+
   // WebSocket event handlers
   function initWebSocket() {
-    // Only connect WebSocket when not in mock mode
+    // In mock mode, start mock detection generator instead of WebSocket
     if (config.useMockData) {
       console.log('Detection WebSocket: Skipping connection (mock mode enabled)')
+      startMockDetectionGenerator()
       return
     }
 
     wsClient.on('detection.new', (detection: Detection) => {
       // Add new detection to the beginning of the list
       detections.value.unshift(detection)
-      // Keep only last 1000 detections in memory
-      if (detections.value.length > 1000) {
-        detections.value = detections.value.slice(0, 1000)
+      // Keep only last MAX_DETECTIONS in memory
+      if (detections.value.length > MAX_DETECTIONS) {
+        detections.value = detections.value.slice(0, MAX_DETECTIONS)
       }
     })
 
@@ -48,6 +115,10 @@ export const useDetectionStore = defineStore('detections', () => {
         tracks.value[index] = track
       } else {
         tracks.value.push(track)
+        // Trim tracks array to prevent unbounded growth
+        if (tracks.value.length > MAX_TRACKS) {
+          tracks.value = tracks.value.slice(-MAX_TRACKS)
+        }
       }
     })
 
@@ -76,7 +147,9 @@ export const useDetectionStore = defineStore('detections', () => {
 
   // Cleanup on unmount
   onUnmounted(() => {
-    if (!config.useMockData) {
+    if (config.useMockData) {
+      stopMockDetectionGenerator()
+    } else {
       wsClient.disconnect()
     }
   })
@@ -152,9 +225,9 @@ export const useDetectionStore = defineStore('detections', () => {
 
   function addDetection(detection: Detection) {
     detections.value.unshift(detection)
-    // Keep only last 1000 detections
-    if (detections.value.length > 1000) {
-      detections.value = detections.value.slice(0, 1000)
+    // Keep only last MAX_DETECTIONS
+    if (detections.value.length > MAX_DETECTIONS) {
+      detections.value = detections.value.slice(0, MAX_DETECTIONS)
     }
     return detection
   }

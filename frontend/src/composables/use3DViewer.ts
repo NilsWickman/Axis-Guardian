@@ -34,6 +34,10 @@ export function use3DViewer() {
   let renderer: THREE.WebGLRenderer | null = null
   let controls: OrbitControls | null = null
   let animationFrameId: number | null = null
+  let isInitialized = false
+
+  // Store resize handler reference for cleanup
+  let resizeHandler: (() => void) | null = null
 
   const sceneObjects: SceneObjects = {
     floor: [],
@@ -99,8 +103,8 @@ export function use3DViewer() {
     scene.add(gridHelper)
     sceneObjects.grid = gridHelper
 
-    // Handle window resize
-    const handleResize = () => {
+    // Handle window resize (store reference for cleanup)
+    resizeHandler = () => {
       if (!camera || !renderer || !canvas) return
 
       const width = canvas.clientWidth
@@ -112,7 +116,10 @@ export function use3DViewer() {
       renderer.setSize(width, height)
     }
 
-    window.addEventListener('resize', handleResize)
+    window.addEventListener('resize', resizeHandler)
+
+    // Mark as initialized
+    isInitialized = true
 
     // Start animation loop
     function animate() {
@@ -300,16 +307,25 @@ export function use3DViewer() {
    * Cleanup resources
    */
   function cleanup() {
+    // Remove resize event listener
+    if (resizeHandler) {
+      window.removeEventListener('resize', resizeHandler)
+      resizeHandler = null
+    }
+
     if (animationFrameId !== null) {
       cancelAnimationFrame(animationFrameId)
+      animationFrameId = null
     }
 
     if (controls) {
       controls.dispose()
+      controls = null
     }
 
     if (renderer) {
       renderer.dispose()
+      renderer = null
     }
 
     // Dispose geometries and materials
@@ -325,12 +341,25 @@ export function use3DViewer() {
           }
         }
       })
+      scene = null
     }
 
-    scene = null
     camera = null
-    renderer = null
-    controls = null
+    isInitialized = false
+
+    // Clear scene object references
+    sceneObjects.floor = []
+    sceneObjects.walls = []
+    sceneObjects.cameras = []
+    sceneObjects.pointCloud = []
+    sceneObjects.grid = null
+  }
+
+  /**
+   * Check if viewer is initialized
+   */
+  function getIsInitialized(): boolean {
+    return isInitialized
   }
 
   return {
@@ -338,6 +367,7 @@ export function use3DViewer() {
     loadModel,
     updateVisibility,
     resetCamera,
-    cleanup
+    cleanup,
+    isInitialized: getIsInitialized
   }
 }

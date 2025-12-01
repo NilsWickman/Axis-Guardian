@@ -70,7 +70,7 @@ export class CameraStatusWebSocketClient {
       secure: options.secure ?? config.wsCameraStatusUrl.startsWith('wss://'),
       autoReconnect: options.autoReconnect ?? true,
       reconnectInterval: options.reconnectInterval || 5000,
-      maxReconnectAttempts: options.maxReconnectAttempts || 0,
+      maxReconnectAttempts: options.maxReconnectAttempts ?? 10,
     };
   }
 
