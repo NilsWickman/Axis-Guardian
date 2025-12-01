@@ -5,7 +5,7 @@
  * via WebRTC data channels. Metadata arrives with each frame for perfect alignment.
  */
 
-import { ref, computed, onUnmounted, type Ref } from 'vue'
+import { ref, computed, onUnmounted, getCurrentInstance, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import msgpack from 'msgpack-lite'
 import type { Detection } from '@/types/detection.types'
@@ -26,6 +26,8 @@ export interface WebRTCDetectionOptions {
   iceServers?: RTCIceServer[]
   autoReconnect?: boolean
   reconnectDelay?: number
+  loopDuration?: number | null  // Loop video after N seconds (null = no loop)
+  onLoop?: () => void  // Callback when video loops
 }
 
 const DEFAULT_OPTIONS: WebRTCDetectionOptions = {
@@ -34,18 +36,29 @@ const DEFAULT_OPTIONS: WebRTCDetectionOptions = {
   // This forces both peers to only use host candidates (127.0.0.1)
   iceServers: [],
   autoReconnect: true,
-  reconnectDelay: 3000
+  reconnectDelay: 3000,
+  loopDuration: null,
+  onLoop: undefined
 }
 
 export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOptions = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...options }
   const toast = useToast()
-  const router = useRouter()
+
+  // Try to get router, but handle case where we're outside setup() context
+  // (e.g., when called from connection manager's async initialization)
+  let router: ReturnType<typeof useRouter> | null = null
+  try {
+    router = useRouter()
+  } catch {
+    // Router not available outside setup context - toast will be disabled
+  }
 
   /**
    * Check if current route is a camera page where toast messages should be shown
    */
   const shouldShowToast = () => {
+    if (!router) return false  // No router = no toast
     const cameraRoutes = [
       'LiveDetectionView',
       'WebRTCDetectionView',
@@ -115,8 +128,21 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
   // Latency averaging (1 second window)
   const latencySamples: number[] = []
+  const MAX_LATENCY_SAMPLES = 100 // Prevent unbounded growth
   const LATENCY_WINDOW_MS = 1000 // 1 second
   let latencyWindowStart = Date.now()
+
+  // Pending timeouts for cleanup
+  const pendingTimeouts = new Set<number>()
+
+  // Event listener references for cleanup
+  let timeupdateHandler: (() => void) | null = null
+  let loopTimeupdateHandler: (() => void) | null = null
+
+  // Loop control state
+  const loopDuration = ref<number | null>(opts.loopDuration ?? null)
+  let onLoopCallback: (() => void) | undefined = opts.onLoop
+  let loopTriggeredThisCycle = false // Prevents multiple triggers per loop cycle
 
   // Callback for detection updates
   let onDetectionUpdate: ((metadata: DetectionMetadata) => void) | null = null
@@ -204,7 +230,8 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
           }, { once: true })
 
           // Monitor buffer and jump to live edge if lag accumulates
-          videoEl.addEventListener('timeupdate', () => {
+          // Store handler for cleanup
+          timeupdateHandler = () => {
             if (videoEl.buffered.length > 0) {
               const end = videoEl.buffered.end(videoEl.buffered.length - 1)
               const lag = end - videoEl.currentTime
@@ -214,7 +241,19 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
                 videoEl.currentTime = end
               }
             }
-          })
+          }
+          videoEl.addEventListener('timeupdate', timeupdateHandler)
+
+          // Loop control: restart video when reaching loop duration
+          loopTimeupdateHandler = () => {
+            if (loopDuration.value !== null && videoEl.currentTime >= loopDuration.value) {
+              console.log(`[WebRTC] ${cameraId}: Video reached ${loopDuration.value}s, looping...`)
+              videoEl.currentTime = 0
+              videoEl.play().catch(e => console.error('Error restarting video:', e))
+              onLoopCallback?.()
+            }
+          }
+          videoEl.addEventListener('timeupdate', loopTimeupdateHandler)
 
           videoEl.play().catch(e => console.error('Error playing video:', e))
         }
@@ -369,7 +408,7 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
       clearInterval(statsMonitorInterval)
     }
 
-    // Monitor every 2 seconds
+    // Monitor every 5 seconds (was 2s - reduced CPU pressure)
     statsMonitorInterval = window.setInterval(async () => {
       if (!peerConnection.value || peerConnection.value.connectionState !== 'connected') {
         return
@@ -439,7 +478,7 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
       } catch (error) {
         console.error('[WebRTC] Error getting connection stats:', error)
       }
-    }, 2000)
+    }, 5000)
   }
 
   /**
@@ -516,8 +555,11 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
       // Calculate instantaneous latency (metadata.timestamp is in seconds, convert to ms)
       const latency = now - (metadata.timestamp * 1000)
 
-      // Add to samples for averaging
+      // Add to samples for averaging (with bounds check)
       latencySamples.push(latency)
+      if (latencySamples.length > MAX_LATENCY_SAMPLES) {
+        latencySamples.shift()
+      }
 
       // Update average every second
       if (now - latencyWindowStart >= LATENCY_WINDOW_MS) {
@@ -543,9 +585,11 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
       // Delay by approximately RTT/2 to sync with actual video display
       const syncDelay = Math.min(connectionQuality.value.roundTripTime / 2, 50)
 
-      setTimeout(() => {
+      const timeoutId = window.setTimeout(() => {
+        pendingTimeouts.delete(timeoutId)
         processBufferedDetection(metadata)
       }, syncDelay)
+      pendingTimeouts.add(timeoutId)
 
       // Update stats
       stats.value.framesReceived++
@@ -576,6 +620,22 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     detectionCount.value = metadata.detection_count
     totalDetections.value += metadata.detection_count
 
+    // Check for loop based on frame number (more reliable than video currentTime for WebRTC)
+    // At 30fps: 10 seconds = 300 frames
+    if (loopDuration.value !== null) {
+      const loopFrameThreshold = loopDuration.value * 30 // Assume 30fps
+      // Only trigger once when crossing threshold, and reset when frame goes back to near 0 (video looped)
+      if (metadata.frame_number >= loopFrameThreshold && !loopTriggeredThisCycle) {
+        console.log(`[WebRTC] ${cameraId}: Frame ${metadata.frame_number} reached loop threshold (${loopFrameThreshold}), triggering loop callback`)
+        loopTriggeredThisCycle = true
+        onLoopCallback?.()
+      } else if (metadata.frame_number < loopFrameThreshold / 2 && loopTriggeredThisCycle) {
+        // Reset when frame number goes back to low values (video looped on backend)
+        console.log(`[WebRTC] ${cameraId}: Frame ${metadata.frame_number} detected video loop reset`)
+        loopTriggeredThisCycle = false
+      }
+    }
+
     // Trigger callback for UI updates
     if (onDetectionUpdate) {
       onDetectionUpdate(metadata)
@@ -593,6 +653,20 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
     // Stop quality monitoring
     stopQualityMonitoring()
+
+    // Clear all pending timeouts
+    pendingTimeouts.forEach(id => clearTimeout(id))
+    pendingTimeouts.clear()
+
+    // Remove timeupdate listeners if attached
+    if (timeupdateHandler && videoElement.value) {
+      videoElement.value.removeEventListener('timeupdate', timeupdateHandler)
+      timeupdateHandler = null
+    }
+    if (loopTimeupdateHandler && videoElement.value) {
+      videoElement.value.removeEventListener('timeupdate', loopTimeupdateHandler)
+      loopTimeupdateHandler = null
+    }
 
     // Clean up peer connection
     if (dataChannel.value) {
@@ -657,6 +731,23 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
       reconnectTimer.value = null
     }
 
+    // Stop quality monitoring
+    stopQualityMonitoring()
+
+    // Clear all pending detection timeouts
+    pendingTimeouts.forEach(id => clearTimeout(id))
+    pendingTimeouts.clear()
+
+    // Remove timeupdate listeners if attached
+    if (timeupdateHandler && videoElement.value) {
+      videoElement.value.removeEventListener('timeupdate', timeupdateHandler)
+      timeupdateHandler = null
+    }
+    if (loopTimeupdateHandler && videoElement.value) {
+      videoElement.value.removeEventListener('timeupdate', loopTimeupdateHandler)
+      loopTimeupdateHandler = null
+    }
+
     isReconnecting.value = false
     isExternalReconnecting.value = externalReconnecting // Signal to handleDisconnect
     reconnectAttempts.value = 0 // Reset attempts on manual disconnect
@@ -678,6 +769,11 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     isDataChannelOpen.value = false
     currentDetections.value = []
     currentMetadata.value = null
+
+    // Clear detection queue and buffer
+    detectionQueue.value.clear()
+    detectionBuffer.length = 0
+    latencySamples.length = 0
   }
 
   /**
@@ -698,11 +794,13 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     return counts
   })
 
-  // Cleanup on unmount
-  onUnmounted(() => {
-    disconnect()
-    stopQualityMonitoring()
-  })
+  // Cleanup on unmount (only if we're in a component context)
+  if (getCurrentInstance()) {
+    onUnmounted(() => {
+      disconnect()
+      stopQualityMonitoring()
+    })
+  }
 
   /**
    * Set callback for detection updates
@@ -763,11 +861,30 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     }
   }
 
+  /**
+   * Set loop duration (video will restart when reaching this time)
+   * @param seconds - Duration in seconds, or null to disable looping
+   * @param callback - Optional callback when video loops
+   */
+  function setLoopDuration(seconds: number | null, callback?: () => void): void {
+    loopDuration.value = seconds
+    onLoopCallback = callback
+    console.log(`[WebRTC] ${cameraId}: Loop duration set to ${seconds}s`)
+  }
+
+  /**
+   * Get current video time
+   */
+  function getVideoTime(): number {
+    return videoElement.value?.currentTime ?? 0
+  }
+
   return {
     // State
     isConnected,
     isDataChannelOpen,
     connectionState,
+    loopDuration,
 
     // Detection data
     currentDetections,
@@ -788,6 +905,8 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
     setDetectionCallback,
     pauseVideo,
     resumeVideo,
-    retryConnection
+    retryConnection,
+    setLoopDuration,
+    getVideoTime
   }
 }

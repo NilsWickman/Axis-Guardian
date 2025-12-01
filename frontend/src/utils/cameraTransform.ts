@@ -7,6 +7,7 @@
 
 import type { BoundingBox, Detection } from '../types/generated'
 import type { CameraPlacement } from '../stores/siteMaps'
+import { extractValue } from './siteMapConversion'
 
 export interface Point2D {
   x: number
@@ -96,11 +97,19 @@ export function imageToWorldCoordinates(
 ): Point2D {
   const { scale, assumeGroundPlane = true, personHeightMeters = 1.7 } = options
 
-  // Convert camera position from pixels to meters
+  // Extract numeric values from UnitValue wrappers
+  const cameraX = extractValue(camera.position.x)
+  const cameraY = extractValue(camera.position.y)
+  const cameraHeight = extractValue(camera.height)
+  const cameraRotation = extractValue(camera.rotation)
+  const cameraAngle = extractValue(camera.angle)
+  const cameraViewDistance = extractValue(camera.viewDistance)
+
+  // Camera position is already in meters, convert to site map pixel coordinates then back
   const cameraPosMeters = {
-    x: (camera.x - 60) / scale, // Remove offset and convert to meters
-    y: (camera.y - 60) / scale,
-    z: camera.height,
+    x: cameraX, // Already in meters
+    y: cameraY,
+    z: cameraHeight,
   }
 
   // Normalize image coordinates to [-1, 1] range
@@ -108,8 +117,8 @@ export function imageToWorldCoordinates(
   const normalizedY = (imagePoint.y - intrinsics.principalPointY) / intrinsics.focalLengthPixels
 
   // Camera angles in radians
-  const azimuthRad = degToRad(camera.rotation)
-  const elevationRad = degToRad(camera.angle)
+  const azimuthRad = degToRad(cameraRotation)
+  const elevationRad = degToRad(cameraAngle)
 
   // Create ray direction in camera space
   // X-right, Y-down, Z-forward (camera convention)
@@ -149,13 +158,13 @@ export function imageToWorldCoordinates(
     // t = -camera.z / ray.z
     if (Math.abs(rayWorld.z) < 0.001) {
       // Ray is parallel to ground, use default distance
-      distance = camera.viewDistance / scale
+      distance = cameraViewDistance
     } else {
       distance = -cameraPosMeters.z / rayWorld.z
     }
   } else {
     // Use a fixed distance based on camera view distance
-    distance = camera.viewDistance / scale
+    distance = cameraViewDistance
   }
 
   // Ensure distance is positive and reasonable
@@ -195,9 +204,12 @@ export function detectionToWorldCoordinates(
   // Use bottom-center of bounding box for better ground plane estimation
   const imagePoint = getBBoxBottomCenter(detection.bbox)
 
+  // Extract FOV from UnitValue wrapper
+  const cameraFov = extractValue(camera.fov)
+
   // Calculate camera intrinsics
   const intrinsics = calculateCameraIntrinsics(
-    camera.fov,
+    cameraFov,
     1920, // Assume 1080p camera
     1080
   )
@@ -259,6 +271,153 @@ export function simpleImageToWorldApproximation(
 }
 
 /**
+ * Check if a world point is within the camera's field of view cone
+ *
+ * @param worldPoint - Point in world coordinates (meters)
+ * @param camera - Camera placement
+ * @returns True if point is within FOV, false otherwise
+ */
+export function isPointInCameraFOV(
+  worldPoint: Point2D,
+  camera: CameraPlacement
+): boolean {
+  // Extract camera parameters
+  const cameraX = extractValue(camera.position.x)
+  const cameraY = extractValue(camera.position.y)
+  const cameraRotation = extractValue(camera.rotation)
+  const cameraFov = extractValue(camera.fov)
+  const cameraViewDistance = extractValue(camera.viewDistance)
+
+  // Vector from camera to point
+  const dx = worldPoint.x - cameraX
+  const dy = worldPoint.y - cameraY
+  const distance = Math.sqrt(dx * dx + dy * dy)
+
+  // Check distance bounds (must be within view distance)
+  if (distance < 0.1 || distance > cameraViewDistance) {
+    return false
+  }
+
+  // Calculate angle from camera to point
+  // atan2 returns angle from positive X axis, we need angle from North (+Y)
+  const angleToPoint = Math.atan2(dx, dy) * (180 / Math.PI)
+  // Normalize to 0-360
+  const normalizedAngle = ((angleToPoint % 360) + 360) % 360
+
+  // Camera rotation is already 0-360 (0 = North)
+  const cameraAngle = ((cameraRotation % 360) + 360) % 360
+
+  // Calculate angular difference
+  let angleDiff = normalizedAngle - cameraAngle
+  // Normalize to -180 to 180
+  if (angleDiff > 180) angleDiff -= 360
+  if (angleDiff < -180) angleDiff += 360
+
+  // Check if within half FOV on each side
+  const halfFov = cameraFov / 2
+  return Math.abs(angleDiff) <= halfFov
+}
+
+/**
+ * Check if a detection's projected world position is valid within camera FOV
+ *
+ * @param detection - Detection from camera
+ * @param camera - Camera placement
+ * @param options - Transformation options
+ * @returns Object with world coordinates and validity flag
+ */
+export function detectionToWorldCoordinatesWithValidation(
+  detection: Detection,
+  camera: CameraPlacement,
+  options: TransformOptions
+): { point: Point2D; isValid: boolean; reason?: string; debug?: any } {
+  // First transform to world coordinates
+  const worldPixels = detectionToWorldCoordinates(detection, camera, options)
+
+  // Convert back to meters for FOV check
+  const worldMeters = {
+    x: (worldPixels.x - 60) / options.scale,
+    y: (worldPixels.y - 60) / options.scale,
+  }
+
+  // Calculate camera parameters for debugging
+  const cameraX = extractValue(camera.position.x)
+  const cameraY = extractValue(camera.position.y)
+  const dx = worldMeters.x - cameraX
+  const dy = worldMeters.y - cameraY
+  const distance = Math.sqrt(dx * dx + dy * dy)
+
+  // Calculate angle to point for debugging
+  const angleToPoint = Math.atan2(dx, dy) * (180 / Math.PI)
+  const cameraRotation = extractValue(camera.rotation)
+  const cameraFov = extractValue(camera.fov)
+  const viewDistance = extractValue(camera.viewDistance)
+
+  // Normalize angle difference to -180 to 180
+  let angleDiff = angleToPoint - cameraRotation
+  while (angleDiff > 180) angleDiff -= 360
+  while (angleDiff < -180) angleDiff += 360
+
+  const debugInfo = {
+    worldMeters,
+    distance: distance.toFixed(2),
+    angleToPoint: angleToPoint.toFixed(1),
+    cameraRotation: cameraRotation.toFixed(1),
+    angleDiff: angleDiff.toFixed(1),
+    halfFov: (cameraFov / 2).toFixed(1),
+    viewDistance: viewDistance.toFixed(1)
+  }
+
+  // Validate within FOV
+  const isInFOV = isPointInCameraFOV(worldMeters, camera)
+  if (!isInFOV) {
+    console.log('[FOV-REJECT]', detection.cameraId, {
+      reason: 'outside_fov',
+      ...debugInfo,
+      evaluation: {
+        distanceCheck: distance >= 0.1 && distance <= viewDistance ? 'PASS' : 'FAIL',
+        angleCheck: Math.abs(angleDiff) <= cameraFov / 2 ? 'PASS' : 'FAIL'
+      }
+    })
+
+    return {
+      point: worldPixels,
+      isValid: false,
+      reason: 'outside_fov',
+      debug: debugInfo
+    }
+  }
+
+  // Check for reasonable bounds (not too close)
+  if (distance < 0.5) {
+    console.log('[FOV-REJECT]', detection.cameraId, {
+      reason: 'too_close',
+      distance: distance.toFixed(2),
+      threshold: 0.5
+    })
+
+    return {
+      point: worldPixels,
+      isValid: false,
+      reason: 'too_close',
+      debug: debugInfo
+    }
+  }
+
+  console.log('[FOV-ACCEPT]', detection.cameraId, {
+    worldMeters: { x: worldMeters.x.toFixed(2), y: worldMeters.y.toFixed(2) },
+    distance: distance.toFixed(2),
+    angleDiff: angleDiff.toFixed(1)
+  })
+
+  return {
+    point: worldPixels,
+    isValid: true,
+    debug: debugInfo
+  }
+}
+
+/**
  * Batch transform multiple detections
  */
 export function transformDetections(
@@ -267,4 +426,18 @@ export function transformDetections(
   options: TransformOptions
 ): Point2D[] {
   return detections.map(det => detectionToWorldCoordinates(det, camera, options))
+}
+
+/**
+ * Batch transform with validation - only returns valid projections
+ */
+export function transformDetectionsWithValidation(
+  detections: Detection[],
+  camera: CameraPlacement,
+  options: TransformOptions
+): Array<{ detection: Detection; point: Point2D; isValid: boolean; reason?: string }> {
+  return detections.map(det => ({
+    detection: det,
+    ...detectionToWorldCoordinatesWithValidation(det, camera, options),
+  }))
 }

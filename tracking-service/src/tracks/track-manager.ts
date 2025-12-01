@@ -1,0 +1,477 @@
+/**
+ * Track Manager - Cross-camera person tracking
+ *
+ * This class manages global track IDs that persist as people move between cameras.
+ * It correlates detections from multiple cameras using spatial proximity and
+ * merges overlapping FOV detections into single positions.
+ *
+ * Converted from Pinia store to pure TypeScript class for backend use.
+ */
+
+import type {
+  GlobalTrack,
+  GlobalTrackJSON,
+  CameraDetection,
+  TrackingConfig,
+  TrailPosition,
+  CameraTrackAssociation,
+} from '../types.js'
+import { DEFAULT_TRACKING_CONFIG } from '../types.js'
+import { calculateDistance, predictPosition, mergeWorldPositions } from '../correlation/track-matcher.js'
+
+// Color palette for global tracks (12 distinct colors)
+const TRACK_COLORS = [
+  '#10b981', // emerald
+  '#3b82f6', // blue
+  '#ef4444', // red
+  '#f59e0b', // amber
+  '#8b5cf6', // purple
+  '#06b6d4', // cyan
+  '#ec4899', // pink
+  '#f97316', // orange
+  '#84cc16', // lime
+  '#14b8a6', // teal
+  '#6366f1', // indigo
+  '#f43f5e', // rose
+]
+
+/**
+ * Convert GlobalTrack to JSON-serializable format
+ */
+export function trackToJSON(track: GlobalTrack): GlobalTrackJSON {
+  const associations: Record<string, CameraTrackAssociation> = {}
+  track.cameraAssociations.forEach((value, key) => {
+    associations[key] = value
+  })
+
+  return {
+    globalTrackId: track.globalTrackId,
+    cameraAssociations: associations,
+    currentPosition: track.currentPosition,
+    trail: track.trail,
+    color: track.color,
+    lastSeen: track.lastSeen,
+    isActive: track.isActive,
+    isConfirmed: track.isConfirmed,
+    detectionCount: track.detectionCount,
+    confidence: track.confidence,
+  }
+}
+
+export interface TrackManagerOptions {
+  config?: Partial<TrackingConfig>
+  clock?: () => number
+  idGenerator?: () => string
+}
+
+/**
+ * TrackManager - Pure TypeScript class for managing global tracks
+ */
+export class TrackManager {
+  private tracks: Map<string, GlobalTrack> = new Map()
+  private nextTrackId: number = 1
+  private usedColors: Set<string> = new Set()
+  private config: TrackingConfig
+  private clock: () => number
+  private idGenerator: () => string
+
+  // Event callbacks for external integration (e.g., WebSocket broadcasting)
+  onTrackCreated?: (track: GlobalTrack) => void
+  onTrackUpdated?: (track: GlobalTrack) => void
+  onTrackExpired?: (track: GlobalTrack) => void
+
+  constructor(options: TrackManagerOptions = {}) {
+    this.config = { ...DEFAULT_TRACKING_CONFIG, ...options.config }
+    this.clock = options.clock ?? (() => Date.now())
+    this.idGenerator = options.idGenerator ?? (() => `global-${this.nextTrackId++}`)
+  }
+
+  // ============================================================================
+  // Getters
+  // ============================================================================
+
+  /**
+   * Get confirmed active tracks (recommended for display)
+   */
+  getActiveTracks(): GlobalTrack[] {
+    return Array.from(this.tracks.values()).filter(
+      track => track.isActive && track.isConfirmed
+    )
+  }
+
+  /**
+   * Get all active tracks including unconfirmed (for debugging)
+   */
+  getAllActiveTracks(): GlobalTrack[] {
+    return Array.from(this.tracks.values()).filter(track => track.isActive)
+  }
+
+  /**
+   * Get all tracks (including inactive)
+   */
+  getAllTracks(): GlobalTrack[] {
+    return Array.from(this.tracks.values())
+  }
+
+  /**
+   * Get a specific track by ID
+   */
+  getTrackById(globalTrackId: string): GlobalTrack | undefined {
+    return this.tracks.get(globalTrackId)
+  }
+
+  /**
+   * Get count of confirmed active tracks
+   */
+  getActiveTrackCount(): number {
+    return this.getActiveTracks().length
+  }
+
+  /**
+   * Get count of pending (unconfirmed) tracks
+   */
+  getPendingTrackCount(): number {
+    return this.getAllActiveTracks().length - this.getActiveTracks().length
+  }
+
+  /**
+   * Get current configuration
+   */
+  getConfig(): TrackingConfig {
+    return { ...this.config }
+  }
+
+  /**
+   * Get trail for a specific track
+   */
+  getTrailForTrack(globalTrackId: string): TrailPosition[] {
+    const track = this.tracks.get(globalTrackId)
+    return track?.trail || []
+  }
+
+  /**
+   * Get camera IDs currently seeing a track
+   */
+  getCamerasForTrack(globalTrackId: string): string[] {
+    const track = this.tracks.get(globalTrackId)
+    if (!track) return []
+
+    const now = this.clock()
+    const activeCameras: string[] = []
+
+    track.cameraAssociations.forEach((assoc, cameraId) => {
+      if (now - assoc.lastSeen < this.config.mergeWindowMs * 5) {
+        activeCameras.push(cameraId)
+      }
+    })
+
+    return activeCameras
+  }
+
+  // ============================================================================
+  // Actions
+  // ============================================================================
+
+  /**
+   * Main entry point - process a new detection
+   */
+  processDetection(
+    cameraId: string,
+    trackId: number,
+    worldX: number,
+    worldY: number,
+    confidence: number
+  ): GlobalTrack {
+    const now = this.clock()
+    const detection: CameraDetection = {
+      cameraId,
+      trackId,
+      worldX,
+      worldY,
+      confidence,
+      timestamp: now,
+    }
+
+    // First check if this camera+trackId is already associated with a global track
+    let existingTrack: GlobalTrack | null = null
+    for (const track of this.tracks.values()) {
+      if (!track.isActive) continue
+      const assoc = track.cameraAssociations.get(cameraId)
+      if (assoc && assoc.trackIds.includes(trackId)) {
+        existingTrack = track
+        break
+      }
+    }
+
+    if (existingTrack) {
+      if (this.associateWithTrack(existingTrack, detection)) {
+        this.processPendingMerge(existingTrack, now)
+        this.onTrackUpdated?.(existingTrack)
+        return existingTrack
+      }
+    }
+
+    // Look for nearby track to correlate with
+    const nearbyTrack = this.findNearbyTrack(worldX, worldY, cameraId, trackId)
+
+    if (nearbyTrack) {
+      if (this.associateWithTrack(nearbyTrack, detection)) {
+        this.processPendingMerge(nearbyTrack, now)
+        this.onTrackUpdated?.(nearbyTrack)
+        return nearbyTrack
+      }
+    }
+
+    // No match found or velocity check failed, create new global track
+    const newTrack = this.createGlobalTrack(detection)
+    this.onTrackCreated?.(newTrack)
+    return newTrack
+  }
+
+  /**
+   * Cleanup expired tracks
+   */
+  cleanupExpiredTracks(): void {
+    const now = this.clock()
+    const maxTracks = 200
+
+    for (const [trackId, track] of this.tracks.entries()) {
+      if (now - track.lastSeen > this.config.trackExpiryMs) {
+        if (track.isActive) {
+          track.isActive = false
+          this.releaseColor(track.color)
+          this.onTrackExpired?.(track)
+        }
+
+        // Remove completely after double expiry time
+        if (now - track.lastSeen > this.config.trackExpiryMs * 2) {
+          this.tracks.delete(trackId)
+        }
+      }
+
+      if (!track.isActive) {
+        track.pendingDetections = []
+      }
+    }
+
+    // Emergency cleanup if too many tracks accumulated
+    if (this.tracks.size > maxTracks) {
+      const sortedTracks = Array.from(this.tracks.entries())
+        .sort((a, b) => a[1].lastSeen - b[1].lastSeen)
+
+      const toRemove = sortedTracks
+        .filter(([, t]) => !t.isActive)
+        .slice(0, this.tracks.size - maxTracks)
+
+      for (const [trackId, track] of toRemove) {
+        this.releaseColor(track.color)
+        this.tracks.delete(trackId)
+      }
+    }
+  }
+
+  /**
+   * Clear all tracks
+   */
+  clearAllTracks(): void {
+    this.tracks.clear()
+    this.usedColors.clear()
+    this.nextTrackId = 1
+  }
+
+  /**
+   * Update tracking configuration
+   */
+  updateConfig(updates: Partial<TrackingConfig>): void {
+    this.config = { ...this.config, ...updates }
+  }
+
+  /**
+   * Reset configuration to defaults
+   */
+  resetConfig(): void {
+    this.config = { ...DEFAULT_TRACKING_CONFIG }
+  }
+
+  // ============================================================================
+  // Internal Methods
+  // ============================================================================
+
+  private assignColor(): string {
+    for (const color of TRACK_COLORS) {
+      if (!this.usedColors.has(color)) {
+        this.usedColors.add(color)
+        return color
+      }
+    }
+    const color = TRACK_COLORS[this.nextTrackId % TRACK_COLORS.length]
+    return color
+  }
+
+  private releaseColor(color: string): void {
+    this.usedColors.delete(color)
+  }
+
+  /**
+   * Find a nearby active track within correlation distance
+   */
+  findNearbyTrack(
+    worldX: number,
+    worldY: number,
+    excludeCameraId?: string,
+    excludeTrackId?: number
+  ): GlobalTrack | null {
+    let bestMatch: GlobalTrack | null = null
+    let bestDistance = this.config.correlationDistanceM
+    const now = this.clock()
+
+    for (const track of this.tracks.values()) {
+      if (!track.isActive) continue
+
+      // Check if this track is already associated with this camera+trackId
+      if (excludeCameraId && excludeTrackId !== undefined) {
+        const assoc = track.cameraAssociations.get(excludeCameraId)
+        if (assoc && assoc.trackIds.includes(excludeTrackId)) {
+          return track
+        }
+      }
+
+      const timeSinceUpdate = now - track.lastSeen
+
+      // Try to predict position for fast-moving targets
+      let predictedPosition = track.currentPosition
+      if (track.trail.length >= 2 && timeSinceUpdate > 50) {
+        const predicted = predictPosition(track.trail, timeSinceUpdate)
+        if (predicted) {
+          predictedPosition = predicted
+        }
+      }
+
+      const distanceToCurrent = calculateDistance(
+        { x: worldX, y: worldY },
+        track.currentPosition
+      )
+
+      const distanceToPredicted = calculateDistance(
+        { x: worldX, y: worldY },
+        predictedPosition
+      )
+
+      const distance = Math.min(distanceToCurrent, distanceToPredicted)
+
+      const threshold = distanceToPredicted < distanceToCurrent
+        ? this.config.correlationDistanceM * 1.5
+        : this.config.correlationDistanceM
+
+      if (distance < threshold && distance < bestDistance) {
+        bestDistance = distance
+        bestMatch = track
+      }
+    }
+
+    return bestMatch
+  }
+
+  private createGlobalTrack(detection: CameraDetection): GlobalTrack {
+    const globalTrackId = this.idGenerator()
+    const color = this.assignColor()
+
+    const track: GlobalTrack = {
+      globalTrackId,
+      cameraAssociations: new Map(),
+      currentPosition: { x: detection.worldX, y: detection.worldY },
+      trail: [{ x: detection.worldX, y: detection.worldY, timestamp: detection.timestamp }],
+      color,
+      lastSeen: detection.timestamp,
+      isActive: true,
+      isConfirmed: false,
+      detectionCount: 1,
+      confidence: detection.confidence,
+      pendingDetections: [detection],
+    }
+
+    track.cameraAssociations.set(detection.cameraId, {
+      cameraId: detection.cameraId,
+      trackIds: [detection.trackId],
+      lastSeen: detection.timestamp,
+    })
+
+    this.tracks.set(globalTrackId, track)
+    return track
+  }
+
+  private associateWithTrack(track: GlobalTrack, detection: CameraDetection): boolean {
+    // Velocity sanity check
+    const timeDelta = (detection.timestamp - track.lastSeen) / 1000
+    if (timeDelta > 0.01) {
+      const distance = calculateDistance(
+        { x: detection.worldX, y: detection.worldY },
+        track.currentPosition
+      )
+      const velocity = distance / timeDelta
+      if (velocity > this.config.maxVelocityMs) {
+        return false
+      }
+    }
+
+    // Update or add camera association
+    let assoc = track.cameraAssociations.get(detection.cameraId)
+    if (assoc) {
+      if (!assoc.trackIds.includes(detection.trackId)) {
+        assoc.trackIds.push(detection.trackId)
+      }
+      assoc.lastSeen = detection.timestamp
+    } else {
+      track.cameraAssociations.set(detection.cameraId, {
+        cameraId: detection.cameraId,
+        trackIds: [detection.trackId],
+        lastSeen: detection.timestamp,
+      })
+    }
+
+    track.detectionCount++
+    if (!track.isConfirmed && track.detectionCount >= this.config.minDetectionsToConfirm) {
+      track.isConfirmed = true
+    }
+
+    track.pendingDetections.push(detection)
+    if (track.pendingDetections.length > 50) {
+      track.pendingDetections = track.pendingDetections.slice(-20)
+    }
+    track.lastSeen = detection.timestamp
+    return true
+  }
+
+  private processPendingMerge(track: GlobalTrack, now: number): void {
+    const recentDetections = track.pendingDetections.filter(
+      det => now - det.timestamp < this.config.mergeWindowMs
+    )
+
+    if (recentDetections.length === 0) {
+      track.pendingDetections = []
+      return
+    }
+
+    const merged = mergeWorldPositions(recentDetections)
+
+    const lastTrailPos = track.trail[0]
+    const movedDistance = lastTrailPos
+      ? calculateDistance(merged.position, lastTrailPos)
+      : Infinity
+
+    if (movedDistance > 0.1 || track.trail.length === 0) {
+      track.trail.unshift({ x: merged.position.x, y: merged.position.y, timestamp: now })
+
+      if (track.trail.length > this.config.maxTrailLength) {
+        track.trail = track.trail.slice(0, this.config.maxTrailLength)
+      }
+    }
+
+    track.currentPosition = merged.position
+    track.confidence = merged.confidence
+
+    track.pendingDetections = recentDetections.filter(
+      det => now - det.timestamp < this.config.mergeWindowMs / 2
+    )
+  }
+}

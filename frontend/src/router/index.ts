@@ -15,14 +15,6 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
-    path: '/cameras/webrtc-detection',
-    name: 'WebRTCDetectionView',
-    component: () => import('@/views/camera-views/WebRTCDetectionView.vue'),
-    meta: {
-      title: 'WebRTC Detection',
-    },
-  },
-  {
     path: '/cameras/snapshot',
     name: 'SnapshotView',
     component: () => import('@/views/camera-views/SnapshotView.vue'),
@@ -52,6 +44,14 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/camera-views/CameraManagement.vue'),
     meta: {
       title: 'Manage Cameras',
+    },
+  },
+  {
+    path: '/site-tracking',
+    name: 'SiteTracking',
+    component: () => import('@/views/site-tracking/SiteTrackingView.vue'),
+    meta: {
+      title: 'Site Tracking',
     },
   },
   // Site Maps - New unified approach

@@ -1,11 +1,49 @@
 /**
  * Camera API Service
  * Handles all camera-related API calls with mock mode support
+ *
+ * NOTE: In mock mode, camera data comes from the JSON config file
+ *       (/public/sitemap-rectangular-room.json) which is the single source of truth.
  */
 
 import { httpClient, type HttpClient } from '../client/httpClient'
 import type { Camera, PTZCommand, StreamRequest, StreamResponse } from '@/types/generated'
-import { mockCameras, getCameraById, getCamerasByStatus } from '@/mocks/data'
+import { loadSiteMapConfig, type SiteMapConfigCamera } from '@/utils/siteMapConfigLoader'
+
+// In-memory cache for mock mode operations
+let mockCamerasCache: Camera[] | null = null
+
+/**
+ * Transform config camera to Camera type (for mock mode)
+ */
+function transformConfigToCamera(configCamera: SiteMapConfigCamera): Camera {
+  return {
+    id: configCamera.id,
+    name: configCamera.name,
+    rtspUrl: configCamera.rtspUrl,
+    status: 'online',
+    model: configCamera.model,
+    ipAddress: configCamera.ipAddress,
+    position: {
+      x: configCamera.position.x,
+      y: configCamera.position.y,
+      z: configCamera.height,
+      azimuth: configCamera.rotation
+    }
+  }
+}
+
+/**
+ * Load cameras from config (for mock mode)
+ */
+async function loadMockCameras(): Promise<Camera[]> {
+  if (mockCamerasCache) {
+    return mockCamerasCache
+  }
+  const config = await loadSiteMapConfig()
+  mockCamerasCache = config.cameras.map(transformConfigToCamera)
+  return mockCamerasCache
+}
 
 export class CameraService {
   constructor(private client: HttpClient = httpClient) {}
@@ -17,7 +55,8 @@ export class CameraService {
     if (this.client.isMockMode()) {
       // Simulate network delay
       await this.delay(300)
-      return [...mockCameras]
+      const cameras = await loadMockCameras()
+      return [...cameras]
     }
 
     return this.client.get<Camera[]>('/cameras')
@@ -29,7 +68,8 @@ export class CameraService {
   async getCamera(id: string): Promise<Camera> {
     if (this.client.isMockMode()) {
       await this.delay(200)
-      const camera = getCameraById(id)
+      const cameras = await loadMockCameras()
+      const camera = cameras.find(c => c.id === id)
       if (!camera) {
         throw new Error(`Camera not found: ${id}`)
       }
@@ -45,7 +85,8 @@ export class CameraService {
   async getCamerasByStatus(status: Camera['status']): Promise<Camera[]> {
     if (this.client.isMockMode()) {
       await this.delay(200)
-      return getCamerasByStatus(status)
+      const cameras = await loadMockCameras()
+      return cameras.filter(c => c.status === status)
     }
 
     return this.client.get<Camera[]>('/cameras', {
@@ -59,15 +100,16 @@ export class CameraService {
   async updateCamera(id: string, data: Partial<Camera>): Promise<Camera> {
     if (this.client.isMockMode()) {
       await this.delay(300)
-      const camera = getCameraById(id)
+      const cameras = await loadMockCameras()
+      const camera = cameras.find(c => c.id === id)
       if (!camera) {
         throw new Error(`Camera not found: ${id}`)
       }
       const updated = { ...camera, ...data }
-      // In mock mode, update the mock data directly
-      const index = mockCameras.findIndex((c) => c.id === id)
-      if (index !== -1) {
-        Object.assign(mockCameras[index], data)
+      // In mock mode, update the cache
+      const index = cameras.findIndex((c) => c.id === id)
+      if (index !== -1 && mockCamerasCache) {
+        Object.assign(mockCamerasCache[index], data)
       }
       return updated
     }
@@ -81,9 +123,11 @@ export class CameraService {
   async deleteCamera(id: string): Promise<void> {
     if (this.client.isMockMode()) {
       await this.delay(200)
-      const index = mockCameras.findIndex((c) => c.id === id)
-      if (index !== -1) {
-        mockCameras.splice(index, 1)
+      if (mockCamerasCache) {
+        const index = mockCamerasCache.findIndex((c) => c.id === id)
+        if (index !== -1) {
+          mockCamerasCache.splice(index, 1)
+        }
       }
       return
     }
@@ -97,11 +141,14 @@ export class CameraService {
   async createCamera(data: Omit<Camera, 'id'>): Promise<Camera> {
     if (this.client.isMockMode()) {
       await this.delay(300)
+      const cameras = await loadMockCameras()
       const newCamera: Camera = {
         ...data,
-        id: `camera${mockCameras.length + 1}`,
+        id: `camera${cameras.length + 1}`,
       }
-      mockCameras.push(newCamera)
+      if (mockCamerasCache) {
+        mockCamerasCache.push(newCamera)
+      }
       return newCamera
     }
 
@@ -112,7 +159,7 @@ export class CameraService {
    * Send PTZ command
    */
   async sendPTZCommand(cameraId: string, command: PTZCommand): Promise<void> {
-    if (this.client.is()) {
+    if (this.client.isMockMode()) {
       await this.delay(100)
       console.log(`Mock PTZ command for ${cameraId}:`, command)
       return

@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { UnitValue } from '../utils/siteMapConversion'
 import { RENDER_SCALE, createMeterUnit, createDegreeUnit } from '../utils/siteMapConversion'
+import { loadAuditoriumCalibration } from '../utils/calibrationLoader'
+import { loadSiteMapConfig, type SiteMapConfig } from '../utils/siteMapConfigLoader'
 
 export interface CameraPlacement {
   cameraId: string
@@ -46,106 +48,151 @@ export interface SiteMap {
   updatedAt: Date
 }
 
+/**
+ * Transform loaded JSON config into a SiteMap object
+ */
+function transformConfigToSiteMap(config: SiteMapConfig): SiteMap {
+  return {
+    id: 'config-sitemap-001',
+    name: 'Rectangular Room',
+    description: `${config.dimensions.width}m × ${config.dimensions.height}m room with ${config.cameras.length} cameras`,
+    width: createMeterUnit(config.dimensions.width),
+    height: createMeterUnit(config.dimensions.height),
+    renderScale: RENDER_SCALE,
+    cameras: config.cameras.map((cam) => ({
+      cameraId: cam.id,
+      position: {
+        x: createMeterUnit(cam.position.x),
+        y: createMeterUnit(cam.position.y)
+      },
+      rotation: createDegreeUnit(cam.rotation),
+      angle: createDegreeUnit(0),
+      height: createMeterUnit(cam.height),
+      fov: createDegreeUnit(cam.fieldOfView),
+      viewDistance: createMeterUnit(cam.viewDistance),
+      autoCalculateDistance: false,
+      color: cam.color || 'cyan-500'
+    })),
+    walls: config.walls.map((wall) => ({
+      id: wall.id,
+      start: {
+        x: createMeterUnit(wall.start.x),
+        y: createMeterUnit(wall.start.y)
+      },
+      end: {
+        x: createMeterUnit(wall.end.x),
+        y: createMeterUnit(wall.end.y)
+      },
+      type: wall.type || 'external'
+    })),
+    createdAt: new Date(),
+    updatedAt: new Date()
+  }
+}
+
+/**
+ * Create site map from JSON config file (single source of truth)
+ */
+async function createSiteMapFromConfig(): Promise<SiteMap> {
+  const config = await loadSiteMapConfig()
+  return transformConfigToSiteMap(config)
+}
+
+/**
+ * Create Auditorium site map from calibration data
+ */
+async function createAuditoriumSiteMap(): Promise<SiteMap> {
+  const calibrations = await loadAuditoriumCalibration()
+
+  // Determine scene bounds from camera positions
+  const xPositions = calibrations.map(c => c.position.x)
+  const yPositions = calibrations.map(c => c.position.y)
+  const minX = Math.min(...xPositions)
+  const maxX = Math.max(...xPositions)
+  const minY = Math.min(...yPositions)
+  const maxY = Math.max(...yPositions)
+
+  // Add padding around cameras
+  const padding = 5 // meters
+  const width = Math.max(maxX - minX + padding * 2, 25)
+  const height = Math.max(maxY - minY + padding * 2, 30)
+
+  console.log('[SiteMapStore] Auditorium scene bounds:', {
+    x: `${minX.toFixed(1)}m to ${maxX.toFixed(1)}m`,
+    y: `${minY.toFixed(1)}m to ${maxY.toFixed(1)}m`,
+    mapSize: `${width.toFixed(1)}m × ${height.toFixed(1)}m`
+  })
+
+  return {
+    id: 'auditorium-001',
+    name: 'Auditorium (Calibrated)',
+    description: 'UCLA VCLA multi-view tracking dataset with accurate camera calibration from scene_metadata.xml',
+    width: createMeterUnit(width),
+    height: createMeterUnit(height),
+    renderScale: RENDER_SCALE,
+    cameras: calibrations.map((cal, idx) => ({
+      cameraId: cal.cameraId,
+      position: {
+        x: createMeterUnit(cal.position.x),
+        y: createMeterUnit(cal.position.y)
+      },
+      rotation: createDegreeUnit(cal.azimuth),
+      angle: createDegreeUnit(cal.elevation),
+      height: createMeterUnit(cal.position.z),
+      fov: createDegreeUnit(60), // Standard for dataset
+      viewDistance: createMeterUnit(30), // Reasonable for auditorium
+      autoCalculateDistance: false,
+      color: idx === 0 ? 'cyan-500' : idx === 1 ? 'purple-500' : idx === 2 ? 'green-500' : 'orange-500',
+      notes: `${cal.viewId} (Calibrated from XML)`
+    })),
+    walls: [], // No wall data initially
+    createdAt: new Date(),
+    updatedAt: new Date()
+  }
+}
+
 export const useSiteMapStore = defineStore('siteMaps', () => {
   console.log('[SiteMapStore] Initializing store')
 
-  // Initialize with rectangular room mock data
-  const siteMaps = ref<SiteMap[]>([
-    {
-      id: 'rectangular-room-001',
-      name: 'Rectangular Room',
-      description: 'Simple 18m × 12m rectangular room with two cameras',
-      width: createMeterUnit(18),
-      height: createMeterUnit(12),
-      renderScale: RENDER_SCALE,
-      cameras: [
-        {
-          cameraId: 'camera1',
-          position: {
-            x: createMeterUnit(1.3),
-            y: createMeterUnit(10.9)
-          },
-          rotation: createDegreeUnit(321),
-          angle: createDegreeUnit(0),
-          height: createMeterUnit(1.5),
-          fov: createDegreeUnit(60),
-          viewDistance: createMeterUnit(100),
-          autoCalculateDistance: false,
-          color: 'cyan-500',
-          notes: 'Front-left corner camera'
-        },
-        {
-          cameraId: 'camera2',
-          position: {
-            x: createMeterUnit(15.75),
-            y: createMeterUnit(10.9)
-          },
-          rotation: createDegreeUnit(253),
-          angle: createDegreeUnit(0),
-          height: createMeterUnit(1.5),
-          fov: createDegreeUnit(60),
-          viewDistance: createMeterUnit(100),
-          autoCalculateDistance: false,
-          color: 'purple-500',
-          notes: 'Front-right corner camera'
-        }
-      ],
-      walls: [
-        {
-          id: 'wall-top',
-          start: {
-            x: createMeterUnit(0),
-            y: createMeterUnit(12)
-          },
-          end: {
-            x: createMeterUnit(18),
-            y: createMeterUnit(12)
-          },
-          type: 'external'
-        },
-        {
-          id: 'wall-right',
-          start: {
-            x: createMeterUnit(18),
-            y: createMeterUnit(12)
-          },
-          end: {
-            x: createMeterUnit(18),
-            y: createMeterUnit(0)
-          },
-          type: 'external'
-        },
-        {
-          id: 'wall-bottom',
-          start: {
-            x: createMeterUnit(18),
-            y: createMeterUnit(0)
-          },
-          end: {
-            x: createMeterUnit(0),
-            y: createMeterUnit(0)
-          },
-          type: 'external'
-        },
-        {
-          id: 'wall-left',
-          start: {
-            x: createMeterUnit(0),
-            y: createMeterUnit(0)
-          },
-          end: {
-            x: createMeterUnit(0),
-            y: createMeterUnit(12)
-          },
-          type: 'external'
-        }
-      ],
-      createdAt: new Date(),
-      updatedAt: new Date()
-    }
-  ])
+  // State
+  const siteMaps = ref<SiteMap[]>([])
+  const activeSiteMapId = ref<string | null>(null)
+  const isLoading = ref(true)
+  const loadError = ref<string | null>(null)
 
-  const activeSiteMapId = ref<string | null>('rectangular-room-001')
+  // Initialize site maps asynchronously
+  async function initializeSiteMaps() {
+    console.log('[SiteMapStore] Loading site maps...')
+    isLoading.value = true
+    loadError.value = null
+
+    try {
+      // Try to load from JSON config first (single source of truth)
+      const configMap = await createSiteMapFromConfig()
+      siteMaps.value = [configMap]
+      activeSiteMapId.value = configMap.id
+      console.log('[SiteMapStore] Successfully loaded site map from JSON config')
+    } catch (configError) {
+      console.warn('[SiteMapStore] Failed to load JSON config, trying Auditorium calibration:', configError)
+
+      try {
+        // Fallback to Auditorium calibration
+        const auditoriumMap = await createAuditoriumSiteMap()
+        siteMaps.value = [auditoriumMap]
+        activeSiteMapId.value = auditoriumMap.id
+        console.log('[SiteMapStore] Successfully loaded Auditorium site map')
+      } catch (auditoriumError) {
+        // Both failed - report error
+        console.error('[SiteMapStore] Failed to load any site map configuration:', auditoriumError)
+        loadError.value = 'Failed to load site map configuration'
+      }
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  // Call initialization immediately
+  initializeSiteMaps()
   console.log('[SiteMapStore] Initial activeSiteMapId:', activeSiteMapId.value)
   console.log('[SiteMapStore] Initial siteMaps count:', siteMaps.value.length)
 
@@ -351,9 +398,14 @@ export const useSiteMapStore = defineStore('siteMaps', () => {
   }
 
   return {
+    // State
     siteMaps,
     activeSiteMapId,
     activeSiteMap,
+    isLoading,
+    loadError,
+    // Actions
+    initializeSiteMaps,
     setActiveSiteMap,
     addSiteMap,
     updateSiteMap,

@@ -1,7 +1,11 @@
 // Person position tracking store
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import type { Detection } from '../types/generated'
+
+// Cleanup interval ID (module level for singleton behavior)
+let cleanupIntervalId: ReturnType<typeof setInterval> | null = null
+const CLEANUP_INTERVAL_MS = 10000 // Run cleanup every 10 seconds
 
 export interface PersonPosition {
   detectionId: string
@@ -141,6 +145,33 @@ export const usePersonPositionStore = defineStore('personPositions', () => {
       return true
     })
   }
+
+  /**
+   * Start automatic cleanup of expired positions
+   */
+  function startCleanupInterval() {
+    // Clear existing interval to prevent duplicates
+    if (cleanupIntervalId !== null) {
+      clearInterval(cleanupIntervalId)
+    }
+
+    cleanupIntervalId = setInterval(() => {
+      cleanupExpiredPositions()
+    }, CLEANUP_INTERVAL_MS)
+  }
+
+  /**
+   * Stop automatic cleanup
+   */
+  function stopCleanupInterval() {
+    if (cleanupIntervalId !== null) {
+      clearInterval(cleanupIntervalId)
+      cleanupIntervalId = null
+    }
+  }
+
+  // Start cleanup interval when store is created
+  startCleanupInterval()
 
   function clearAllPositions() {
     positions.value = []
