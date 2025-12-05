@@ -248,13 +248,16 @@ const heatmapData = computed<HeatmapCell[]>(() => {
 
 /**
  * Convert world coordinates (meters) to canvas coordinates (pixels)
+ * Accounts for site map origin offset to handle different coordinate systems
  */
 function worldToCanvasX(worldX: number): number {
-  return worldX * props.siteMap.renderScale + 60 // Add offset
+  const origin = props.siteMap.origin ?? { x: 0, y: 0 }
+  return (worldX - origin.x) * props.siteMap.renderScale + 60 // Subtract origin, add padding
 }
 
 function worldToCanvasY(worldY: number): number {
-  return worldY * props.siteMap.renderScale + 60 // Add offset
+  const origin = props.siteMap.origin ?? { x: 0, y: 0 }
+  return (worldY - origin.y) * props.siteMap.renderScale + 60 // Subtract origin, add padding
 }
 
 /**

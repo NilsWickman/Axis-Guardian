@@ -98,6 +98,22 @@ export interface SiteMapCameraConfig {
 }
 
 /**
+ * Lens distortion coefficients (Brown-Conrady model)
+ */
+export interface DistortionCoeffs {
+  /** Radial distortion coefficient 1 */
+  k1: number
+  /** Radial distortion coefficient 2 */
+  k2: number
+  /** Radial distortion coefficient 3 */
+  k3: number
+  /** Tangential distortion coefficient 1 */
+  p1: number
+  /** Tangential distortion coefficient 2 */
+  p2: number
+}
+
+/**
  * Camera calibration matrices (K/R/T) for accurate projection
  * From dataset cam_param.mat file
  */
@@ -112,6 +128,8 @@ export interface CameraCalibration {
   center: [number, number]
   /** Scale factor (usually 1) */
   scale: number
+  /** Optional lens distortion coefficients */
+  distortion?: DistortionCoeffs
 }
 
 // ============================================================================
@@ -173,6 +191,18 @@ export interface TrailPosition {
 }
 
 /**
+ * Kalman filter state for position/velocity estimation
+ */
+export interface KalmanState {
+  /** State vector [[x], [y], [vx], [vy]] */
+  mean: number[][]
+  /** 4x4 covariance matrix */
+  covariance: number[][]
+  /** Last update timestamp in ms */
+  lastTimestamp: number
+}
+
+/**
  * Global track that spans multiple cameras
  */
 export interface GlobalTrack {
@@ -187,6 +217,8 @@ export interface GlobalTrack {
   detectionCount: number
   confidence: number
   pendingDetections: CameraDetection[]
+  /** Kalman filter state for motion estimation */
+  kalmanState?: KalmanState
 }
 
 /**

@@ -21,6 +21,9 @@ export const config = {
   // Site map generation
   siteMapGenerationUrl: import.meta.env.VITE_SITEMAP_URL || 'http://localhost:8091',
 
+  // Tracking service WebSocket
+  trackingServiceWsUrl: import.meta.env.VITE_TRACKING_WS_URL || 'ws://localhost:3010/ws',
+
   // Environment flags
   isDevelopment: import.meta.env.DEV,
   isProduction: import.meta.env.PROD,

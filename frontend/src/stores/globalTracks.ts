@@ -562,6 +562,98 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     }
   }
 
+  // ============================================
+  // Server Sync Methods (for tracking-service WebSocket)
+  // ============================================
+
+  /**
+   * JSON format received from tracking-service
+   */
+  interface GlobalTrackJSON {
+    globalTrackId: string
+    cameraAssociations: Record<string, CameraTrackAssociation>
+    currentPosition: { x: number; y: number }
+    trail: TrailPosition[]
+    color: string
+    lastSeen: number
+    isActive: boolean
+    isConfirmed: boolean
+    detectionCount: number
+    confidence: number
+  }
+
+  /**
+   * Convert server JSON to frontend GlobalTrack (Map conversion)
+   */
+  function convertServerTrack(json: GlobalTrackJSON): GlobalTrack {
+    return {
+      ...json,
+      cameraAssociations: new Map(Object.entries(json.cameraAssociations)),
+      pendingDetections: [], // Server handles merging, no pending needed
+    }
+  }
+
+  /**
+   * Replace all tracks with server-provided snapshot
+   */
+  function setTracksFromServer(serverTracks: unknown[]): void {
+    tracks.value.clear()
+    usedColors.value.clear()
+
+    for (const track of serverTracks as GlobalTrackJSON[]) {
+      const converted = convertServerTrack(track)
+      tracks.value.set(converted.globalTrackId, converted)
+      usedColors.value.add(converted.color)
+    }
+
+    // Update nextTrackId based on highest received ID
+    let maxId = 0
+    for (const trackId of tracks.value.keys()) {
+      const match = trackId.match(/global-(\d+)/)
+      if (match) {
+        maxId = Math.max(maxId, parseInt(match[1], 10))
+      }
+    }
+    nextTrackId.value = maxId + 1
+  }
+
+  /**
+   * Update or insert a single track from server
+   */
+  function upsertTrackFromServer(serverTrack: unknown): void {
+    const json = serverTrack as GlobalTrackJSON
+    const converted = convertServerTrack(json)
+
+    // Check if track exists
+    const existing = tracks.value.get(converted.globalTrackId)
+    if (existing) {
+      // Update existing track
+      existing.currentPosition = converted.currentPosition
+      existing.trail = converted.trail
+      existing.lastSeen = converted.lastSeen
+      existing.isActive = converted.isActive
+      existing.isConfirmed = converted.isConfirmed
+      existing.detectionCount = converted.detectionCount
+      existing.confidence = converted.confidence
+      existing.cameraAssociations = converted.cameraAssociations
+    } else {
+      // Insert new track
+      tracks.value.set(converted.globalTrackId, converted)
+      usedColors.value.add(converted.color)
+    }
+  }
+
+  /**
+   * Remove a track by ID (when server reports expiry)
+   */
+  function removeTrack(trackId: string): void {
+    const track = tracks.value.get(trackId)
+    if (track) {
+      releaseColor(track.color)
+      tracks.value.delete(trackId)
+    }
+  }
+
   return {
     // State
     tracks,
@@ -582,6 +674,10 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     setShowTrails,
     updateConfig,
     resetConfig,
+    // Server sync methods
+    setTracksFromServer,
+    upsertTrackFromServer,
+    removeTrack,
     // For testing/debugging
     findNearbyTrack,
   }

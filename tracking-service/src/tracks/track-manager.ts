@@ -18,6 +18,8 @@ import type {
 } from '../types.js'
 import { DEFAULT_TRACKING_CONFIG } from '../types.js'
 import { calculateDistance, predictPosition, mergeWorldPositions } from '../correlation/track-matcher.js'
+import { KalmanTrackFilter } from '../filters/kalman-track-filter.js'
+import { assignDetectionsToTracks } from '../correlation/hungarian-assignment.js'
 
 // Color palette for global tracks (12 distinct colors)
 const TRACK_COLORS = [
@@ -74,6 +76,7 @@ export class TrackManager {
   private config: TrackingConfig
   private clock: () => number
   private idGenerator: () => string
+  private kalmanFilter: KalmanTrackFilter
 
   // Event callbacks for external integration (e.g., WebSocket broadcasting)
   onTrackCreated?: (track: GlobalTrack) => void
@@ -84,6 +87,9 @@ export class TrackManager {
     this.config = { ...DEFAULT_TRACKING_CONFIG, ...options.config }
     this.clock = options.clock ?? (() => Date.now())
     this.idGenerator = options.idGenerator ?? (() => `global-${this.nextTrackId++}`)
+    // Create a new KalmanTrackFilter instance for each TrackManager
+    // to avoid state cache pollution between tests or different managers
+    this.kalmanFilter = new KalmanTrackFilter()
   }
 
   // ============================================================================
@@ -246,6 +252,7 @@ export class TrackManager {
         // Remove completely after double expiry time
         if (now - track.lastSeen > this.config.trackExpiryMs * 2) {
           this.tracks.delete(trackId)
+          this.kalmanFilter.removeTrackState(trackId)
         }
       }
 
@@ -266,6 +273,7 @@ export class TrackManager {
       for (const [trackId, track] of toRemove) {
         this.releaseColor(track.color)
         this.tracks.delete(trackId)
+        this.kalmanFilter.removeTrackState(trackId)
       }
     }
   }
@@ -277,6 +285,7 @@ export class TrackManager {
     this.tracks.clear()
     this.usedColors.clear()
     this.nextTrackId = 1
+    this.kalmanFilter.clearCache()
   }
 
   /**
@@ -314,6 +323,7 @@ export class TrackManager {
 
   /**
    * Find a nearby active track within correlation distance
+   * Uses Kalman filter prediction for better accuracy
    */
   findNearbyTrack(
     worldX: number,
@@ -338,9 +348,13 @@ export class TrackManager {
 
       const timeSinceUpdate = now - track.lastSeen
 
-      // Try to predict position for fast-moving targets
+      // Use Kalman filter prediction if available, fall back to linear prediction
       let predictedPosition = track.currentPosition
-      if (track.trail.length >= 2 && timeSinceUpdate > 50) {
+      if (track.kalmanState && timeSinceUpdate > 50) {
+        // Use Kalman prediction
+        predictedPosition = this.kalmanFilter.predict(track.kalmanState, timeSinceUpdate)
+      } else if (track.trail.length >= 2 && timeSinceUpdate > 50) {
+        // Fall back to legacy linear prediction
         const predicted = predictPosition(track.trail, timeSinceUpdate)
         if (predicted) {
           predictedPosition = predicted
@@ -359,9 +373,16 @@ export class TrackManager {
 
       const distance = Math.min(distanceToCurrent, distanceToPredicted)
 
-      const threshold = distanceToPredicted < distanceToCurrent
-        ? this.config.correlationDistanceM * 1.5
-        : this.config.correlationDistanceM
+      // Use adaptive gating if Kalman state available
+      let threshold = this.config.correlationDistanceM
+      if (track.kalmanState) {
+        threshold = this.kalmanFilter.getGatingDistance(
+          track.kalmanState,
+          this.config.correlationDistanceM
+        )
+      } else if (distanceToPredicted < distanceToCurrent) {
+        threshold = this.config.correlationDistanceM * 1.5
+      }
 
       if (distance < threshold && distance < bestDistance) {
         bestDistance = distance
@@ -376,6 +397,12 @@ export class TrackManager {
     const globalTrackId = this.idGenerator()
     const color = this.assignColor()
 
+    // Initialize Kalman filter state for this track
+    const kalmanState = this.kalmanFilter.initialize(
+      { x: detection.worldX, y: detection.worldY },
+      detection.timestamp
+    )
+
     const track: GlobalTrack = {
       globalTrackId,
       cameraAssociations: new Map(),
@@ -388,6 +415,7 @@ export class TrackManager {
       detectionCount: 1,
       confidence: detection.confidence,
       pendingDetections: [detection],
+      kalmanState,
     }
 
     track.cameraAssociations.set(detection.cameraId, {
@@ -454,6 +482,19 @@ export class TrackManager {
 
     const merged = mergeWorldPositions(recentDetections)
 
+    // Update Kalman filter state with merged position
+    if (track.kalmanState) {
+      track.kalmanState = this.kalmanFilter.update(
+        track.kalmanState,
+        merged.position,
+        now,
+        track.globalTrackId  // Pass track ID for state caching
+      )
+      // Use Kalman-filtered position for smoother tracking
+      const filteredPosition = this.kalmanFilter.getPosition(track.kalmanState)
+      merged.position = filteredPosition
+    }
+
     const lastTrailPos = track.trail[0]
     const movedDistance = lastTrailPos
       ? calculateDistance(merged.position, lastTrailPos)
@@ -473,5 +514,52 @@ export class TrackManager {
     track.pendingDetections = recentDetections.filter(
       det => now - det.timestamp < this.config.mergeWindowMs / 2
     )
+  }
+
+  // ============================================================================
+  // Batch Processing with Hungarian Algorithm
+  // ============================================================================
+
+  /**
+   * Process a batch of detections using Hungarian algorithm for optimal assignment
+   * This is more efficient for multi-detection frames
+   */
+  processBatchDetections(detections: CameraDetection[]): GlobalTrack[] {
+    if (detections.length === 0) return []
+
+    const now = this.clock()
+    const activeTracks = this.getAllActiveTracks()
+
+    // Use Hungarian algorithm for optimal assignment
+    const { matches, unmatchedDetections } = assignDetectionsToTracks(
+      detections,
+      activeTracks,
+      {
+        maxCost: this.config.correlationDistanceM * 2,
+        useKalmanPrediction: true,
+        associationBonus: 0.5,
+        kalmanFilter: this.kalmanFilter,
+      }
+    )
+
+    const results: GlobalTrack[] = []
+
+    // Process matched pairs
+    for (const { detection, track } of matches) {
+      if (this.associateWithTrack(track, detection)) {
+        this.processPendingMerge(track, now)
+        this.onTrackUpdated?.(track)
+        results.push(track)
+      }
+    }
+
+    // Create new tracks for unmatched detections
+    for (const detection of unmatchedDetections) {
+      const newTrack = this.createGlobalTrack(detection)
+      this.onTrackCreated?.(newTrack)
+      results.push(newTrack)
+    }
+
+    return results
   }
 }

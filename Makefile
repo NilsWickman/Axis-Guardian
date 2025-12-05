@@ -1,4 +1,4 @@
-.PHONY: setup dev help clean check-pnpm check-python kill-ports
+.PHONY: setup dev help clean check-pnpm kill-ports dev-frontend dev-camera dev-tracking
 
 # Colors for output
 CYAN := \033[0;36m
@@ -8,7 +8,7 @@ RED := \033[0;31m
 NC := \033[0m # No Color
 
 # Ports used by development servers
-DEV_PORTS := 5173 9101 9102
+DEV_PORTS := 5173 9101 3010
 
 help: ## Show this help message
 	@echo "$(CYAN)Axis-Guardian Development Makefile$(NC)"
@@ -19,33 +19,28 @@ help: ## Show this help message
 check-pnpm: ## Check if pnpm is installed
 	@command -v pnpm >/dev/null 2>&1 || { echo "$(YELLOW)Warning: pnpm is not installed. Install it with: npm install -g pnpm$(NC)"; exit 1; }
 
-check-python: ## Check if python3 is installed
-	@command -v python3 >/dev/null 2>&1 || { echo "$(YELLOW)Warning: python3 is not installed$(NC)"; exit 1; }
-
-setup: check-pnpm check-python ## Install all dependencies (frontend + Python environments)
+setup: check-pnpm ## Install all dependencies (frontend + camera-emulator + tracking-service)
 	@echo "$(CYAN)Starting setup...$(NC)"
 	@echo ""
 
-	@echo "$(GREEN)[1/2] Installing frontend dependencies...$(NC)"
+	@echo "$(GREEN)[1/3] Installing frontend dependencies...$(NC)"
 	@cd frontend && pnpm install
 	@echo "$(GREEN)✓ Frontend dependencies installed$(NC)"
 	@echo ""
 
-	@echo "$(GREEN)[2/2] Setting up Python environments...$(NC)"
-	@if [ ! -d "camera-emulator/venv" ]; then \
-		echo "  Creating virtual environment for camera-emulator..."; \
-		cd camera-emulator && python3 -m venv venv; \
-	else \
-		echo "  Virtual environment already exists for camera-emulator"; \
-	fi
-	@echo "  Installing Python dependencies for camera-emulator..."
-	@cd camera-emulator && . venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt
+	@echo "$(GREEN)[2/3] Installing camera-emulator dependencies...$(NC)"
+	@cd camera-emulator && pnpm install
 	@echo "$(GREEN)✓ Camera emulator dependencies installed$(NC)"
 	@echo ""
 
-	@echo "$(GREEN)Setup complete! Run 'make dev' to start development servers.$(NC)"
+	@echo "$(GREEN)[3/3] Installing tracking-service dependencies...$(NC)"
+	@cd tracking-service && pnpm install
+	@echo "$(GREEN)✓ Tracking service dependencies installed$(NC)"
+	@echo ""
 
-kill-ports: ## Kill any processes using development ports (5173, 9101, 9102)
+	@echo "$(GREEN)Setup complete! Run 'make dev' to start all development servers.$(NC)"
+
+kill-ports: ## Kill any processes using development ports (5173, 9101, 3010)
 	@echo "$(CYAN)Checking for processes on development ports...$(NC)"
 	@for port in $(DEV_PORTS); do \
 		pid=$$(lsof -t -i:$$port 2>/dev/null); \
@@ -56,28 +51,35 @@ kill-ports: ## Kill any processes using development ports (5173, 9101, 9102)
 	done
 	@echo "$(GREEN)✓ Ports cleared$(NC)"
 
-dev: kill-ports ## Start all development servers (frontend + camera-emulator)
+dev: kill-ports ## Start all development servers (frontend + camera-emulator + tracking-service)
 	@echo "$(CYAN)Starting development servers...$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Starting frontend dev server (port 5173)...$(NC)"
-	@echo "$(YELLOW)Starting camera-emulator...$(NC)"
+	@echo "$(YELLOW)Starting camera-emulator (port 9101)...$(NC)"
+	@echo "$(YELLOW)Starting tracking-service (port 3010)...$(NC)"
 	@echo ""
 	@FRONTEND_PID=0; \
 	CAMERA_PID=0; \
+	TRACKING_PID=0; \
 	cleanup() { \
 		echo ""; \
 		echo "$(CYAN)Shutting down development servers...$(NC)"; \
 		[ $$FRONTEND_PID -ne 0 ] && kill $$FRONTEND_PID 2>/dev/null; \
 		[ $$CAMERA_PID -ne 0 ] && kill $$CAMERA_PID 2>/dev/null; \
+		[ $$TRACKING_PID -ne 0 ] && kill $$TRACKING_PID 2>/dev/null; \
 		wait 2>/dev/null; \
 		echo "$(GREEN)✓ All servers stopped$(NC)"; \
 		exit 0; \
 	}; \
 	trap cleanup INT TERM; \
+	(cd tracking-service && exec pnpm run dev) & \
+	TRACKING_PID=$$!; \
+	sleep 1; \
+	(cd camera-emulator && exec pnpm run dev) & \
+	CAMERA_PID=$$!; \
+	sleep 1; \
 	(cd frontend && exec pnpm run dev) & \
 	FRONTEND_PID=$$!; \
-	(cd camera-emulator && . venv/bin/activate && CAMERA_DATA_PATH=../shared/cameras/preprocessed/1080p exec python src/main.py) & \
-	CAMERA_PID=$$!; \
 	wait
 
 dev-frontend: ## Start only the frontend dev server
@@ -86,17 +88,23 @@ dev-frontend: ## Start only the frontend dev server
 
 dev-camera: ## Start only the camera emulator
 	@echo "$(CYAN)Starting camera emulator...$(NC)"
-	@cd camera-emulator && . venv/bin/activate && python src/main.py
+	@cd camera-emulator && pnpm run dev
 
-clean: ## Remove node_modules and Python virtual environments
+dev-tracking: ## Start only the tracking service
+	@echo "$(CYAN)Starting tracking service...$(NC)"
+	@cd tracking-service && pnpm run dev
+
+clean: ## Remove node_modules from all projects
 	@echo "$(CYAN)Cleaning up...$(NC)"
 	@rm -rf frontend/node_modules
-	@rm -rf camera-emulator/venv
+	@rm -rf camera-emulator/node_modules
+	@rm -rf tracking-service/node_modules
 	@echo "$(GREEN)✓ Cleanup complete$(NC)"
 
 check: ## Check if all dependencies are installed
 	@echo "$(CYAN)Checking dependencies...$(NC)"
 	@command -v pnpm >/dev/null 2>&1 && echo "$(GREEN)✓ pnpm installed$(NC)" || echo "$(YELLOW)✗ pnpm not installed$(NC)"
-	@command -v python3 >/dev/null 2>&1 && echo "$(GREEN)✓ python3 installed$(NC)" || echo "$(YELLOW)✗ python3 not installed$(NC)"
+	@command -v ffmpeg >/dev/null 2>&1 && echo "$(GREEN)✓ ffmpeg installed$(NC)" || echo "$(YELLOW)✗ ffmpeg not installed (required for camera-emulator)$(NC)"
 	@[ -d "frontend/node_modules" ] && echo "$(GREEN)✓ Frontend dependencies installed$(NC)" || echo "$(YELLOW)✗ Frontend dependencies not installed$(NC)"
-	@[ -d "camera-emulator/venv" ] && echo "$(GREEN)✓ Camera emulator venv exists$(NC)" || echo "$(YELLOW)✗ Camera emulator venv not created$(NC)"
+	@[ -d "camera-emulator/node_modules" ] && echo "$(GREEN)✓ Camera emulator dependencies installed$(NC)" || echo "$(YELLOW)✗ Camera emulator dependencies not installed$(NC)"
+	@[ -d "tracking-service/node_modules" ] && echo "$(GREEN)✓ Tracking service dependencies installed$(NC)" || echo "$(YELLOW)✗ Tracking service dependencies not installed$(NC)"

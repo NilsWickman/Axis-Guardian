@@ -6,7 +6,7 @@
  */
 
 import { ref, reactive, computed, watch } from 'vue'
-import { useWebRTCDetection, type DetectionMetadata } from './useWebRTCDetection'
+import { useMediasoupDetection, type DetectionMetadata } from './useMediasoupDetection'
 import { config } from '@/config/environment'
 import { loadSiteMapConfig } from '@/utils/siteMapConfigLoader'
 
@@ -17,7 +17,7 @@ interface Camera {
 }
 
 interface CameraConnection {
-  connection: ReturnType<typeof useWebRTCDetection>
+  connection: ReturnType<typeof useMediasoupDetection>
   videoElement: HTMLVideoElement | null
   isConnected: boolean
   latestMetadata: DetectionMetadata | null
@@ -172,7 +172,7 @@ async function initializeConnections() {
         return
       }
 
-      const connection = useWebRTCDetection(camera.id, {
+      const connection = useMediasoupDetection(camera.id, {
         signalingUrl,
         autoReconnect: true,
         reconnectDelay: 3000

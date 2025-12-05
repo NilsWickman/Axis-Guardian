@@ -6,14 +6,62 @@ import type { CameraParams, CameraConfig, SiteMapCameraConfig, CameraCalibration
 import { siteMapConfigToCamera } from '../projection/ground-plane.js'
 
 /**
+ * Build rotation matrix from azimuth and elevation angles
+ * @param azimuthDeg - Azimuth in degrees (0 = North/+Y, 90 = East/+X, clockwise)
+ * @param elevationDeg - Elevation in degrees (negative = looking down)
+ */
+function buildRotationMatrix(azimuthDeg: number, elevationDeg: number): number[][] {
+  const az = (azimuthDeg * Math.PI) / 180
+  const el = (elevationDeg * Math.PI) / 180
+
+  const cosAz = Math.cos(az)
+  const sinAz = Math.sin(az)
+  const cosEl = Math.cos(el)
+  const sinEl = Math.sin(el)
+
+  // Rotation around Z axis (azimuth) then X axis (elevation)
+  // Rz * Rx composition
+  return [
+    [cosAz, -sinAz * cosEl, sinAz * sinEl],
+    [sinAz, cosAz * cosEl, -cosAz * sinEl],
+    [0, sinEl, cosEl],
+  ]
+}
+
+/**
+ * Estimate intrinsic matrix K from assumed FOV
+ * @param fovDeg - Horizontal field of view in degrees
+ * @param imageWidth - Image width in pixels
+ * @param imageHeight - Image height in pixels
+ */
+function estimateIntrinsicMatrix(
+  fovDeg: number = 60,
+  imageWidth: number = 1920,
+  imageHeight: number = 1080
+): number[][] {
+  const fovRad = (fovDeg * Math.PI) / 180
+  const fx = (imageWidth / 2) / Math.tan(fovRad / 2)
+  const fy = fx  // Assume square pixels
+  const cx = imageWidth / 2
+  const cy = imageHeight / 2
+
+  return [
+    [fx, 0, cx],
+    [0, fy, cy],
+    [0, 0, 1],
+  ]
+}
+
+/**
  * K/R/T Calibration data from Auditorium dataset (cam_param.mat)
- * These matrices provide accurate pixel-to-world projection
+ * HC3/HC4: Extracted from MATLAB file
+ * IP2/IP5: Estimated from scene_metadata.xml
  */
 const CAMERA_CALIBRATIONS: Record<string, CameraCalibration> = {
-  'camera1': {  // HC3
+  'camera1': {  // HC3 - from cam_param.mat
     K: [
-      [1480, 0, 0],
-      [0, 1480, 0],
+      [1480, 0, 960],
+      [0, 1480, 540],
       [0, 0, 1],
     ],
     R: [
@@ -25,10 +73,10 @@ const CAMERA_CALIBRATIONS: Record<string, CameraCalibration> = {
     center: [960, 540],
     scale: 1,
   },
-  'camera2': {  // HC4
+  'camera2': {  // HC4 - from cam_param.mat
     K: [
-      [2350, 0, 0],
-      [0, 2350, 0],
+      [2350, 0, 960],
+      [0, 2350, 540],
       [0, 0, 1],
     ],
     R: [
@@ -37,6 +85,22 @@ const CAMERA_CALIBRATIONS: Record<string, CameraCalibration> = {
       [0, 0.9961946980917455, -0.08715574274765801],
     ],
     T: [0, 0, 1.5],
+    center: [960, 540],
+    scale: 1,
+  },
+  'camera3': {  // IP2 - estimated from scene_metadata.xml
+    // Position: (20.60, 28.31, 2.62), Azimuth: 140°, Elevation: -9°
+    K: estimateIntrinsicMatrix(60),
+    R: buildRotationMatrix(140, -9),
+    T: [20.60, 28.31, 2.62],
+    center: [960, 540],
+    scale: 1,
+  },
+  'camera4': {  // IP5 - estimated from scene_metadata.xml
+    // Position: (10.57, 16.31, 1.84), Azimuth: 339°, Elevation: 0°
+    K: estimateIntrinsicMatrix(60),
+    R: buildRotationMatrix(339, 0),
+    T: [10.57, 16.31, 1.84],
     center: [960, 540],
     scale: 1,
   },

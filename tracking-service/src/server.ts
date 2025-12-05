@@ -4,6 +4,7 @@
 
 import Fastify from 'fastify'
 import websocket from '@fastify/websocket'
+import cors from '@fastify/cors'
 import type { FastifyInstance } from 'fastify'
 import { TrackManager } from './tracks/track-manager.js'
 import { CameraRegistry } from './detection/camera-registry.js'
@@ -192,6 +193,11 @@ export async function createServerWithComponents(options: CreateServerOptions = 
 
   const app = Fastify({
     logger: false,  // Disable fastify logging for clean visual display
+  })
+
+  // Register CORS plugin (allow frontend to connect)
+  await app.register(cors, {
+    origin: true, // Allow all origins in development
   })
 
   // Register WebSocket plugin
