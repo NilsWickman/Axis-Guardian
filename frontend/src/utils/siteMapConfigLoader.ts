@@ -29,6 +29,7 @@ export interface SiteMapConfigWall {
 
 export interface SiteMapConfig {
   dimensions: { width: number; height: number; unit: string }
+  origin?: { x: number; y: number }
   walls: SiteMapConfigWall[]
   cameras: SiteMapConfigCamera[]
 }

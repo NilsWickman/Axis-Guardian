@@ -1,0 +1,141 @@
+/**
+ * Camera Emulator Server
+ * Fastify server with WebSocket support for mediasoup signaling
+ */
+
+import Fastify from 'fastify'
+import websocket from '@fastify/websocket'
+import cors from '@fastify/cors'
+import type { CameraConfig } from './types.js'
+import { createWorker, createRouter } from './mediasoup/worker.js'
+import { createPlainTransport, createDirectTransport, createDataProducerOnDirect } from './mediasoup/transports.js'
+import { FFmpegStreamer } from './video/ffmpeg-streamer.js'
+import { loadDetections } from './detections/loader.js'
+import { DetectionSync } from './detections/sync.js'
+import { TrackingClient } from './detections/tracking-client.js'
+import { registerWebSocketSignaling } from './signaling/websocket-handler.js'
+
+export interface CameraEmulatorServer {
+  start(): Promise<void>
+  stop(): Promise<void>
+}
+
+export async function createCameraEmulator(config: CameraConfig): Promise<CameraEmulatorServer> {
+  const app = Fastify({ logger: false })
+
+  // Register plugins
+  await app.register(cors, { origin: true })
+  await app.register(websocket)
+
+  // Load detection data
+  const detectionData = await loadDetections(config.detectionsPath)
+  const detectionSync = new DetectionSync(config.cameraId, detectionData)
+
+  // Create tracking client
+  const trackingClient = new TrackingClient(config.trackingServiceUrl, config.trackingCameraId)
+
+  // Create mediasoup infrastructure
+  const worker = await createWorker()
+  const router = await createRouter(worker)
+
+  // Create PlainTransport for FFmpeg RTP input
+  // The transport returns the actual port to send RTP to
+  const { rtpPort: actualRtpPort, createProducer } = await createPlainTransport(router, 0)
+
+  // Create DirectTransport for server→client data channel
+  const directTransport = await createDirectTransport(router)
+  const dataProducer = await createDataProducerOnDirect(directTransport)
+
+  // Create FFmpeg streamer - use the actual port mediasoup is listening on
+  const ffmpegStreamer = new FFmpegStreamer(
+    config.videoPath,
+    actualRtpPort,
+    detectionData.video_info
+  )
+
+  // Start FFmpeg first so it sends packets
+  ffmpegStreamer.start()
+
+  // Wait a moment for FFmpeg to start sending RTP packets (comedia needs incoming packets)
+  await new Promise(resolve => setTimeout(resolve, 1000))
+
+  // Now create the producer (after FFmpeg is sending)
+  const videoProducer = await createProducer()
+
+  // Handle FFmpeg frame events - send detections via DirectTransport DataProducer
+  let lastFrameSent = -1
+  ffmpegStreamer.on('frame', (frameNumber) => {
+    // Only send if frame changed
+    if (frameNumber === lastFrameSent) return
+    lastFrameSent = frameNumber
+
+    // Send to all DataConsumers via single DataProducer
+    const detectionBuffer = detectionSync.getDetectionForFrame(frameNumber)
+    try {
+      dataProducer.send(detectionBuffer)
+    } catch (error) {
+      console.error('Error sending detection data:', error)
+    }
+
+    // Also send to tracking service
+    const rawFrame = detectionSync.getRawDetectionForFrame(frameNumber)
+    if (rawFrame) {
+      trackingClient.postDetections(rawFrame)
+    }
+  })
+
+  // Register WebSocket signaling
+  registerWebSocketSignaling(
+    app,
+    router,
+    videoProducer,
+    dataProducer,
+    detectionSync
+  )
+
+  // Health check endpoint
+  app.get('/health', async () => ({
+    status: 'online',
+    camera_id: config.cameraId,
+    ffmpeg_running: ffmpegStreamer.isRunning(),
+    current_frame: ffmpegStreamer.getCurrentFrame(),
+    loop_count: ffmpegStreamer.getLoopCount(),
+  }))
+
+  // VAPIX camera info endpoint (for compatibility)
+  app.get('/vapix/camera', async () => ({
+    camera_id: config.cameraId,
+    model: 'AXIS P3245-LVE',
+    serial: `SERIAL-${config.cameraId}`,
+    firmware: '11.11.73',
+    resolution: {
+      width: detectionData.video_info.width,
+      height: detectionData.video_info.height,
+    },
+    fps: detectionData.video_info.fps,
+    capabilities: {
+      ptz: false,
+      audio: false,
+      analytics: true,
+    },
+  }))
+
+  return {
+    async start() {
+      // FFmpeg streamer already started during initialization (before producer creation)
+      // Just start the Fastify server
+      await app.listen({ port: config.port, host: '0.0.0.0' })
+
+      console.log(`Camera emulator '${config.cameraId}' started on port ${config.port}`)
+      console.log(`  Video: ${config.videoPath}`)
+      console.log(`  Detections: ${detectionData.frames.length} frames`)
+      console.log(`  Signaling: ws://localhost:${config.port}/ws/webrtc`)
+      console.log(`  Health: http://localhost:${config.port}/health`)
+    },
+
+    async stop() {
+      ffmpegStreamer.stop()
+      await app.close()
+    },
+  }
+}

@@ -5,18 +5,21 @@
  * coordinates, and feeds them into the TrackManager.
  */
 
-import type { DetectionMessage, RawDetection, GlobalTrack } from '../types.js'
+import type { DetectionMessage, RawDetection, GlobalTrack, CameraDetection } from '../types.js'
 import { projectDetectionToGround, projectDetectionWithKRT } from '../projection/ground-plane.js'
 import { TrackManager } from '../tracks/track-manager.js'
 import { CameraRegistry } from './camera-registry.js'
 import { logProjectionFailure } from '../api/routes.js'
 
-const MIN_CONFIDENCE = 0.5
+const MIN_CONFIDENCE = 0.7
 const IMAGE_WIDTH = 1920
 const IMAGE_HEIGHT = 1080
 
 export class DetectionProcessor {
   private lastProcessedFrames: Map<string, number> = new Map()
+  private lastCleanupTime: number = Date.now()
+  private static readonly MAX_CAMERAS = 100  // Prevent unbounded growth
+  private static readonly CLEANUP_INTERVAL_MS = 60000  // Cleanup every minute
 
   constructor(
     private trackManager: TrackManager,
@@ -25,6 +28,7 @@ export class DetectionProcessor {
 
   /**
    * Process a detection message from a camera emulator
+   * Uses batch processing with Hungarian algorithm for optimal assignment
    */
   processMessage(message: DetectionMessage): GlobalTrack[] {
     const cameraId = this.cameraRegistry.normalizeCameraId(message.camera_id)
@@ -36,6 +40,9 @@ export class DetectionProcessor {
     }
     this.lastProcessedFrames.set(cameraId, message.frame_number)
 
+    // Periodic cleanup to prevent memory leaks from stale camera entries
+    this.periodicCleanup()
+
     // Get camera parameters
     const camera = this.cameraRegistry.getCamera(cameraId)
     if (!camera) {
@@ -43,7 +50,11 @@ export class DetectionProcessor {
       return []
     }
 
-    const updatedTracks: GlobalTrack[] = []
+    // Convert timestamp from seconds to ms
+    const timestampMs = message.timestamp * 1000
+
+    // Project all detections to world coordinates
+    const projectedDetections: CameraDetection[] = []
 
     for (const detection of message.detections) {
       // Filter for person detections with sufficient confidence
@@ -75,20 +86,23 @@ export class DetectionProcessor {
         continue
       }
 
-      // Feed into track manager
-      // Note: timestamp from camera is in seconds, TrackManager expects ms
-      const track = this.trackManager.processDetection(
+      // Add to batch for Hungarian assignment
+      projectedDetections.push({
         cameraId,
-        detection.track_id ?? 0,
-        worldPoint.x,
-        worldPoint.y,
-        detection.confidence
-      )
-
-      updatedTracks.push(track)
+        trackId: detection.track_id ?? 0,
+        worldX: worldPoint.x,
+        worldY: worldPoint.y,
+        confidence: detection.confidence,
+        timestamp: timestampMs,
+      })
     }
 
-    return updatedTracks
+    // Use batch processing with Hungarian algorithm for optimal assignment
+    if (projectedDetections.length > 0) {
+      return this.trackManager.processBatchDetections(projectedDetections)
+    }
+
+    return []
   }
 
   // Debug counter
@@ -193,6 +207,7 @@ export class DetectionProcessor {
    */
   resetFrameTracking(): void {
     this.lastProcessedFrames.clear()
+    this.lastCleanupTime = Date.now()
   }
 
   /**
@@ -200,5 +215,39 @@ export class DetectionProcessor {
    */
   getLastProcessedFrame(cameraId: string): number {
     return this.lastProcessedFrames.get(cameraId) ?? -1
+  }
+
+  /**
+   * Periodic cleanup to prevent memory leaks from accumulated camera entries
+   * Removes entries for cameras not in the registry (stale/disconnected cameras)
+   */
+  private periodicCleanup(): void {
+    const now = Date.now()
+    if (now - this.lastCleanupTime < DetectionProcessor.CLEANUP_INTERVAL_MS) {
+      return
+    }
+    this.lastCleanupTime = now
+
+    // Remove entries for cameras no longer in the registry
+    const registeredCameras = new Set(this.cameraRegistry.getCameraIds())
+    const cameraIds = Array.from(this.lastProcessedFrames.keys())
+    for (const cameraId of cameraIds) {
+      if (!registeredCameras.has(cameraId)) {
+        this.lastProcessedFrames.delete(cameraId)
+      }
+    }
+
+    // Emergency cleanup if too many entries (hard limit)
+    if (this.lastProcessedFrames.size > DetectionProcessor.MAX_CAMERAS) {
+      // Keep only the most recently used cameras
+      const entries = Array.from(this.lastProcessedFrames.entries())
+        .sort((a, b) => b[1] - a[1])  // Sort by frame number (higher = more recent)
+        .slice(0, DetectionProcessor.MAX_CAMERAS)
+
+      this.lastProcessedFrames.clear()
+      for (const [id, frame] of entries) {
+        this.lastProcessedFrames.set(id, frame)
+      }
+    }
   }
 }

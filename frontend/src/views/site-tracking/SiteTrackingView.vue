@@ -116,7 +116,7 @@ import { useCameraStore } from '@/stores/cameras'
 import { useGlobalTrackStore } from '@/stores/globalTracks'
 import { useCameraConnectionManager } from '@/composables/useCameraConnectionManager'
 import { useSiteMapCanvas, type CanvasRenderOptions } from '@/composables/useSiteMapCanvas'
-import { usePersonPositionTracking } from '@/composables/usePersonPositionTracking'
+import { useTrackingServiceWebSocket } from '@/composables/useTrackingServiceWebSocket'
 // Global track store is used by PersonPositionOverlay component
 import { extractValue, metersToPixels, RENDER_SCALE } from '@/utils/siteMapConversion'
 import PersonPositionOverlay from '@/components/features/site-map/PersonPositionOverlay.vue'
@@ -168,11 +168,10 @@ const canvasOptions = reactive<CanvasRenderOptions>({
 // Initialize canvas composable
 const canvas = useSiteMapCanvas(mapCanvas, ref(canvasOptions))
 
-// Initialize person position tracking
-const positionTracking = usePersonPositionTracking({
-  enabled: true,
-  updateIntervalMs: 500,
-  minConfidence: 0.5,
+// Initialize tracking service WebSocket (server-side tracking with K/R/T projection)
+const trackingWs = useTrackingServiceWebSocket({
+  autoReconnect: true,
+  reconnectIntervalMs: 3000,
 })
 
 // Canvas transform state (fixed, no zoom/pan)
@@ -345,13 +344,10 @@ onMounted(async () => {
     TRACKED_CAMERA_ID,
     LOOP_DURATION_SECONDS,
     () => {
-      console.log(`[SiteTracking] Video looped - clearing all tracks`)
       globalTrackStore.clearAllTracks()
     }
   )
-  if (loopConfigured) {
-    console.log(`[SiteTracking] Configured ${TRACKED_CAMERA_ID} to loop at ${LOOP_DURATION_SECONDS}s`)
-  } else {
+  if (!loopConfigured) {
     console.warn(`[SiteTracking] Could not configure loop for ${TRACKED_CAMERA_ID} - camera not connected`)
   }
 
@@ -363,12 +359,12 @@ onMounted(async () => {
     selectCamera(cameras.value[0])
   }
 
-  // Start position tracking
-  positionTracking.startTracking()
+  // Connect to tracking service WebSocket for real-time track updates
+  trackingWs.connect()
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
-  positionTracking.stopTracking()
+  trackingWs.disconnect()
 })
 </script>

@@ -26,6 +26,7 @@ import type {
   SiteMapCameraConfig,
   CameraCalibration,
 } from '../types.js'
+import { undistortPoint } from './lens-distortion.js'
 
 // ============================================================================
 // Core Functions
@@ -451,6 +452,18 @@ export function projectDetectionWithKRT(
   } else {
     footX = bbox.x + bbox.width / 2
     footY = bbox.y + bbox.height
+  }
+
+  // Apply lens distortion correction if distortion coefficients are available
+  if (calibration.distortion) {
+    const fx = calibration.K[0][0]
+    const fy = calibration.K[1][1]
+    const cx = calibration.center[0]
+    const cy = calibration.center[1]
+
+    const corrected = undistortPoint(footX, footY, fx, fy, cx, cy, calibration.distortion)
+    footX = corrected.x
+    footY = corrected.y
   }
 
   return projectWithKRT(footX, footY, calibration)

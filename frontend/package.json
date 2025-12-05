@@ -32,6 +32,7 @@
     "embla-carousel-vue": "^8.6.0",
     "hls.js": "^1.6.13",
     "lucide-vue-next": "^0.542.0",
+    "mediasoup-client": "^3.18.1",
     "msgpack-lite": "^0.1.26",
     "pinia": "^2.2.6",
     "reka-ui": "^2.5.0",

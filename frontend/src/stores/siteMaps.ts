@@ -41,6 +41,7 @@ export interface SiteMap {
   imagePath?: string
   width: UnitValue
   height: UnitValue
+  origin?: { x: number; y: number } // World coordinate origin offset
   renderScale: number // Fixed at 100 pixels per meter
   cameras: CameraPlacement[]
   walls: Wall[]
@@ -58,6 +59,7 @@ function transformConfigToSiteMap(config: SiteMapConfig): SiteMap {
     description: `${config.dimensions.width}m × ${config.dimensions.height}m room with ${config.cameras.length} cameras`,
     width: createMeterUnit(config.dimensions.width),
     height: createMeterUnit(config.dimensions.height),
+    origin: config.origin ?? { x: 0, y: 0 },
     renderScale: RENDER_SCALE,
     cameras: config.cameras.map((cam) => ({
       cameraId: cam.id,
@@ -129,6 +131,7 @@ async function createAuditoriumSiteMap(): Promise<SiteMap> {
     description: 'UCLA VCLA multi-view tracking dataset with accurate camera calibration from scene_metadata.xml',
     width: createMeterUnit(width),
     height: createMeterUnit(height),
+    origin: { x: minX - padding, y: minY - padding },
     renderScale: RENDER_SCALE,
     cameras: calibrations.map((cal, idx) => ({
       cameraId: cal.cameraId,
