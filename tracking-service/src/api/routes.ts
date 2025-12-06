@@ -4,7 +4,8 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { z } from 'zod'
-import type { InjectDetectionRequest, TrackingConfig } from '../types.js'
+import { appendFileSync } from 'fs'
+import type { TrackingConfig } from '../types.js'
 import { TrackManager, trackToJSON } from '../tracks/track-manager.js'
 import { DetectionProcessor } from '../detection/detection-processor.js'
 import { CameraRegistry } from '../detection/camera-registry.js'
@@ -56,23 +57,57 @@ const UpdateConfigSchema = z.object({
   maxVelocityMs: z.number().positive().optional(),
 })
 
-// Camera emulator format - uses left/top/right/bottom instead of x/y/width/height
+// Camera emulator format - accepts both array [x, y, w, h] and object {left, top, right, bottom}
+const BboxArraySchema = z.tuple([
+  z.number().min(0).max(1),  // x
+  z.number().min(0).max(1),  // y
+  z.number().min(0).max(1),  // width
+  z.number().min(0).max(1),  // height
+])
+
+const BboxObjectSchema = z.object({
+  left: z.number().min(0).max(1),
+  top: z.number().min(0).max(1),
+  right: z.number().min(0).max(1),
+  bottom: z.number().min(0).max(1),
+})
+
 const EmulatorDetectionSchema = z.object({
   camera_id: z.string(),
   timestamp: z.number().optional(),
   frame_number: z.number().optional(),
+  dispatch_time: z.number().optional(),  // High-res ms timestamp for timing measurement
   detections: z.array(z.object({
     class_name: z.string().optional().default('person'),
     confidence: z.number().min(0).max(1),
-    bbox: z.object({
-      left: z.number().min(0).max(1),
-      top: z.number().min(0).max(1),
-      right: z.number().min(0).max(1),
-      bottom: z.number().min(0).max(1),
-    }),
+    bbox: z.union([BboxArraySchema, BboxObjectSchema]),
     track_id: z.number().optional(),
   })),
 })
+
+// Timing stats for HTTP path latency measurement
+interface TimingStats {
+  samples: number[]
+  maxSamples: number
+}
+const httpTimingStats: TimingStats = { samples: [], maxSamples: 100 }
+const TIMING_LOG_FILE = '/tmp/tracking-timing.log'
+
+function recordHttpLatency(dispatchTime: number): void {
+  const latency = Date.now() - dispatchTime
+  httpTimingStats.samples.push(latency)
+  if (httpTimingStats.samples.length > httpTimingStats.maxSamples) {
+    httpTimingStats.samples.shift()
+  }
+  // Log every 50 samples to file (stderr gets cleared by console.clear)
+  if (httpTimingStats.samples.length % 50 === 0) {
+    const avg = httpTimingStats.samples.reduce((a, b) => a + b, 0) / httpTimingStats.samples.length
+    const min = Math.min(...httpTimingStats.samples)
+    const max = Math.max(...httpTimingStats.samples)
+    const msg = `[${new Date().toISOString()}] HTTP path latency - avg: ${avg.toFixed(1)}ms, min: ${min}ms, max: ${max}ms (n=${httpTimingStats.samples.length})\n`
+    appendFileSync(TIMING_LOG_FILE, msg)
+  }
+}
 
 export function registerRoutes(
   app: FastifyInstance,
@@ -181,16 +216,34 @@ export function registerRoutes(
     }
 
     const data = parseResult.data
+
+    // Record timing if dispatch_time is present
+    if (data.dispatch_time) {
+      recordHttpLatency(data.dispatch_time)
+    }
     const results: Array<{ detection: number; track: ReturnType<typeof trackToJSON> | null; worldPoint?: { x: number; y: number }; error?: string }> = []
 
     for (let i = 0; i < data.detections.length; i++) {
       const det = data.detections[i]
-      // Convert left/top/right/bottom to x/y/width/height
-      const bbox = {
-        x: det.bbox.left,
-        y: det.bbox.top,
-        width: det.bbox.right - det.bbox.left,
-        height: det.bbox.bottom - det.bbox.top,
+      // Convert bbox to x/y/width/height format
+      // Handle both array [x, y, w, h] and object {left, top, right, bottom}
+      let bbox: { x: number; y: number; width: number; height: number }
+      if (Array.isArray(det.bbox)) {
+        // Array format [x, y, width, height]
+        bbox = {
+          x: det.bbox[0],
+          y: det.bbox[1],
+          width: det.bbox[2],
+          height: det.bbox[3],
+        }
+      } else {
+        // Object format {left, top, right, bottom}
+        bbox = {
+          x: det.bbox.left,
+          y: det.bbox.top,
+          width: det.bbox.right - det.bbox.left,
+          height: det.bbox.bottom - det.bbox.top,
+        }
       }
 
       const track = detectionProcessor.processInjection(
@@ -248,7 +301,6 @@ export function registerRoutes(
         azimuth: params.azimuth,
         elevation: params.elevation,
         fov: params.fov,
-        maxDistance: params.maxDistance,
       })),
     }
   })

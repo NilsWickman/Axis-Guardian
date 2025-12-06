@@ -104,12 +104,17 @@ export function castRay(
  */
 export function calculateVisibleFOV(
   cameraPosition: Point,
-  rotation: number, // in degrees
+  rotation: number, // azimuth in degrees (0° = North/+Y, clockwise)
   fov: number, // field of view in degrees
   viewDistance: number, // in pixels
   walls: LineSegment[]
 ): Point[] {
-  const rotationRad = (rotation * Math.PI) / 180
+  // Convert from azimuth (0° = North/+Y world, clockwise) to canvas angle
+  // Navigation azimuth: 0°=N, 90°=E, 180°=S, 270°=W
+  // Canvas uses standard trig: cos(angle) for X, sin(angle) for Y
+  // For azimuth, direction is (sin(az), cos(az)), so canvas angle = 90 - azimuth
+  const canvasAngle = 90 - rotation
+  const rotationRad = (canvasAngle * Math.PI) / 180
   const halfFovRad = (fov / 2) * (Math.PI) / 180
 
   // Calculate the two edge angles of the FOV
@@ -127,7 +132,7 @@ export function calculateVisibleFOV(
     const angle = rightAngle - i * angleStep
     const direction = {
       x: Math.cos(angle),
-      y: Math.sin(angle),
+      y: Math.sin(angle), // Negate Y for canvas coordinates (Y points down)
     }
 
     const hitPoint = castRay(cameraPosition, direction, viewDistance, walls)

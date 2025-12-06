@@ -36,11 +36,9 @@ export function cameraPlacementToParams(
       y: extractValue(placement.position.y),
       z: extractValue(placement.height),
     },
-    azimuth: extractValue(placement.rotation),
-    // The 'angle' field in CameraPlacement is the tilt/elevation
-    elevation: elevationOverride ?? (extractValue(placement.angle) || DEFAULT_ELEVATION_DEG),
+    azimuth: extractValue(placement.azimuth),
+    elevation: elevationOverride ?? (extractValue(placement.elevation) || DEFAULT_ELEVATION_DEG),
     fov: extractValue(placement.fov),
-    maxDistance: extractValue(placement.viewDistance),
   }
 }
 

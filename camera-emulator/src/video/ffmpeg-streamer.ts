@@ -8,7 +8,7 @@ import { EventEmitter } from 'events'
 import { ffmpegConfig } from '../config.js'
 
 export interface FFmpegStreamerEvents {
-  frame: (frameNumber: number) => void
+  frame: (frameNumber: number, videoTimeMs: number) => void
   loop: (loopCount: number) => void
   error: (error: Error) => void
   exit: (code: number | null) => void
@@ -20,15 +20,18 @@ export class FFmpegStreamer extends EventEmitter {
   private loopCount = 0
   private totalFrames = 0
   private fps = 30
+  private streamStartTime = 0  // When streaming started (ms)
+  private videoDurationMs = 0  // Total video duration (ms)
 
   constructor(
     private videoPath: string,
     private rtpPort: number,
-    videoInfo?: { fps?: number; total_frames?: number }
+    videoInfo?: { fps?: number; total_frames?: number; duration?: number }
   ) {
     super()
     this.fps = videoInfo?.fps ?? 30
     this.totalFrames = videoInfo?.total_frames ?? 0
+    this.videoDurationMs = (videoInfo?.duration ?? (this.totalFrames / this.fps)) * 1000
   }
 
   start(): void {
@@ -43,8 +46,11 @@ export class FFmpegStreamer extends EventEmitter {
     // FFmpeg command to stream H.264 via RTP
     // -re: real-time rate
     // -stream_loop -1: loop forever
-    // -c:v copy: passthrough (no re-encoding)
-    // -bsf:v h264_mp4toannexb: convert from AVCC to Annex B format for RTP
+    // -c:v libx264: re-encode to ensure frequent keyframes
+    // -preset ultrafast: minimize encoding latency
+    // -tune zerolatency: optimize for streaming
+    // -g 30: keyframe every 30 frames (~1 second) for quick browser decode start
+    // -profile:v baseline: widely compatible profile
     // -an: no audio
     // -f rtp: RTP output format
     // -ssrc: fixed SSRC to match mediasoup producer
@@ -53,8 +59,16 @@ export class FFmpegStreamer extends EventEmitter {
       '-stream_loop', '-1',
       '-i', this.videoPath,
       '-an',
-      '-c:v', 'copy',
-      '-bsf:v', 'h264_mp4toannexb',
+      '-c:v', 'libx264',
+      '-preset', 'ultrafast',
+      '-tune', 'zerolatency',
+      '-profile:v', 'baseline',
+      '-g', '30',
+      '-keyint_min', '30',
+      '-sc_threshold', '0',
+      '-b:v', '2M',
+      '-maxrate', '2M',
+      '-bufsize', '1M',
       '-f', 'rtp',
       '-payload_type', String(ffmpegConfig.payloadType),
       '-ssrc', '12345678',
@@ -62,6 +76,9 @@ export class FFmpegStreamer extends EventEmitter {
     ], {
       stdio: ['ignore', 'pipe', 'pipe'],
     })
+
+    // Record stream start time
+    this.streamStartTime = Date.now()
 
     // Parse FFmpeg stderr for frame progress
     this.ffmpeg.stderr?.on('data', (data: Buffer) => {
@@ -75,12 +92,16 @@ export class FFmpegStreamer extends EventEmitter {
         // Detect loop (frame number reset or big jump)
         if (this.totalFrames > 0 && newFrame < this.frameCount && this.frameCount > this.totalFrames * 0.9) {
           this.loopCount++
+          this.streamStartTime = Date.now()  // Reset start time on loop
           this.emit('loop', this.loopCount)
           console.log(`FFmpeg loop ${this.loopCount}`)
         }
 
         this.frameCount = newFrame
-        this.emit('frame', this.frameCount)
+
+        // Calculate video presentation time (position within current loop)
+        const videoTimeMs = (this.frameCount / this.fps) * 1000
+        this.emit('frame', this.frameCount, videoTimeMs)
       }
     })
 
@@ -117,6 +138,18 @@ export class FFmpegStreamer extends EventEmitter {
 
   getLoopCount(): number {
     return this.loopCount
+  }
+
+  /**
+   * Get current video presentation time in milliseconds
+   * This is the position within the video (resets on loop)
+   */
+  getVideoTimeMs(): number {
+    return (this.frameCount / this.fps) * 1000
+  }
+
+  getFps(): number {
+    return this.fps
   }
 
   isRunning(): boolean {

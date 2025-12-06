@@ -146,6 +146,11 @@ async function handleMessage(
         console.log(`Resuming consumer ${session.consumer.id}, was paused: ${session.consumer.paused}`)
         await session.consumer.resume()
         console.log(`Consumer resumed, now paused: ${session.consumer.paused}`)
+
+        // Request a keyframe from the producer so the browser can decode
+        await session.consumer.requestKeyFrame()
+        console.log(`Keyframe requested for consumer ${session.consumer.id}`)
+
         ws.send(JSON.stringify({ type: 'consumerResumed' }))
       } else {
         console.warn(`resumeConsumer: no session or consumer found`)

@@ -1,0 +1,5 @@
+packages:
+  - 'frontend'
+  - 'tracking-service'
+  - 'camera-emulator'
+  - 'shared/types'

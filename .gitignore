@@ -162,19 +162,6 @@ GEMINI.md
 .cursor/
 .playwright-mcp/
 
-# API Contract artefacts
-shared/contracts/
-shared/schemas/
-shared/models/*.py
-!shared/models/*.pt
-shared/clients/
-shared/docs/api-contracts/generated/
-shared/generated/
-shared/types/
-shared/dist/
-shared/axis_shared.egg-info/
-frontend/src/types/generated/
-frontend/src/api/generated/
 # Video files (large, can be regenerated or stored elsewhere)
 shared/cameras/*.mp4
 shared/cameras/**/*.mp4

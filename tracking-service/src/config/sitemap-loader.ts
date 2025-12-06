@@ -11,11 +11,10 @@ export interface SiteMapCamera {
   id: string
   name: string
   position: { x: number; y: number }
-  rotation: number
+  azimuth: number
   elevation?: number
   height: number
   fieldOfView: number
-  viewDistance: number
 }
 
 export interface SiteMapConfig {
@@ -51,10 +50,9 @@ export function siteMapCameraToCameraParams(camera: SiteMapCamera): CameraParams
       y: camera.position.y,
       z: camera.height,
     },
-    azimuth: camera.rotation,
+    azimuth: camera.azimuth,
     elevation: camera.elevation ?? 45,
     fov: camera.fieldOfView,
-    maxDistance: camera.viewDistance,
   }
 }
 

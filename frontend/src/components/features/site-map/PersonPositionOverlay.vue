@@ -1,5 +1,8 @@
 <template>
-  <div class="person-position-overlay">
+  <div
+    class="person-position-overlay"
+    :style="{ width: `${canvasWidth}px`, height: `${canvasHeight}px` }"
+  >
     <!-- Global track markers (cross-camera tracking) -->
     <svg
       v-if="globalTracks.length > 0"
@@ -70,6 +73,21 @@
             opacity="0.9"
           />
         </g>
+
+        <!-- Track ID label -->
+        <text
+          :x="worldToCanvasX(track.currentPosition.x)"
+          :y="worldToCanvasY(track.currentPosition.y) - markerRadius - 6"
+          text-anchor="middle"
+          font-size="11"
+          font-weight="600"
+          :fill="track.color"
+          stroke="#000"
+          stroke-width="0.5"
+          class="track-label"
+        >
+          {{ formatTrackId(track.globalTrackId) }}
+        </text>
       </g>
 
       <!-- Heatmap overlay (if enabled) -->
@@ -248,16 +266,18 @@ const heatmapData = computed<HeatmapCell[]>(() => {
 
 /**
  * Convert world coordinates (meters) to canvas coordinates (pixels)
- * Accounts for site map origin offset to handle different coordinate systems
+ *
+ * World coordinates: X=East, Y=North (meters)
+ * Canvas coordinates: pixels at RENDER_SCALE (100 px/m)
  */
 function worldToCanvasX(worldX: number): number {
   const origin = props.siteMap.origin ?? { x: 0, y: 0 }
-  return (worldX - origin.x) * props.siteMap.renderScale + 60 // Subtract origin, add padding
+  return (worldX - origin.x) * props.siteMap.renderScale
 }
 
 function worldToCanvasY(worldY: number): number {
   const origin = props.siteMap.origin ?? { x: 0, y: 0 }
-  return (worldY - origin.y) * props.siteMap.renderScale + 60 // Subtract origin, add padding
+  return (worldY - origin.y) * props.siteMap.renderScale
 }
 
 /**
@@ -288,12 +308,18 @@ function getGlobalTrailPath(track: GlobalTrack): string {
 
   return pathSegments.join(' ')
 }
+
+/**
+ * Format track ID for display (e.g., "global-5" -> "#5")
+ */
+function formatTrackId(trackId: string): string {
+  return trackId.replace('global-', '#')
+}
 </script>
 
 <style scoped>
 .person-position-overlay {
-  position: absolute;
-  inset: 0;
+  /* Position controlled by parent via inline styles */
   pointer-events: none;
 }
 
@@ -303,5 +329,10 @@ function getGlobalTrailPath(track: GlobalTrack): string {
 
 .heatmap-cell {
   transition: opacity 0.5s ease;
+}
+
+.track-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 </style>

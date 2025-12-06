@@ -1,0 +1,17 @@
+{
+  "name": "@axis-guardian/types",
+  "version": "1.0.0",
+  "description": "Shared type definitions for Axis Guardian",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src"
+  ]
+}

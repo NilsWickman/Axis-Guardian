@@ -176,6 +176,7 @@ export function projectToGround(
   const cx = image.width / 2
   const cy = image.height / 2
 
+  // Standard pinhole camera model: positive X in image = right side of frame
   const normalizedX = (imagePoint.x - cx) / focalLength
   const normalizedY = (imagePoint.y - cy) / focalLength
 
@@ -216,16 +217,6 @@ export function projectToGround(
     Math.pow(worldPoint.x - camera.position.x, 2) +
     Math.pow(worldPoint.y - camera.position.y, 2)
   )
-
-  if (distance > camera.maxDistance) {
-    return {
-      worldPoint,
-      distance,
-      isValid: false,
-      reason: 'beyond_max_distance',
-      debug,
-    }
-  }
 
   if (distance < 0.1) {
     return {
@@ -310,10 +301,9 @@ export function siteMapConfigToCamera(config: SiteMapCameraConfig): CameraParams
       y: config.position.y,
       z: config.height,
     },
-    azimuth: config.rotation,
+    azimuth: config.azimuth,
     elevation: config.elevation ?? DEFAULT_ELEVATION_DEG,
     fov: config.fieldOfView,
-    maxDistance: config.viewDistance,
   }
 }
 

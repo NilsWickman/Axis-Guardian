@@ -24,6 +24,7 @@ export interface DetectionFrame {
   frame_number: number
   timestamp: number  // seconds
   detections: Detection[]
+  dispatch_time?: number  // High-res ms timestamp for timing measurement
 }
 
 export interface DetectionData {
@@ -50,6 +51,8 @@ export interface DetectionMetadata {
   detection_count: number
   detections: Detection[]
   detection_frame?: number
+  dispatch_time?: number  // High-res ms timestamp for timing measurement
+  video_time_ms?: number  // Video presentation time in ms (for sync with video element)
 }
 
 export interface ClientSession {

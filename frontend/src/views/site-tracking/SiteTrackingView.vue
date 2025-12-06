@@ -179,7 +179,7 @@ const scale = ref(1)
 const offsetX = ref(0)
 const offsetY = ref(0)
 
-// Canvas style
+// Canvas style (no rotation - coordinates are pre-rotated in config)
 const canvasStyle = computed(() => ({
   position: 'absolute' as const,
   left: `${offsetX.value}px`,
@@ -255,14 +255,21 @@ const fitToView = () => {
 
   if (containerWidth < 100 || containerHeight < 100) return
 
-  const padding = 40
+  const padding = 60
+
+  // Calculate scale to fit the entire map
   const scaleX = (containerWidth - padding * 2) / mapWidth
   const scaleY = (containerHeight - padding * 2) / mapHeight
-  const newScale = Math.min(scaleX, scaleY, 1)
+  const newScale = Math.min(scaleX, scaleY)
 
   scale.value = newScale
-  offsetX.value = (containerWidth - mapWidth * newScale) / 2
-  offsetY.value = (containerHeight - mapHeight * newScale) / 2
+
+  // Center the map in the container
+  const scaledWidth = mapWidth * newScale
+  const scaledHeight = mapHeight * newScale
+
+  offsetX.value = (containerWidth - scaledWidth) / 2
+  offsetY.value = (containerHeight - scaledHeight) / 2
 }
 
 // Camera selection

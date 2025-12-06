@@ -21,6 +21,8 @@ export interface DetectionMetadata {
   detection_count: number
   detections: Detection[]
   detection_frame?: number
+  dispatch_time?: number  // High-res ms timestamp for timing measurement
+  video_time_ms?: number  // Video presentation time in ms (for sync with video element)
 }
 
 export interface MediasoupDetectionOptions {
@@ -90,7 +92,17 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
   // Frame synchronization
   const maxFrameAge = 5
   const detectionBuffer: DetectionMetadata[] = []
-  const maxBufferSize = 10
+  const maxBufferSize = 30  // Increased buffer for video sync
+
+  // Video-sync detection buffer
+  // Holds detections until the video element's currentTime catches up
+  const videoSyncBuffer: DetectionMetadata[] = []
+  const maxVideoSyncBufferSize = 60  // ~2 seconds at 30fps
+  let videoSyncInterval: number | null = null
+  let lastVideoTime = 0
+  let videoSyncOffset = 0  // Calibrated offset between detection time and video time
+  let videoSyncCalibrated = false
+  const VIDEO_SYNC_TOLERANCE_MS = 50  // Release detection if within 50ms of video time
 
   // Stats
   const stats = ref({
@@ -99,7 +111,9 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
     avgDetectionsPerFrame: 0,
     lastUpdateTime: 0,
     droppedStaleDetections: 0,
-    latencyMs: 0
+    latencyMs: 0,
+    videoSyncBufferSize: 0,
+    videoSyncDelayMs: 0  // How far ahead detections are from video
   })
 
   // Connection quality stats
@@ -119,6 +133,11 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
   const MAX_LATENCY_SAMPLES = 100
   const LATENCY_WINDOW_MS = 1000
   let latencyWindowStart = Date.now()
+
+  // WebRTC path timing stats (using dispatch_time for accurate measurement)
+  const webrtcTimingSamples: number[] = []
+  const MAX_TIMING_SAMPLES = 100
+  let timingLogCounter = 0
 
   // Pending timeouts
   const pendingTimeouts = new Set<number>()
@@ -185,9 +204,18 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
             const now = performance.now()
             const timeDiff = (now - lastStatsTime) / 1000
 
-            if (timeDiff > 0 && lastFramesDecoded > 0) {
-              const framesDiff = (videoStats.framesDecoded || 0) - lastFramesDecoded
-              connectionQuality.value.fps = Math.round(framesDiff / timeDiff)
+            if (timeDiff > 0) {
+              const currentFrames = videoStats.framesDecoded || 0
+              // Only calculate FPS if we have a valid previous value and frames increased
+              if (lastFramesDecoded > 0 && currentFrames >= lastFramesDecoded) {
+                const framesDiff = currentFrames - lastFramesDecoded
+                connectionQuality.value.fps = Math.round(framesDiff / timeDiff)
+              } else if (currentFrames > 0 && lastFramesDecoded === 0) {
+                // First measurement - don't update FPS yet
+              } else if (currentFrames < lastFramesDecoded) {
+                // Stream reset detected - reset baseline, don't show negative
+                // Keep previous FPS value
+              }
             }
 
             lastFramesDecoded = videoStats.framesDecoded || 0
@@ -482,15 +510,120 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
   }
 
   /**
+   * Start video sync polling loop
+   * This releases buffered detections when the video catches up
+   */
+  function startVideoSyncLoop() {
+    if (videoSyncInterval) return
+
+    videoSyncInterval = window.setInterval(() => {
+      if (!videoElement.value || videoSyncBuffer.length === 0) return
+
+      const videoTimeMs = videoElement.value.currentTime * 1000
+
+      // Calibrate offset on first detection with video_time_ms
+      if (!videoSyncCalibrated && videoSyncBuffer.length > 0) {
+        const firstDetection = videoSyncBuffer[0]
+        if (firstDetection.video_time_ms !== undefined) {
+          // Calculate how far ahead detections are from video
+          videoSyncOffset = firstDetection.video_time_ms - videoTimeMs
+          videoSyncCalibrated = true
+          console.log(`[VideoSync] Calibrated offset: ${videoSyncOffset.toFixed(0)}ms (detection ahead of video)`)
+        }
+      }
+
+      // Detect video loop/seek (large backward jump)
+      if (videoTimeMs < lastVideoTime - 500) {
+        console.log(`[VideoSync] Video loop detected (${lastVideoTime.toFixed(0)}ms -> ${videoTimeMs.toFixed(0)}ms), clearing buffer`)
+        videoSyncBuffer.length = 0
+        videoSyncCalibrated = false
+      }
+      lastVideoTime = videoTimeMs
+
+      // Release detections that match current video time
+      // Detection should be released when: video_time >= detection.video_time_ms - tolerance
+      let releasedCount = 0
+      while (videoSyncBuffer.length > 0) {
+        const detection = videoSyncBuffer[0]
+        const detectionVideoTime = detection.video_time_ms ?? 0
+
+        // Check if video has caught up to this detection
+        if (videoTimeMs >= detectionVideoTime - VIDEO_SYNC_TOLERANCE_MS) {
+          videoSyncBuffer.shift()
+          releaseDetection(detection)
+          releasedCount++
+        } else {
+          // Buffer is sorted by video_time_ms, so we can stop
+          break
+        }
+      }
+
+      // Update stats
+      stats.value.videoSyncBufferSize = videoSyncBuffer.length
+      if (videoSyncBuffer.length > 0) {
+        stats.value.videoSyncDelayMs = (videoSyncBuffer[0].video_time_ms ?? 0) - videoTimeMs
+      } else {
+        stats.value.videoSyncDelayMs = 0
+      }
+
+      // Log sync status periodically
+      if (releasedCount > 0 && stats.value.framesReceived % 100 === 0) {
+        const bufferDepthMs = videoSyncBuffer.length > 0
+          ? (videoSyncBuffer[videoSyncBuffer.length - 1].video_time_ms ?? 0) - videoTimeMs
+          : 0
+        console.log(`[VideoSync] Released ${releasedCount}, buffer: ${videoSyncBuffer.length} items, depth: ${bufferDepthMs.toFixed(0)}ms`)
+      }
+    }, 16)  // ~60fps polling for smooth sync
+  }
+
+  /**
+   * Stop video sync loop
+   */
+  function stopVideoSyncLoop() {
+    if (videoSyncInterval) {
+      clearInterval(videoSyncInterval)
+      videoSyncInterval = null
+    }
+    videoSyncBuffer.length = 0
+    videoSyncCalibrated = false
+  }
+
+  /**
+   * Release a detection for processing (called when video catches up)
+   */
+  function releaseDetection(metadata: DetectionMetadata) {
+    // Emit for person position tracking
+    emitWebRTCDetection(metadata)
+
+    // Process buffered detection (update local state)
+    processBufferedDetection(metadata)
+  }
+
+  /**
    * Process detection metadata
+   * Buffers detections and releases them in sync with video playback
    */
   function processMetadata(metadata: DetectionMetadata) {
     const now = Date.now()
 
-    // Emit for person position tracking
-    emitWebRTCDetection(metadata)
+    // Record WebRTC path timing if dispatch_time is present
+    if (metadata.dispatch_time) {
+      const webrtcLatency = now - metadata.dispatch_time
+      webrtcTimingSamples.push(webrtcLatency)
+      if (webrtcTimingSamples.length > MAX_TIMING_SAMPLES) {
+        webrtcTimingSamples.shift()
+      }
+      // Log every 50 samples
+      timingLogCounter++
+      if (timingLogCounter % 50 === 0) {
+        const avg = webrtcTimingSamples.reduce((a, b) => a + b, 0) / webrtcTimingSamples.length
+        const min = Math.min(...webrtcTimingSamples)
+        const max = Math.max(...webrtcTimingSamples)
+        console.log(`[TIMING] WebRTC path latency - avg: ${avg.toFixed(1)}ms, min: ${min}ms, max: ${max}ms (n=${webrtcTimingSamples.length})`)
+      }
+    }
 
-    // Calculate latency
+    // Calculate latency for stats
     const latency = now - (metadata.timestamp * 1000)
     latencySamples.push(latency)
     if (latencySamples.length > MAX_LATENCY_SAMPLES) {
@@ -506,25 +639,44 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
       latencyWindowStart = now
     }
 
-    // Buffer management
-    detectionBuffer.push(metadata)
-    if (detectionBuffer.length > maxBufferSize) {
-      detectionBuffer.shift()
-    }
-
-    // Sync delay based on RTT
-    const syncDelay = Math.min(connectionQuality.value.roundTripTime / 2, 50)
-    const timeoutId = window.setTimeout(() => {
-      pendingTimeouts.delete(timeoutId)
-      processBufferedDetection(metadata)
-    }, syncDelay)
-    pendingTimeouts.add(timeoutId)
-
     // Update stats
     stats.value.framesReceived++
     stats.value.detectionsReceived += metadata.detection_count
     stats.value.avgDetectionsPerFrame = stats.value.detectionsReceived / stats.value.framesReceived
     stats.value.lastUpdateTime = metadata.timestamp
+
+    // If video_time_ms is available, use video-sync buffer
+    if (metadata.video_time_ms !== undefined && videoElement.value) {
+      // Start sync loop if not running
+      startVideoSyncLoop()
+
+      // Add to video sync buffer (sorted by video_time_ms)
+      videoSyncBuffer.push(metadata)
+
+      // Trim buffer if too large (drop oldest)
+      while (videoSyncBuffer.length > maxVideoSyncBufferSize) {
+        const dropped = videoSyncBuffer.shift()
+        if (dropped) {
+          stats.value.droppedStaleDetections++
+        }
+      }
+    } else {
+      // Fallback: no video_time_ms, use old RTT-based delay
+      // Buffer management
+      detectionBuffer.push(metadata)
+      if (detectionBuffer.length > maxBufferSize) {
+        detectionBuffer.shift()
+      }
+
+      // Sync delay based on RTT
+      const syncDelay = Math.min(connectionQuality.value.roundTripTime / 2, 50)
+      const timeoutId = window.setTimeout(() => {
+        pendingTimeouts.delete(timeoutId)
+        emitWebRTCDetection(metadata)
+        processBufferedDetection(metadata)
+      }, syncDelay)
+      pendingTimeouts.add(timeoutId)
+    }
   }
 
   /**
@@ -572,6 +724,7 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
     isDataChannelOpen.value = false
 
     stopStatsPolling()
+    stopVideoSyncLoop()
 
     pendingTimeouts.forEach(id => clearTimeout(id))
     pendingTimeouts.clear()
@@ -638,6 +791,7 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
     }
 
     stopStatsPolling()
+    stopVideoSyncLoop()
 
     pendingTimeouts.forEach(id => clearTimeout(id))
     pendingTimeouts.clear()
@@ -670,6 +824,7 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
     currentDetections.value = []
     currentMetadata.value = null
     detectionBuffer.length = 0
+    videoSyncBuffer.length = 0
     latencySamples.length = 0
   }
 
