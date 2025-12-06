@@ -636,10 +636,12 @@ export function useSiteMapCanvas(
     // Extract values from unit objects
     const x = metersToPixels(extractValue(placement.position.x))
     const y = metersToPixels(extractValue(placement.position.y))
-    const rotation = extractValue(placement.rotation)
-    const angle = extractValue(placement.angle)
+    const azimuth = extractValue(placement.azimuth)
+    const elevation = extractValue(placement.elevation)
     const fov = extractValue(placement.fov)
-    const viewDistance = metersToPixels(extractValue(placement.viewDistance))
+    // Use fixed render distance for FOV visualization (cameras can see to horizon)
+    const FOV_RENDER_DISTANCE_M = 50
+    const viewDistance = metersToPixels(FOV_RENDER_DISTANCE_M)
     const color = placement.color
 
     const isHovered = hoveredCameraId.value === placement.cameraId
@@ -662,7 +664,7 @@ export function useSiteMapCanvas(
     // Calculate visible FOV with wall occlusion
     const visiblePolygon = calculateVisibleFOV(
       { x, y },
-      rotation,
+      azimuth,
       fov,
       viewDistance,
       wallSegments
@@ -681,9 +683,12 @@ export function useSiteMapCanvas(
     drawPolygon(context, visiblePolygon, fillStyle, strokeStyle, lineWidth)
 
     // Draw camera icon
+    // Convert from azimuth (0° = North, clockwise) to canvas rotation
+    // Navigation azimuth: 0°=N, 90°=E - converts to canvas angle = 90 - azimuth
+    const canvasAngle = 90 - azimuth
     context.save()
     context.translate(x, y)
-    context.rotate((rotation * Math.PI) / 180)
+    context.rotate((canvasAngle * Math.PI) / 180)
 
     // Camera body
     context.beginPath()
@@ -703,10 +708,10 @@ export function useSiteMapCanvas(
     context.lineWidth = 1
     context.stroke()
 
-    // Angle indicator
-    if (angle > 0 && angle < 90) {
+    // Elevation indicator
+    if (elevation > 0 && elevation < 90) {
       const angleIndicatorLength = 20
-      const angleRad = (angle * Math.PI) / 180
+      const angleRad = (elevation * Math.PI) / 180
 
       context.beginPath()
       context.moveTo(15, 0)
@@ -739,11 +744,11 @@ export function useSiteMapCanvas(
       context.textAlign = x < 50 ? 'left' : x > canvas.width - 50 ? 'right' : 'center'
       context.fillText(getCameraName(placement.cameraId), labelX, labelY)
 
-      if (angle > 0 && angle < 90) {
+      if (elevation > 0 && elevation < 90) {
         context.font = '10px monospace'
         context.fillStyle = '#f87171'
         context.textAlign = 'center'
-        context.fillText(`▼ ${angle}°`, x, y - 10)
+        context.fillText(`▼ ${elevation}°`, x, y - 10)
       }
     }
   }

@@ -12,7 +12,12 @@ import { DetectionProcessor } from './detection/detection-processor.js'
 import { registerRoutes } from './api/routes.js'
 import { WebSocketBroadcaster, registerWebSocket } from './api/websocket.js'
 import { loadEnvironment } from './config/environment.js'
+import { loadSiteMapConfig } from './config/sitemap-loader.js'
 import type { CameraParams } from './types.js'
+import { dirname, resolve } from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // ASCII visualization config (Auditorium scene ~20m x 20m based on calibration)
 const GRID_WIDTH = 50
@@ -135,7 +140,12 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
   const trackManager = new TrackManager()
   const cameraRegistry = new CameraRegistry()
 
-  // Register cameras if provided
+  // Load cameras from sitemap JSON (single source of truth)
+  const sitemapPath = resolve(__dirname, '../../frontend/public/sitemap-rectangular-room.json')
+  const sitemapConfig = loadSiteMapConfig(sitemapPath)
+  cameraRegistry.loadFromSiteMapConfig(sitemapConfig.cameras)
+
+  // Register additional cameras if provided
   if (options.cameras) {
     for (const [cameraId, params] of options.cameras) {
       cameraRegistry.registerCamera(cameraId, params)
@@ -207,7 +217,12 @@ export async function createServerWithComponents(options: CreateServerOptions = 
   const trackManager = new TrackManager()
   const cameraRegistry = new CameraRegistry()
 
-  // Register cameras if provided
+  // Load cameras from sitemap JSON (single source of truth)
+  const sitemapPath = resolve(__dirname, '../../frontend/public/sitemap-rectangular-room.json')
+  const sitemapConfig = loadSiteMapConfig(sitemapPath)
+  cameraRegistry.loadFromSiteMapConfig(sitemapConfig.cameras)
+
+  // Register additional cameras if provided
   if (options.cameras) {
     for (const [cameraId, params] of options.cameras) {
       cameraRegistry.registerCamera(cameraId, params)

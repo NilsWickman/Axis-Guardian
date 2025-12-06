@@ -19,6 +19,8 @@ export interface DetectionMetadata {
   detection_count: number
   detections: Detection[]
   detection_frame?: number // Original frame where detection ran
+  dispatch_time?: number  // High-res ms timestamp for timing measurement
+  video_time_ms?: number  // Video presentation time in ms (for sync with video element)
 }
 
 export interface WebRTCDetectionOptions {

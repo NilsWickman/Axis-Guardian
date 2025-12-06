@@ -68,8 +68,6 @@ export interface CameraParams {
   elevation: number
   /** Horizontal field of view in degrees */
   fov: number
-  /** Maximum viewing distance in meters */
-  maxDistance: number
 }
 
 /**
@@ -81,7 +79,6 @@ export interface CameraConfig {
   azimuth: number
   elevation: number
   fov: number
-  viewDistance: number
 }
 
 /**
@@ -90,11 +87,14 @@ export interface CameraConfig {
 export interface SiteMapCameraConfig {
   id: string
   position: { x: number; y: number }
-  rotation: number
+  /** Azimuth angle in degrees (0 = North/+Y, 90 = East/+X, clockwise) */
+  azimuth: number
+  /** Elevation angle in degrees (positive = looking down). Default: 45 */
   elevation?: number
+  /** Camera mount height in meters */
   height: number
+  /** Horizontal field of view in degrees */
   fieldOfView: number
-  viewDistance: number
 }
 
 /**

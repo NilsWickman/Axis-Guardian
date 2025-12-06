@@ -175,7 +175,6 @@ describe('projectToGround', () => {
     azimuth: 0, // Looking North
     elevation: 45,
     fov: 60,
-    maxDistance: 20,
   }
 
   const image = { width: 1920, height: 1080 }
@@ -184,13 +183,6 @@ describe('projectToGround', () => {
     const result = projectToGround({ x: 960, y: 540 }, camera, image)
     expect(result.isValid).toBe(true)
     expect(result.worldPoint.y).toBeGreaterThan(camera.position.y) // North of camera
-  })
-
-  it('rejects points beyond max distance', () => {
-    const nearCamera: CameraParams = { ...camera, maxDistance: 1 }
-    const result = projectToGround({ x: 960, y: 200 }, nearCamera, image)
-    expect(result.isValid).toBe(false)
-    expect(result.reason).toBe('beyond_max_distance')
   })
 
   it('rejects points too close', () => {
@@ -209,7 +201,6 @@ describe('isInHorizontalFOV', () => {
     azimuth: 0, // Looking North
     elevation: 45,
     fov: 60,
-    maxDistance: 20,
   }
 
   it('accepts point directly ahead', () => {
@@ -256,7 +247,6 @@ describe('projectDetectionToGround', () => {
     azimuth: 0,
     elevation: 45,
     fov: 60,
-    maxDistance: 20,
   }
 
   it('projects normalized bbox to world coordinates', () => {
@@ -267,16 +257,94 @@ describe('projectDetectionToGround', () => {
   })
 })
 
+describe('Projection Direction Tests', () => {
+  const image = { width: 1920, height: 1080 }
+
+  it('projects toward North for azimuth=0', () => {
+    const camera: CameraParams = {
+      position: { x: 5, y: 5, z: 2 },
+      azimuth: 0, // North
+      elevation: 45,
+      fov: 60,
+    }
+    const result = projectToGround({ x: 960, y: 540 }, camera, image)
+
+    expect(result.isValid).toBe(true)
+    // Azimuth 0 = North = +Y direction
+    expect(result.worldPoint.x).toBeCloseTo(5, 0) // X unchanged (no east/west component)
+    expect(result.worldPoint.y).toBeGreaterThan(5) // North of camera
+  })
+
+  it('projects toward East for azimuth=90', () => {
+    const camera: CameraParams = {
+      position: { x: 5, y: 5, z: 2 },
+      azimuth: 90, // East
+      elevation: 45,
+      fov: 60,
+    }
+    const result = projectToGround({ x: 960, y: 540 }, camera, image)
+
+    expect(result.isValid).toBe(true)
+    // Azimuth 90 = East = +X direction
+    expect(result.worldPoint.x).toBeGreaterThan(5) // East of camera
+    expect(result.worldPoint.y).toBeCloseTo(5, 0) // Y unchanged (no north/south component)
+  })
+
+  it('projects toward camera direction for azimuth=340 (NW)', () => {
+    const camera: CameraParams = {
+      position: { x: 11, y: 1, z: 1.7 },
+      azimuth: 340, // 20° west of north
+      elevation: 10,
+      fov: 60,
+    }
+    const result = projectToGround({ x: 960, y: 540 }, camera, image)
+
+    expect(result.isValid).toBe(true)
+    // 340° = 20° west of north = should project to -X (west) and +Y (north)
+    expect(result.worldPoint.x).toBeLessThan(11) // West of camera
+    expect(result.worldPoint.y).toBeGreaterThan(1) // North of camera
+  })
+
+  it('projects toward South for azimuth=180', () => {
+    const camera: CameraParams = {
+      position: { x: 5, y: 5, z: 2 },
+      azimuth: 180, // South
+      elevation: 45,
+      fov: 60,
+    }
+    const result = projectToGround({ x: 960, y: 540 }, camera, image)
+
+    expect(result.isValid).toBe(true)
+    // Azimuth 180 = South = -Y direction
+    expect(result.worldPoint.x).toBeCloseTo(5, 0) // X unchanged
+    expect(result.worldPoint.y).toBeLessThan(5) // South of camera
+  })
+
+  it('projects toward West for azimuth=270', () => {
+    const camera: CameraParams = {
+      position: { x: 5, y: 5, z: 2 },
+      azimuth: 270, // West
+      elevation: 45,
+      fov: 60,
+    }
+    const result = projectToGround({ x: 960, y: 540 }, camera, image)
+
+    expect(result.isValid).toBe(true)
+    // Azimuth 270 = West = -X direction
+    expect(result.worldPoint.x).toBeLessThan(5) // West of camera
+    expect(result.worldPoint.y).toBeCloseTo(5, 0) // Y unchanged
+  })
+})
+
 describe('siteMapConfigToCamera', () => {
   it('converts sitemap config to camera params', () => {
     const config = {
       id: 'camera1',
       position: { x: 3.5, y: 0.5 },
-      rotation: 90,
+      azimuth: 90,
       elevation: 45,
       height: 2.5,
       fieldOfView: 60,
-      viewDistance: 10,
     }
 
     const camera = siteMapConfigToCamera(config)
@@ -287,17 +355,15 @@ describe('siteMapConfigToCamera', () => {
     expect(camera.azimuth).toBe(90)
     expect(camera.elevation).toBe(45)
     expect(camera.fov).toBe(60)
-    expect(camera.maxDistance).toBe(10)
   })
 
   it('uses default elevation when not specified', () => {
     const config = {
       id: 'camera1',
       position: { x: 0, y: 0 },
-      rotation: 0,
+      azimuth: 0,
       height: 2,
       fieldOfView: 60,
-      viewDistance: 10,
     }
 
     const camera = siteMapConfigToCamera(config)

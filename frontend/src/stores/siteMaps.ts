@@ -11,12 +11,14 @@ export interface CameraPlacement {
     x: UnitValue
     y: UnitValue
   }
-  rotation: UnitValue
-  angle: UnitValue
+  /** Azimuth angle in degrees (0 = North/+Y, 90 = East/+X, clockwise) */
+  azimuth: UnitValue
+  /** Elevation angle in degrees (positive = looking down) */
+  elevation: UnitValue
+  /** Camera mount height */
   height: UnitValue
+  /** Horizontal field of view */
   fov: UnitValue
-  viewDistance: UnitValue
-  autoCalculateDistance: boolean
   color: string
   notes?: string
 }
@@ -67,12 +69,10 @@ function transformConfigToSiteMap(config: SiteMapConfig): SiteMap {
         x: createMeterUnit(cam.position.x),
         y: createMeterUnit(cam.position.y)
       },
-      rotation: createDegreeUnit(cam.rotation),
-      angle: createDegreeUnit(0),
+      azimuth: createDegreeUnit(cam.azimuth),
+      elevation: createDegreeUnit(cam.elevation ?? 45),
       height: createMeterUnit(cam.height),
       fov: createDegreeUnit(cam.fieldOfView),
-      viewDistance: createMeterUnit(cam.viewDistance),
-      autoCalculateDistance: false,
       color: cam.color || 'cyan-500'
     })),
     walls: config.walls.map((wall) => ({
@@ -139,12 +139,10 @@ async function createAuditoriumSiteMap(): Promise<SiteMap> {
         x: createMeterUnit(cal.position.x),
         y: createMeterUnit(cal.position.y)
       },
-      rotation: createDegreeUnit(cal.azimuth),
-      angle: createDegreeUnit(cal.elevation),
+      azimuth: createDegreeUnit(cal.azimuth),
+      elevation: createDegreeUnit(cal.elevation),
       height: createMeterUnit(cal.position.z),
       fov: createDegreeUnit(60), // Standard for dataset
-      viewDistance: createMeterUnit(30), // Reasonable for auditorium
-      autoCalculateDistance: false,
       color: idx === 0 ? 'cyan-500' : idx === 1 ? 'purple-500' : idx === 2 ? 'green-500' : 'orange-500',
       notes: `${cal.viewId} (Calibrated from XML)`
     })),

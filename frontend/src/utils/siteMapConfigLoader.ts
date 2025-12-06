@@ -13,10 +13,14 @@ export interface SiteMapConfigCamera {
   webrtcUrl?: string
   ipAddress?: string
   position: { x: number; y: number }
-  rotation: number
+  /** Azimuth angle in degrees (0 = North/+Y, 90 = East/+X, clockwise) */
+  azimuth: number
+  /** Elevation angle in degrees (positive = looking down). Default: 45 */
+  elevation?: number
+  /** Camera mount height in meters */
   height: number
+  /** Horizontal field of view in degrees */
   fieldOfView: number
-  viewDistance: number
   color?: string
 }
 

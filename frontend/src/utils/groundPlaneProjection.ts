@@ -39,8 +39,6 @@ export interface CameraParams {
   elevation: number
   /** Horizontal field of view in degrees */
   fov: number
-  /** Maximum viewing distance in meters */
-  maxDistance: number
 }
 
 export interface ImageParams {
@@ -319,17 +317,6 @@ export function projectToGround(
     Math.pow(worldPoint.y - camera.position.y, 2)
   )
 
-  // Validate distance
-  if (distance > camera.maxDistance) {
-    return {
-      worldPoint,
-      distance,
-      isValid: false,
-      reason: 'beyond_max_distance',
-      debug,
-    }
-  }
-
   if (distance < 0.1) {
     return {
       worldPoint,
@@ -437,11 +424,14 @@ export function projectDetectionToGround(
 export interface SiteMapCameraConfig {
   id: string
   position: { x: number; y: number }
-  rotation: number
-  elevation?: number  // Camera tilt angle in degrees (positive = looking down)
+  /** Azimuth angle in degrees (0 = North/+Y, 90 = East/+X, clockwise) */
+  azimuth: number
+  /** Elevation angle in degrees (positive = looking down). Default: 45 */
+  elevation?: number
+  /** Camera mount height in meters */
   height: number
+  /** Horizontal field of view in degrees */
   fieldOfView: number
-  viewDistance: number
 }
 
 // Default elevation angle when not specified
@@ -457,9 +447,8 @@ export function siteMapConfigToCamera(config: SiteMapCameraConfig): CameraParams
       y: config.position.y,
       z: config.height,
     },
-    azimuth: config.rotation,
+    azimuth: config.azimuth,
     elevation: config.elevation ?? DEFAULT_ELEVATION_DEG,
     fov: config.fieldOfView,
-    maxDistance: config.viewDistance,
   }
 }
