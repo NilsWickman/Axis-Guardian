@@ -24,6 +24,9 @@ export const config = {
   // Tracking service WebSocket
   trackingServiceWsUrl: import.meta.env.VITE_TRACKING_WS_URL || 'ws://localhost:3010/ws',
 
+  // Tracking service REST API (for sitemap config)
+  trackingServiceApiUrl: import.meta.env.VITE_TRACKING_API_URL || 'http://localhost:3010',
+
   // Environment flags
   isDevelopment: import.meta.env.DEV,
   isProduction: import.meta.env.PROD,
