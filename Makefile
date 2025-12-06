@@ -1,4 +1,4 @@
-.PHONY: setup dev help clean check-pnpm kill-ports dev-frontend dev-camera dev-tracking
+.PHONY: setup dev help clean check-pnpm kill-ports dev-frontend dev-camera dev-tracking db-seed db-reset
 
 # Colors for output
 CYAN := \033[0;36m
@@ -19,26 +19,43 @@ help: ## Show this help message
 check-pnpm: ## Check if pnpm is installed
 	@command -v pnpm >/dev/null 2>&1 || { echo "$(YELLOW)Warning: pnpm is not installed. Install it with: npm install -g pnpm$(NC)"; exit 1; }
 
-setup: check-pnpm ## Install all dependencies (frontend + camera-emulator + tracking-service)
+setup: check-pnpm ## Install all dependencies and seed database
 	@echo "$(CYAN)Starting setup...$(NC)"
 	@echo ""
 
-	@echo "$(GREEN)[1/3] Installing frontend dependencies...$(NC)"
+	@echo "$(GREEN)[1/4] Installing frontend dependencies...$(NC)"
 	@cd frontend && pnpm install
 	@echo "$(GREEN)✓ Frontend dependencies installed$(NC)"
 	@echo ""
 
-	@echo "$(GREEN)[2/3] Installing camera-emulator dependencies...$(NC)"
+	@echo "$(GREEN)[2/4] Installing camera-emulator dependencies...$(NC)"
 	@cd camera-emulator && pnpm install
+	@echo "$(YELLOW)   Rebuilding mediasoup native worker...$(NC)"
+	@cd camera-emulator && npm rebuild mediasoup 2>/dev/null || true
 	@echo "$(GREEN)✓ Camera emulator dependencies installed$(NC)"
 	@echo ""
 
-	@echo "$(GREEN)[3/3] Installing tracking-service dependencies...$(NC)"
+	@echo "$(GREEN)[3/4] Installing tracking-service dependencies...$(NC)"
 	@cd tracking-service && pnpm install
 	@echo "$(GREEN)✓ Tracking service dependencies installed$(NC)"
 	@echo ""
 
+	@echo "$(GREEN)[4/4] Seeding tracking-service database...$(NC)"
+	@cd tracking-service && pnpm db:seed
+	@echo "$(GREEN)✓ Database seeded from shared/config/sitemap-rectangular-room.json$(NC)"
+	@echo ""
+
 	@echo "$(GREEN)Setup complete! Run 'make dev' to start all development servers.$(NC)"
+
+db-seed: ## Seed the tracking-service database from shared config
+	@echo "$(CYAN)Seeding database...$(NC)"
+	@cd tracking-service && pnpm db:seed
+	@echo "$(GREEN)✓ Database seeded$(NC)"
+
+db-reset: ## Reset and re-seed the tracking-service database
+	@echo "$(CYAN)Resetting database...$(NC)"
+	@cd tracking-service && pnpm db:reset
+	@echo "$(GREEN)✓ Database reset and re-seeded$(NC)"
 
 kill-ports: ## Kill any processes using development ports (5173, 9101, 3010)
 	@echo "$(CYAN)Checking for processes on development ports...$(NC)"

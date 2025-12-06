@@ -9,6 +9,7 @@ import type { TrackingConfig } from '../types.js'
 import { TrackManager, trackToJSON } from '../tracks/track-manager.js'
 import { DetectionProcessor } from '../detection/detection-processor.js'
 import { CameraRegistry } from '../detection/camera-registry.js'
+import { getSiteMapConfigJson, isDatabaseSeeded } from '../db/repositories.js'
 
 // Stats tracking (exported for display)
 export let detectionsReceived = 0
@@ -303,6 +304,25 @@ export function registerRoutes(
         fov: params.fov,
       })),
     }
+  })
+
+  // Get site map config from database (matches frontend JSON format)
+  app.get('/api/sitemap', async (_request: FastifyRequest, reply: FastifyReply) => {
+    if (!isDatabaseSeeded()) {
+      return reply.status(503).send({
+        error: 'Database not seeded',
+        message: 'Run `pnpm db:seed` to initialize the database',
+      })
+    }
+
+    const config = getSiteMapConfigJson()
+    if (!config) {
+      return reply.status(404).send({
+        error: 'Site config not found',
+      })
+    }
+
+    return config
   })
 
   // Get tracking config

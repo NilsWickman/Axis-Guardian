@@ -137,7 +137,8 @@ export function transformRayToWorld(
   }
 
   // Step 3: Apply azimuth rotation around world Z-axis
-  const azimuthRad = degToRad(-azimuthDeg)
+  // Azimuth convention: 0° = North (+Y), 90° = East (+X), clockwise
+  const azimuthRad = degToRad(azimuthDeg)
   const rayWorld = rotateAroundZ(rayIntermediate, azimuthRad)
 
   return rayWorld

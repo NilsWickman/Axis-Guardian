@@ -1,5 +1,10 @@
 /**
  * Camera Registry - Manages camera configurations for projection
+ *
+ * Supports loading cameras from:
+ * - Database (SQLite via Drizzle ORM)
+ * - Sitemap JSON config
+ * - Manual registration
  */
 
 import type { CameraParams, CameraConfig, SiteMapCameraConfig, CameraCalibration } from '../types.js'
@@ -146,5 +151,28 @@ export class CameraRegistry {
    */
   clear(): void {
     this.cameras.clear()
+  }
+
+  /**
+   * Load cameras from database
+   * Requires db module to be initialized with seeded data
+   */
+  async loadFromDatabase(): Promise<void> {
+    // Dynamic import to avoid circular dependency and allow optional db usage
+    const { getCamerasForSite, isDatabaseSeeded } = await import('../db/repositories.js')
+
+    if (!isDatabaseSeeded()) {
+      console.warn('⚠️  Database not seeded, skipping database camera load')
+      return
+    }
+
+    const dbCameras = getCamerasForSite('default')
+    this.cameras.clear()
+
+    for (const [cameraId, params] of dbCameras) {
+      this.cameras.set(cameraId, params)
+    }
+
+    console.log(`📷 Loaded ${this.cameras.size} camera(s) from database`)
   }
 }

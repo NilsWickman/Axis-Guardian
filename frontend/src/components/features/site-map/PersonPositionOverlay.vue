@@ -11,19 +11,22 @@
       class="absolute inset-0 pointer-events-none"
       style="z-index: 10"
     >
-      <!-- Trails (if enabled) -->
+      <!-- Trails (if enabled) - individual segments with fading opacity -->
       <g v-if="showTrails">
-        <path
-          v-for="track in visibleGlobalTracks"
-          :key="`trail-${track.globalTrackId}`"
-          :d="getGlobalTrailPath(track)"
-          :stroke="track.color"
-          stroke-width="2"
-          fill="none"
-          opacity="0.4"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
+        <g v-for="track in visibleGlobalTracks" :key="`trail-${track.globalTrackId}`">
+          <line
+            v-for="segment in getTrailSegments(track)"
+            :key="segment.key"
+            :x1="segment.x1"
+            :y1="segment.y1"
+            :x2="segment.x2"
+            :y2="segment.y2"
+            :stroke="track.color"
+            stroke-width="2"
+            :opacity="segment.opacity"
+            stroke-linecap="round"
+          />
+        </g>
       </g>
 
       <!-- Global track position markers -->
@@ -90,21 +93,6 @@
         </text>
       </g>
 
-      <!-- Heatmap overlay (if enabled) -->
-      <g v-if="showHeatmap && heatmapData.length > 0">
-        <rect
-          v-for="(cell, index) in heatmapData"
-          :key="`heatmap-${index}`"
-          :x="cell.x"
-          :y="cell.y"
-          :width="cell.size"
-          :height="cell.size"
-          :fill="cell.color"
-          :opacity="cell.opacity"
-          class="heatmap-cell"
-        />
-      </g>
-
       <!-- Debug: Unconfirmed tracks (dashed outline) -->
       <g v-if="showDebugMode && unconfirmedTracks.length > 0">
         <g v-for="track in unconfirmedTracks" :key="`unconfirmed-${track.globalTrackId}`">
@@ -167,7 +155,6 @@ export interface PersonPositionOverlayProps {
   showConfidence?: boolean
   showPersonIcon?: boolean
   showStats?: boolean
-  showHeatmap?: boolean
   showDebugMode?: boolean // Show unconfirmed tracks and FOV cones
   markerRadius?: number
   maxTrailLength?: number
@@ -178,7 +165,6 @@ const props = withDefaults(defineProps<PersonPositionOverlayProps>(), {
   showConfidence: true,
   showPersonIcon: false,
   showStats: true,
-  showHeatmap: false,
   showDebugMode: false,
   markerRadius: 8,
   maxTrailLength: 20,
@@ -214,56 +200,6 @@ const unconfirmedTracks = computed(() => {
   })
 })
 
-// Heatmap data (simplified grid-based heatmap)
-interface HeatmapCell {
-  x: number
-  y: number
-  size: number
-  count: number
-  color: string
-  opacity: number
-}
-
-const heatmapData = computed<HeatmapCell[]>(() => {
-  if (!props.showHeatmap) return []
-
-  const cellSize = 30 // 30 pixels per cell
-  const grid = new Map<string, number>()
-
-  // Accumulate global track positions into grid cells
-  globalTracks.value.forEach(track => {
-    const cellX = Math.floor(worldToCanvasX(track.currentPosition.x) / cellSize) * cellSize
-    const cellY = Math.floor(worldToCanvasY(track.currentPosition.y) / cellSize) * cellSize
-    const key = `${cellX},${cellY}`
-    grid.set(key, (grid.get(key) || 0) + 1)
-  })
-
-  // Convert to array and calculate colors
-  const maxCount = Math.max(...Array.from(grid.values()), 1)
-  const cells: HeatmapCell[] = []
-
-  grid.forEach((count, key) => {
-    const [x, y] = key.split(',').map(Number)
-    const intensity = count / maxCount
-
-    // Color gradient from blue to red
-    const color = intensity < 0.5
-      ? `rgb(${Math.round(intensity * 510)}, ${Math.round(intensity * 510)}, 255)`
-      : `rgb(255, ${Math.round((1 - intensity) * 510)}, 0)`
-
-    cells.push({
-      x,
-      y,
-      size: cellSize,
-      count,
-      color,
-      opacity: 0.3 + intensity * 0.4,
-    })
-  })
-
-  return cells
-})
-
 /**
  * Convert world coordinates (meters) to canvas coordinates (pixels)
  *
@@ -287,26 +223,58 @@ function getGlobalTrackOpacity(track: GlobalTrack): number {
   const now = Date.now()
   const ageMs = now - track.lastSeen
 
-  // Fade out over 10 seconds
-  const fadeMs = 10000
+  // Fade out over 3 seconds
+  const fadeMs = 3000
   const opacity = Math.max(0.3, 1 - (ageMs / fadeMs))
   return Math.min(1, opacity)
 }
 
 /**
- * Generate SVG path for a global track trail
+ * Trail segment with opacity for fading effect
  */
-function getGlobalTrailPath(track: GlobalTrack): string {
+interface TrailSegment {
+  key: string
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  opacity: number
+}
+
+/**
+ * Generate trail segments with fading opacity based on age
+ * Segments fade out over 3 seconds
+ */
+function getTrailSegments(track: GlobalTrack): TrailSegment[] {
   const trailPositions = track.trail.slice(0, props.maxTrailLength)
-  if (trailPositions.length < 2) return ''
+  if (trailPositions.length < 2) return []
 
-  const pathSegments = trailPositions.map((pos, index) => {
-    const x = worldToCanvasX(pos.x)
-    const y = worldToCanvasY(pos.y)
-    return index === 0 ? `M ${x} ${y}` : `L ${x} ${y}`
-  })
+  const now = Date.now()
+  const fadeMs = 3000 // Fade over 3 seconds
+  const segments: TrailSegment[] = []
 
-  return pathSegments.join(' ')
+  for (let i = 0; i < trailPositions.length - 1; i++) {
+    const from = trailPositions[i]
+    const to = trailPositions[i + 1]
+
+    // Use the older point's timestamp to determine opacity
+    const ageMs = now - to.timestamp
+    const opacity = Math.max(0, 0.6 * (1 - ageMs / fadeMs))
+
+    // Skip segments that have fully faded
+    if (opacity <= 0) continue
+
+    segments.push({
+      key: `${track.globalTrackId}-seg-${i}`,
+      x1: worldToCanvasX(from.x),
+      y1: worldToCanvasY(from.y),
+      x2: worldToCanvasX(to.x),
+      y2: worldToCanvasY(to.y),
+      opacity,
+    })
+  }
+
+  return segments
 }
 
 /**
@@ -325,10 +293,6 @@ function formatTrackId(trackId: string): string {
 
 .person-marker {
   transition: opacity 0.3s ease;
-}
-
-.heatmap-cell {
-  transition: opacity 0.5s ease;
 }
 
 .track-label {
