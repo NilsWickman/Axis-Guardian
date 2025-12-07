@@ -19,6 +19,11 @@ sqlite.pragma('journal_mode = WAL');
 // Create Drizzle ORM instance with schema
 export const db = drizzle(sqlite, { schema });
 
+// Getter function for the database instance
+export function getDb() {
+  return db;
+}
+
 // Export the raw sqlite connection for migrations
 export { sqlite };
 

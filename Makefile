@@ -1,4 +1,4 @@
-.PHONY: setup dev help clean check-pnpm kill-ports dev-frontend dev-camera dev-tracking db-seed db-reset
+.PHONY: setup dev help clean check-pnpm kill-ports dev-frontend dev-camera dev-tracking db-seed db-reset debug-tracking debug-tracking-stop
 
 # Colors for output
 CYAN := \033[0;36m
@@ -125,3 +125,43 @@ check: ## Check if all dependencies are installed
 	@[ -d "frontend/node_modules" ] && echo "$(GREEN)✓ Frontend dependencies installed$(NC)" || echo "$(YELLOW)✗ Frontend dependencies not installed$(NC)"
 	@[ -d "camera-emulator/node_modules" ] && echo "$(GREEN)✓ Camera emulator dependencies installed$(NC)" || echo "$(YELLOW)✗ Camera emulator dependencies not installed$(NC)"
 	@[ -d "tracking-service/node_modules" ] && echo "$(GREEN)✓ Tracking service dependencies installed$(NC)" || echo "$(YELLOW)✗ Tracking service dependencies not installed$(NC)"
+
+# Database path for debug operations
+DB_PATH := tracking-service/data/tracking.db
+
+debug-tracking: ## Clear debug tables, start recording, wait for Ctrl+C to stop
+	@echo "$(CYAN)Starting debug tracking session...$(NC)"
+	@echo ""
+	@echo "$(YELLOW)[1/2] Clearing debug tables...$(NC)"
+	@sqlite3 $(DB_PATH) "DELETE FROM debug_track_states; DELETE FROM debug_track_associations; DELETE FROM debug_projected_positions; DELETE FROM debug_raw_detections; DELETE FROM debug_sessions;" 2>/dev/null || echo "$(YELLOW)   Tables may not exist yet - will be created on first use$(NC)"
+	@echo "$(GREEN)✓ Debug tables cleared$(NC)"
+	@echo ""
+	@echo "$(YELLOW)[2/2] Starting debug session...$(NC)"
+	@curl -s -X POST http://localhost:3010/api/debug/session/start \
+		-H "Content-Type: application/json" \
+		-d '{"name": "Debug session $(shell date +%Y-%m-%d_%H:%M:%S)"}' | \
+		(command -v jq >/dev/null 2>&1 && jq '.' || cat)
+	@echo ""
+	@echo "$(GREEN)✓ Debug recording started!$(NC)"
+	@echo ""
+	@echo "$(CYAN)Recording pipeline data to: $(DB_PATH)$(NC)"
+	@echo "$(CYAN)Press Ctrl+C to stop recording...$(NC)"
+	@echo ""
+	@trap 'curl -s -X POST http://localhost:3010/api/debug/session/end -H "Content-Type: application/json" -d "{}" >/dev/null; echo ""; echo "$(GREEN)✓ Debug recording stopped$(NC)"; echo ""; echo "$(CYAN)Query data: sqlite3 $(DB_PATH)$(NC)"; exit 0' INT; \
+	while true; do sleep 1; done
+
+debug-tracking-stop: ## Stop the current debug recording session
+	@echo "$(CYAN)Stopping debug tracking session...$(NC)"
+	@curl -s -X POST http://localhost:3010/api/debug/session/end \
+		-H "Content-Type: application/json" \
+		-d '{}' | \
+		(command -v jq >/dev/null 2>&1 && jq '.' || cat)
+	@echo ""
+	@echo "$(GREEN)✓ Debug recording stopped$(NC)"
+	@echo ""
+	@echo "$(CYAN)Query the data with:$(NC)"
+	@echo "  sqlite3 $(DB_PATH)"
+	@echo ""
+	@echo "$(CYAN)Example queries:$(NC)"
+	@echo "  SELECT * FROM debug_sessions ORDER BY started_at DESC LIMIT 1;"
+	@echo "  SELECT camera_id, world_x, world_y FROM debug_projected_positions LIMIT 20;"

@@ -17,6 +17,8 @@
     Archive,
     Layers,
     Box,
+    Code,
+    Film,
   } from 'lucide-vue-next'
   import { useTheme } from '@/composables/useTheme'
 
@@ -88,6 +90,17 @@
       name: 'Settings',
       path: '/settings',
       icon: Settings,
+    },
+    {
+      name: 'Dev',
+      icon: Code,
+      children: [
+        {
+          name: 'Frame Review',
+          path: '/cameras/frame-review',
+          icon: Film,
+        },
+      ],
     },
   ]
 

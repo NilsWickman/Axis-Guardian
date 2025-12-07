@@ -5,11 +5,12 @@
  * coordinates, and feeds them into the TrackManager.
  */
 
-import type { DetectionMessage, RawDetection, GlobalTrack, CameraDetection } from '../types.js'
+import type { DetectionMessage, RawDetection, GlobalTrack, CameraDetection, CameraFrameInfo } from '../types.js'
 import { projectDetectionToGround, projectDetectionWithKRT } from '../projection/ground-plane.js'
 import { TrackManager } from '../tracks/track-manager.js'
 import { CameraRegistry } from './camera-registry.js'
 import { logProjectionFailure } from '../api/routes.js'
+import { getPipelineLogger } from '../debug/pipeline-logger.js'
 
 const MIN_CONFIDENCE = 0.7
 const IMAGE_WIDTH = 1920
@@ -17,6 +18,7 @@ const IMAGE_HEIGHT = 1080
 
 export class DetectionProcessor {
   private lastProcessedFrames: Map<string, number> = new Map()
+  private lastFrameTimestamps: Map<string, number> = new Map()
   private lastCleanupTime: number = Date.now()
   private static readonly MAX_CAMERAS = 100  // Prevent unbounded growth
   private static readonly CLEANUP_INTERVAL_MS = 60000  // Cleanup every minute
@@ -39,6 +41,7 @@ export class DetectionProcessor {
       return []
     }
     this.lastProcessedFrames.set(cameraId, message.frame_number)
+    this.lastFrameTimestamps.set(cameraId, Date.now())
 
     // Periodic cleanup to prevent memory leaks from stale camera entries
     this.periodicCleanup()
@@ -55,6 +58,7 @@ export class DetectionProcessor {
 
     // Project all detections to world coordinates
     const projectedDetections: CameraDetection[] = []
+    const logger = getPipelineLogger()
 
     for (const detection of message.detections) {
       // Filter for person detections with sufficient confidence
@@ -66,21 +70,42 @@ export class DetectionProcessor {
       const bbox = this.parseBBox(detection)
       if (!bbox) continue
 
+      // Log raw detection
+      const rawDetectionKey = logger.logRawDetection(cameraId, detection, message.frame_number)
+
       // Project to world coordinates
       // Try K/R/T projection first (more accurate), fall back to legacy
       const calibration = this.cameraRegistry.getCalibration(cameraId)
       let worldPoint: { x: number; y: number }
       let isValid: boolean
+      let projectionMethod: 'krt' | 'legacy'
+      let projectionReason: string | undefined
 
       if (calibration) {
         const krtResult = projectDetectionWithKRT(bbox, calibration, true, IMAGE_WIDTH, IMAGE_HEIGHT)
         worldPoint = krtResult.worldPoint
         isValid = krtResult.isValid
+        projectionMethod = 'krt'
+        projectionReason = krtResult.reason
       } else {
         const legacyResult = projectDetectionToGround(bbox, camera, true, IMAGE_WIDTH, IMAGE_HEIGHT)
         worldPoint = legacyResult.worldPoint
         isValid = legacyResult.isValid
+        projectionMethod = 'legacy'
+        projectionReason = legacyResult.reason
       }
+
+      // Log projected position (key available for linking in future)
+      logger.logProjectedPosition(
+        cameraId,
+        detection.track_id,
+        worldPoint.x,
+        worldPoint.y,
+        isValid,
+        projectionMethod,
+        projectionReason,
+        rawDetectionKey ?? undefined
+      )
 
       if (!isValid) {
         continue
@@ -207,6 +232,7 @@ export class DetectionProcessor {
    */
   resetFrameTracking(): void {
     this.lastProcessedFrames.clear()
+    this.lastFrameTimestamps.clear()
     this.lastCleanupTime = Date.now()
   }
 
@@ -215,6 +241,27 @@ export class DetectionProcessor {
    */
   getLastProcessedFrame(cameraId: string): number {
     return this.lastProcessedFrames.get(cameraId) ?? -1
+  }
+
+  /**
+   * Get frame info for all cameras (for WebSocket broadcasting)
+   */
+  getCameraFrameInfo(): CameraFrameInfo[] {
+    const frames: CameraFrameInfo[] = []
+    for (const [cameraId, frameNumber] of this.lastProcessedFrames.entries()) {
+      const timestamp = this.lastFrameTimestamps.get(cameraId) ?? 0
+      frames.push({ cameraId, frameNumber, timestamp })
+    }
+    return frames
+  }
+
+  /**
+   * Update frame info for a camera (called from HTTP API routes)
+   */
+  updateFrameInfo(cameraId: string, frameNumber: number): void {
+    const normalizedCameraId = this.cameraRegistry.normalizeCameraId(cameraId)
+    this.lastProcessedFrames.set(normalizedCameraId, frameNumber)
+    this.lastFrameTimestamps.set(normalizedCameraId, Date.now())
   }
 
   /**
