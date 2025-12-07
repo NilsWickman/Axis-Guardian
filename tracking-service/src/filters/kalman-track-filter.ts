@@ -37,8 +37,8 @@ export interface KalmanFilterConfig {
  * Optimized for better prediction during brief occlusions
  */
 export const DEFAULT_KALMAN_CONFIG: KalmanFilterConfig = {
-  processNoise: 0.3,              // Reduced for smoother prediction during occlusion (was 0.5)
-  measurementNoise: 0.4,          // Increased to trust predictions more (was 0.3)
+  processNoise: 0.5,              // Higher for better handling of sudden stops/starts (pedestrian motion)
+  measurementNoise: 0.2,          // Lower for faster response to direction changes (was 0.4)
   initialPositionUncertainty: 1,  // Initial position uncertainty 1m
   initialVelocityUncertainty: 1,  // Initial velocity uncertainty 1m/s
 }

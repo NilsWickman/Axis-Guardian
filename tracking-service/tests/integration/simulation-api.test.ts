@@ -123,14 +123,9 @@ describe('Simulation API Flow', () => {
       let track = detectionProcessor.processWorldPosition('camera1', 0.0, 0.0, 0.9, 1)
       expect(track.isConfirmed).toBe(false)
 
-      // Second detection - not confirmed
+      // Second detection - confirmed (minDetectionsToConfirm=2)
       mockTime += 100
       track = detectionProcessor.processWorldPosition('camera1', 0.5, 0.5, 0.9, 1)
-      expect(track.isConfirmed).toBe(false)
-
-      // Third detection - confirmed
-      mockTime += 100
-      track = detectionProcessor.processWorldPosition('camera1', 1.0, 1.0, 0.9, 1)
       expect(track.isConfirmed).toBe(true)
     })
 

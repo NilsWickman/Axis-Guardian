@@ -68,16 +68,20 @@
     <!-- Frame info -->
     <div
       v-if="metadata"
-      class="mt-1 pt-1 border-t border-border/30 text-muted-foreground/70 font-mono flex justify-between"
+      class="mt-1 pt-1 border-t border-border/30 font-mono flex justify-between"
+      :class="isStale ? 'text-muted-foreground/40' : 'text-muted-foreground/70'"
     >
       <span>Frame: {{ metadata.frame_number }}</span>
-      <span>{{ formatTimestamp(metadata.timestamp) }}</span>
+      <span :class="isStale ? 'text-yellow-500/50' : ''">
+        {{ formatTimestamp(metadata.timestamp) }}
+        <span v-if="isStale" class="text-yellow-500/70"> (stale)</span>
+      </span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import type { Detection } from '@/types/detection.types'
 import type { DetectionMetadata } from '@/composables/useWebRTCDetection'
 
@@ -86,6 +90,30 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+
+// Track current time for staleness detection
+const now = ref(Date.now())
+let staleCheckInterval: number | null = null
+
+onMounted(() => {
+  // Update current time every second for staleness check
+  staleCheckInterval = window.setInterval(() => {
+    now.value = Date.now()
+  }, 1000)
+})
+
+onUnmounted(() => {
+  if (staleCheckInterval) {
+    clearInterval(staleCheckInterval)
+  }
+})
+
+// Check if metadata is stale (more than 3 seconds old)
+const isStale = computed(() => {
+  if (!props.metadata?.timestamp) return false
+  const metadataAge = now.value - props.metadata.timestamp * 1000
+  return metadataAge > 3000
+})
 
 // Track colors matching globalTracks color palette
 const TRACK_COLORS = [

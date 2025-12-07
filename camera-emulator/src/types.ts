@@ -53,6 +53,7 @@ export interface DetectionMetadata {
   detection_frame?: number
   dispatch_time?: number  // High-res ms timestamp for timing measurement
   video_time_ms?: number  // Video presentation time in ms (for sync with video element)
+  rtp_timestamp?: number  // RTP timestamp (90kHz clock) for frame-perfect sync
 }
 
 export interface ClientSession {

@@ -38,11 +38,11 @@
       "rtspUrl": "rtsp://localhost:8554/camera1",
       "webrtcUrl": "http://localhost:9101",
       "ipAddress": "192.168.1.101",
-      "position": { "x": 16, "y": 9 },
-      "azimuth": 192,
+      "position": { "x": 17, "y": 9 },
+      "azimuth": 200,
       "elevation": 23.5,
       "height": 4.7,
-      "fieldOfView": 85,
+      "fieldOfView": 75,
       "color": "cyan-500"
     }
   ]
