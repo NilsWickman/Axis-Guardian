@@ -15,7 +15,7 @@
     <!-- Position count overlay -->
     <div
       v-if="showStats"
-      class="absolute top-4 right-4 bg-black/70 text-white px-3 py-2 rounded-lg text-sm pointer-events-none"
+      class="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 text-white px-3 py-2 rounded-lg text-sm pointer-events-none"
       style="z-index: 11"
     >
       <div class="flex items-center gap-2 mb-1">
