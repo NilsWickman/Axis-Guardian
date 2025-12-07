@@ -99,6 +99,11 @@ const allActiveTracks = computed(() => globalTrackStore.allActiveTracks)
 // Filter global tracks that are within the canvas bounds
 const visibleGlobalTracks = computed(() => {
   return globalTracks.value.filter(track => {
+    // Skip tracks with invalid positions
+    if (!isFinite(track.currentPosition.x) || !isFinite(track.currentPosition.y)) {
+      console.warn(`[PersonPositionOverlay] Track ${track.globalTrackId} has invalid position:`, track.currentPosition)
+      return false
+    }
     const x = worldToCanvasX(track.currentPosition.x)
     const y = worldToCanvasY(track.currentPosition.y)
     return x >= -50 && x <= props.canvasWidth + 50 && y >= -50 && y <= props.canvasHeight + 50

@@ -24,7 +24,10 @@ export class DetectionProcessor {
   private lastCleanupTime: number = Date.now()
   private static readonly MAX_CAMERAS = 100  // Prevent unbounded growth
   private static readonly CLEANUP_INTERVAL_MS = 60000  // Cleanup every minute
-  private obstacles: SiteMapObstacle[] = []
+  /** Obstacles that block tracking (detections inside are filtered out) */
+  private trackingBlockingObstacles: SiteMapObstacle[] = []
+  /** Tables/furniture that block view (used for occlusion-based position adjustment) */
+  private viewBlockingObstacles: SiteMapObstacle[] = []
   private obstacleFilterCount: number = 0
 
   constructor(
@@ -33,20 +36,37 @@ export class DetectionProcessor {
   ) {}
 
   /**
-   * Set obstacles for detection filtering
-   * Only obstacles with blocksTracking=true will filter detections
+   * Set obstacles for detection filtering and occlusion detection
+   * - Obstacles with blocksTracking=true will filter out detections inside them
+   * - Obstacles with blocksView=true and height >= 0.8m will be used for occlusion detection
    */
   setObstacles(obstacles: SiteMapObstacle[]): void {
-    this.obstacles = obstacles.filter((obs) => obs.blocksTracking !== false)
-    console.log(`[DetectionProcessor] Loaded ${this.obstacles.length} tracking-blocking obstacles`)
+    // Obstacles that block tracking (detections inside are filtered out)
+    this.trackingBlockingObstacles = obstacles.filter((obs) => obs.blocksTracking !== false)
+
+    // Tables/furniture that block view (used for occlusion-based position adjustment)
+    // Only include obstacles that:
+    // 1. Have blocksView=true
+    // 2. Are at table height (0.8m - 1.3m) - lower than a standing person
+    // 3. Are furniture category (not structural like pillars)
+    this.viewBlockingObstacles = obstacles.filter((obs) =>
+      obs.blocksView === true &&
+      obs.height !== undefined &&
+      obs.height >= 0.8 &&
+      obs.height <= 1.3 &&  // Table height, not pillar height
+      obs.category === 'furniture'  // Only furniture, not structural
+    )
+
+    console.log(`[DetectionProcessor] Loaded ${this.trackingBlockingObstacles.length} tracking-blocking obstacles`)
+    console.log(`[DetectionProcessor] Loaded ${this.viewBlockingObstacles.length} view-blocking obstacles (tables)`)
   }
 
   /**
-   * Check if a world position is inside any obstacle
+   * Check if a world position is inside any tracking-blocking obstacle
    */
   private isInsideObstacle(worldX: number, worldY: number): boolean {
-    if (this.obstacles.length === 0) return false
-    return isPointInsideAnyObstacle({ x: worldX, y: worldY }, this.obstacles)
+    if (this.trackingBlockingObstacles.length === 0) return false
+    return isPointInsideAnyObstacle({ x: worldX, y: worldY }, this.trackingBlockingObstacles)
   }
 
   /**
@@ -96,6 +116,7 @@ export class DetectionProcessor {
 
       // Project to world coordinates
       // Try K/R/T projection first (more accurate), fall back to legacy
+      // Pass camera and view-blocking obstacles for table occlusion detection
       const calibration = this.cameraRegistry.getCalibration(cameraId)
       let worldPoint: { x: number; y: number }
       let isValid: boolean
@@ -103,13 +124,28 @@ export class DetectionProcessor {
       let projectionReason: string | undefined
 
       if (calibration) {
-        const krtResult = projectDetectionWithKRT(bbox, calibration, true, IMAGE_WIDTH, IMAGE_HEIGHT)
+        const krtResult = projectDetectionWithKRT(
+          bbox,
+          calibration,
+          camera,
+          this.viewBlockingObstacles,
+          true,
+          IMAGE_WIDTH,
+          IMAGE_HEIGHT
+        )
         worldPoint = krtResult.worldPoint
         isValid = krtResult.isValid
         projectionMethod = 'krt'
         projectionReason = krtResult.reason
       } else {
-        const legacyResult = projectDetectionToGround(bbox, camera, true, IMAGE_WIDTH, IMAGE_HEIGHT)
+        const legacyResult = projectDetectionToGround(
+          bbox,
+          camera,
+          this.viewBlockingObstacles,
+          true,
+          IMAGE_WIDTH,
+          IMAGE_HEIGHT
+        )
         worldPoint = legacyResult.worldPoint
         isValid = legacyResult.isValid
         projectionMethod = 'legacy'
@@ -177,10 +213,21 @@ export class DetectionProcessor {
   ): GlobalTrack | null {
     const normalizedCameraId = this.cameraRegistry.normalizeCameraId(cameraId)
 
+    // Get camera for occlusion detection
+    const camera = this.cameraRegistry.getCamera(normalizedCameraId)
+
     // Try K/R/T projection first (more accurate)
     const calibration = this.cameraRegistry.getCalibration(normalizedCameraId)
     if (calibration) {
-      const result = projectDetectionWithKRT(bbox, calibration, true, IMAGE_WIDTH, IMAGE_HEIGHT)
+      const result = projectDetectionWithKRT(
+        bbox,
+        calibration,
+        camera,
+        this.viewBlockingObstacles,
+        true,
+        IMAGE_WIDTH,
+        IMAGE_HEIGHT
+      )
 
       if (!result.isValid) {
         logProjectionFailure(`track=${trackId}: ${result.reason}`)
@@ -199,13 +246,19 @@ export class DetectionProcessor {
     }
 
     // Fall back to legacy projection if no K/R/T calibration
-    const camera = this.cameraRegistry.getCamera(normalizedCameraId)
     if (!camera) {
       if (this.debugCount < 3) console.warn(`Unknown camera: ${cameraId}`)
       return null
     }
 
-    const result = projectDetectionToGround(bbox, camera, true, IMAGE_WIDTH, IMAGE_HEIGHT)
+    const result = projectDetectionToGround(
+      bbox,
+      camera,
+      this.viewBlockingObstacles,
+      true,
+      IMAGE_WIDTH,
+      IMAGE_HEIGHT
+    )
 
     if (!result.isValid) {
       logProjectionFailure(`track=${trackId}: ${result.reason}, dist=${result.distance?.toFixed(1)}m`)

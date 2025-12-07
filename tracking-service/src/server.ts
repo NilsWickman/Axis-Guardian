@@ -73,10 +73,10 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
     getFrameInfo: () => detectionProcessor.getCameraFrameInfo(),
   })
 
-  // Set up periodic cleanup
+  // Set up periodic cleanup (1s for responsive track removal)
   const cleanupInterval = setInterval(() => {
     trackManager.cleanupExpiredTracks()
-  }, 5000)
+  }, 1000)
 
   // Register routes
   registerRoutes(app, trackManager, detectionProcessor, cameraRegistry)
@@ -150,10 +150,10 @@ export async function createServerWithComponents(options: CreateServerOptions = 
     getFrameInfo: () => detectionProcessor.getCameraFrameInfo(),
   })
 
-  // Set up periodic cleanup
+  // Set up periodic cleanup (1s for responsive track removal)
   const cleanupInterval = setInterval(() => {
     trackManager.cleanupExpiredTracks()
-  }, 5000)
+  }, 1000)
 
   // Register routes
   registerRoutes(app, trackManager, detectionProcessor, cameraRegistry)

@@ -28,6 +28,8 @@ import type {
   WorldTransform,
 } from '../types.js'
 import { undistortPoint } from './lens-distortion.js'
+import { findOccludingTables, type Point3D as ObstaclePoint3D } from '../geometry/obstacles.js'
+import type { SiteMapObstacle } from '../config/sitemap-loader.js'
 
 // ============================================================================
 // Core Functions
@@ -268,7 +270,7 @@ export function isInHorizontalFOV(worldPoint: Point2D, camera: CameraParams): bo
 // ============================================================================
 
 /**
- * Estimate if a person is seated based on bbox aspect ratio.
+ * Estimate bbox height extension based on aspect ratio (FALLBACK method).
  * Returns an extension factor to apply to bbox height (1.0 = no extension).
  *
  * Standing person: height >> width (aspect ratio > 1.5)
@@ -277,7 +279,7 @@ export function isInHorizontalFOV(worldPoint: Point2D, camera: CameraParams): bo
  * For seated people, we extend the bbox downward to estimate where
  * their feet would be on the ground plane.
  */
-export function estimateBBoxHeightExtension(
+function estimateBBoxHeightExtensionFromAspectRatio(
   bbox: DetectionBBox,
   isNormalized: boolean = false,
   imageWidth: number = 1920,
@@ -320,11 +322,174 @@ export function estimateBBoxHeightExtension(
 }
 
 /**
+ * Detect if a table occludes the view of a person's feet.
+ * Uses 3D ray-tracing from camera through bbox bottom to detect table occlusion.
+ *
+ * Returns extension factor based on geometric distance ratios:
+ * extensionFactor = distanceToGround / distanceToTable
+ */
+function detectTableOcclusion(
+  bbox: DetectionBBox,
+  camera: CameraParams,
+  tables: SiteMapObstacle[],
+  isNormalized: boolean,
+  imageWidth: number,
+  imageHeight: number
+): {
+  isOccluded: boolean
+  occludingTable: SiteMapObstacle | null
+  extensionFactor: number
+} {
+  if (tables.length === 0) {
+    return { isOccluded: false, occludingTable: null, extensionFactor: 1.0 }
+  }
+
+  // 1. Get bbox bottom center in image coordinates (without extension)
+  const bboxBottom = getBBoxBottomCenterRaw(bbox, isNormalized, imageWidth, imageHeight)
+
+  // 2. Create ray from camera through this point
+  const focalLength = calculateFocalLength(camera.fov, imageWidth)
+  const cx = imageWidth / 2
+  const cy = imageHeight / 2
+  const normalizedX = (bboxBottom.x - cx) / focalLength
+  const normalizedY = (bboxBottom.y - cy) / focalLength
+
+  const rayCamera = createCameraRay(normalizedX, normalizedY)
+  const rayWorld = transformRayToWorld(rayCamera, camera.azimuth, camera.elevation)
+
+  // 3. Convert to obstacles module Point3D type
+  const cameraPos: ObstaclePoint3D = {
+    x: camera.position.x,
+    y: camera.position.y,
+    z: camera.position.z,
+  }
+
+  // 4. Find occluding tables
+  const occludingTableIntersections = findOccludingTables(cameraPos, rayWorld, tables)
+
+  if (occludingTableIntersections.length === 0) {
+    return { isOccluded: false, occludingTable: null, extensionFactor: 1.0 }
+  }
+
+  // 5. Use closest table
+  const closestIntersection = occludingTableIntersections[0]
+
+  // 6. Calculate extension factor
+  // Find where ray hits ground plane (z=0)
+  const tGround = intersectGroundPlane(camera.position, rayWorld)
+
+  if (tGround === null) {
+    return { isOccluded: false, occludingTable: null, extensionFactor: 1.0 }
+  }
+
+  // The bbox bottom shows where the table edge is (at table height)
+  // We need to extend to where the ground would be
+  // Extension = (distance to ground) / (distance to table)
+  const tTable = closestIntersection.distance
+
+  // Safety check: avoid division issues
+  if (tTable <= 0 || !isFinite(tTable) || !isFinite(tGround)) {
+    return { isOccluded: false, occludingTable: null, extensionFactor: 1.0 }
+  }
+
+  const extensionRatio = tGround / tTable
+
+  // Safety check: ensure valid ratio
+  if (!isFinite(extensionRatio) || extensionRatio <= 0) {
+    return { isOccluded: false, occludingTable: null, extensionFactor: 1.0 }
+  }
+
+  // Cap at 2.5x for safety (person can't be infinitely extended)
+  const extensionFactor = Math.min(extensionRatio, 2.5)
+
+  // Only apply if extension is meaningful (>1.05x)
+  if (extensionFactor < 1.05) {
+    return { isOccluded: false, occludingTable: null, extensionFactor: 1.0 }
+  }
+
+  return {
+    isOccluded: true,
+    occludingTable: closestIntersection.table,
+    extensionFactor,
+  }
+}
+
+/**
+ * Get raw bbox bottom center without any extensions (internal helper)
+ */
+function getBBoxBottomCenterRaw(
+  bbox: DetectionBBox,
+  isNormalized: boolean,
+  imageWidth: number,
+  imageHeight: number
+): Point2D {
+  if (isNormalized) {
+    return {
+      x: (bbox.x + bbox.width / 2) * imageWidth,
+      y: (bbox.y + bbox.height) * imageHeight,
+    }
+  }
+
+  return {
+    x: bbox.x + bbox.width / 2,
+    y: bbox.y + bbox.height,
+  }
+}
+
+/**
+ * Estimate bbox height extension using table occlusion detection.
+ * Falls back to aspect ratio method when no tables are provided or no occlusion detected.
+ *
+ * @param bbox - Detection bounding box
+ * @param camera - Camera parameters (null to use aspect ratio fallback only)
+ * @param tables - View-blocking obstacles (tables with blocksView=true)
+ * @param isNormalized - Whether bbox coordinates are normalized [0,1]
+ * @param imageWidth - Image width in pixels
+ * @param imageHeight - Image height in pixels
+ */
+export function estimateBBoxHeightExtension(
+  bbox: DetectionBBox,
+  camera: CameraParams | null = null,
+  tables: SiteMapObstacle[] = [],
+  isNormalized: boolean = false,
+  imageWidth: number = 1920,
+  imageHeight: number = 1080
+): number {
+  // Try table-based occlusion detection if we have camera and tables
+  if (camera && tables.length > 0) {
+    const occlusion = detectTableOcclusion(
+      bbox,
+      camera,
+      tables,
+      isNormalized,
+      imageWidth,
+      imageHeight
+    )
+    if (occlusion.isOccluded) {
+      return occlusion.extensionFactor
+    }
+  }
+
+  // Fall back to aspect ratio method
+  return estimateBBoxHeightExtensionFromAspectRatio(bbox, isNormalized, imageWidth, imageHeight)
+}
+
+/**
  * Get the bottom-center of a bounding box (person's feet position)
- * Optionally applies height extension for seated people
+ * Optionally applies height extension for seated/occluded people
+ *
+ * @param bbox - Detection bounding box
+ * @param camera - Camera parameters (required for table occlusion detection)
+ * @param tables - View-blocking obstacles (tables with blocksView=true)
+ * @param isNormalized - Whether bbox coordinates are normalized [0,1]
+ * @param imageWidth - Image width in pixels
+ * @param imageHeight - Image height in pixels
+ * @param applySeatedExtension - Whether to apply seated/occlusion extension
  */
 export function getBBoxBottomCenter(
   bbox: DetectionBBox,
+  camera: CameraParams | null = null,
+  tables: SiteMapObstacle[] = [],
   isNormalized: boolean = false,
   imageWidth: number = 1920,
   imageHeight: number = 1080,
@@ -332,9 +497,16 @@ export function getBBoxBottomCenter(
 ): Point2D {
   let effectiveHeight = bbox.height
 
-  // Apply seated person extension if enabled
+  // Apply seated person / table occlusion extension if enabled
   if (applySeatedExtension) {
-    const extension = estimateBBoxHeightExtension(bbox, isNormalized, imageWidth, imageHeight)
+    const extension = estimateBBoxHeightExtension(
+      bbox,
+      camera,
+      tables,
+      isNormalized,
+      imageWidth,
+      imageHeight
+    )
     effectiveHeight = bbox.height * extension
   }
 
@@ -357,17 +529,33 @@ export function getBBoxBottomCenter(
 
 /**
  * Project a detection bounding box to world coordinates
- * Automatically applies height extension for seated people
+ * Automatically applies height extension for seated/occluded people
+ *
+ * @param bbox - Detection bounding box
+ * @param camera - Camera parameters
+ * @param tables - View-blocking obstacles (tables with blocksView=true)
+ * @param isNormalized - Whether bbox coordinates are normalized [0,1]
+ * @param imageWidth - Image width in pixels
+ * @param imageHeight - Image height in pixels
  */
 export function projectDetectionToGround(
   bbox: DetectionBBox,
   camera: CameraParams,
+  tables: SiteMapObstacle[] = [],
   isNormalized: boolean = false,
   imageWidth: number = 1920,
   imageHeight: number = 1080
 ): ProjectionResult & { debug: DebugInfo } {
-  // Enable seated extension by default - this helps with seated/partial people
-  const imagePoint = getBBoxBottomCenter(bbox, isNormalized, imageWidth, imageHeight, true)
+  // Enable seated/occlusion extension by default - this helps with seated/partial people
+  const imagePoint = getBBoxBottomCenter(
+    bbox,
+    camera,
+    tables,
+    isNormalized,
+    imageWidth,
+    imageHeight,
+    true
+  )
   return projectToGround(imagePoint, camera, { width: imageWidth, height: imageHeight })
 }
 
@@ -533,17 +721,35 @@ export function projectWithKRT(
 
 /**
  * Project detection bbox to ground using K/R/T calibration
- * Automatically applies height extension for seated people
+ * Automatically applies height extension for seated/occluded people
+ *
+ * @param bbox - Detection bounding box
+ * @param calibration - K/R/T camera calibration
+ * @param camera - Camera parameters (for table occlusion detection)
+ * @param tables - View-blocking obstacles (tables with blocksView=true)
+ * @param isNormalized - Whether bbox coordinates are normalized [0,1]
+ * @param imageWidth - Image width in pixels
+ * @param imageHeight - Image height in pixels
  */
 export function projectDetectionWithKRT(
   bbox: DetectionBBox,
   calibration: CameraCalibration,
+  camera: CameraParams | null = null,
+  tables: SiteMapObstacle[] = [],
   isNormalized: boolean = false,
   imageWidth: number = 1920,
   imageHeight: number = 1080
 ): { worldPoint: Point2D; isValid: boolean; reason?: string } {
-  // Get bottom-center of bbox (feet position) with seated extension
-  const feetPos = getBBoxBottomCenter(bbox, isNormalized, imageWidth, imageHeight, true)
+  // Get bottom-center of bbox (feet position) with seated/occlusion extension
+  const feetPos = getBBoxBottomCenter(
+    bbox,
+    camera,
+    tables,
+    isNormalized,
+    imageWidth,
+    imageHeight,
+    true
+  )
   let footX = feetPos.x
   let footY = feetPos.y
 

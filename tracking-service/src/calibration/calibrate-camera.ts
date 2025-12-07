@@ -332,6 +332,7 @@ function projectDetection(
   const result = projectDetectionToGround(
     { x: footX, y: footY, width: 0, height: 0 },
     camera,
+    [], // No tables for calibration
     false, // Already in pixel coordinates
     IMAGE_WIDTH,
     IMAGE_HEIGHT
