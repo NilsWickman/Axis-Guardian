@@ -36,12 +36,24 @@ export interface AssignmentConfig {
   associationBonus: number
   /** Kalman filter for predictions */
   kalmanFilter?: KalmanTrackFilter
+  /** Penalty multiplier when track already has different trackId from same camera */
+  sameCameraPenalty: number
+  /** Weight for velocity consistency cost component */
+  velocityConsistencyWeight: number
+  /** Proximity threshold for detecting crossing tracks */
+  crossingProximityThreshold: number
+  /** Cost multiplier for crossing tracks (tighter matching) */
+  crossingMaxCostMultiplier: number
 }
 
 const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
-  maxCost: 2.0,
+  maxCost: 1.0,             // Reduced from 2.0 for tighter gating
   useKalmanPrediction: true,
-  associationBonus: 0.5,
+  associationBonus: 0.3,    // Reduced from 0.5 for stronger identity binding (70% reduction)
+  sameCameraPenalty: 1.5,   // 50% penalty for stealing tracks from same camera
+  velocityConsistencyWeight: 0.1,  // Weight for velocity consistency term
+  crossingProximityThreshold: 1.5, // Detect crossing when tracks within 1.5m
+  crossingMaxCostMultiplier: 0.5,  // Use 50% of maxCost for crossing tracks
 }
 
 /**
@@ -65,6 +77,7 @@ export function buildCostMatrix(
     return tracks.map(track => {
       // Get target position for distance calculation
       let targetPos = track.currentPosition
+      let predictedVelocity: Point2D | null = null
 
       // Use Kalman prediction if available and enabled
       if (config.useKalmanPrediction && track.kalmanState) {
@@ -72,6 +85,7 @@ export function buildCostMatrix(
         if (timeDelta > 0) {
           const predicted = kalmanFilter.predict(track.kalmanState, timeDelta)
           targetPos = predicted
+          predictedVelocity = kalmanFilter.getVelocity(track.kalmanState)
         }
       }
 
@@ -82,12 +96,60 @@ export function buildCostMatrix(
       const assoc = track.cameraAssociations.get(det.cameraId)
       if (assoc?.trackIds.includes(det.trackId)) {
         cost *= config.associationBonus
+      } else if (assoc && assoc.trackIds.length > 0) {
+        // Same-camera penalty: if track already has different trackId from same camera
+        // This prevents "stealing" tracks from the same camera
+        cost *= config.sameCameraPenalty
+      }
+
+      // Add motion consistency cost
+      // Penalize assignments that would require implausible velocity changes
+      if (predictedVelocity && config.velocityConsistencyWeight > 0) {
+        const dt = (det.timestamp - track.lastSeen) / 1000  // seconds
+        if (dt > 0.01) {
+          const impliedVelocity = {
+            x: (detPos.x - track.currentPosition.x) / dt,
+            y: (detPos.y - track.currentPosition.y) / dt,
+          }
+          const velocityChange = Math.sqrt(
+            Math.pow(impliedVelocity.x - predictedVelocity.x, 2) +
+            Math.pow(impliedVelocity.y - predictedVelocity.y, 2)
+          )
+          // Add velocity consistency penalty (max 0.5m equivalent)
+          cost += Math.min(0.5, velocityChange * config.velocityConsistencyWeight)
+        }
       }
 
       // Cap cost at maximum
       return Math.min(cost, config.maxCost)
     })
   })
+}
+
+/**
+ * Detect potential crossing events where multiple tracks are close together
+ * Returns set of track IDs that are in crossing situations
+ */
+export function detectCrossingTracks(
+  tracks: GlobalTrack[],
+  proximityThreshold: number = 1.5
+): Set<string> {
+  const crossingTrackIds = new Set<string>()
+
+  for (let i = 0; i < tracks.length; i++) {
+    for (let j = i + 1; j < tracks.length; j++) {
+      const dist = calculateDistance(
+        tracks[i].currentPosition,
+        tracks[j].currentPosition
+      )
+      if (dist < proximityThreshold) {
+        crossingTrackIds.add(tracks[i].globalTrackId)
+        crossingTrackIds.add(tracks[j].globalTrackId)
+      }
+    }
+  }
+
+  return crossingTrackIds
 }
 
 /**
@@ -124,6 +186,12 @@ export function assignDetectionsToTracks(
     }
   }
 
+  // Detect crossing tracks for tighter matching
+  const crossingTracks = detectCrossingTracks(
+    tracks,
+    fullConfig.crossingProximityThreshold
+  )
+
   // Build cost matrix
   const costMatrix = buildCostMatrix(detections, tracks, fullConfig)
 
@@ -147,12 +215,18 @@ export function assignDetectionsToTracks(
     }
 
     const cost = costMatrix[detIdx][trackIdx]
+    const track = tracks[trackIdx]
+
+    // Use tighter threshold for crossing tracks
+    const effectiveMaxCost = crossingTracks.has(track.globalTrackId)
+      ? fullConfig.maxCost * fullConfig.crossingMaxCostMultiplier
+      : fullConfig.maxCost
 
     // Only accept matches below cost threshold
-    if (cost < fullConfig.maxCost) {
+    if (cost < effectiveMaxCost) {
       matches.push({
         detection: detections[detIdx],
-        track: tracks[trackIdx],
+        track: track,
         cost,
       })
       matchedDetIdx.add(detIdx)

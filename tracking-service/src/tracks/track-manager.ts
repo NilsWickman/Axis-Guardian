@@ -57,6 +57,7 @@ export function trackToJSON(track: GlobalTrack): GlobalTrackJSON {
     isConfirmed: track.isConfirmed,
     detectionCount: track.detectionCount,
     confidence: track.confidence,
+    state: track.state,
   }
 }
 
@@ -235,14 +236,52 @@ export class TrackManager {
   }
 
   /**
-   * Cleanup expired tracks
+   * Cleanup expired tracks with occlusion state handling
    */
   cleanupExpiredTracks(): void {
     const now = this.clock()
     const maxTracks = 200
+    const unconfirmedExpiryMs = this.config.unconfirmedTrackExpiryMs ?? 2000
+    const occlusionCoastTimeMs = this.config.occlusionCoastTimeMs ?? 2000
 
     for (const [trackId, track] of this.tracks.entries()) {
-      if (now - track.lastSeen > this.config.trackExpiryMs) {
+      const timeSinceLastSeen = now - track.lastSeen
+
+      // Handle unconfirmed tracks - expire faster
+      if (track.state === 'unconfirmed') {
+        if (timeSinceLastSeen > unconfirmedExpiryMs) {
+          track.isActive = false
+          this.releaseColor(track.color)
+          this.tracks.delete(trackId)
+          this.kalmanFilter.removeTrackState(trackId)
+          continue
+        }
+      }
+
+      // Handle confirmed tracks - transition to occluded state
+      if (track.state === 'confirmed' && timeSinceLastSeen > 100) {
+        // Track hasn't been seen recently, transition to occluded
+        track.state = 'occluded'
+        track.occludedSince = track.lastSeen
+        track.missedFrames++
+      }
+
+      // Handle occluded tracks - check if they should expire
+      if (track.state === 'occluded') {
+        const timeSinceOcclusion = now - (track.occludedSince ?? track.lastSeen)
+
+        if (timeSinceOcclusion > occlusionCoastTimeMs) {
+          // Occlusion coast time exceeded, expire the track
+          if (track.isActive) {
+            track.isActive = false
+            this.releaseColor(track.color)
+            this.onTrackExpired?.(track)
+          }
+        }
+      }
+
+      // Full track expiry
+      if (timeSinceLastSeen > this.config.trackExpiryMs) {
         if (track.isActive) {
           track.isActive = false
           this.releaseColor(track.color)
@@ -250,7 +289,7 @@ export class TrackManager {
         }
 
         // Remove completely after double expiry time
-        if (now - track.lastSeen > this.config.trackExpiryMs * 2) {
+        if (timeSinceLastSeen > this.config.trackExpiryMs * 2) {
           this.tracks.delete(trackId)
           this.kalmanFilter.removeTrackState(trackId)
         }
@@ -384,6 +423,15 @@ export class TrackManager {
         threshold = this.config.correlationDistanceM * 1.5
       }
 
+      // Expand gating for occluded tracks to allow re-association
+      if (track.state === 'occluded') {
+        const occlusionCoastTimeMs = this.config.occlusionCoastTimeMs ?? 2000
+        const timeSinceOcclusion = now - (track.occludedSince ?? now)
+        // Gradually expand gate up to 2x based on occlusion duration
+        const expansionFactor = Math.min(2.0, 1.0 + timeSinceOcclusion / occlusionCoastTimeMs)
+        threshold *= expansionFactor
+      }
+
       if (distance < threshold && distance < bestDistance) {
         bestDistance = distance
         bestMatch = track
@@ -391,6 +439,36 @@ export class TrackManager {
     }
 
     return bestMatch
+  }
+
+  /**
+   * Check if a position is too close to existing confirmed tracks
+   * to create a new track (likely a duplicate detection)
+   */
+  private isInExclusionZone(worldX: number, worldY: number): boolean {
+    const exclusionRadius = this.config.exclusionRadius ?? 0.3
+
+    for (const track of this.tracks.values()) {
+      if (!track.isActive || !track.isConfirmed) continue
+
+      const distance = calculateDistance(
+        { x: worldX, y: worldY },
+        track.currentPosition
+      )
+      if (distance < exclusionRadius) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  /**
+   * Check if a detection meets minimum confidence for track creation
+   */
+  private meetsCreationConfidence(detection: CameraDetection): boolean {
+    const minConfidence = this.config.minCreationConfidence ?? 0.7
+    return detection.confidence >= minConfidence
   }
 
   private createGlobalTrack(detection: CameraDetection): GlobalTrack {
@@ -416,6 +494,8 @@ export class TrackManager {
       confidence: detection.confidence,
       pendingDetections: [detection],
       kalmanState,
+      state: 'unconfirmed',
+      missedFrames: 0,
     }
 
     track.cameraAssociations.set(detection.cameraId, {
@@ -458,8 +538,18 @@ export class TrackManager {
     }
 
     track.detectionCount++
+    track.missedFrames = 0  // Reset missed frames on detection
+
+    // Transition state on confirmation
     if (!track.isConfirmed && track.detectionCount >= this.config.minDetectionsToConfirm) {
       track.isConfirmed = true
+      track.state = 'confirmed'
+    }
+
+    // Recover from occlusion on detection
+    if (track.state === 'occluded') {
+      track.state = 'confirmed'
+      track.occludedSince = undefined
     }
 
     track.pendingDetections.push(detection)
@@ -537,7 +627,7 @@ export class TrackManager {
       {
         maxCost: this.config.correlationDistanceM * 2,
         useKalmanPrediction: true,
-        associationBonus: 0.5,
+        associationBonus: 0.3,  // Use tighter association bonus
         kalmanFilter: this.kalmanFilter,
       }
     )
@@ -553,13 +643,83 @@ export class TrackManager {
       }
     }
 
-    // Create new tracks for unmatched detections
+    // Try re-identification for unmatched detections with occluded tracks
+    const occludedTracks = this.getAllTracks().filter(
+      t => t.state === 'occluded' && t.isConfirmed
+    )
+
+    const finalUnmatched: CameraDetection[] = []
     for (const detection of unmatchedDetections) {
+      const reidentified = this.attemptReidentification(detection, occludedTracks)
+      if (reidentified) {
+        // Restore track from occlusion
+        reidentified.state = 'confirmed'
+        reidentified.missedFrames = 0
+        reidentified.occludedSince = undefined
+        if (this.associateWithTrack(reidentified, detection)) {
+          this.processPendingMerge(reidentified, now)
+          this.onTrackUpdated?.(reidentified)
+          results.push(reidentified)
+        }
+      } else {
+        finalUnmatched.push(detection)
+      }
+    }
+
+    // Create new tracks for truly unmatched detections
+    // Apply ghost track prevention: check exclusion zone and confidence
+    for (const detection of finalUnmatched) {
+      // Skip if within exclusion zone of confirmed track
+      if (this.isInExclusionZone(detection.worldX, detection.worldY)) {
+        continue
+      }
+
+      // Skip if confidence is too low
+      if (!this.meetsCreationConfidence(detection)) {
+        continue
+      }
+
       const newTrack = this.createGlobalTrack(detection)
       this.onTrackCreated?.(newTrack)
       results.push(newTrack)
     }
 
     return results
+  }
+
+  /**
+   * Attempt to re-identify a detection with a recently occluded track
+   * Uses camera trackId matching and spatial proximity
+   */
+  private attemptReidentification(
+    detection: CameraDetection,
+    occludedTracks: GlobalTrack[]
+  ): GlobalTrack | null {
+    const gateMultiplier = this.config.reidentificationGateMultiplier ?? 3.0
+
+    for (const track of occludedTracks) {
+      const assoc = track.cameraAssociations.get(detection.cameraId)
+
+      // Check if camera trackId matches
+      if (assoc?.trackIds.includes(detection.trackId)) {
+        // Verify spatial plausibility using Kalman prediction
+        if (track.kalmanState) {
+          const timeSinceOcclusion = detection.timestamp - (track.occludedSince ?? track.lastSeen)
+          const predicted = this.kalmanFilter.predict(track.kalmanState, timeSinceOcclusion)
+          const distance = calculateDistance(
+            { x: detection.worldX, y: detection.worldY },
+            predicted
+          )
+
+          // Use expanded gate for re-identification
+          const maxDistance = this.config.correlationDistanceM * gateMultiplier
+          if (distance < maxDistance) {
+            return track
+          }
+        }
+      }
+    }
+
+    return null
   }
 }

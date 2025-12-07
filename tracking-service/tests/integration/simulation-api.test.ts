@@ -135,7 +135,12 @@ describe('Simulation API Flow', () => {
     })
 
     it('marks track as inactive after expiry', () => {
+      // Create confirmed track with 3 detections
       detectionProcessor.processWorldPosition('camera1', 5.0, 5.0, 0.9, 1)
+      mockTime += 100
+      detectionProcessor.processWorldPosition('camera1', 5.1, 5.0, 0.9, 1)
+      mockTime += 100
+      detectionProcessor.processWorldPosition('camera1', 5.2, 5.0, 0.9, 1)
 
       // Advance time past expiry (default 5000ms)
       mockTime += 6000
@@ -146,7 +151,12 @@ describe('Simulation API Flow', () => {
     })
 
     it('removes expired track completely after double expiry', () => {
+      // Create confirmed track with 3 detections
       detectionProcessor.processWorldPosition('camera1', 5.0, 5.0, 0.9, 1)
+      mockTime += 100
+      detectionProcessor.processWorldPosition('camera1', 5.1, 5.0, 0.9, 1)
+      mockTime += 100
+      detectionProcessor.processWorldPosition('camera1', 5.2, 5.0, 0.9, 1)
 
       // Advance time past double expiry
       mockTime += 11000
@@ -302,7 +312,12 @@ describe('Simulation API Flow', () => {
         expiredTrackId = track.globalTrackId
       }
 
+      // Create confirmed track with 3 detections
       detectionProcessor.processWorldPosition('camera1', 5.0, 5.0, 0.9, 1)
+      mockTime += 100
+      detectionProcessor.processWorldPosition('camera1', 5.1, 5.0, 0.9, 1)
+      mockTime += 100
+      detectionProcessor.processWorldPosition('camera1', 5.2, 5.0, 0.9, 1)
 
       mockTime += 6000
       trackManager.cleanupExpiredTracks()

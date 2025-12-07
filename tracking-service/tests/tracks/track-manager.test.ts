@@ -122,8 +122,14 @@ describe('TrackManager', () => {
 
   describe('Track Expiry', () => {
     it('marks track as inactive after expiry time', () => {
-      const track = trackManager.processDetection('camera1', 1, 5.0, 5.0, 0.9)
+      // Create and confirm track with 3 detections
+      trackManager.processDetection('camera1', 1, 5.0, 5.0, 0.9)
+      mockTime += 100
+      trackManager.processDetection('camera1', 1, 5.1, 5.0, 0.9)
+      mockTime += 100
+      const track = trackManager.processDetection('camera1', 1, 5.2, 5.0, 0.9)
       expect(track.isActive).toBe(true)
+      expect(track.isConfirmed).toBe(true)
 
       // Advance time past expiry (default 5000ms)
       mockTime += 6000
@@ -134,7 +140,12 @@ describe('TrackManager', () => {
     })
 
     it('removes track completely after double expiry time', () => {
+      // Create and confirm track with 3 detections
       trackManager.processDetection('camera1', 1, 5.0, 5.0, 0.9)
+      mockTime += 100
+      trackManager.processDetection('camera1', 1, 5.1, 5.0, 0.9)
+      mockTime += 100
+      trackManager.processDetection('camera1', 1, 5.2, 5.0, 0.9)
 
       // Advance time past double expiry
       mockTime += 11000
@@ -142,6 +153,20 @@ describe('TrackManager', () => {
 
       const track = trackManager.getTrackById('global-1')
       expect(track).toBeUndefined()
+    })
+
+    it('expires unconfirmed tracks faster', () => {
+      // Create unconfirmed track with only 1 detection
+      const track = trackManager.processDetection('camera1', 1, 5.0, 5.0, 0.9)
+      expect(track.isConfirmed).toBe(false)
+
+      // Advance time past unconfirmed expiry (2000ms) but before regular expiry
+      mockTime += 2500
+      trackManager.cleanupExpiredTracks()
+
+      // Unconfirmed track should be deleted
+      const expiredTrack = trackManager.getTrackById('global-1')
+      expect(expiredTrack).toBeUndefined()
     })
   })
 
@@ -235,7 +260,7 @@ describe('TrackManager', () => {
       trackManager.updateConfig({ correlationDistanceM: 999 })
       trackManager.resetConfig()
       const config = trackManager.getConfig()
-      expect(config.correlationDistanceM).toBe(0.5) // Default from DEFAULT_TRACKING_CONFIG
+      expect(config.correlationDistanceM).toBe(0.3) // Default from DEFAULT_TRACKING_CONFIG
     })
   })
 
@@ -283,7 +308,12 @@ describe('TrackManager', () => {
         expiredTrack = track.globalTrackId
       }
 
+      // Create and confirm track with 3 detections
       trackManager.processDetection('camera1', 1, 5.0, 5.0, 0.9)
+      mockTime += 100
+      trackManager.processDetection('camera1', 1, 5.1, 5.0, 0.9)
+      mockTime += 100
+      trackManager.processDetection('camera1', 1, 5.2, 5.0, 0.9)
 
       mockTime += 6000
       trackManager.cleanupExpiredTracks()

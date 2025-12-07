@@ -31,6 +31,13 @@ export interface MediasoupDetectionOptions {
   reconnectDelay?: number
   loopDuration?: number | null
   onLoop?: () => void
+  /**
+   * Manual sync offset in ms to compensate for video decoder latency.
+   * Negative values release detections earlier (use when detections lag behind video).
+   * Positive values delay detections (use when detections appear before video).
+   * Default: 0
+   */
+  videoSyncOffsetMs?: number
 }
 
 const DEFAULT_OPTIONS: MediasoupDetectionOptions = {
@@ -38,7 +45,10 @@ const DEFAULT_OPTIONS: MediasoupDetectionOptions = {
   autoReconnect: true,
   reconnectDelay: 3000,
   loopDuration: null,
-  onLoop: undefined
+  onLoop: undefined,
+  // Default -100ms to compensate for typical video decoder latency
+  // (detections tend to lag behind displayed video)
+  videoSyncOffsetMs: Number(import.meta.env.VITE_VIDEO_SYNC_OFFSET_MS) || -100
 }
 
 export function useMediasoupDetection(cameraId: string, options: MediasoupDetectionOptions = {}) {
@@ -103,6 +113,9 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
   let videoSyncOffset = 0  // Calibrated offset between detection time and video time
   let videoSyncCalibrated = false
   const VIDEO_SYNC_TOLERANCE_MS = 50  // Release detection if within 50ms of video time
+
+  // Manual sync offset (negative = release detections earlier, positive = delay detections)
+  const manualSyncOffsetMs = ref(opts.videoSyncOffsetMs ?? 0)
 
   // Stats
   const stats = ref({
@@ -541,14 +554,18 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
       lastVideoTime = videoTimeMs
 
       // Release detections that match current video time
-      // Detection should be released when: video_time >= detection.video_time_ms - tolerance
+      // Detection should be released when: video_time >= detection.video_time_ms - tolerance + manualOffset
+      // manualOffset negative = release earlier (detections lag behind video)
+      // manualOffset positive = release later (detections ahead of video)
       let releasedCount = 0
+      const effectiveOffset = manualSyncOffsetMs.value
       while (videoSyncBuffer.length > 0) {
         const detection = videoSyncBuffer[0]
         const detectionVideoTime = detection.video_time_ms ?? 0
 
-        // Check if video has caught up to this detection
-        if (videoTimeMs >= detectionVideoTime - VIDEO_SYNC_TOLERANCE_MS) {
+        // Check if video has caught up to this detection (with manual offset applied)
+        const releaseThreshold = detectionVideoTime - VIDEO_SYNC_TOLERANCE_MS + effectiveOffset
+        if (videoTimeMs >= releaseThreshold) {
           videoSyncBuffer.shift()
           releaseDetection(detection)
           releasedCount++
@@ -901,12 +918,23 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
     return videoElement.value?.currentTime ?? 0
   }
 
+  /**
+   * Set the manual video sync offset in milliseconds.
+   * Negative values release detections earlier (use when detections lag behind video).
+   * Positive values delay detections (use when detections appear before video).
+   */
+  function setVideoSyncOffset(offsetMs: number) {
+    manualSyncOffsetMs.value = offsetMs
+    console.log(`[VideoSync] Manual offset set to ${offsetMs}ms`)
+  }
+
   return {
     // State
     isConnected,
     isDataChannelOpen,
     connectionState,
     loopDuration,
+    videoSyncOffset: manualSyncOffsetMs,
 
     // Detection data
     currentDetections,
@@ -929,6 +957,7 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
     resumeVideo,
     retryConnection,
     setLoopDuration,
-    getVideoTime
+    getVideoTime,
+    setVideoSyncOffset
   }
 }

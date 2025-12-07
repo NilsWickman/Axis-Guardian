@@ -34,10 +34,11 @@ export interface KalmanFilterConfig {
 /**
  * Default Kalman filter configuration
  * Tuned for walking pedestrians (~1.4 m/s typical speed)
+ * Optimized for better prediction during brief occlusions
  */
 export const DEFAULT_KALMAN_CONFIG: KalmanFilterConfig = {
-  processNoise: 0.5,              // Moderate acceleration variance for walking
-  measurementNoise: 0.3,          // Position measurement noise ~0.5m std dev
+  processNoise: 0.3,              // Reduced for smoother prediction during occlusion (was 0.5)
+  measurementNoise: 0.4,          // Increased to trust predictions more (was 0.3)
   initialPositionUncertainty: 1,  // Initial position uncertainty 1m
   initialVelocityUncertainty: 1,  // Initial velocity uncertainty 1m/s
 }

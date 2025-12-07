@@ -219,6 +219,12 @@ export interface GlobalTrack {
   pendingDetections: CameraDetection[]
   /** Kalman filter state for motion estimation */
   kalmanState?: KalmanState
+  /** Track lifecycle state for occlusion handling */
+  state: TrackState
+  /** Timestamp when track entered occluded state */
+  occludedSince?: number
+  /** Number of consecutive frames without detection */
+  missedFrames: number
 }
 
 /**
@@ -235,11 +241,17 @@ export interface GlobalTrackJSON {
   isConfirmed: boolean
   detectionCount: number
   confidence: number
+  state: TrackState
 }
 
 // ============================================================================
 // Configuration
 // ============================================================================
+
+/**
+ * Track lifecycle state for occlusion handling
+ */
+export type TrackState = 'unconfirmed' | 'confirmed' | 'occluded'
 
 /**
  * Tracking configuration parameters
@@ -251,15 +263,33 @@ export interface TrackingConfig {
   maxTrailLength: number
   minDetectionsToConfirm: number
   maxVelocityMs: number
+  /** Expiry time for unconfirmed tracks (faster cleanup of ghost tracks) */
+  unconfirmedTrackExpiryMs: number
+  /** Minimum confidence required to create a new track */
+  minCreationConfidence: number
+  /** Exclusion radius - no new tracks within this distance of confirmed tracks */
+  exclusionRadius: number
+  /** Proximity threshold for detecting crossing events */
+  crossingProximityThreshold: number
+  /** Maximum coast time for occluded tracks before expiry */
+  occlusionCoastTimeMs: number
+  /** Gate expansion multiplier for re-identification */
+  reidentificationGateMultiplier: number
 }
 
 export const DEFAULT_TRACKING_CONFIG: TrackingConfig = {
-  correlationDistanceM: 0.5,  // Reduced to prevent merging different people
+  correlationDistanceM: 0.3,  // Reduced from 0.5 to prevent merging people ~1m apart
   mergeWindowMs: 200,
   trackExpiryMs: 5000,
   maxTrailLength: 20,
   minDetectionsToConfirm: 3,
   maxVelocityMs: 50,
+  unconfirmedTrackExpiryMs: 2000,  // Ghost tracks expire faster
+  minCreationConfidence: 0.7,      // Require higher confidence for new tracks
+  exclusionRadius: 0.3,            // No new tracks within 0.3m of existing
+  crossingProximityThreshold: 1.5, // Detect crossing when tracks within 1.5m
+  occlusionCoastTimeMs: 2000,      // Coast for 2 seconds during occlusion
+  reidentificationGateMultiplier: 3.0, // 3x expanded gate for re-ID
 }
 
 // ============================================================================
