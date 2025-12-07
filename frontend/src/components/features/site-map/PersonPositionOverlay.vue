@@ -85,8 +85,10 @@ interface InterpolationState {
 }
 const interpolationStates = new Map<string, InterpolationState>()
 
-// Interpolation speed (0-1, higher = faster convergence)
-const LERP_FACTOR = 0.75
+// Time-based smoothing constant (seconds to reach ~63% of target)
+// Lower = snappier, higher = smoother
+const SMOOTH_TIME = 0.12
+let lastFrameTime = 0
 
 // Computed data from global track store
 const globalTracks = computed(() => globalTrackStore.activeTracks)
@@ -136,7 +138,7 @@ function formatTrackId(trackId: string): string {
 
 /**
  * Get interpolated position for a track
- * Uses lerp to smoothly converge toward target position each frame
+ * Uses time-based exponential smoothing for frame-rate-independent animation
  */
 function getInterpolatedPosition(track: GlobalTrack, now: number): { x: number; y: number } {
   const state = interpolationStates.get(track.globalTrackId)
@@ -151,9 +153,15 @@ function getInterpolatedPosition(track: GlobalTrack, now: number): { x: number; 
     return track.currentPosition
   }
 
-  // Lerp current position toward target position
-  state.position.x += (state.targetPosition.x - state.position.x) * LERP_FACTOR
-  state.position.y += (state.targetPosition.y - state.position.y) * LERP_FACTOR
+  // Calculate delta time in seconds, capped to avoid huge jumps after tab switching
+  const dt = Math.min((now - lastFrameTime) / 1000, 0.1)
+
+  // Exponential smoothing factor based on delta time
+  // This ensures consistent motion regardless of frame rate
+  const factor = 1 - Math.exp(-dt / SMOOTH_TIME)
+
+  state.position.x += (state.targetPosition.x - state.position.x) * factor
+  state.position.y += (state.targetPosition.y - state.position.y) * factor
 
   return state.position
 }
@@ -367,6 +375,9 @@ function animate() {
     }
   }
 
+  // Update lastFrameTime for next frame's delta calculation
+  lastFrameTime = now
+
   animationFrameId = requestAnimationFrame(animate)
 }
 
@@ -376,6 +387,7 @@ function animate() {
 function startAnimation() {
   if (isAnimating) return
   isAnimating = true
+  lastFrameTime = Date.now()  // Initialize to avoid large delta on first frame
   animate()
 }
 

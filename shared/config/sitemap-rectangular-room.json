@@ -113,6 +113,19 @@
       "blocksTracking": true,
       "blocksView": true,
       "color": "#e2e8f0"
+    },
+    {
+      "id": "table-1",
+      "type": "rectangle",
+      "label": "Registration Table",
+      "category": "furniture",
+      "position": { "x": 14, "y": 1.8 },
+      "dimensions": { "width": 1.0, "height": 0.5 },
+      "rotation": 0,
+      "height": 1.0,
+      "blocksTracking": false,
+      "blocksView": true,
+      "color": "#f5f5f4"
     }
   ]
 }

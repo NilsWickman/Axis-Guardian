@@ -231,8 +231,16 @@ const drawMap = () => {
 
   canvas.drawWalls(currentMap.value.walls)
 
-  currentMap.value.cameras.forEach(camera => {
-    canvas.drawCamera(camera, getCameraName, false, false, currentMap.value!.walls, currentMap.value!.obstacles)
+  // Pre-calculate all camera FOV polygons for overlap detection
+  const allCameraFOVs = currentMap.value.cameras.map(camera =>
+    canvas.getCameraFOVPolygon(camera, currentMap.value!.walls, currentMap.value!.obstacles)
+  )
+
+  // Draw each camera, passing other cameras' FOVs for shadow overlap detection
+  currentMap.value.cameras.forEach((camera, index) => {
+    // Get FOVs of all other cameras (exclude current camera's FOV)
+    const otherCameraFOVs = allCameraFOVs.filter((_, i) => i !== index)
+    canvas.drawCamera(camera, getCameraName, false, false, currentMap.value!.walls, currentMap.value!.obstacles, otherCameraFOVs)
   })
 }
 
