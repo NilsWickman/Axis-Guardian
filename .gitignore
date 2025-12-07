@@ -186,3 +186,6 @@ simulation/mediamtx/*.log
 simulation/mediamtx/*.pid
 simulation/mediamtx/recordings/
 simulation/mediamtx/mediamtx.custom.yml
+
+# Camera calibration files
+tracking-service/calibration-*

@@ -20,6 +20,15 @@ import { DEFAULT_TRACKING_CONFIG } from '../types.js'
 import { calculateDistance, predictPosition, mergeWorldPositions } from '../correlation/track-matcher.js'
 import { KalmanTrackFilter } from '../filters/kalman-track-filter.js'
 import { assignDetectionsToTracks } from '../correlation/hungarian-assignment.js'
+import { TrackMerger } from './track-merger.js'
+
+/**
+ * Cluster of detections from different cameras that likely represent same person
+ */
+interface DetectionCluster {
+  detections: CameraDetection[]
+  centroid: { x: number; y: number }
+}
 
 // Color palette for global tracks (12 distinct colors)
 const TRACK_COLORS = [
@@ -87,6 +96,7 @@ export class TrackManager {
   private clock: () => number
   private idGenerator: () => string
   private kalmanFilter: KalmanTrackFilter
+  private trackMerger: TrackMerger
   /** Per-camera frame tracking for frame-based missed detection */
   private cameraFrameTrackers: Map<string, CameraFrameTracker> = new Map()
 
@@ -102,6 +112,11 @@ export class TrackManager {
     // Create a new KalmanTrackFilter instance for each TrackManager
     // to avoid state cache pollution between tests or different managers
     this.kalmanFilter = new KalmanTrackFilter()
+    // Create track merger with same Kalman filter
+    this.trackMerger = new TrackMerger(this.kalmanFilter, {
+      mergeDistanceM: this.config.mergeDistanceM,
+      mergeConfidenceThreshold: this.config.mergeConfidenceThreshold,
+    })
   }
 
   // ============================================================================
@@ -531,6 +546,125 @@ export class TrackManager {
     return detection.confidence >= minConfidence
   }
 
+  /**
+   * Cluster unmatched detections from different cameras that likely represent the same person.
+   * This prevents duplicate tracks when multiple cameras see the same person simultaneously.
+   */
+  private clusterUnmatchedDetections(detections: CameraDetection[]): DetectionCluster[] {
+    if (detections.length === 0) return []
+    if (detections.length === 1) {
+      return [{
+        detections: [detections[0]],
+        centroid: { x: detections[0].worldX, y: detections[0].worldY },
+      }]
+    }
+
+    const clusteringDistance = this.config.clusteringDistanceM ?? 0.6
+    const clusters: DetectionCluster[] = []
+    const used = new Set<number>()
+
+    for (let i = 0; i < detections.length; i++) {
+      if (used.has(i)) continue
+
+      const cluster: CameraDetection[] = [detections[i]]
+      used.add(i)
+
+      // Find spatially close detections from DIFFERENT cameras
+      for (let j = i + 1; j < detections.length; j++) {
+        if (used.has(j)) continue
+
+        // Only cluster detections from different cameras
+        if (detections[j].cameraId === detections[i].cameraId) continue
+
+        const dist = calculateDistance(
+          { x: detections[i].worldX, y: detections[i].worldY },
+          { x: detections[j].worldX, y: detections[j].worldY }
+        )
+
+        if (dist < clusteringDistance) {
+          cluster.push(detections[j])
+          used.add(j)
+        }
+      }
+
+      // Calculate centroid
+      const merged = mergeWorldPositions(cluster)
+      clusters.push({
+        detections: cluster,
+        centroid: merged.position,
+      })
+    }
+
+    return clusters
+  }
+
+  /**
+   * Create a global track from a cluster of detections (potentially from multiple cameras)
+   */
+  private createGlobalTrackFromCluster(cluster: DetectionCluster): GlobalTrack {
+    // Use the first detection as the primary, but merged position
+    const primaryDetection = cluster.detections[0]
+    const merged = mergeWorldPositions(cluster.detections)
+
+    const globalTrackId = this.idGenerator()
+    const color = this.assignColor()
+
+    // Initialize Kalman filter state with merged position
+    const kalmanState = this.kalmanFilter.initialize(
+      merged.position,
+      primaryDetection.timestamp
+    )
+
+    const track: GlobalTrack = {
+      globalTrackId,
+      cameraAssociations: new Map(),
+      currentPosition: merged.position,
+      trail: [{ x: merged.position.x, y: merged.position.y, timestamp: primaryDetection.timestamp }],
+      color,
+      lastSeen: primaryDetection.timestamp,
+      isActive: true,
+      isConfirmed: false,
+      detectionCount: cluster.detections.length,
+      confidence: merged.confidence,
+      pendingDetections: [...cluster.detections],
+      kalmanState,
+      state: 'unconfirmed',
+      missedFrames: 0,
+      consecutiveDetections: 0,
+    }
+
+    // Associate with ALL cameras in the cluster
+    for (const det of cluster.detections) {
+      const existingAssoc = track.cameraAssociations.get(det.cameraId)
+      if (existingAssoc) {
+        if (!existingAssoc.trackIds.includes(det.trackId)) {
+          existingAssoc.trackIds.push(det.trackId)
+        }
+      } else {
+        track.cameraAssociations.set(det.cameraId, {
+          cameraId: det.cameraId,
+          trackIds: [det.trackId],
+          lastSeen: det.timestamp,
+          lastFrameNumber: det.frameNumber,
+        })
+      }
+
+      // Update camera frame tracker
+      if (det.frameNumber !== undefined) {
+        this.updateCameraFrameTracker(det.cameraId, det.frameNumber, det.timestamp)
+      }
+    }
+
+    // Confirm immediately if seen by multiple cameras
+    if (cluster.detections.length >= this.config.minDetectionsToConfirm) {
+      track.isConfirmed = true
+      track.state = 'confirmed'
+    }
+
+    this.tracks.set(globalTrackId, track)
+    return track
+  }
+
   private createGlobalTrack(detection: CameraDetection): GlobalTrack {
     const globalTrackId = this.idGenerator()
     const color = this.assignColor()
@@ -753,24 +887,74 @@ export class TrackManager {
     }
 
     // Create new tracks for truly unmatched detections
-    // Apply ghost track prevention: check exclusion zone and confidence
-    for (const detection of finalUnmatched) {
+    // IMPORTANT: Cluster detections from different cameras to prevent duplicates
+    // when same person is seen by multiple cameras simultaneously
+    const validUnmatched = finalUnmatched.filter(det => {
       // Skip if within exclusion zone of confirmed track
-      if (this.isInExclusionZone(detection.worldX, detection.worldY)) {
-        continue
+      if (this.isInExclusionZone(det.worldX, det.worldY)) {
+        return false
       }
-
       // Skip if confidence is too low
-      if (!this.meetsCreationConfidence(detection)) {
+      if (!this.meetsCreationConfidence(det)) {
+        return false
+      }
+      return true
+    })
+
+    // Cluster detections from different cameras that are spatially close
+    const clusters = this.clusterUnmatchedDetections(validUnmatched)
+
+    // Create one track per cluster (not per detection)
+    for (const cluster of clusters) {
+      // Use centroid for exclusion zone check (in case filtering missed edge cases)
+      if (this.isInExclusionZone(cluster.centroid.x, cluster.centroid.y)) {
         continue
       }
 
-      const newTrack = this.createGlobalTrack(detection)
+      const newTrack = this.createGlobalTrackFromCluster(cluster)
       this.onTrackCreated?.(newTrack)
       results.push(newTrack)
     }
 
+    // Post-batch merge detection: Find and merge duplicate tracks
+    // This catches duplicates that slipped through initial clustering
+    this.detectAndMergeDuplicates()
+
     return results
+  }
+
+  /**
+   * Detect and merge duplicate tracks that represent the same person
+   */
+  private detectAndMergeDuplicates(): void {
+    const activeTracks = this.getActiveTracks()
+    const candidates = this.trackMerger.findMergeCandidates(activeTracks)
+
+    // Process merges (one at a time to avoid conflicts)
+    const mergedTrackIds = new Set<string>()
+
+    for (const candidate of candidates) {
+      // Skip if either track was already merged in this batch
+      if (mergedTrackIds.has(candidate.track1.globalTrackId) ||
+          mergedTrackIds.has(candidate.track2.globalTrackId)) {
+        continue
+      }
+
+      // Perform the merge
+      const { primary, merged } = this.trackMerger.mergeTracks(
+        candidate.track1,
+        candidate.track2
+      )
+
+      mergedTrackIds.add(merged.globalTrackId)
+
+      // Release color from merged track
+      this.releaseColor(merged.color)
+
+      // Fire events
+      this.onTrackUpdated?.(primary)
+      this.onTrackExpired?.(merged)
+    }
   }
 
   /**

@@ -763,6 +763,8 @@ program
   .option('-r, --room <dimensions>', 'Room dimensions as "width,height" in meters (enables constraint-aware search)')
   .option('--room-margin <meters>', 'Margin from room edge for wall detection (default: 0.5)', '0.5')
   .option('-p, --position <x,y>', 'Fixed camera position as "x,y" (skips position sweep)')
+  .option('-a, --azimuth <degrees>', 'Fixed camera azimuth in degrees (skips azimuth sweep)')
+  .option('--fov <degrees>', 'Fixed camera field of view in degrees (skips FOV sweep)')
   .action(async (options) => {
     // Set bbox height extension for seated/partial people
     BBOX_HEIGHT_EXTENSION = parseFloat(options.bboxExtend)
@@ -814,13 +816,39 @@ program
       fixedPosition = { x, y }
     }
 
+    // Parse fixed azimuth (optional)
+    let fixedAzimuth: number | null = null
+    if (options.azimuth) {
+      fixedAzimuth = parseFloat(options.azimuth)
+      if (isNaN(fixedAzimuth)) {
+        console.error('Invalid azimuth (must be a number in degrees)')
+        process.exit(1)
+      }
+    }
+
+    // Parse fixed FOV (optional)
+    let fixedFov: number | null = null
+    if (options.fov) {
+      fixedFov = parseFloat(options.fov)
+      if (isNaN(fixedFov)) {
+        console.error('Invalid FOV (must be a number in degrees)')
+        process.exit(1)
+      }
+    }
+
     console.log('=== Camera Configuration Calibration ===')
     console.log(`Ground Truth: [(${groundTruth[0].x}, ${groundTruth[0].y}), (${groundTruth[1].x}, ${groundTruth[1].y})]`)
     if (BBOX_HEIGHT_EXTENSION > 1.0) {
       console.log(`BBox extension: ${BBOX_HEIGHT_EXTENSION}x (extending bbox height downward for seated/partial people)`)
     }
     if (fixedPosition) {
-      console.log(`Fixed position: (${fixedPosition.x}, ${fixedPosition.y}) - only sweeping azimuth, elevation, height, FOV`)
+      console.log(`Fixed position: (${fixedPosition.x}, ${fixedPosition.y})`)
+    }
+    if (fixedAzimuth !== null) {
+      console.log(`Fixed azimuth: ${fixedAzimuth}°`)
+    }
+    if (fixedFov !== null) {
+      console.log(`Fixed FOV: ${fixedFov}°`)
     }
     if (roomConstraints) {
       console.log(`Room constraints: ${roomConstraints.width}x${roomConstraints.height}m (margin: ${roomConstraints.margin}m)`)
@@ -851,22 +879,26 @@ program
 
     console.log(`  Sample frames: ${frames.length} (from ${data.frames.filter(f => f.detections.length === 2).length} valid)`)
 
-    // Create sweep config - fix position if specified
-    const coarseSweep: SweepConfig = fixedPosition
-      ? {
-          ...DEFAULT_COARSE_SWEEP,
-          positionX: { min: fixedPosition.x, max: fixedPosition.x, step: 1 },
-          positionY: { min: fixedPosition.y, max: fixedPosition.y, step: 1 },
-        }
-      : DEFAULT_COARSE_SWEEP
+    // Create sweep config - fix parameters as specified
+    let coarseSweep: SweepConfig = { ...DEFAULT_COARSE_SWEEP }
+    let fineSweep: SweepConfig = { ...DEFAULT_FINE_SWEEP }
 
-    const fineSweep: SweepConfig = fixedPosition
-      ? {
-          ...DEFAULT_FINE_SWEEP,
-          positionX: { min: 0, max: 0, step: 1 },
-          positionY: { min: 0, max: 0, step: 1 },
-        }
-      : DEFAULT_FINE_SWEEP
+    if (fixedPosition) {
+      coarseSweep.positionX = { min: fixedPosition.x, max: fixedPosition.x, step: 1 }
+      coarseSweep.positionY = { min: fixedPosition.y, max: fixedPosition.y, step: 1 }
+      fineSweep.positionX = { min: 0, max: 0, step: 1 }
+      fineSweep.positionY = { min: 0, max: 0, step: 1 }
+    }
+
+    if (fixedAzimuth !== null) {
+      coarseSweep.azimuth = { min: fixedAzimuth, max: fixedAzimuth, step: 1 }
+      fineSweep.azimuth = { min: 0, max: 0, step: 1 }
+    }
+
+    if (fixedFov !== null) {
+      coarseSweep.fieldOfView = { min: fixedFov, max: fixedFov, step: 1 }
+      fineSweep.fieldOfView = { min: 0, max: 0, step: 1 }
+    }
 
     // Run optimization
     let coarseScore = runCoarseSearch(frames, groundTruth, coarseSweep, options.verbose, roomConstraints)

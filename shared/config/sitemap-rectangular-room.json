@@ -1,4 +1,5 @@
 {
+  "$schema": "./sitemap.schema.json",
   "dimensions": {
     "width": 18,
     "height": 12,
@@ -38,12 +39,30 @@
       "rtspUrl": "rtsp://localhost:8554/camera1",
       "webrtcUrl": "http://localhost:9101",
       "ipAddress": "192.168.1.101",
-      "position": { "x": 17, "y": 9 },
-      "azimuth": 200,
-      "elevation": 23.5,
-      "height": 4.7,
+      "position": { "x": 16.22, "y": 11.7 },
+      "azimuth": 198,
+      "elevation": 1,
+      "height": 1.68,
       "fieldOfView": 75,
+      "resolution": { "width": 1920, "height": 1080 },
+      "distortion": { "k1": 0, "k2": 0, "p1": 0, "p2": 0 },
       "color": "cyan-500"
+    },
+    {
+      "id": "camera2",
+      "name": "HC4 (Auditorium)",
+      "model": "AXIS P3245-LVE",
+      "rtspUrl": "rtsp://localhost:8554/camera2",
+      "webrtcUrl": "http://localhost:9102",
+      "ipAddress": "192.168.1.102",
+      "position": { "x": 0.9, "y": 11.5 },
+      "azimuth": 133,
+      "elevation": -5,
+      "height": 1.67,
+      "fieldOfView": 75,
+      "resolution": { "width": 1920, "height": 1080 },
+      "distortion": { "k1": 0, "k2": 0, "p1": 0, "p2": 0 },
+      "color": "amber-500"
     }
   ]
 }

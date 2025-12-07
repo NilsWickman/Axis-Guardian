@@ -18,6 +18,14 @@ export const cameras: CameraConfig[] = [
     trackingCameraId: 'camera1',
     trackingServiceUrl: TRACKING_SERVICE_URL,
   },
+  {
+    cameraId: 'camera-HC4',
+    videoPath: path.join(BASE_PATH, 'view-HC4-preprocessed.mp4'),
+    detectionsPath: path.join(BASE_PATH, 'view-HC4-preprocessed.detections.json.gz'),
+    port: 9102,
+    trackingCameraId: 'camera2',
+    trackingServiceUrl: TRACKING_SERVICE_URL,
+  },
 ]
 
 // mediasoup configuration

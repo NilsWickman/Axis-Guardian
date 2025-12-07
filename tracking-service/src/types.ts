@@ -82,6 +82,14 @@ export interface CameraConfig {
 }
 
 /**
+ * Image resolution
+ */
+export interface ImageResolution {
+  width: number
+  height: number
+}
+
+/**
  * Sitemap camera config format (for loading from JSON)
  */
 export interface SiteMapCameraConfig {
@@ -95,6 +103,10 @@ export interface SiteMapCameraConfig {
   height: number
   /** Horizontal field of view in degrees */
   fieldOfView: number
+  /** Image resolution in pixels */
+  resolution?: ImageResolution
+  /** Lens distortion coefficients */
+  distortion?: DistortionCoeffs
 }
 
 /**
@@ -285,10 +297,16 @@ export interface TrackingConfig {
   missedFramesBeforeOcclusion: number
   /** Number of consecutive detections required to exit occlusion state */
   detectionsToExitOcclusion: number
+  /** Max distance to cluster unmatched detections from different cameras */
+  clusteringDistanceM: number
+  /** Max distance between tracks to consider merging */
+  mergeDistanceM: number
+  /** Min confidence score (0-1) required to merge tracks */
+  mergeConfidenceThreshold: number
 }
 
 export const DEFAULT_TRACKING_CONFIG: TrackingConfig = {
-  correlationDistanceM: 0.3,  // Reduced from 0.5 to prevent merging people ~1m apart
+  correlationDistanceM: 0.5,  // Increased from 0.3 to handle projection error
   mergeWindowMs: 200,
   trackExpiryMs: 5000,
   maxTrailLength: 20,
@@ -296,12 +314,15 @@ export const DEFAULT_TRACKING_CONFIG: TrackingConfig = {
   maxVelocityMs: 50,
   unconfirmedTrackExpiryMs: 2000,  // Ghost tracks expire faster
   minCreationConfidence: 0.7,      // Require higher confidence for new tracks
-  exclusionRadius: 0.3,            // No new tracks within 0.3m of existing
+  exclusionRadius: 0.5,            // Increased from 0.3 to handle projection error
   crossingProximityThreshold: 1.5, // Detect crossing when tracks within 1.5m
   occlusionCoastTimeMs: 5000,      // Coast for 5 seconds during occlusion (increased from 2s)
   reidentificationGateMultiplier: 3.0, // 3x expanded gate for re-ID
   missedFramesBeforeOcclusion: 5,  // Require 5 missed frames before transitioning to occluded
   detectionsToExitOcclusion: 2,    // Require 2 detections to exit occlusion state
+  clusteringDistanceM: 0.6,        // Cluster detections within 0.6m from different cameras
+  mergeDistanceM: 0.6,             // Consider merging tracks within 0.6m
+  mergeConfidenceThreshold: 0.7,   // Require 70% confidence to merge tracks
 }
 
 // ============================================================================

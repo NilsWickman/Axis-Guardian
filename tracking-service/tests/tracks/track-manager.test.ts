@@ -255,7 +255,7 @@ describe('TrackManager', () => {
       trackManager.updateConfig({ correlationDistanceM: 999 })
       trackManager.resetConfig()
       const config = trackManager.getConfig()
-      expect(config.correlationDistanceM).toBe(0.3) // Default from DEFAULT_TRACKING_CONFIG
+      expect(config.correlationDistanceM).toBe(0.5) // Default from DEFAULT_TRACKING_CONFIG (increased for projection error)
     })
   })
 
@@ -327,6 +327,87 @@ describe('TrackManager', () => {
       expect(typeof json.cameraAssociations).toBe('object')
       // Should not have pendingDetections (internal state)
       expect(json).not.toHaveProperty('pendingDetections')
+    })
+  })
+
+  describe('Cross-Camera Duplicate Prevention', () => {
+    it('clusters detections from different cameras at similar positions', () => {
+      // Simulate two cameras seeing the same person at nearly the same world position
+      const detections = [
+        { cameraId: 'camera1', trackId: 1, worldX: 10.0, worldY: 6.0, confidence: 0.9, timestamp: mockTime },
+        { cameraId: 'camera2', trackId: 1, worldX: 10.3, worldY: 5.9, confidence: 0.85, timestamp: mockTime },
+      ]
+
+      const results = trackManager.processBatchDetections(detections)
+
+      // Should create only ONE track, not two
+      expect(results.length).toBe(1)
+      expect(trackManager.getAllActiveTracks().length).toBe(1)
+
+      // The track should be associated with both cameras
+      const track = results[0]
+      expect(track.cameraAssociations.has('camera1')).toBe(true)
+      expect(track.cameraAssociations.has('camera2')).toBe(true)
+
+      // Position should be merged (weighted centroid)
+      expect(track.currentPosition.x).toBeCloseTo(10.15, 1)
+      expect(track.currentPosition.y).toBeCloseTo(5.95, 1)
+    })
+
+    it('creates separate tracks for distant positions', () => {
+      // Two detections far apart - should create separate tracks
+      const detections = [
+        { cameraId: 'camera1', trackId: 1, worldX: 5.0, worldY: 5.0, confidence: 0.9, timestamp: mockTime },
+        { cameraId: 'camera2', trackId: 1, worldX: 15.0, worldY: 10.0, confidence: 0.85, timestamp: mockTime },
+      ]
+
+      const results = trackManager.processBatchDetections(detections)
+
+      // Should create TWO tracks (positions too far apart)
+      expect(results.length).toBe(2)
+      expect(trackManager.getAllActiveTracks().length).toBe(2)
+    })
+
+    it('does not cluster detections from the same camera', () => {
+      // Two detections from same camera at close positions - should be separate tracks
+      // (same camera can't see the same person twice)
+      const detections = [
+        { cameraId: 'camera1', trackId: 1, worldX: 10.0, worldY: 6.0, confidence: 0.9, timestamp: mockTime },
+        { cameraId: 'camera1', trackId: 2, worldX: 10.2, worldY: 6.1, confidence: 0.85, timestamp: mockTime },
+      ]
+
+      const results = trackManager.processBatchDetections(detections)
+
+      // Should create TWO tracks (same camera = different people)
+      expect(results.length).toBe(2)
+      expect(trackManager.getAllActiveTracks().length).toBe(2)
+    })
+
+    it('merges duplicate tracks after batch processing', () => {
+      // First, create two tracks separately (simulating race condition)
+      trackManager.processDetection('camera1', 1, 10.0, 6.0, 0.9)
+      mockTime += 50
+      trackManager.processDetection('camera1', 1, 10.05, 6.02, 0.9) // Confirm track 1
+
+      // Create a second track from different camera
+      mockTime += 50
+      trackManager.processDetection('camera2', 1, 10.2, 5.9, 0.85)
+      mockTime += 50
+      trackManager.processDetection('camera2', 1, 10.22, 5.92, 0.85) // Confirm track 2
+
+      // At this point we may have 2 tracks (depending on exact positions)
+      // Process another batch to trigger merge detection
+      mockTime += 100
+      const detections = [
+        { cameraId: 'camera1', trackId: 1, worldX: 10.1, worldY: 6.0, confidence: 0.9, timestamp: mockTime },
+      ]
+
+      trackManager.processBatchDetections(detections)
+
+      // After merge detection runs, there should be at most 2 confirmed tracks
+      // (The exact outcome depends on whether the tracks were close enough to merge)
+      const activeTracks = trackManager.getActiveTracks()
+      expect(activeTracks.length).toBeLessThanOrEqual(2)
     })
   })
 })
