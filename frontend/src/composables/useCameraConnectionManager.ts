@@ -86,7 +86,7 @@ const RECONNECT_DELAY = 2000 // Wait 2 seconds before attempting reconnect
 
 // Single camera mode - only connect to HC3 (camera1) for testing
 // Set to null to connect to all cameras
-const SINGLE_CAMERA_MODE: string | null = 'camera1'
+const SINGLE_CAMERA_MODE: string | null = null
 
 // Video element pool for reuse (prevents orphaned elements)
 const videoElementPool: HTMLVideoElement[] = []

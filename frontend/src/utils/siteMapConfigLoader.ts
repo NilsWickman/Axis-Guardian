@@ -8,6 +8,18 @@
 
 import { config } from '../config/environment'
 
+export interface ImageResolution {
+  width: number
+  height: number
+}
+
+export interface DistortionCoeffs {
+  k1: number
+  k2: number
+  p1: number
+  p2: number
+}
+
 export interface SiteMapConfigCamera {
   id: string
   name: string
@@ -24,6 +36,10 @@ export interface SiteMapConfigCamera {
   height: number
   /** Horizontal field of view in degrees */
   fieldOfView: number
+  /** Image resolution in pixels */
+  resolution?: ImageResolution
+  /** Lens distortion coefficients */
+  distortion?: DistortionCoeffs
   color?: string
 }
 

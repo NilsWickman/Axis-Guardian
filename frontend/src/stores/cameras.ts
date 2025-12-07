@@ -21,7 +21,7 @@ function transformConfigToCamera(configCamera: SiteMapConfigCamera): Camera {
       x: configCamera.position.x,
       y: configCamera.position.y,
       z: configCamera.height,
-      azimuth: configCamera.rotation
+      azimuth: configCamera.azimuth
     }
   }
 }

@@ -11,6 +11,28 @@ import type { Position2D } from './geometry'
  * Camera configuration as stored in JSON config files.
  * This is the canonical format for serialization.
  */
+/**
+ * Image resolution
+ */
+export interface ImageResolution {
+  width: number
+  height: number
+}
+
+/**
+ * Lens distortion coefficients (Brown-Conrady model)
+ */
+export interface DistortionCoeffs {
+  /** Radial distortion coefficient 1 */
+  k1: number
+  /** Radial distortion coefficient 2 */
+  k2: number
+  /** Tangential distortion coefficient 1 */
+  p1: number
+  /** Tangential distortion coefficient 2 */
+  p2: number
+}
+
 export interface SiteMapCameraConfig {
   /** Unique camera identifier */
   id: string
@@ -34,6 +56,10 @@ export interface SiteMapCameraConfig {
   height: number
   /** Horizontal field of view in degrees */
   fieldOfView: number
+  /** Image resolution in pixels */
+  resolution?: ImageResolution
+  /** Lens distortion coefficients */
+  distortion?: DistortionCoeffs
   /** Display color for visualization */
   color?: string
 }

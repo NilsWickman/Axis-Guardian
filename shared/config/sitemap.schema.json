@@ -1,0 +1,198 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://axis-guardian/schemas/sitemap.json",
+  "title": "Site Map Configuration",
+  "description": "Configuration schema for Axis-Guardian site maps including cameras, walls, and dimensions",
+  "type": "object",
+  "required": ["dimensions", "walls", "cameras"],
+  "properties": {
+    "dimensions": {
+      "type": "object",
+      "description": "Physical dimensions of the monitored area",
+      "required": ["width", "height", "unit"],
+      "properties": {
+        "width": {
+          "type": "number",
+          "description": "Width of the area",
+          "minimum": 0
+        },
+        "height": {
+          "type": "number",
+          "description": "Height/depth of the area",
+          "minimum": 0
+        },
+        "unit": {
+          "type": "string",
+          "enum": ["meters", "feet"],
+          "description": "Unit of measurement"
+        }
+      }
+    },
+    "origin": {
+      "type": "object",
+      "description": "Origin point offset (optional)",
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      },
+      "required": ["x", "y"]
+    },
+    "walls": {
+      "type": "array",
+      "description": "Wall segments defining the room boundary",
+      "items": {
+        "type": "object",
+        "required": ["id", "start", "end"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique wall identifier"
+          },
+          "start": {
+            "$ref": "#/$defs/position2D"
+          },
+          "end": {
+            "$ref": "#/$defs/position2D"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["external", "internal", "door"],
+            "default": "external"
+          }
+        }
+      }
+    },
+    "cameras": {
+      "type": "array",
+      "description": "Camera configurations",
+      "items": {
+        "$ref": "#/$defs/camera"
+      }
+    }
+  },
+  "$defs": {
+    "position2D": {
+      "type": "object",
+      "description": "2D position in meters",
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      }
+    },
+    "resolution": {
+      "type": "object",
+      "description": "Image resolution in pixels",
+      "required": ["width", "height"],
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Image width in pixels"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Image height in pixels"
+        }
+      }
+    },
+    "distortion": {
+      "type": "object",
+      "description": "Brown-Conrady lens distortion coefficients",
+      "required": ["k1", "k2", "p1", "p2"],
+      "properties": {
+        "k1": {
+          "type": "number",
+          "description": "Radial distortion coefficient 1"
+        },
+        "k2": {
+          "type": "number",
+          "description": "Radial distortion coefficient 2"
+        },
+        "p1": {
+          "type": "number",
+          "description": "Tangential distortion coefficient 1"
+        },
+        "p2": {
+          "type": "number",
+          "description": "Tangential distortion coefficient 2"
+        }
+      }
+    },
+    "camera": {
+      "type": "object",
+      "description": "Camera configuration",
+      "required": ["id", "name", "position", "azimuth", "height", "fieldOfView"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^camera[0-9]+$",
+          "description": "Unique camera identifier (e.g., camera1, camera2)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable camera name"
+        },
+        "model": {
+          "type": "string",
+          "description": "Camera model identifier"
+        },
+        "rtspUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "RTSP stream URL"
+        },
+        "webrtcUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "WebRTC signaling endpoint URL"
+        },
+        "ipAddress": {
+          "type": "string",
+          "description": "Camera IP address"
+        },
+        "position": {
+          "$ref": "#/$defs/position2D",
+          "description": "Camera position on floor plan (meters)"
+        },
+        "azimuth": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 360,
+          "description": "Horizontal orientation in degrees (0 = North/+Y, 90 = East/+X, clockwise)"
+        },
+        "elevation": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 90,
+          "default": 45,
+          "description": "Vertical tilt in degrees (0 = horizontal, 90 = straight down)"
+        },
+        "height": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Camera mounting height in meters"
+        },
+        "fieldOfView": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 180,
+          "description": "Horizontal field of view in degrees"
+        },
+        "resolution": {
+          "$ref": "#/$defs/resolution",
+          "description": "Image resolution in pixels"
+        },
+        "distortion": {
+          "$ref": "#/$defs/distortion",
+          "description": "Lens distortion coefficients"
+        },
+        "color": {
+          "type": "string",
+          "description": "Display color for visualization (Tailwind class or hex)"
+        }
+      }
+    }
+  }
+}

@@ -79,11 +79,14 @@ let isAnimating = false
 
 // Interpolation state for smooth animation
 interface InterpolationState {
-  position: { x: number; y: number }
-  velocity: { x: number; y: number }
+  position: { x: number; y: number }       // Current rendered position
+  targetPosition: { x: number; y: number } // Target position to interpolate toward
   lastUpdateTime: number
 }
 const interpolationStates = new Map<string, InterpolationState>()
+
+// Interpolation speed (0-1, higher = faster convergence)
+const LERP_FACTOR = 0.75
 
 // Computed data from global track store
 const globalTracks = computed(() => globalTrackStore.activeTracks)
@@ -132,36 +135,8 @@ function formatTrackId(trackId: string): string {
 }
 
 /**
- * Calculate velocity from trail positions
- */
-function calculateVelocity(trail: TrailPosition[]): { x: number; y: number } {
-  if (trail.length < 2) return { x: 0, y: 0 }
-
-  // Use average of last 2-3 segments for smoother velocity
-  let totalVx = 0
-  let totalVy = 0
-  let count = 0
-
-  for (let i = 0; i < Math.min(3, trail.length - 1); i++) {
-    const dt = (trail[i].timestamp - trail[i + 1].timestamp) / 1000
-    if (dt > 0.01 && dt < 2) { // Valid time delta between 10ms and 2s
-      totalVx += (trail[i].x - trail[i + 1].x) / dt
-      totalVy += (trail[i].y - trail[i + 1].y) / dt
-      count++
-    }
-  }
-
-  if (count === 0) return { x: 0, y: 0 }
-
-  return {
-    x: totalVx / count,
-    y: totalVy / count,
-  }
-}
-
-/**
  * Get interpolated position for a track
- * Note: Velocity-based prediction disabled to avoid rubber-banding
+ * Uses lerp to smoothly converge toward target position each frame
  */
 function getInterpolatedPosition(track: GlobalTrack, now: number): { x: number; y: number } {
   const state = interpolationStates.get(track.globalTrackId)
@@ -170,31 +145,35 @@ function getInterpolatedPosition(track: GlobalTrack, now: number): { x: number; 
     // First time seeing this track, initialize state
     interpolationStates.set(track.globalTrackId, {
       position: { ...track.currentPosition },
-      velocity: { x: 0, y: 0 },
+      targetPosition: { ...track.currentPosition },
       lastUpdateTime: now,
     })
     return track.currentPosition
   }
 
-  // Return current stored position (no velocity prediction)
+  // Lerp current position toward target position
+  state.position.x += (state.targetPosition.x - state.position.x) * LERP_FACTOR
+  state.position.y += (state.targetPosition.y - state.position.y) * LERP_FACTOR
+
   return state.position
 }
 
 /**
  * Update interpolation state when track position changes
- * Note: Simplified - just updates position directly without blending
+ * Updates the target position - the animation loop will smoothly lerp toward it
  */
 function updateInterpolationState(track: GlobalTrack, now: number): void {
   const state = interpolationStates.get(track.globalTrackId)
 
   if (state) {
-    // Direct update - no blending
-    state.position = { ...track.currentPosition }
+    // Update target position - animation loop will lerp toward it
+    state.targetPosition = { ...track.currentPosition }
     state.lastUpdateTime = now
   } else {
+    // New track - start at target position immediately
     interpolationStates.set(track.globalTrackId, {
       position: { ...track.currentPosition },
-      velocity: { x: 0, y: 0 },
+      targetPosition: { ...track.currentPosition },
       lastUpdateTime: now,
     })
   }
