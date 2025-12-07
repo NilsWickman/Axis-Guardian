@@ -15,6 +15,7 @@ export interface LineSegment {
 export interface CircleObstacle {
   center: Point
   radius: number
+  obstacleHeight?: number // physical height in meters
 }
 
 export interface RectangleObstacle {
@@ -22,6 +23,7 @@ export interface RectangleObstacle {
   width: number
   height: number
   rotation?: number // degrees
+  obstacleHeight?: number // physical height in meters
 }
 
 /**
@@ -286,6 +288,176 @@ function isAngleInFOV(angle: number, leftAngle: number, rightAngle: number): boo
 }
 
 /**
+ * Check if a point is inside a polygon using ray casting algorithm
+ */
+export function isPointInPolygon(point: Point, polygon: Point[]): boolean {
+  if (polygon.length < 3) return false
+
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].x, yi = polygon[i].y
+    const xj = polygon[j].x, yj = polygon[j].y
+
+    if (((yi > point.y) !== (yj > point.y)) &&
+        (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi)) {
+      inside = !inside
+    }
+  }
+
+  return inside
+}
+
+/**
+ * Height-aware occlusion options
+ */
+export interface HeightAwareOptions {
+  cameraHeight: number    // camera height in meters
+  targetHeight: number    // target (person) height in meters, default ~1.7m
+  pixelsPerMeter: number  // conversion factor for distance calculations
+}
+
+/**
+ * Ground shadow zone - area behind obstacle where ground/feet can't be seen
+ */
+export interface GroundShadowZone {
+  polygon: Point[]        // the shadow polygon
+  obstacleId?: string     // optional reference to the obstacle
+}
+
+/**
+ * Calculate the ground shadow zone behind an obstacle
+ * This is the triangular area behind an obstacle where the camera can see over it
+ * (at person height) but cannot see the ground level
+ *
+ * The shadow extends from the obstacle to where the camera's line-of-sight
+ * to the top of the obstacle reaches ground level
+ */
+export function calculateGroundShadowZone(
+  cameraPosition: Point,
+  cameraHeight: number,
+  obstacle: { center: Point; width?: number; height?: number; radius?: number; rotation?: number; obstacleHeight?: number },
+  pixelsPerMeter: number,
+  maxDistance: number = 10 // max shadow distance in meters
+): Point[] | null {
+  const obstacleHeight = obstacle.obstacleHeight
+  if (obstacleHeight === undefined || obstacleHeight <= 0) return null
+
+  // Camera must be above obstacle for shadow to exist
+  if (cameraHeight <= obstacleHeight) return null
+
+  // Calculate where the shadow ends (where line from camera over obstacle hits ground)
+  // Using similar triangles: shadowLength / cameraHeight = (shadowLength - obstacleDistance) / obstacleHeight
+  // Solving: shadowLength = obstacleDistance * cameraHeight / (cameraHeight - obstacleHeight)
+
+  const dx = obstacle.center.x - cameraPosition.x
+  const dy = obstacle.center.y - cameraPosition.y
+  const distToObstacle = Math.sqrt(dx * dx + dy * dy) / pixelsPerMeter // in meters
+
+  if (distToObstacle < 0.1) return null // too close
+
+  const heightDiff = cameraHeight - obstacleHeight
+  const shadowEndDistance = Math.min(
+    distToObstacle * cameraHeight / heightDiff,
+    distToObstacle + maxDistance
+  )
+
+  // Direction from camera to obstacle
+  const angle = Math.atan2(dy, dx)
+
+  // Calculate obstacle's angular width as seen from camera
+  let angularHalfWidth: number
+
+  if (obstacle.radius !== undefined) {
+    // Circle: use tangent angle
+    const radiusMeters = obstacle.radius / pixelsPerMeter
+    angularHalfWidth = Math.atan2(radiusMeters, distToObstacle)
+  } else if (obstacle.width !== undefined && obstacle.height !== undefined) {
+    // Rectangle: approximate with diagonal
+    const halfDiagonal = Math.sqrt(
+      Math.pow(obstacle.width / 2, 2) + Math.pow(obstacle.height / 2, 2)
+    ) / pixelsPerMeter
+    angularHalfWidth = Math.atan2(halfDiagonal, distToObstacle)
+  } else {
+    return null
+  }
+
+  // Add small buffer for visual clarity
+  angularHalfWidth += 0.02
+
+  // Calculate shadow polygon points
+  // Near edge (at obstacle distance)
+  const nearDist = distToObstacle * pixelsPerMeter
+  const nearLeft: Point = {
+    x: cameraPosition.x + nearDist * Math.cos(angle - angularHalfWidth),
+    y: cameraPosition.y + nearDist * Math.sin(angle - angularHalfWidth)
+  }
+  const nearRight: Point = {
+    x: cameraPosition.x + nearDist * Math.cos(angle + angularHalfWidth),
+    y: cameraPosition.y + nearDist * Math.sin(angle + angularHalfWidth)
+  }
+
+  // Far edge (where shadow ends)
+  const farDist = shadowEndDistance * pixelsPerMeter
+  const farLeft: Point = {
+    x: cameraPosition.x + farDist * Math.cos(angle - angularHalfWidth),
+    y: cameraPosition.y + farDist * Math.sin(angle - angularHalfWidth)
+  }
+  const farRight: Point = {
+    x: cameraPosition.x + farDist * Math.cos(angle + angularHalfWidth),
+    y: cameraPosition.y + farDist * Math.sin(angle + angularHalfWidth)
+  }
+
+  return [nearLeft, nearRight, farRight, farLeft]
+}
+
+/**
+ * Check if an obstacle blocks view based on heights
+ * Returns true if the obstacle is tall enough to block line of sight from camera to target
+ */
+function doesObstacleBlockView(
+  cameraPos: Point,
+  obstaclePos: Point,
+  obstacleHeight: number | undefined,
+  cameraHeight: number,
+  targetHeight: number,
+  pixelsPerMeter: number
+): boolean {
+  // If no height specified, assume infinite height (always blocks)
+  if (obstacleHeight === undefined) return true
+
+  // If obstacle is taller than both camera and target, it blocks
+  if (obstacleHeight >= cameraHeight && obstacleHeight >= targetHeight) return true
+
+  // If camera is above obstacle and target is above obstacle, camera can see over it
+  if (cameraHeight > obstacleHeight && targetHeight > obstacleHeight) return false
+
+  // Calculate the horizontal distance from camera to obstacle (in meters)
+  const dx = (obstaclePos.x - cameraPos.x) / pixelsPerMeter
+  const dy = (obstaclePos.y - cameraPos.y) / pixelsPerMeter
+  const distToObstacle = Math.sqrt(dx * dx + dy * dy)
+
+  // If very close to obstacle, treat as blocking
+  if (distToObstacle < 0.5) return true
+
+  // Calculate the angle of view from camera down to obstacle top
+  // If this angle is steep enough, camera can see over obstacle to see target behind it
+  const heightDiffCameraToObstacle = cameraHeight - obstacleHeight
+
+  // For a target at distance D behind obstacle, can camera see it?
+  // The "shadow" extends behind the obstacle based on the geometry
+  // If camera looks down at angle θ = atan(heightDiff / dist),
+  // everything at target height and beyond the shadow zone is visible
+
+  // Simple heuristic: if camera is significantly above obstacle (>0.5m),
+  // and target is above obstacle, don't block
+  if (heightDiffCameraToObstacle > 0.3 && targetHeight > obstacleHeight) {
+    return false
+  }
+
+  return true
+}
+
+/**
  * Calculate the visible FOV polygon for a camera, clipped by walls and obstacles
  * Uses ray-casting to obstacle edges for proper shadow wrapping
  * Returns an array of points representing the visible area
@@ -297,8 +469,41 @@ export function calculateVisibleFOV(
   viewDistance: number, // in pixels
   walls: LineSegment[],
   circles: CircleObstacle[] = [],
-  rectangles: RectangleObstacle[] = []
+  rectangles: RectangleObstacle[] = [],
+  heightOptions?: HeightAwareOptions
 ): Point[] {
+  // Filter obstacles based on height if height-aware options provided
+  let effectiveCircles = circles
+  let effectiveRectangles = rectangles
+
+  if (heightOptions) {
+    const { cameraHeight, targetHeight, pixelsPerMeter } = heightOptions
+
+    // Filter circles - only include those that actually block view at person height
+    effectiveCircles = circles.filter((circle) =>
+      doesObstacleBlockView(
+        cameraPosition,
+        circle.center,
+        circle.obstacleHeight,
+        cameraHeight,
+        targetHeight,
+        pixelsPerMeter
+      )
+    )
+
+    // Filter rectangles - only include those that actually block view at person height
+    effectiveRectangles = rectangles.filter((rect) =>
+      doesObstacleBlockView(
+        cameraPosition,
+        rect.center,
+        rect.obstacleHeight,
+        cameraHeight,
+        targetHeight,
+        pixelsPerMeter
+      )
+    )
+  }
+
   // Convert from azimuth (0° = North/+Y world, clockwise) to canvas angle
   const canvasAngle = 90 - rotation
   const rotationRad = (canvasAngle * Math.PI) / 180
@@ -334,7 +539,7 @@ export function calculateVisibleFOV(
   }
 
   // 3. Add angles to rectangle corners
-  for (const rect of rectangles) {
+  for (const rect of effectiveRectangles) {
     const edges = getRectangleEdges(rect)
     for (const edge of edges) {
       for (const point of [edge.start, edge.end]) {
@@ -351,7 +556,7 @@ export function calculateVisibleFOV(
   }
 
   // 4. Add angles to circle tangent points
-  for (const circle of circles) {
+  for (const circle of effectiveCircles) {
     const tangents = getCircleTangentPoints(cameraPosition, circle)
     for (const point of tangents) {
       const dx = point.x - cameraPosition.x
@@ -385,7 +590,7 @@ export function calculateVisibleFOV(
       y: Math.sin(angle),
     }
 
-    const hitPoint = castRay(cameraPosition, direction, viewDistance, walls, circles, rectangles)
+    const hitPoint = castRay(cameraPosition, direction, viewDistance, walls, effectiveCircles, effectiveRectangles)
     visiblePoints.push(hitPoint)
   }
 

@@ -1,6 +1,6 @@
 import { ref, type Ref } from 'vue'
 import type { CameraPlacement, Wall, Obstacle } from '../stores/siteMaps'
-import { calculateVisibleFOV, drawPolygon, type LineSegment, type CircleObstacle, type RectangleObstacle } from './useGeometry'
+import { calculateVisibleFOV, drawPolygon, type Point, type LineSegment, type CircleObstacle, type RectangleObstacle, type HeightAwareOptions } from './useGeometry'
 import {
   extractValue,
   metersToPixels,
@@ -854,7 +854,8 @@ export function useSiteMapCanvas(
     isSelected: boolean = false,
     isPreview: boolean = false,
     walls: Wall[] = [],
-    obstacles: Obstacle[] = []
+    obstacles: Obstacle[] = [],
+    otherCameraFOVs: Point[][] = [] // FOV polygons from other cameras for overlap detection
   ) => {
     if (!ctx.value) return
 
@@ -905,7 +906,8 @@ export function useSiteMapCanvas(
             x: metersToPixels(extractValue(obstacle.position.x)),
             y: metersToPixels(extractValue(obstacle.position.y))
           },
-          radius: metersToPixels(extractValue(obstacle.radius))
+          radius: metersToPixels(extractValue(obstacle.radius)),
+          obstacleHeight: obstacle.height // physical height in meters
         })
       } else if (obstacle.type === 'rectangle' && obstacle.dimensions) {
         rectangleObstacles.push({
@@ -915,12 +917,24 @@ export function useSiteMapCanvas(
           },
           width: metersToPixels(extractValue(obstacle.dimensions.width)),
           height: metersToPixels(extractValue(obstacle.dimensions.height)),
-          rotation: obstacle.rotation
+          rotation: obstacle.rotation,
+          obstacleHeight: obstacle.height // physical height in meters
         })
       }
     }
 
-    // Calculate visible FOV with wall and obstacle occlusion
+    // Get camera height for height-aware occlusion
+    const cameraHeight = extractValue(placement.height)
+
+    // Height-aware occlusion options
+    // Target height is the typical person detection height (~1.7m)
+    const heightOptions: HeightAwareOptions = {
+      cameraHeight,
+      targetHeight: 1.7, // person height
+      pixelsPerMeter: RENDER_SCALE
+    }
+
+    // Calculate visible FOV with wall and obstacle occlusion (height-aware)
     const visiblePolygon = calculateVisibleFOV(
       { x, y },
       azimuth,
@@ -928,7 +942,8 @@ export function useSiteMapCanvas(
       viewDistance,
       wallSegments,
       circleObstacles,
-      rectangleObstacles
+      rectangleObstacles,
+      heightOptions
     )
 
     // Draw FOV cone with wall occlusion
@@ -942,6 +957,11 @@ export function useSiteMapCanvas(
     const lineWidth = isSelected ? 3 : isHovered ? 2.5 : 2
 
     drawPolygon(context, visiblePolygon, fillStyle, strokeStyle, lineWidth)
+
+    // Note: Ground shadow zone drawing is disabled pending coordinate system fixes
+    // The feature would show areas where camera can see people but not ground-level objects
+    // See calculateGroundShadowZone in useGeometry.ts for the implementation
+    void otherCameraFOVs // Used for shadow overlap detection when enabled
 
     // Draw camera icon
     // Convert from azimuth (0° = North, clockwise) to canvas rotation
@@ -1043,6 +1063,76 @@ export function useSiteMapCanvas(
     })
   }
 
+  // Calculate FOV polygon for a camera without drawing (for overlap detection)
+  const getCameraFOVPolygon = (
+    placement: CameraPlacement,
+    walls: Wall[] = [],
+    obstacles: Obstacle[] = []
+  ): Point[] => {
+    const x = metersToPixels(extractValue(placement.position.x))
+    const y = metersToPixels(extractValue(placement.position.y))
+    const azimuth = extractValue(placement.azimuth)
+    const fov = extractValue(placement.fov)
+    const FOV_RENDER_DISTANCE_M = 50
+    const viewDistance = metersToPixels(FOV_RENDER_DISTANCE_M)
+
+    // Convert walls to line segments
+    const wallSegments: LineSegment[] = walls.map(wall => ({
+      start: {
+        x: metersToPixels(extractValue(wall.start.x)),
+        y: metersToPixels(extractValue(wall.start.y))
+      },
+      end: {
+        x: metersToPixels(extractValue(wall.end.x)),
+        y: metersToPixels(extractValue(wall.end.y))
+      }
+    }))
+
+    // Convert obstacles (only those that block view AND are tall enough to fully block)
+    const cameraHeight = extractValue(placement.height)
+    const circleObstacles: CircleObstacle[] = []
+    const rectangleObstacles: RectangleObstacle[] = []
+
+    for (const obstacle of obstacles) {
+      if (obstacle.blocksView === false) continue
+      // For FOV calculation, only include obstacles that fully block (>= camera height)
+      // Shorter obstacles don't block the person-height FOV
+      if (obstacle.height !== undefined && obstacle.height < cameraHeight) continue
+
+      if (obstacle.type === 'circle' && obstacle.radius !== undefined) {
+        circleObstacles.push({
+          center: {
+            x: metersToPixels(extractValue(obstacle.position.x)),
+            y: metersToPixels(extractValue(obstacle.position.y))
+          },
+          radius: metersToPixels(extractValue(obstacle.radius)),
+          obstacleHeight: obstacle.height
+        })
+      } else if (obstacle.type === 'rectangle' && obstacle.dimensions) {
+        rectangleObstacles.push({
+          center: {
+            x: metersToPixels(extractValue(obstacle.position.x)),
+            y: metersToPixels(extractValue(obstacle.position.y))
+          },
+          width: metersToPixels(extractValue(obstacle.dimensions.width)),
+          height: metersToPixels(extractValue(obstacle.dimensions.height)),
+          rotation: obstacle.rotation,
+          obstacleHeight: obstacle.height
+        })
+      }
+    }
+
+    return calculateVisibleFOV(
+      { x, y },
+      azimuth,
+      fov,
+      viewDistance,
+      wallSegments,
+      circleObstacles,
+      rectangleObstacles
+    )
+  }
+
   return {
     ctx,
     hoveredCameraId,
@@ -1061,6 +1151,7 @@ export function useSiteMapCanvas(
     findObstacleAtPoint,
     drawCamera,
     findCameraAtPoint,
+    getCameraFOVPolygon,
     requestRedraw
   }
 }
