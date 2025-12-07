@@ -28,6 +28,13 @@
           Pending: {{ pendingTrackCount }}
         </div>
       </div>
+      <!-- Tracking frame numbers for timing diagnostics -->
+      <div v-if="trackingFrameNumbers.length > 0" class="mt-2 pt-2 border-t border-gray-600">
+        <div class="text-xs text-cyan-400 font-semibold mb-1">Tracking Frame:</div>
+        <div v-for="frame in trackingFrameNumbers" :key="frame.cameraId" class="text-xs text-cyan-300">
+          {{ frame.cameraId }}: #{{ frame.frameNumber }}
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -64,6 +71,9 @@ const globalTrackStore = useGlobalTrackStore()
 
 // Canvas ref
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+
+// Tracking frame numbers for timing diagnostics
+const trackingFrameNumbers = computed(() => globalTrackStore.getAllFrameInfo())
 let animationFrameId: number | null = null
 let isAnimating = false
 

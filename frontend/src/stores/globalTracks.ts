@@ -27,6 +27,13 @@ export interface TrackingConfig {
   maxVelocityMs: number
 }
 
+// Frame info for timing diagnostics
+export interface CameraFrameInfo {
+  cameraId: string
+  frameNumber: number
+  timestamp: number
+}
+
 // Color palette for global tracks (12 distinct colors)
 const TRACK_COLORS = [
   '#10b981', // emerald
@@ -145,6 +152,9 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
   const tracks = ref<Map<string, GlobalTrack>>(new Map())
   const nextTrackId = ref(1)
   const usedColors = ref<Set<string>>(new Set())
+
+  // Tracking frame info for timing diagnostics (per camera)
+  const trackingFrameInfo = ref<Map<string, CameraFrameInfo>>(new Map())
 
   // Configurable tracking parameters
   const config = ref<TrackingConfig>({
@@ -654,11 +664,36 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     }
   }
 
+  /**
+   * Update frame info from server (for timing diagnostics)
+   */
+  function updateFrameInfo(frames: CameraFrameInfo[] | undefined): void {
+    if (!frames) return
+    for (const frame of frames) {
+      trackingFrameInfo.value.set(frame.cameraId, frame)
+    }
+  }
+
+  /**
+   * Get frame info for a specific camera
+   */
+  function getFrameInfoForCamera(cameraId: string): CameraFrameInfo | undefined {
+    return trackingFrameInfo.value.get(cameraId)
+  }
+
+  /**
+   * Get all tracking frame info
+   */
+  function getAllFrameInfo(): CameraFrameInfo[] {
+    return Array.from(trackingFrameInfo.value.values())
+  }
+
   return {
     // State
     tracks,
     showTrails,
     config, // Configurable tracking parameters
+    trackingFrameInfo, // Frame info for timing diagnostics
     // Getters
     activeTracks,
     allActiveTracks, // Includes unconfirmed tracks (for debugging)
@@ -678,6 +713,9 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     setTracksFromServer,
     upsertTrackFromServer,
     removeTrack,
+    updateFrameInfo,
+    getFrameInfoForCamera,
+    getAllFrameInfo,
     // For testing/debugging
     findNearbyTrack,
   }

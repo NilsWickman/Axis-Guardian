@@ -10,6 +10,7 @@ import { TrackManager, trackToJSON } from '../tracks/track-manager.js'
 import { DetectionProcessor } from '../detection/detection-processor.js'
 import { CameraRegistry } from '../detection/camera-registry.js'
 import { getSiteMapConfigJson, isDatabaseSeeded } from '../db/repositories.js'
+import { getPipelineLogger } from '../debug/pipeline-logger.js'
 
 // Stats tracking (exported for display)
 export let detectionsReceived = 0
@@ -222,6 +223,12 @@ export function registerRoutes(
     if (data.dispatch_time) {
       recordHttpLatency(data.dispatch_time)
     }
+
+    // Update frame info for this camera (for timing diagnostics)
+    if (data.frame_number !== undefined) {
+      detectionProcessor.updateFrameInfo(data.camera_id, data.frame_number)
+    }
+
     const results: Array<{ detection: number; track: ReturnType<typeof trackToJSON> | null; worldPoint?: { x: number; y: number }; error?: string }> = []
 
     for (let i = 0; i < data.detections.length; i++) {
@@ -392,6 +399,64 @@ export function registerRoutes(
       inactiveTracks: allTracks.length - allActiveTracks.length,
       cameras: cameraRegistry.getCameraIds().length,
       config: trackManager.getConfig(),
+    }
+  })
+
+  // ============================================================================
+  // Debug Logging API
+  // ============================================================================
+
+  // Start debug session
+  app.post('/api/debug/session/start', async (request: FastifyRequest<{ Body: { name?: string } }>) => {
+    const logger = getPipelineLogger()
+    const name = (request.body as { name?: string })?.name
+    const sessionId = await logger.startSession(name)
+    return {
+      success: true,
+      sessionId,
+      message: 'Debug logging started',
+    }
+  })
+
+  // End debug session
+  app.post('/api/debug/session/end', async (request: FastifyRequest<{ Body: { notes?: string } }>) => {
+    const logger = getPipelineLogger()
+    const notes = (request.body as { notes?: string })?.notes
+    await logger.endSession(notes)
+    return {
+      success: true,
+      message: 'Debug logging stopped',
+    }
+  })
+
+  // Get debug session status
+  app.get('/api/debug/session', async () => {
+    const logger = getPipelineLogger()
+    const sessionId = logger.getSessionId()
+    const isEnabled = logger.isEnabled()
+
+    if (!isEnabled || !sessionId) {
+      return {
+        active: false,
+        sessionId: null,
+      }
+    }
+
+    const stats = await logger.getSessionStats()
+    return {
+      active: true,
+      sessionId,
+      stats,
+    }
+  })
+
+  // Get session stats
+  app.get('/api/debug/session/:id/stats', async (request: FastifyRequest<{ Params: { id: string } }>) => {
+    const logger = getPipelineLogger()
+    const stats = await logger.getSessionStats(request.params.id)
+    return {
+      sessionId: request.params.id,
+      stats,
     }
   })
 }

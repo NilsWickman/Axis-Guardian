@@ -320,10 +320,19 @@ export interface TracksResponse {
 }
 
 /**
+ * Frame info per camera for timing diagnostics
+ */
+export interface CameraFrameInfo {
+  cameraId: string
+  frameNumber: number
+  timestamp: number
+}
+
+/**
  * WebSocket message types
  */
 export type WebSocketMessage =
-  | { type: 'snapshot'; tracks: GlobalTrackJSON[] }
-  | { type: 'track_created'; track: GlobalTrackJSON }
-  | { type: 'track_updated'; track: GlobalTrackJSON }
-  | { type: 'track_expired'; trackId: string }
+  | { type: 'snapshot'; tracks: GlobalTrackJSON[]; frames?: CameraFrameInfo[] }
+  | { type: 'track_created'; track: GlobalTrackJSON; frames?: CameraFrameInfo[] }
+  | { type: 'track_updated'; track: GlobalTrackJSON; frames?: CameraFrameInfo[] }
+  | { type: 'track_expired'; trackId: string; frames?: CameraFrameInfo[] }

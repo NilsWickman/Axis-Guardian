@@ -120,7 +120,12 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
   /**
    * Handle incoming WebSocket messages
    */
-  function handleMessage(message: { type: string; track?: unknown; tracks?: unknown[]; trackId?: string }): void {
+  function handleMessage(message: { type: string; track?: unknown; tracks?: unknown[]; trackId?: string; frames?: unknown[] }): void {
+    // Update frame info if present
+    if (message.frames) {
+      globalTrackStore.updateFrameInfo(message.frames as { cameraId: string; frameNumber: number; timestamp: number }[])
+    }
+
     switch (message.type) {
       case 'snapshot':
         if (Array.isArray(message.tracks)) {

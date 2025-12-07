@@ -53,6 +53,93 @@ const migrations = [
   // Indexes for faster lookups
   `CREATE INDEX IF NOT EXISTS idx_cameras_site ON cameras(site_config_id)`,
   `CREATE INDEX IF NOT EXISTS idx_walls_site ON walls(site_config_id)`,
+
+  // ============================================================================
+  // Debug Logging Tables (for pipeline troubleshooting)
+  // ============================================================================
+
+  // Debug sessions table
+  `CREATE TABLE IF NOT EXISTS debug_sessions (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    started_at INTEGER,
+    ended_at INTEGER,
+    notes TEXT
+  )`,
+
+  // Raw detections - from camera emulator before projection
+  `CREATE TABLE IF NOT EXISTS debug_raw_detections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT REFERENCES debug_sessions(id) ON DELETE CASCADE,
+    timestamp INTEGER NOT NULL,
+    camera_id TEXT NOT NULL,
+    frame_number INTEGER,
+    track_id INTEGER,
+    class_name TEXT,
+    confidence REAL,
+    bbox_x REAL,
+    bbox_y REAL,
+    bbox_width REAL,
+    bbox_height REAL
+  )`,
+
+  // Projected positions - after ground-plane projection
+  `CREATE TABLE IF NOT EXISTS debug_projected_positions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT REFERENCES debug_sessions(id) ON DELETE CASCADE,
+    raw_detection_id INTEGER REFERENCES debug_raw_detections(id),
+    timestamp INTEGER NOT NULL,
+    camera_id TEXT NOT NULL,
+    track_id INTEGER,
+    world_x REAL,
+    world_y REAL,
+    is_valid INTEGER,
+    projection_reason TEXT,
+    projection_method TEXT
+  )`,
+
+  // Track associations - after Hungarian assignment
+  `CREATE TABLE IF NOT EXISTS debug_track_associations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT REFERENCES debug_sessions(id) ON DELETE CASCADE,
+    projected_position_id INTEGER REFERENCES debug_projected_positions(id),
+    timestamp INTEGER NOT NULL,
+    camera_id TEXT NOT NULL,
+    camera_track_id INTEGER,
+    world_x REAL,
+    world_y REAL,
+    global_track_id TEXT,
+    assignment_type TEXT,
+    assignment_cost REAL
+  )`,
+
+  // Track state snapshots - periodic track state for analysis
+  `CREATE TABLE IF NOT EXISTS debug_track_states (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT REFERENCES debug_sessions(id) ON DELETE CASCADE,
+    timestamp INTEGER NOT NULL,
+    global_track_id TEXT NOT NULL,
+    position_x REAL,
+    position_y REAL,
+    velocity_x REAL,
+    velocity_y REAL,
+    position_uncertainty REAL,
+    state TEXT,
+    is_active INTEGER,
+    is_confirmed INTEGER,
+    detection_count INTEGER,
+    confidence REAL,
+    missed_frames INTEGER,
+    camera_ids TEXT
+  )`,
+
+  // Indexes for debug tables
+  `CREATE INDEX IF NOT EXISTS idx_debug_raw_session ON debug_raw_detections(session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_debug_raw_timestamp ON debug_raw_detections(timestamp)`,
+  `CREATE INDEX IF NOT EXISTS idx_debug_projected_session ON debug_projected_positions(session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_debug_assoc_session ON debug_track_associations(session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_debug_states_session ON debug_track_states(session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_debug_states_track ON debug_track_states(global_track_id)`,
 ];
 
 export function migrate(): void {

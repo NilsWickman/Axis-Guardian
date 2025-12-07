@@ -39,6 +39,14 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/cameras/frame-review',
+    name: 'FrameReviewView',
+    component: () => import('@/views/camera-views/FrameReviewView.vue'),
+    meta: {
+      title: 'Frame Review',
+    },
+  },
+  {
     path: '/cameras/manage',
     name: 'CameraManagement',
     component: () => import('@/views/camera-views/CameraManagement.vue'),

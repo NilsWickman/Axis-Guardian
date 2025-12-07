@@ -4,27 +4,37 @@
 
 import type { FastifyInstance } from 'fastify'
 import type { WebSocket } from '@fastify/websocket'
-import type { GlobalTrack, WebSocketMessage } from '../types.js'
+import type { WebSocketMessage, CameraFrameInfo } from '../types.js'
 import { TrackManager, trackToJSON } from '../tracks/track-manager.js'
+
+export interface WebSocketBroadcasterOptions {
+  getFrameInfo?: () => CameraFrameInfo[]
+}
 
 export class WebSocketBroadcaster {
   private clients: Set<WebSocket> = new Set()
+  private getFrameInfo?: () => CameraFrameInfo[]
 
-  constructor(private trackManager: TrackManager) {
+  constructor(private trackManager: TrackManager, options?: WebSocketBroadcasterOptions) {
+    this.getFrameInfo = options?.getFrameInfo
+
     // Hook into track manager events
     trackManager.onTrackCreated = (track) => this.broadcast({
       type: 'track_created',
       track: trackToJSON(track),
+      frames: this.getFrameInfo?.(),
     })
 
     trackManager.onTrackUpdated = (track) => this.broadcast({
       type: 'track_updated',
       track: trackToJSON(track),
+      frames: this.getFrameInfo?.(),
     })
 
     trackManager.onTrackExpired = (track) => this.broadcast({
       type: 'track_expired',
       trackId: track.globalTrackId,
+      frames: this.getFrameInfo?.(),
     })
   }
 
@@ -38,6 +48,7 @@ export class WebSocketBroadcaster {
     const snapshot: WebSocketMessage = {
       type: 'snapshot',
       tracks: this.trackManager.getActiveTracks().map(trackToJSON),
+      frames: this.getFrameInfo?.(),
     }
     this.send(socket, snapshot)
 
