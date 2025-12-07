@@ -326,3 +326,109 @@ export function getObstacleBufferRadius(
       return bufferMeters
   }
 }
+
+// ============================================================================
+// 3D Ray-Table Intersection Utilities
+// ============================================================================
+
+export interface Point3D {
+  x: number
+  y: number
+  z: number
+}
+
+export interface Ray3D {
+  origin: Point3D
+  direction: Point3D
+}
+
+export interface TableIntersection {
+  point: Point3D
+  distance: number
+  table: SiteMapObstacle
+}
+
+/**
+ * Find where a 3D ray intersects a horizontal plane at given height
+ */
+function intersectHorizontalPlane(
+  ray: Ray3D,
+  planeHeight: number
+): { point: Point3D; distance: number } | null {
+  // Check if ray is parallel to plane
+  if (Math.abs(ray.direction.z) < 1e-10) {
+    return null
+  }
+
+  // Calculate intersection parameter t
+  const t = (planeHeight - ray.origin.z) / ray.direction.z
+
+  // Reject if behind camera or too far
+  if (t < 0 || t > 1000) {
+    return null
+  }
+
+  // Calculate intersection point
+  const point: Point3D = {
+    x: ray.origin.x + t * ray.direction.x,
+    y: ray.origin.y + t * ray.direction.y,
+    z: planeHeight,
+  }
+
+  return { point, distance: t }
+}
+
+/**
+ * Find where a 3D ray intersects a table at its height
+ * Returns null if no intersection or ray doesn't pass through table footprint
+ */
+export function findRayTableIntersection(
+  ray: Ray3D,
+  table: SiteMapObstacle
+): TableIntersection | null {
+  const tableHeight = table.height ?? 1.0
+
+  // Find where ray intersects the plane at table height
+  const planeIntersection = intersectHorizontalPlane(ray, tableHeight)
+  if (!planeIntersection) {
+    return null
+  }
+
+  // Check if intersection point is inside table's 2D footprint
+  const point2D: Point2D = {
+    x: planeIntersection.point.x,
+    y: planeIntersection.point.y,
+  }
+  if (!isPointInsideObstacle(point2D, table)) {
+    return null
+  }
+
+  return {
+    point: planeIntersection.point,
+    distance: planeIntersection.distance,
+    table,
+  }
+}
+
+/**
+ * Find all tables that occlude a camera's view along a ray direction
+ * Returns tables sorted by distance from camera (closest first)
+ */
+export function findOccludingTables(
+  cameraPos: Point3D,
+  rayDirection: Point3D,
+  tables: SiteMapObstacle[]
+): TableIntersection[] {
+  const ray: Ray3D = { origin: cameraPos, direction: rayDirection }
+
+  const intersections: TableIntersection[] = []
+  for (const table of tables) {
+    const intersection = findRayTableIntersection(ray, table)
+    if (intersection) {
+      intersections.push(intersection)
+    }
+  }
+
+  // Sort by distance (closest first)
+  return intersections.sort((a, b) => a.distance - b.distance)
+}
