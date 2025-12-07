@@ -119,6 +119,7 @@ export class DetectionProcessor {
         worldY: worldPoint.y,
         confidence: detection.confidence,
         timestamp: timestampMs,
+        frameNumber: message.frame_number,
       })
     }
 

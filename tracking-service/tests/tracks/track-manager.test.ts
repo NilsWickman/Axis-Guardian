@@ -44,21 +44,16 @@ describe('TrackManager', () => {
   })
 
   describe('Track Confirmation', () => {
-    it('confirms track after 3 detections', () => {
+    it('confirms track after 2 detections (minDetectionsToConfirm)', () => {
       // First detection
       let track = trackManager.processDetection('camera1', 1, 5.0, 5.0, 0.9)
       expect(track.isConfirmed).toBe(false)
 
-      // Second detection
+      // Second detection - should confirm (minDetectionsToConfirm=2)
       mockTime += 100
       track = trackManager.processDetection('camera1', 1, 5.1, 5.1, 0.9)
-      expect(track.isConfirmed).toBe(false)
-
-      // Third detection - should confirm
-      mockTime += 100
-      track = trackManager.processDetection('camera1', 1, 5.2, 5.2, 0.9)
       expect(track.isConfirmed).toBe(true)
-      expect(track.detectionCount).toBe(3)
+      expect(track.detectionCount).toBe(2)
     })
   })
 

@@ -170,6 +170,8 @@ export interface CameraDetection {
   worldY: number
   confidence: number
   timestamp: number // Unix timestamp in ms
+  /** Frame number from source camera (for frame-based missed detection) */
+  frameNumber?: number
 }
 
 /**
@@ -179,6 +181,8 @@ export interface CameraTrackAssociation {
   cameraId: string
   trackIds: number[]
   lastSeen: number
+  /** Last frame number this track was seen in from this camera */
+  lastFrameNumber?: number
 }
 
 /**
@@ -225,6 +229,8 @@ export interface GlobalTrack {
   occludedSince?: number
   /** Number of consecutive frames without detection */
   missedFrames: number
+  /** Number of consecutive detections since entering occlusion (for hysteresis) */
+  consecutiveDetections: number
 }
 
 /**
@@ -275,6 +281,10 @@ export interface TrackingConfig {
   occlusionCoastTimeMs: number
   /** Gate expansion multiplier for re-identification */
   reidentificationGateMultiplier: number
+  /** Number of consecutive missed frames before transitioning to occluded state */
+  missedFramesBeforeOcclusion: number
+  /** Number of consecutive detections required to exit occlusion state */
+  detectionsToExitOcclusion: number
 }
 
 export const DEFAULT_TRACKING_CONFIG: TrackingConfig = {
@@ -282,14 +292,16 @@ export const DEFAULT_TRACKING_CONFIG: TrackingConfig = {
   mergeWindowMs: 200,
   trackExpiryMs: 5000,
   maxTrailLength: 20,
-  minDetectionsToConfirm: 3,
+  minDetectionsToConfirm: 2,  // Reduced from 3 for faster track confirmation
   maxVelocityMs: 50,
   unconfirmedTrackExpiryMs: 2000,  // Ghost tracks expire faster
   minCreationConfidence: 0.7,      // Require higher confidence for new tracks
   exclusionRadius: 0.3,            // No new tracks within 0.3m of existing
   crossingProximityThreshold: 1.5, // Detect crossing when tracks within 1.5m
-  occlusionCoastTimeMs: 2000,      // Coast for 2 seconds during occlusion
+  occlusionCoastTimeMs: 5000,      // Coast for 5 seconds during occlusion (increased from 2s)
   reidentificationGateMultiplier: 3.0, // 3x expanded gate for re-ID
+  missedFramesBeforeOcclusion: 5,  // Require 5 missed frames before transitioning to occluded
+  detectionsToExitOcclusion: 2,    // Require 2 detections to exit occlusion state
 }
 
 // ============================================================================

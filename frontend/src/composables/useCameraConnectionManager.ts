@@ -480,6 +480,9 @@ async function attemptReconnection(cameraId: string) {
     // Wait a bit before reconnecting
     await new Promise(resolve => setTimeout(resolve, RECONNECT_DELAY))
 
+    // Clear stale metadata before reconnection
+    conn.latestMetadata = null
+
     // Disconnect with externalReconnecting=true to prevent duplicate reconnection attempts
     conn.connection.disconnect(true)
 

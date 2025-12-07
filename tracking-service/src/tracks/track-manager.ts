@@ -68,6 +68,15 @@ export interface TrackManagerOptions {
 }
 
 /**
+ * Per-camera frame tracking for accurate missed frame detection
+ */
+interface CameraFrameTracker {
+  lastFrameNumber: number
+  lastFrameTimestamp: number
+  estimatedFps: number
+}
+
+/**
  * TrackManager - Pure TypeScript class for managing global tracks
  */
 export class TrackManager {
@@ -78,6 +87,8 @@ export class TrackManager {
   private clock: () => number
   private idGenerator: () => string
   private kalmanFilter: KalmanTrackFilter
+  /** Per-camera frame tracking for frame-based missed detection */
+  private cameraFrameTrackers: Map<string, CameraFrameTracker> = new Map()
 
   // Event callbacks for external integration (e.g., WebSocket broadcasting)
   onTrackCreated?: (track: GlobalTrack) => void
@@ -258,12 +269,36 @@ export class TrackManager {
         }
       }
 
-      // Handle confirmed tracks - transition to occluded state
-      if (track.state === 'confirmed' && timeSinceLastSeen > 100) {
-        // Track hasn't been seen recently, transition to occluded
-        track.state = 'occluded'
-        track.occludedSince = track.lastSeen
-        track.missedFrames++
+      // Handle confirmed tracks - transition to occluded state after missing multiple frames
+      if (track.state === 'confirmed') {
+        const missedFrameThreshold = this.config.missedFramesBeforeOcclusion ?? 5
+
+        // Calculate missed frames based on actual camera frame numbers
+        let totalMissedFrames = 0
+        for (const [cameraId, assoc] of track.cameraAssociations) {
+          const cameraTracker = this.cameraFrameTrackers.get(cameraId)
+          if (cameraTracker && assoc.lastFrameNumber !== undefined) {
+            // Count frames missed since last detection from this camera
+            const framesMissed = cameraTracker.lastFrameNumber - assoc.lastFrameNumber
+            if (framesMissed > 0) {
+              totalMissedFrames = Math.max(totalMissedFrames, framesMissed)
+            }
+          }
+        }
+
+        // Fall back to time-based detection if no frame info available
+        if (totalMissedFrames === 0 && timeSinceLastSeen > 100) {
+          totalMissedFrames = Math.floor(timeSinceLastSeen / 100)  // Assume ~10fps
+        }
+
+        track.missedFrames = totalMissedFrames
+
+        // Only transition to occluded after missing multiple consecutive frames
+        if (track.missedFrames >= missedFrameThreshold) {
+          track.state = 'occluded'
+          track.occludedSince = track.lastSeen
+          track.consecutiveDetections = 0  // Reset for hysteresis on recovery
+        }
       }
 
       // Handle occluded tracks - check if they should expire
@@ -358,6 +393,31 @@ export class TrackManager {
 
   private releaseColor(color: string): void {
     this.usedColors.delete(color)
+  }
+
+  /**
+   * Update camera frame tracker for frame-based missed detection
+   */
+  private updateCameraFrameTracker(cameraId: string, frameNumber: number, timestamp: number): void {
+    const existing = this.cameraFrameTrackers.get(cameraId)
+    if (existing) {
+      // Estimate FPS from frame delta
+      const frameDelta = frameNumber - existing.lastFrameNumber
+      const timeDelta = (timestamp - existing.lastFrameTimestamp) / 1000  // seconds
+      if (frameDelta > 0 && timeDelta > 0) {
+        const instantFps = frameDelta / timeDelta
+        // Exponential moving average for FPS estimation
+        existing.estimatedFps = existing.estimatedFps * 0.9 + instantFps * 0.1
+      }
+      existing.lastFrameNumber = frameNumber
+      existing.lastFrameTimestamp = timestamp
+    } else {
+      this.cameraFrameTrackers.set(cameraId, {
+        lastFrameNumber: frameNumber,
+        lastFrameTimestamp: timestamp,
+        estimatedFps: 10,  // Default assumption
+      })
+    }
   }
 
   /**
@@ -496,13 +556,20 @@ export class TrackManager {
       kalmanState,
       state: 'unconfirmed',
       missedFrames: 0,
+      consecutiveDetections: 0,
     }
 
     track.cameraAssociations.set(detection.cameraId, {
       cameraId: detection.cameraId,
       trackIds: [detection.trackId],
       lastSeen: detection.timestamp,
+      lastFrameNumber: detection.frameNumber,
     })
+
+    // Update camera frame tracker
+    if (detection.frameNumber !== undefined) {
+      this.updateCameraFrameTracker(detection.cameraId, detection.frameNumber, detection.timestamp)
+    }
 
     this.tracks.set(globalTrackId, track)
     return track
@@ -529,12 +596,21 @@ export class TrackManager {
         assoc.trackIds.push(detection.trackId)
       }
       assoc.lastSeen = detection.timestamp
+      if (detection.frameNumber !== undefined) {
+        assoc.lastFrameNumber = detection.frameNumber
+      }
     } else {
       track.cameraAssociations.set(detection.cameraId, {
         cameraId: detection.cameraId,
         trackIds: [detection.trackId],
         lastSeen: detection.timestamp,
+        lastFrameNumber: detection.frameNumber,
       })
+    }
+
+    // Update camera frame tracker
+    if (detection.frameNumber !== undefined) {
+      this.updateCameraFrameTracker(detection.cameraId, detection.frameNumber, detection.timestamp)
     }
 
     track.detectionCount++
@@ -546,10 +622,20 @@ export class TrackManager {
       track.state = 'confirmed'
     }
 
-    // Recover from occlusion on detection
+    // Recover from occlusion with hysteresis (require multiple detections)
     if (track.state === 'occluded') {
-      track.state = 'confirmed'
-      track.occludedSince = undefined
+      const detectionsRequired = this.config.detectionsToExitOcclusion ?? 2
+      track.consecutiveDetections++
+
+      // Only exit occlusion after multiple consecutive detections
+      if (track.consecutiveDetections >= detectionsRequired) {
+        track.state = 'confirmed'
+        track.occludedSince = undefined
+        track.consecutiveDetections = 0
+      }
+    } else {
+      // Reset consecutive detection counter for non-occluded tracks
+      track.consecutiveDetections = 0
     }
 
     track.pendingDetections.push(detection)

@@ -44,6 +44,9 @@ function createMockTrack(
     detectionCount: 5,
     confidence: 0.9,
     pendingDetections: [],
+    state: 'confirmed',
+    missedFrames: 0,
+    consecutiveDetections: 0,
   }
 }
 
@@ -182,13 +185,13 @@ describe('Hungarian Assignment', () => {
         lastSeen: Date.now(),
       })
 
-      const costMatrixWithBonus = buildCostMatrix([detection], [track], {
+      const { matrix: costMatrixWithBonus } = buildCostMatrix([detection], [track], {
         maxCost: 10.0,
         useKalmanPrediction: false,
         associationBonus: 0.5,
       })
 
-      const costMatrixNoBonus = buildCostMatrix([detection], [track], {
+      const { matrix: costMatrixNoBonus } = buildCostMatrix([detection], [track], {
         maxCost: 10.0,
         useKalmanPrediction: false,
         associationBonus: 1.0,  // No bonus (multiply by 1)
@@ -212,18 +215,19 @@ describe('Hungarian Assignment', () => {
         createMockTrack('track-3', 3.0, 3.0),
       ]
 
-      const costMatrix = buildCostMatrix(detections, tracks)
+      const { matrix: costMatrix, adaptiveGates } = buildCostMatrix(detections, tracks)
 
       expect(costMatrix).toHaveLength(2)          // 2 detections
       expect(costMatrix[0]).toHaveLength(3)       // 3 tracks
       expect(costMatrix[1]).toHaveLength(3)
+      expect(adaptiveGates).toHaveLength(3)       // adaptive gate per track
     })
 
     it('calculates Euclidean distance costs', () => {
       const detections = [createMockDetection('cam1', 1, 0.0, 0.0)]
       const tracks = [createMockTrack('track-1', 1.0, 0.0)]  // 1m away
 
-      const costMatrix = buildCostMatrix(detections, tracks, { maxCost: 10.0, useKalmanPrediction: false, associationBonus: 1.0 })
+      const { matrix: costMatrix } = buildCostMatrix(detections, tracks, { maxCost: 10.0, useKalmanPrediction: false, associationBonus: 1.0 })
 
       expect(costMatrix[0][0]).toBeCloseTo(1.0, 5)  // 1m distance
     })

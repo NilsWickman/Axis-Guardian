@@ -44,6 +44,10 @@ export interface AssignmentConfig {
   crossingProximityThreshold: number
   /** Cost multiplier for crossing tracks (tighter matching) */
   crossingMaxCostMultiplier: number
+  /** Weight for direction-of-travel consistency (0-1) */
+  directionConsistencyWeight: number
+  /** Minimum speed (m/s) to consider direction constraint */
+  minSpeedForDirection: number
 }
 
 const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
@@ -54,6 +58,8 @@ const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
   velocityConsistencyWeight: 0.1,  // Weight for velocity consistency term
   crossingProximityThreshold: 1.5, // Detect crossing when tracks within 1.5m
   crossingMaxCostMultiplier: 0.5,  // Use 50% of maxCost for crossing tracks
+  directionConsistencyWeight: 0.3, // Penalize direction reversals during crossings
+  minSpeedForDirection: 0.3,       // 0.3 m/s minimum to consider direction
 }
 
 /**
@@ -62,19 +68,31 @@ const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
  * @param detections - Array of detections to assign
  * @param tracks - Array of active tracks
  * @param config - Assignment configuration
- * @returns 2D cost matrix [detections x tracks]
+ * @returns Object with cost matrix and per-track adaptive gates
  */
 export function buildCostMatrix(
   detections: CameraDetection[],
   tracks: GlobalTrack[],
   config: AssignmentConfig = DEFAULT_ASSIGNMENT_CONFIG
-): number[][] {
+): { matrix: number[][]; adaptiveGates: number[] } {
   const kalmanFilter = config.kalmanFilter ?? new KalmanTrackFilter()
 
-  return detections.map(det => {
+  // Calculate adaptive gate for each track based on Kalman uncertainty
+  const adaptiveGates = tracks.map(track => {
+    if (track.kalmanState) {
+      const uncertainty = kalmanFilter.getPositionUncertainty(track.kalmanState)
+      // Expand gate based on uncertainty: baseGate + 2*sigma
+      // Clamp between 0.5x and 2x of maxCost
+      const adaptiveGate = config.maxCost + 2 * uncertainty
+      return Math.max(config.maxCost * 0.5, Math.min(config.maxCost * 2, adaptiveGate))
+    }
+    return config.maxCost
+  })
+
+  const matrix = detections.map(det => {
     const detPos: Point2D = { x: det.worldX, y: det.worldY }
 
-    return tracks.map(track => {
+    return tracks.map((track, trackIdx) => {
       // Get target position for distance calculation
       let targetPos = track.currentPosition
       let predictedVelocity: Point2D | null = null
@@ -117,13 +135,45 @@ export function buildCostMatrix(
           )
           // Add velocity consistency penalty (max 0.5m equivalent)
           cost += Math.min(0.5, velocityChange * config.velocityConsistencyWeight)
+
+          // Add direction-of-travel consistency penalty
+          // Penalize assignments that would require reversal of direction
+          if (config.directionConsistencyWeight > 0) {
+            const currentSpeed = Math.sqrt(
+              predictedVelocity.x * predictedVelocity.x +
+              predictedVelocity.y * predictedVelocity.y
+            )
+            const impliedSpeed = Math.sqrt(
+              impliedVelocity.x * impliedVelocity.x +
+              impliedVelocity.y * impliedVelocity.y
+            )
+
+            // Only apply direction constraint if track has meaningful velocity
+            if (currentSpeed > config.minSpeedForDirection && impliedSpeed > config.minSpeedForDirection) {
+              // Calculate direction consistency using dot product (cosine similarity)
+              const dotProduct = (
+                predictedVelocity.x * impliedVelocity.x +
+                predictedVelocity.y * impliedVelocity.y
+              )
+              const cosineSimilarity = dotProduct / (currentSpeed * impliedSpeed)
+
+              // cosineSimilarity: 1 = same direction, -1 = opposite direction
+              // Convert to penalty: 0 for same direction, 1 for opposite
+              const directionPenalty = (1 - cosineSimilarity) / 2
+
+              // Apply weighted penalty (max 0.5m equivalent)
+              cost += Math.min(0.5, directionPenalty * config.directionConsistencyWeight)
+            }
+          }
         }
       }
 
-      // Cap cost at maximum
-      return Math.min(cost, config.maxCost)
+      // Cap cost at adaptive gate for this track
+      return Math.min(cost, adaptiveGates[trackIdx])
     })
   })
+
+  return { matrix, adaptiveGates }
 }
 
 /**
@@ -192,8 +242,8 @@ export function assignDetectionsToTracks(
     fullConfig.crossingProximityThreshold
   )
 
-  // Build cost matrix
-  const costMatrix = buildCostMatrix(detections, tracks, fullConfig)
+  // Build cost matrix with adaptive gates
+  const { matrix: costMatrix, adaptiveGates } = buildCostMatrix(detections, tracks, fullConfig)
 
   // Run Hungarian algorithm
   // The munkres function returns array of [row, col] assignments
@@ -217,10 +267,11 @@ export function assignDetectionsToTracks(
     const cost = costMatrix[detIdx][trackIdx]
     const track = tracks[trackIdx]
 
-    // Use tighter threshold for crossing tracks
-    const effectiveMaxCost = crossingTracks.has(track.globalTrackId)
-      ? fullConfig.maxCost * fullConfig.crossingMaxCostMultiplier
-      : fullConfig.maxCost
+    // Use adaptive gate, tightened for crossing tracks
+    let effectiveMaxCost = adaptiveGates[trackIdx]
+    if (crossingTracks.has(track.globalTrackId)) {
+      effectiveMaxCost *= fullConfig.crossingMaxCostMultiplier
+    }
 
     // Only accept matches below cost threshold
     if (cost < effectiveMaxCost) {

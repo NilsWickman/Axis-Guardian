@@ -6,10 +6,14 @@
 import msgpack from 'msgpack-lite'
 import type { DetectionData, DetectionFrame, DetectionMetadata } from '../types.js'
 
+// RTP clock rate for video (H.264 standard)
+const RTP_CLOCK_RATE = 90000
+
 export class DetectionSync {
   private frames: DetectionFrame[]
   private fps: number
   private totalFrames: number
+  private rtpTicksPerFrame: number
 
   constructor(
     private cameraId: string,
@@ -18,6 +22,8 @@ export class DetectionSync {
     this.frames = detectionData.frames
     this.fps = detectionData.video_info.fps || 30
     this.totalFrames = detectionData.video_info.total_frames || this.frames.length
+    // Calculate RTP ticks per frame (e.g., 90000/30 = 3000 ticks per frame at 30fps)
+    this.rtpTicksPerFrame = Math.round(RTP_CLOCK_RATE / this.fps)
   }
 
   /**
@@ -36,6 +42,10 @@ export class DetectionSync {
     // Calculate video time from frame number if not provided
     const calculatedVideoTimeMs = videoTimeMs ?? (frameNumber / this.fps) * 1000
 
+    // Calculate RTP timestamp for this frame (90kHz clock)
+    // This allows frame-perfect correlation with browser's VideoFrameCallbackMetadata.rtpTimestamp
+    const rtpTimestamp = frameNumber * this.rtpTicksPerFrame
+
     if (!frame) {
       // Return empty detections if no frame data
       const metadata: DetectionMetadata = {
@@ -47,6 +57,7 @@ export class DetectionSync {
         detection_frame: frameNumber,
         dispatch_time: now,  // High-res ms timestamp for timing measurement
         video_time_ms: calculatedVideoTimeMs,  // Video presentation time for sync
+        rtp_timestamp: rtpTimestamp,  // RTP timestamp for frame-perfect sync
       }
       return msgpack.encode(metadata)
     }
@@ -60,6 +71,7 @@ export class DetectionSync {
       detection_frame: frameNumber,
       dispatch_time: now,  // High-res ms timestamp for timing measurement
       video_time_ms: calculatedVideoTimeMs,  // Video presentation time for sync
+      rtp_timestamp: rtpTimestamp,  // RTP timestamp for frame-perfect sync
     }
 
     return msgpack.encode(metadata)
