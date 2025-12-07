@@ -43,7 +43,7 @@
       "azimuth": 198,
       "elevation": 1,
       "height": 1.68,
-      "fieldOfView": 75,
+      "fieldOfView": 66,
       "resolution": { "width": 1920, "height": 1080 },
       "distortion": { "k1": 0, "k2": 0, "p1": 0, "p2": 0 },
       "color": "cyan-500"
@@ -59,7 +59,7 @@
       "azimuth": 133,
       "elevation": -5,
       "height": 1.67,
-      "fieldOfView": 75,
+      "fieldOfView": 44,
       "resolution": { "width": 1920, "height": 1080 },
       "distortion": { "k1": 0, "k2": 0, "p1": 0, "p2": 0 },
       "color": "amber-500"

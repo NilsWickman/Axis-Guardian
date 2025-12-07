@@ -154,13 +154,15 @@ export function intersectGroundPlane(
   origin: Point3D,
   direction: Point3D
 ): number | null {
-  if (Math.abs(direction.z) < 0.0001) {
+  // Use a much smaller threshold to handle shallow elevation angles
+  if (Math.abs(direction.z) < 1e-10) {
     return null
   }
 
   const t = -origin.z / direction.z
 
-  if (t < 0) {
+  // Reject if intersection is behind the camera or unreasonably far (>1000m)
+  if (t < 0 || t > 1000) {
     return null
   }
 
@@ -258,28 +260,96 @@ export function isInHorizontalFOV(worldPoint: Point2D, camera: CameraParams): bo
 // ============================================================================
 
 /**
+ * Estimate if a person is seated based on bbox aspect ratio.
+ * Returns an extension factor to apply to bbox height (1.0 = no extension).
+ *
+ * Standing person: height >> width (aspect ratio > 1.5)
+ * Seated person: height ≈ width (aspect ratio < 1.2)
+ *
+ * For seated people, we extend the bbox downward to estimate where
+ * their feet would be on the ground plane.
+ */
+export function estimateBBoxHeightExtension(
+  bbox: DetectionBBox,
+  isNormalized: boolean = false,
+  imageWidth: number = 1920,
+  imageHeight: number = 1080
+): number {
+  // Get dimensions in pixels for aspect ratio calculation
+  let bboxHeight: number
+  let bboxWidth: number
+
+  if (isNormalized) {
+    bboxHeight = bbox.height * imageHeight
+    bboxWidth = bbox.width * imageWidth
+  } else {
+    bboxHeight = bbox.height
+    bboxWidth = bbox.width
+  }
+
+  // Avoid division by zero
+  if (bboxWidth < 1) return 1.0
+
+  const aspectRatio = bboxHeight / bboxWidth
+
+  // Standing person typically has aspect ratio > 1.5
+  // Seated person typically has aspect ratio between 0.8 and 1.3
+  // We interpolate the extension factor based on aspect ratio
+
+  if (aspectRatio >= 1.5) {
+    // Standing - no extension needed
+    return 1.0
+  } else if (aspectRatio <= 0.8) {
+    // Very short bbox (likely heavily cropped or lying down)
+    // Apply maximum extension (extend bbox by 80%)
+    return 1.8
+  } else {
+    // Interpolate between 1.0 and 1.6 for aspect ratios between 1.5 and 0.8
+    // Lower aspect ratio = more extension
+    const t = (1.5 - aspectRatio) / (1.5 - 0.8)  // 0 to 1
+    return 1.0 + t * 0.6  // 1.0 to 1.6
+  }
+}
+
+/**
  * Get the bottom-center of a bounding box (person's feet position)
+ * Optionally applies height extension for seated people
  */
 export function getBBoxBottomCenter(
   bbox: DetectionBBox,
   isNormalized: boolean = false,
   imageWidth: number = 1920,
-  imageHeight: number = 1080
+  imageHeight: number = 1080,
+  applySeatedExtension: boolean = false
 ): Point2D {
+  let effectiveHeight = bbox.height
+
+  // Apply seated person extension if enabled
+  if (applySeatedExtension) {
+    const extension = estimateBBoxHeightExtension(bbox, isNormalized, imageWidth, imageHeight)
+    effectiveHeight = bbox.height * extension
+  }
+
   if (isNormalized) {
+    // Clamp to image bounds
+    const bottomY = Math.min(bbox.y + effectiveHeight, 1.0)
     return {
       x: (bbox.x + bbox.width / 2) * imageWidth,
-      y: (bbox.y + bbox.height) * imageHeight,
+      y: bottomY * imageHeight,
     }
   }
+
+  // Clamp to image bounds
+  const bottomY = Math.min(bbox.y + effectiveHeight, imageHeight)
   return {
     x: bbox.x + bbox.width / 2,
-    y: bbox.y + bbox.height,
+    y: bottomY,
   }
 }
 
 /**
  * Project a detection bounding box to world coordinates
+ * Automatically applies height extension for seated people
  */
 export function projectDetectionToGround(
   bbox: DetectionBBox,
@@ -288,7 +358,8 @@ export function projectDetectionToGround(
   imageWidth: number = 1920,
   imageHeight: number = 1080
 ): ProjectionResult & { debug: DebugInfo } {
-  const imagePoint = getBBoxBottomCenter(bbox, isNormalized, imageWidth, imageHeight)
+  // Enable seated extension by default - this helps with seated/partial people
+  const imagePoint = getBBoxBottomCenter(bbox, isNormalized, imageWidth, imageHeight, true)
   return projectToGround(imagePoint, camera, { width: imageWidth, height: imageHeight })
 }
 
@@ -428,6 +499,7 @@ export function projectWithKRT(
 
 /**
  * Project detection bbox to ground using K/R/T calibration
+ * Automatically applies height extension for seated people
  */
 export function projectDetectionWithKRT(
   bbox: DetectionBBox,
@@ -436,17 +508,10 @@ export function projectDetectionWithKRT(
   imageWidth: number = 1920,
   imageHeight: number = 1080
 ): { worldPoint: Point2D; isValid: boolean; reason?: string } {
-  // Get bottom-center of bbox (feet position)
-  let footX: number
-  let footY: number
-
-  if (isNormalized) {
-    footX = (bbox.x + bbox.width / 2) * imageWidth
-    footY = (bbox.y + bbox.height) * imageHeight
-  } else {
-    footX = bbox.x + bbox.width / 2
-    footY = bbox.y + bbox.height
-  }
+  // Get bottom-center of bbox (feet position) with seated extension
+  const feetPos = getBBoxBottomCenter(bbox, isNormalized, imageWidth, imageHeight, true)
+  let footX = feetPos.x
+  let footY = feetPos.y
 
   // Apply lens distortion correction if distortion coefficients are available
   if (calibration.distortion) {
