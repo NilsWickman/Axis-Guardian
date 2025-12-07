@@ -50,11 +50,28 @@ export interface SiteMapConfigWall {
   type?: 'external' | 'internal' | 'door'
 }
 
+export interface SiteMapConfigObstacle {
+  id: string
+  type: 'rectangle' | 'circle' | 'polygon'
+  label?: string
+  category?: 'furniture' | 'structural' | 'equipment'
+  position: { x: number; y: number }
+  rotation?: number
+  dimensions?: { width: number; height: number }
+  radius?: number
+  vertices?: { x: number; y: number }[]
+  height?: number
+  blocksTracking?: boolean
+  blocksView?: boolean
+  color?: string
+}
+
 export interface SiteMapConfig {
   dimensions: { width: number; height: number; unit: string }
   origin?: { x: number; y: number }
   walls: SiteMapConfigWall[]
   cameras: SiteMapConfigCamera[]
+  obstacles?: SiteMapConfigObstacle[]
 }
 
 const STATIC_CONFIG_PATH = '/sitemap-rectangular-room.json'
@@ -147,7 +164,8 @@ function logConfigSummary(cfg: SiteMapConfig): void {
     source: configSource,
     dimensions: `${cfg.dimensions.width}m x ${cfg.dimensions.height}m`,
     cameras: cfg.cameras.length,
-    walls: cfg.walls.length
+    walls: cfg.walls.length,
+    obstacles: cfg.obstacles?.length ?? 0
   })
 }
 

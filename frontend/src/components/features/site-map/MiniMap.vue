@@ -74,6 +74,34 @@ const drawMiniMap = () => {
   ctx.fillStyle = '#0f172a'
   ctx.fillRect(offsetXMini, offsetYMini, mapWidth * miniScale, mapHeight * miniScale)
 
+  // Obstacles (simplified rendering)
+  props.siteMap.obstacles.forEach(obstacle => {
+    const x = offsetXMini + extractValue(obstacle.position.x) * miniScale
+    const y = offsetYMini + extractValue(obstacle.position.y) * miniScale
+
+    // Use obstacle color or category-based defaults
+    const categoryColors: Record<string, string> = {
+      furniture: '#78716c',
+      structural: '#64748b',
+      equipment: '#1e293b',
+    }
+    ctx.fillStyle = obstacle.color || categoryColors[obstacle.category || 'furniture'] || '#78716c'
+    ctx.globalAlpha = 0.5
+
+    if (obstacle.type === 'rectangle' && obstacle.dimensions) {
+      const width = extractValue(obstacle.dimensions.width) * miniScale
+      const height = extractValue(obstacle.dimensions.height) * miniScale
+      ctx.fillRect(x - width / 2, y - height / 2, width, height)
+    } else if (obstacle.type === 'circle' && obstacle.radius !== undefined) {
+      const radius = extractValue(obstacle.radius) * miniScale
+      ctx.beginPath()
+      ctx.arc(x, y, radius, 0, Math.PI * 2)
+      ctx.fill()
+    }
+
+    ctx.globalAlpha = 1.0
+  })
+
   // Walls
   ctx.strokeStyle = '#475569'
   ctx.lineWidth = 1

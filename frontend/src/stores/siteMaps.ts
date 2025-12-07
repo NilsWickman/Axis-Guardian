@@ -36,6 +36,37 @@ export interface Wall {
   type?: 'external' | 'internal' | 'door'
 }
 
+export type ObstacleType = 'rectangle' | 'circle' | 'polygon'
+export type ObstacleCategory = 'furniture' | 'structural' | 'equipment'
+
+export interface Obstacle {
+  id: string
+  type: ObstacleType
+  label?: string
+  category?: ObstacleCategory
+  position: {
+    x: UnitValue
+    y: UnitValue
+  }
+  rotation?: number
+  // For rectangles
+  dimensions?: {
+    width: UnitValue
+    height: UnitValue
+  }
+  // For circles
+  radius?: UnitValue
+  // For polygons
+  vertices?: { x: UnitValue; y: UnitValue }[]
+  // Physical height for FOV occlusion
+  height?: number
+  // Behavior flags
+  blocksTracking?: boolean
+  blocksView?: boolean
+  // Display
+  color?: string
+}
+
 export interface SiteMap {
   id: string
   name: string
@@ -47,6 +78,7 @@ export interface SiteMap {
   renderScale: number // Fixed at 100 pixels per meter
   cameras: CameraPlacement[]
   walls: Wall[]
+  obstacles: Obstacle[]
   createdAt: Date
   updatedAt: Date
 }
@@ -86,6 +118,30 @@ function transformConfigToSiteMap(config: SiteMapConfig): SiteMap {
         y: createMeterUnit(wall.end.y)
       },
       type: wall.type || 'external'
+    })),
+    obstacles: (config.obstacles ?? []).map((obs) => ({
+      id: obs.id,
+      type: obs.type,
+      label: obs.label,
+      category: obs.category ?? 'furniture',
+      position: {
+        x: createMeterUnit(obs.position.x),
+        y: createMeterUnit(obs.position.y)
+      },
+      rotation: obs.rotation ?? 0,
+      dimensions: obs.dimensions ? {
+        width: createMeterUnit(obs.dimensions.width),
+        height: createMeterUnit(obs.dimensions.height)
+      } : undefined,
+      radius: obs.radius !== undefined ? createMeterUnit(obs.radius) : undefined,
+      vertices: obs.vertices?.map(v => ({
+        x: createMeterUnit(v.x),
+        y: createMeterUnit(v.y)
+      })),
+      height: obs.height ?? 1.0,
+      blocksTracking: obs.blocksTracking ?? true,
+      blocksView: obs.blocksView ?? true,
+      color: obs.color
     })),
     createdAt: new Date(),
     updatedAt: new Date()
@@ -147,6 +203,7 @@ async function createAuditoriumSiteMap(): Promise<SiteMap> {
       notes: `${cal.viewId} (Calibrated from XML)`
     })),
     walls: [], // No wall data initially
+    obstacles: [], // No obstacle data initially
     createdAt: new Date(),
     updatedAt: new Date()
   }

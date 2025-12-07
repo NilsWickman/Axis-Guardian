@@ -12,6 +12,18 @@ export interface LineSegment {
   end: Point
 }
 
+export interface CircleObstacle {
+  center: Point
+  radius: number
+}
+
+export interface RectangleObstacle {
+  center: Point
+  width: number
+  height: number
+  rotation?: number // degrees
+}
+
 /**
  * Check if two line segments intersect
  */
@@ -63,14 +75,97 @@ export function distance(p1: Point, p2: Point): number {
 }
 
 /**
- * Cast a ray from a point in a direction and find intersections with walls
+ * Get intersection of a ray with a circle
+ * Returns the closest intersection point, or null if no intersection
+ */
+export function getRayCircleIntersection(
+  rayOrigin: Point,
+  rayEnd: Point,
+  circle: CircleObstacle
+): Point | null {
+  const dx = rayEnd.x - rayOrigin.x
+  const dy = rayEnd.y - rayOrigin.y
+  const fx = rayOrigin.x - circle.center.x
+  const fy = rayOrigin.y - circle.center.y
+
+  const a = dx * dx + dy * dy
+  const b = 2 * (fx * dx + fy * dy)
+  const c = fx * fx + fy * fy - circle.radius * circle.radius
+
+  const discriminant = b * b - 4 * a * c
+
+  if (discriminant < 0) {
+    return null // No intersection
+  }
+
+  const sqrtDisc = Math.sqrt(discriminant)
+  const t1 = (-b - sqrtDisc) / (2 * a)
+  const t2 = (-b + sqrtDisc) / (2 * a)
+
+  // Find the closest valid intersection (t in [0, 1])
+  let t = -1
+  if (t1 >= 0 && t1 <= 1) {
+    t = t1
+  } else if (t2 >= 0 && t2 <= 1) {
+    t = t2
+  }
+
+  if (t < 0) {
+    return null
+  }
+
+  return {
+    x: rayOrigin.x + t * dx,
+    y: rayOrigin.y + t * dy,
+  }
+}
+
+/**
+ * Get edges of a rectangle as line segments (with rotation support)
+ */
+export function getRectangleEdges(rect: RectangleObstacle): LineSegment[] {
+  const { center, width, height, rotation = 0 } = rect
+  const halfWidth = width / 2
+  const halfHeight = height / 2
+
+  // Corner points in local coordinates
+  const corners = [
+    { x: -halfWidth, y: -halfHeight },
+    { x: halfWidth, y: -halfHeight },
+    { x: halfWidth, y: halfHeight },
+    { x: -halfWidth, y: halfHeight },
+  ]
+
+  // Rotate and translate corners to world coordinates
+  const radians = (rotation * Math.PI) / 180
+  const cos = Math.cos(radians)
+  const sin = Math.sin(radians)
+
+  const worldCorners = corners.map((corner) => ({
+    x: center.x + corner.x * cos - corner.y * sin,
+    y: center.y + corner.x * sin + corner.y * cos,
+  }))
+
+  // Create edge segments
+  return [
+    { start: worldCorners[0], end: worldCorners[1] },
+    { start: worldCorners[1], end: worldCorners[2] },
+    { start: worldCorners[2], end: worldCorners[3] },
+    { start: worldCorners[3], end: worldCorners[0] },
+  ]
+}
+
+/**
+ * Cast a ray from a point in a direction and find intersections with walls and obstacles
  * Returns the closest intersection point, or the ray endpoint if no intersection
  */
 export function castRay(
   origin: Point,
   direction: { x: number; y: number },
   maxDistance: number,
-  walls: LineSegment[]
+  walls: LineSegment[],
+  circles: CircleObstacle[] = [],
+  rectangles: RectangleObstacle[] = []
 ): Point {
   // Calculate the ray endpoint
   const rayEnd: Point = {
@@ -95,11 +190,104 @@ export function castRay(
     }
   }
 
+  // Check intersection with circle obstacles
+  for (const circle of circles) {
+    const intersection = getRayCircleIntersection(origin, rayEnd, circle)
+    if (intersection) {
+      const dist = distance(origin, intersection)
+      if (dist < closestDistance) {
+        closestDistance = dist
+        closestIntersection = intersection
+      }
+    }
+  }
+
+  // Check intersection with rectangle obstacles (convert to edges)
+  for (const rect of rectangles) {
+    const edges = getRectangleEdges(rect)
+    for (const edge of edges) {
+      const intersection = getLineIntersection(ray, edge)
+      if (intersection) {
+        const dist = distance(origin, intersection)
+        if (dist < closestDistance) {
+          closestDistance = dist
+          closestIntersection = intersection
+        }
+      }
+    }
+  }
+
   return closestIntersection || rayEnd
 }
 
 /**
- * Calculate the visible FOV polygon for a camera, clipped by walls
+ * Get the tangent points from an external point to a circle
+ * Returns two points where rays from the external point would graze the circle
+ */
+function getCircleTangentPoints(from: Point, circle: CircleObstacle): Point[] {
+  const dx = circle.center.x - from.x
+  const dy = circle.center.y - from.y
+  const dist = Math.sqrt(dx * dx + dy * dy)
+
+  // Point is inside or on the circle
+  if (dist <= circle.radius) {
+    return []
+  }
+
+  // Angle from point to circle center
+  const angleToCenter = Math.atan2(dy, dx)
+
+  // Angle offset for tangent lines
+  const tangentAngle = Math.asin(circle.radius / dist)
+
+  // Two tangent points
+  const angle1 = angleToCenter + tangentAngle
+  const angle2 = angleToCenter - tangentAngle
+
+  // Calculate tangent points on the circle
+  const tangentDist = Math.sqrt(dist * dist - circle.radius * circle.radius)
+
+  return [
+    {
+      x: from.x + tangentDist * Math.cos(angle1),
+      y: from.y + tangentDist * Math.sin(angle1),
+    },
+    {
+      x: from.x + tangentDist * Math.cos(angle2),
+      y: from.y + tangentDist * Math.sin(angle2),
+    },
+  ]
+}
+
+/**
+ * Normalize angle to [0, 2π)
+ */
+function normalizeAngle(angle: number): number {
+  while (angle < 0) angle += 2 * Math.PI
+  while (angle >= 2 * Math.PI) angle -= 2 * Math.PI
+  return angle
+}
+
+/**
+ * Check if angle is within FOV bounds (handling wrap-around)
+ */
+function isAngleInFOV(angle: number, leftAngle: number, rightAngle: number): boolean {
+  const a = normalizeAngle(angle)
+  const left = normalizeAngle(leftAngle)
+  const right = normalizeAngle(rightAngle)
+
+  if (right >= left) {
+    // Normal case: FOV doesn't wrap around
+    return a >= left && a <= right
+  } else {
+    // FOV wraps around 0/2π
+    return a >= left || a <= right
+  }
+}
+
+/**
+ * Calculate the visible FOV polygon for a camera, clipped by walls and obstacles
+ * Uses ray-casting to obstacle edges for proper shadow wrapping
  * Returns an array of points representing the visible area
  */
 export function calculateVisibleFOV(
@@ -107,39 +295,101 @@ export function calculateVisibleFOV(
   rotation: number, // azimuth in degrees (0° = North/+Y, clockwise)
   fov: number, // field of view in degrees
   viewDistance: number, // in pixels
-  walls: LineSegment[]
+  walls: LineSegment[],
+  circles: CircleObstacle[] = [],
+  rectangles: RectangleObstacle[] = []
 ): Point[] {
   // Convert from azimuth (0° = North/+Y world, clockwise) to canvas angle
-  // Navigation azimuth: 0°=N, 90°=E, 180°=S, 270°=W
-  // Canvas uses standard trig: cos(angle) for X, sin(angle) for Y
-  // For azimuth, direction is (sin(az), cos(az)), so canvas angle = 90 - azimuth
   const canvasAngle = 90 - rotation
   const rotationRad = (canvasAngle * Math.PI) / 180
-  const halfFovRad = (fov / 2) * (Math.PI) / 180
+  const halfFovRad = (fov / 2) * (Math.PI / 180)
 
   // Calculate the two edge angles of the FOV
   const leftAngle = rotationRad - halfFovRad
   const rightAngle = rotationRad + halfFovRad
 
-  // Number of rays to cast (more rays = smoother polygon)
+  // Collect all angles to cast rays at
+  const angles: number[] = []
+
+  // 1. Add regular sweep angles for smooth FOV edges
   const numRays = Math.max(Math.floor(fov / 2), 20)
   const angleStep = (fov * Math.PI / 180) / numRays
+  for (let i = 0; i <= numRays; i++) {
+    angles.push(rightAngle - i * angleStep)
+  }
 
+  // 2. Add angles to wall endpoints
+  for (const wall of walls) {
+    for (const point of [wall.start, wall.end]) {
+      const dx = point.x - cameraPosition.x
+      const dy = point.y - cameraPosition.y
+      const angle = Math.atan2(dy, dx)
+      if (isAngleInFOV(angle, leftAngle, rightAngle)) {
+        // Add angle and slightly offset angles to catch edges
+        angles.push(angle)
+        angles.push(angle + 0.0001)
+        angles.push(angle - 0.0001)
+      }
+    }
+  }
+
+  // 3. Add angles to rectangle corners
+  for (const rect of rectangles) {
+    const edges = getRectangleEdges(rect)
+    for (const edge of edges) {
+      for (const point of [edge.start, edge.end]) {
+        const dx = point.x - cameraPosition.x
+        const dy = point.y - cameraPosition.y
+        const angle = Math.atan2(dy, dx)
+        if (isAngleInFOV(angle, leftAngle, rightAngle)) {
+          angles.push(angle)
+          angles.push(angle + 0.0001)
+          angles.push(angle - 0.0001)
+        }
+      }
+    }
+  }
+
+  // 4. Add angles to circle tangent points
+  for (const circle of circles) {
+    const tangents = getCircleTangentPoints(cameraPosition, circle)
+    for (const point of tangents) {
+      const dx = point.x - cameraPosition.x
+      const dy = point.y - cameraPosition.y
+      const angle = Math.atan2(dy, dx)
+      if (isAngleInFOV(angle, leftAngle, rightAngle)) {
+        angles.push(angle)
+        angles.push(angle + 0.0001)
+        angles.push(angle - 0.0001)
+      }
+    }
+  }
+
+  // Sort angles (right to left for clockwise sweep)
+  angles.sort((a, b) => b - a)
+
+  // Remove duplicate angles (within small epsilon)
+  const uniqueAngles: number[] = []
+  for (const angle of angles) {
+    if (uniqueAngles.length === 0 || Math.abs(angle - uniqueAngles[uniqueAngles.length - 1]) > 0.00005) {
+      uniqueAngles.push(angle)
+    }
+  }
+
+  // Cast rays at each angle
   const visiblePoints: Point[] = [cameraPosition]
 
-  // Cast rays from right to left (clockwise)
-  for (let i = 0; i <= numRays; i++) {
-    const angle = rightAngle - i * angleStep
+  for (const angle of uniqueAngles) {
     const direction = {
       x: Math.cos(angle),
-      y: Math.sin(angle), // Negate Y for canvas coordinates (Y points down)
+      y: Math.sin(angle),
     }
 
-    const hitPoint = castRay(cameraPosition, direction, viewDistance, walls)
+    const hitPoint = castRay(cameraPosition, direction, viewDistance, walls, circles, rectangles)
     visiblePoints.push(hitPoint)
   }
 
-  // Close the polygon by returning to the camera position
+  // Close the polygon
   visiblePoints.push(cameraPosition)
 
   return visiblePoints

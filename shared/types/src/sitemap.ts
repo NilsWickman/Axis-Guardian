@@ -84,6 +84,103 @@ export interface SiteMapDimensions {
 }
 
 /**
+ * 2D dimensions for obstacles
+ */
+export interface Dimensions2D {
+  width: number
+  height: number
+}
+
+/**
+ * Obstacle category determines styling and default behavior
+ */
+export type ObstacleCategory = 'furniture' | 'structural' | 'equipment'
+
+/**
+ * Obstacle geometry type
+ */
+export type ObstacleType = 'rectangle' | 'circle' | 'polygon'
+
+/**
+ * Base obstacle properties shared by all obstacle types
+ */
+export interface ObstacleBase {
+  /** Unique obstacle identifier */
+  id: string
+  /** Obstacle geometry type */
+  type: ObstacleType
+  /** Human-readable name (e.g., 'Conference Table') */
+  label?: string
+  /** Obstacle category for styling and behavior */
+  category?: ObstacleCategory
+  /** Center position in meters */
+  position: Position2D
+  /** Rotation in degrees (clockwise from north) */
+  rotation?: number
+  /** Physical height in meters (for FOV occlusion calculation) */
+  height?: number
+  /** If true, prevents tracks from being created inside this obstacle */
+  blocksTracking?: boolean
+  /** If true, occludes camera field of view */
+  blocksView?: boolean
+  /** Display color (Tailwind class or hex) */
+  color?: string
+}
+
+/**
+ * Rectangular obstacle (tables, desks, equipment racks)
+ */
+export interface RectangleObstacle extends ObstacleBase {
+  type: 'rectangle'
+  /** Width and height in meters */
+  dimensions: Dimensions2D
+}
+
+/**
+ * Circular obstacle (pillars, columns)
+ */
+export interface CircleObstacle extends ObstacleBase {
+  type: 'circle'
+  /** Radius in meters */
+  radius: number
+}
+
+/**
+ * Polygon obstacle (complex shapes)
+ */
+export interface PolygonObstacle extends ObstacleBase {
+  type: 'polygon'
+  /** Array of vertex positions (minimum 3) */
+  vertices: Position2D[]
+}
+
+/**
+ * Union type for all obstacle types
+ */
+export type Obstacle = RectangleObstacle | CircleObstacle | PolygonObstacle
+
+/**
+ * Type guard to check if obstacle is a rectangle
+ */
+export function isRectangleObstacle(obstacle: Obstacle): obstacle is RectangleObstacle {
+  return obstacle.type === 'rectangle'
+}
+
+/**
+ * Type guard to check if obstacle is a circle
+ */
+export function isCircleObstacle(obstacle: Obstacle): obstacle is CircleObstacle {
+  return obstacle.type === 'circle'
+}
+
+/**
+ * Type guard to check if obstacle is a polygon
+ */
+export function isPolygonObstacle(obstacle: Obstacle): obstacle is PolygonObstacle {
+  return obstacle.type === 'polygon'
+}
+
+/**
  * Complete site map configuration (JSON format)
  */
 export interface SiteMapConfig {
@@ -91,4 +188,5 @@ export interface SiteMapConfig {
   origin?: Position2D
   walls: SiteMapWall[]
   cameras: SiteMapCameraConfig[]
+  obstacles?: Obstacle[]
 }

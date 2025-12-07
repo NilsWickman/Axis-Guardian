@@ -59,10 +59,60 @@
       "azimuth": 133,
       "elevation": -5,
       "height": 1.67,
-      "fieldOfView": 44,
+      "fieldOfView": 60,
       "resolution": { "width": 1920, "height": 1080 },
       "distortion": { "k1": 0, "k2": 0, "p1": 0, "p2": 0 },
       "color": "amber-500"
+    }
+  ],
+  "obstacles": [
+    {
+      "id": "pillar-1",
+      "type": "circle",
+      "label": "Pillar 1",
+      "category": "structural",
+      "position": { "x": 6, "y": 3 },
+      "radius": 0.25,
+      "height": 3.0,
+      "blocksTracking": true,
+      "blocksView": true,
+      "color": "#e2e8f0"
+    },
+    {
+      "id": "pillar-2",
+      "type": "circle",
+      "label": "Pillar 2",
+      "category": "structural",
+      "position": { "x": 12, "y": 3 },
+      "radius": 0.25,
+      "height": 3.0,
+      "blocksTracking": true,
+      "blocksView": true,
+      "color": "#e2e8f0"
+    },
+    {
+      "id": "pillar-3",
+      "type": "circle",
+      "label": "Pillar 3",
+      "category": "structural",
+      "position": { "x": 6, "y": 9 },
+      "radius": 0.25,
+      "height": 3.0,
+      "blocksTracking": true,
+      "blocksView": true,
+      "color": "#e2e8f0"
+    },
+    {
+      "id": "pillar-4",
+      "type": "circle",
+      "label": "Pillar 4",
+      "category": "structural",
+      "position": { "x": 12, "y": 9 },
+      "radius": 0.25,
+      "height": 3.0,
+      "blocksTracking": true,
+      "blocksView": true,
+      "color": "#e2e8f0"
     }
   ]
 }

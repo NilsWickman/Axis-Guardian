@@ -12,4 +12,19 @@ export type {
   SiteMapWall,
   SiteMapDimensions,
   SiteMapConfig,
+  // Obstacle types
+  Dimensions2D,
+  ObstacleCategory,
+  ObstacleType,
+  ObstacleBase,
+  RectangleObstacle,
+  CircleObstacle,
+  PolygonObstacle,
+  Obstacle,
+} from './sitemap'
+
+export {
+  isRectangleObstacle,
+  isCircleObstacle,
+  isPolygonObstacle,
 } from './sitemap'
