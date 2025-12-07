@@ -37,6 +37,8 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/msgpack-lite": "^0.1.10",
     "@types/node": "^20.11.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
     "drizzle-kit": "^0.31.8",
     "tsx": "^4.7.0",
     "typescript": "^5.4.0",

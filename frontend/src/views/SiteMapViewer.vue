@@ -1160,6 +1160,9 @@ const drawMap = () => {
   canvas.drawGrid()
   canvas.drawScaleReference()
 
+  // Draw obstacles (below camera FOV cones)
+  canvas.drawObstacles(currentMap.value.obstacles)
+
   // Use working data (local copies in edit mode, store data in viewer mode)
   canvas.drawWalls(workingWalls.value)
 
@@ -1185,7 +1188,7 @@ const drawMap = () => {
 
   workingCameras.value.forEach(camera => {
     const isSelected = selectedCamera.value?.cameraId === camera.cameraId
-    canvas.drawCamera(camera, getCameraName, isSelected, false, workingWalls.value)
+    canvas.drawCamera(camera, getCameraName, isSelected, false, workingWalls.value, currentMap.value?.obstacles ?? [])
   })
 }
 
@@ -1343,6 +1346,7 @@ const openAddMapDialog = () => {
     renderScale: RENDER_SCALE, // Use fixed render scale of 100 px/m
     cameras: [],
     walls: [],
+    obstacles: [],
   })
 
   // Enter edit mode with the new site map using editMap

@@ -364,6 +364,7 @@ function createManualMap() {
     renderScale: 100, // Fixed render scale of 100 px/m
     cameras: [],
     walls: [],
+    obstacles: [],
   })
 
   // Navigate to editor

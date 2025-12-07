@@ -1,6 +1,6 @@
 import { ref, type Ref } from 'vue'
-import type { CameraPlacement, Wall } from '../stores/siteMaps'
-import { calculateVisibleFOV, drawPolygon, type LineSegment } from './useGeometry'
+import type { CameraPlacement, Wall, Obstacle } from '../stores/siteMaps'
+import { calculateVisibleFOV, drawPolygon, type LineSegment, type CircleObstacle, type RectangleObstacle } from './useGeometry'
 import {
   extractValue,
   metersToPixels,
@@ -506,6 +506,235 @@ export function useSiteMapCanvas(
     context.restore()
   }
 
+  // Category-based default colors
+  const OBSTACLE_CATEGORY_COLORS: Record<string, string> = {
+    furniture: '#78716c',   // stone-500
+    structural: '#64748b',  // slate-500
+    equipment: '#1e293b',   // slate-800
+  }
+
+  const drawObstacles = (
+    obstacles: Obstacle[],
+    hoveredObstacleId?: string | null,
+    selectedObstacleId?: string | null
+  ) => {
+    if (!ctx.value || !obstacles || obstacles.length === 0) return
+
+    const context = ctx.value
+
+    context.save()
+
+    obstacles.forEach((obstacle) => {
+      const { id, type, position, rotation = 0, category = 'furniture', color } = obstacle
+      const isHovered = hoveredObstacleId === id
+      const isSelected = selectedObstacleId === id
+
+      // Convert position from meters to pixels
+      const centerX = metersToPixels(extractValue(position.x))
+      const centerY = metersToPixels(extractValue(position.y))
+
+      // Get color (use provided color or category default)
+      const baseColor = color || OBSTACLE_CATEGORY_COLORS[category] || OBSTACLE_CATEGORY_COLORS.furniture
+
+      // Determine fill and stroke colors based on state
+      let fillColor = baseColor
+      let strokeColor = baseColor
+      let lineWidth = 2
+
+      if (isSelected) {
+        strokeColor = '#06b6d4' // cyan-500
+        lineWidth = 4
+      } else if (isHovered) {
+        strokeColor = '#f59e0b' // amber-500
+        lineWidth = 3
+      }
+
+      // Add transparency to fill
+      const fillAlpha = isSelected ? '80' : isHovered ? '60' : '40'
+      if (fillColor.startsWith('#') && fillColor.length === 7) {
+        fillColor = fillColor + fillAlpha
+      }
+
+      context.save()
+      context.translate(centerX, centerY)
+
+      // Apply rotation (convert degrees to radians, rotation is clockwise)
+      if (rotation !== 0) {
+        context.rotate((rotation * Math.PI) / 180)
+      }
+
+      if (type === 'rectangle' && obstacle.dimensions) {
+        const width = metersToPixels(extractValue(obstacle.dimensions.width))
+        const height = metersToPixels(extractValue(obstacle.dimensions.height))
+
+        // Draw rectangle centered at position
+        context.fillStyle = fillColor
+        context.fillRect(-width / 2, -height / 2, width, height)
+
+        context.strokeStyle = strokeColor
+        context.lineWidth = lineWidth
+        context.strokeRect(-width / 2, -height / 2, width, height)
+
+        // Draw category-specific patterns
+        if (category === 'structural') {
+          // Draw cross-hatch pattern for structural elements
+          context.strokeStyle = `${baseColor}30`
+          context.lineWidth = 1
+          const step = 10
+          for (let i = -width / 2; i < width / 2; i += step) {
+            context.beginPath()
+            context.moveTo(i, -height / 2)
+            context.lineTo(i + height, height / 2)
+            context.stroke()
+          }
+        } else if (category === 'equipment') {
+          // Draw dashed border for equipment
+          context.setLineDash([5, 3])
+          context.strokeStyle = '#ffffff40'
+          context.lineWidth = 1
+          context.strokeRect(-width / 2 + 4, -height / 2 + 4, width - 8, height - 8)
+          context.setLineDash([])
+        }
+
+      } else if (type === 'circle' && obstacle.radius !== undefined) {
+        const radius = metersToPixels(extractValue(obstacle.radius))
+
+        // Draw circle centered at position
+        context.beginPath()
+        context.arc(0, 0, radius, 0, Math.PI * 2)
+        context.fillStyle = fillColor
+        context.fill()
+        context.strokeStyle = strokeColor
+        context.lineWidth = lineWidth
+        context.stroke()
+
+        // Draw cross pattern for structural pillars
+        if (category === 'structural') {
+          context.strokeStyle = `${baseColor}50`
+          context.lineWidth = 2
+          context.beginPath()
+          context.moveTo(-radius * 0.6, 0)
+          context.lineTo(radius * 0.6, 0)
+          context.moveTo(0, -radius * 0.6)
+          context.lineTo(0, radius * 0.6)
+          context.stroke()
+        }
+
+      } else if (type === 'polygon' && obstacle.vertices && obstacle.vertices.length >= 3) {
+        // Draw polygon
+        const vertices = obstacle.vertices.map(v => ({
+          x: metersToPixels(extractValue(v.x)) - centerX,
+          y: metersToPixels(extractValue(v.y)) - centerY
+        }))
+
+        context.beginPath()
+        context.moveTo(vertices[0].x, vertices[0].y)
+        for (let i = 1; i < vertices.length; i++) {
+          context.lineTo(vertices[i].x, vertices[i].y)
+        }
+        context.closePath()
+
+        context.fillStyle = fillColor
+        context.fill()
+        context.strokeStyle = strokeColor
+        context.lineWidth = lineWidth
+        context.stroke()
+      }
+
+      context.restore()
+
+      // Draw label if hovered or selected
+      if ((isHovered || isSelected) && obstacle.label) {
+        context.fillStyle = 'rgba(0, 0, 0, 0.8)'
+        context.font = 'bold 12px sans-serif'
+        const labelMetrics = context.measureText(obstacle.label)
+        const labelPadding = 6
+        const labelHeight = 20
+
+        // Position label above the obstacle
+        const labelX = centerX - labelMetrics.width / 2 - labelPadding
+        const labelY = centerY - 30
+
+        // Draw label background
+        context.fillRect(
+          labelX,
+          labelY - labelHeight / 2,
+          labelMetrics.width + labelPadding * 2,
+          labelHeight
+        )
+
+        // Draw label text
+        context.fillStyle = '#ffffff'
+        context.textAlign = 'center'
+        context.textBaseline = 'middle'
+        context.fillText(obstacle.label, centerX, labelY)
+      }
+    })
+
+    context.restore()
+  }
+
+  const findObstacleAtPoint = (
+    x: number,
+    y: number,
+    obstacles: Obstacle[]
+  ): Obstacle | null => {
+    // x, y are in pixels from mouse position
+    // Check in reverse order (top-most first)
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+      const obstacle = obstacles[i]
+      const centerX = metersToPixels(extractValue(obstacle.position.x))
+      const centerY = metersToPixels(extractValue(obstacle.position.y))
+      const rotation = (obstacle.rotation ?? 0) * Math.PI / 180
+
+      // Transform point to obstacle's local coordinate system
+      const dx = x - centerX
+      const dy = y - centerY
+
+      // Apply inverse rotation
+      const localX = dx * Math.cos(-rotation) - dy * Math.sin(-rotation)
+      const localY = dx * Math.sin(-rotation) + dy * Math.cos(-rotation)
+
+      if (obstacle.type === 'rectangle' && obstacle.dimensions) {
+        const halfWidth = metersToPixels(extractValue(obstacle.dimensions.width)) / 2
+        const halfHeight = metersToPixels(extractValue(obstacle.dimensions.height)) / 2
+
+        if (Math.abs(localX) <= halfWidth && Math.abs(localY) <= halfHeight) {
+          return obstacle
+        }
+      } else if (obstacle.type === 'circle' && obstacle.radius !== undefined) {
+        const radius = metersToPixels(extractValue(obstacle.radius))
+        const distance = Math.sqrt(localX * localX + localY * localY)
+
+        if (distance <= radius) {
+          return obstacle
+        }
+      } else if (obstacle.type === 'polygon' && obstacle.vertices && obstacle.vertices.length >= 3) {
+        // Point-in-polygon test using ray casting
+        const vertices = obstacle.vertices.map(v => ({
+          x: metersToPixels(extractValue(v.x)) - centerX,
+          y: metersToPixels(extractValue(v.y)) - centerY
+        }))
+
+        let inside = false
+        for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i++) {
+          const xi = vertices[i].x, yi = vertices[i].y
+          const xj = vertices[j].x, yj = vertices[j].y
+
+          if (((yi > localY) !== (yj > localY)) &&
+              (localX < (xj - xi) * (localY - yi) / (yj - yi) + xi)) {
+            inside = !inside
+          }
+        }
+
+        if (inside) {
+          return obstacle
+        }
+      }
+    }
+    return null
+  }
+
   const drawWallMeasurements = (
     start: { x: number; y: number },
     end: { x: number; y: number },
@@ -624,7 +853,8 @@ export function useSiteMapCanvas(
     getCameraName: (id: string) => string,
     isSelected: boolean = false,
     isPreview: boolean = false,
-    walls: Wall[] = []
+    walls: Wall[] = [],
+    obstacles: Obstacle[] = []
   ) => {
     if (!ctx.value) return
 
@@ -661,13 +891,44 @@ export function useSiteMapCanvas(
       }
     }))
 
-    // Calculate visible FOV with wall occlusion
+    // Convert obstacles to geometry types for ray-casting (only those that block view)
+    const circleObstacles: CircleObstacle[] = []
+    const rectangleObstacles: RectangleObstacle[] = []
+
+    for (const obstacle of obstacles) {
+      // Only include obstacles that block camera view
+      if (obstacle.blocksView === false) continue
+
+      if (obstacle.type === 'circle' && obstacle.radius !== undefined) {
+        circleObstacles.push({
+          center: {
+            x: metersToPixels(extractValue(obstacle.position.x)),
+            y: metersToPixels(extractValue(obstacle.position.y))
+          },
+          radius: metersToPixels(extractValue(obstacle.radius))
+        })
+      } else if (obstacle.type === 'rectangle' && obstacle.dimensions) {
+        rectangleObstacles.push({
+          center: {
+            x: metersToPixels(extractValue(obstacle.position.x)),
+            y: metersToPixels(extractValue(obstacle.position.y))
+          },
+          width: metersToPixels(extractValue(obstacle.dimensions.width)),
+          height: metersToPixels(extractValue(obstacle.dimensions.height)),
+          rotation: obstacle.rotation
+        })
+      }
+    }
+
+    // Calculate visible FOV with wall and obstacle occlusion
     const visiblePolygon = calculateVisibleFOV(
       { x, y },
       azimuth,
       fov,
       viewDistance,
-      wallSegments
+      wallSegments,
+      circleObstacles,
+      rectangleObstacles
     )
 
     // Draw FOV cone with wall occlusion
@@ -796,6 +1057,8 @@ export function useSiteMapCanvas(
     drawWalls,
     drawPreviewWall,
     drawWallMeasurements,
+    drawObstacles,
+    findObstacleAtPoint,
     drawCamera,
     findCameraAtPoint,
     requestRedraw

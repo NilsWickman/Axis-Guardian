@@ -1118,6 +1118,9 @@ const drawMap = () => {
   canvas.drawGrid()
   canvas.drawScaleReference()
 
+  // Draw obstacles (below camera FOV cones)
+  canvas.drawObstacles(currentSiteMap.value.obstacles)
+
   // Draw walls with selection, but use the dragged wall if dragging
   const wallsToDraw = wallEditor.dragState.value.isDragging && wallEditor.dragState.value.draggedWall
     ? currentSiteMap.value.walls.map(w =>
@@ -1160,14 +1163,14 @@ const drawMap = () => {
       return
     }
     const isSelected = cameraSelection.isSelected(camera.cameraId)
-    canvas.drawCamera(camera, getCameraName, isSelected, false, currentSiteMap.value.walls)
+    canvas.drawCamera(camera, getCameraName, isSelected, false, currentSiteMap.value.walls, currentSiteMap.value.obstacles)
   })
 
   // Draw preview or editing camera (allow in edit mode)
   if (placement.selectedCameraId.value && (!wallEditor.isActive.value || wallEditor.mode.value === 'edit')) {
     const preview = placement.createPlacement()
     const isPreview = !placement.isUpdating.value
-    canvas.drawCamera(preview, getCameraName, true, isPreview, currentSiteMap.value.walls)
+    canvas.drawCamera(preview, getCameraName, true, isPreview, currentSiteMap.value.walls, currentSiteMap.value.obstacles)
   }
 }
 

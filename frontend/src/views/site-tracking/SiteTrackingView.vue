@@ -225,10 +225,14 @@ const drawMap = () => {
   canvas.clearCanvas()
   canvas.drawGrid()
   canvas.drawScaleReference()
+
+  // Draw obstacles before cameras (below FOV cones)
+  canvas.drawObstacles(currentMap.value.obstacles)
+
   canvas.drawWalls(currentMap.value.walls)
 
   currentMap.value.cameras.forEach(camera => {
-    canvas.drawCamera(camera, getCameraName, false, false, currentMap.value!.walls)
+    canvas.drawCamera(camera, getCameraName, false, false, currentMap.value!.walls, currentMap.value!.obstacles)
   })
 }
 

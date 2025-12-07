@@ -63,6 +63,12 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
   }
 
   const detectionProcessor = new DetectionProcessor(trackManager, cameraRegistry)
+
+  // Load obstacles for detection filtering
+  if (sitemapConfig.obstacles && sitemapConfig.obstacles.length > 0) {
+    detectionProcessor.setObstacles(sitemapConfig.obstacles)
+  }
+
   const broadcaster = new WebSocketBroadcaster(trackManager, {
     getFrameInfo: () => detectionProcessor.getCameraFrameInfo(),
   })
@@ -134,6 +140,12 @@ export async function createServerWithComponents(options: CreateServerOptions = 
   }
 
   const detectionProcessor = new DetectionProcessor(trackManager, cameraRegistry)
+
+  // Load obstacles for detection filtering
+  if (sitemapConfig.obstacles && sitemapConfig.obstacles.length > 0) {
+    detectionProcessor.setObstacles(sitemapConfig.obstacles)
+  }
+
   const broadcaster = new WebSocketBroadcaster(trackManager, {
     getFrameInfo: () => detectionProcessor.getCameraFrameInfo(),
   })

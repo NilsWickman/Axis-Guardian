@@ -11,6 +11,8 @@ import { TrackManager } from '../tracks/track-manager.js'
 import { CameraRegistry } from './camera-registry.js'
 import { logProjectionFailure } from '../api/routes.js'
 import { getPipelineLogger } from '../debug/pipeline-logger.js'
+import type { SiteMapObstacle } from '../config/sitemap-loader.js'
+import { isPointInsideAnyObstacle } from '../geometry/obstacles.js'
 
 const MIN_CONFIDENCE = 0.7
 const IMAGE_WIDTH = 1920
@@ -22,11 +24,30 @@ export class DetectionProcessor {
   private lastCleanupTime: number = Date.now()
   private static readonly MAX_CAMERAS = 100  // Prevent unbounded growth
   private static readonly CLEANUP_INTERVAL_MS = 60000  // Cleanup every minute
+  private obstacles: SiteMapObstacle[] = []
+  private obstacleFilterCount: number = 0
 
   constructor(
     private trackManager: TrackManager,
     private cameraRegistry: CameraRegistry
   ) {}
+
+  /**
+   * Set obstacles for detection filtering
+   * Only obstacles with blocksTracking=true will filter detections
+   */
+  setObstacles(obstacles: SiteMapObstacle[]): void {
+    this.obstacles = obstacles.filter((obs) => obs.blocksTracking !== false)
+    console.log(`[DetectionProcessor] Loaded ${this.obstacles.length} tracking-blocking obstacles`)
+  }
+
+  /**
+   * Check if a world position is inside any obstacle
+   */
+  private isInsideObstacle(worldX: number, worldY: number): boolean {
+    if (this.obstacles.length === 0) return false
+    return isPointInsideAnyObstacle({ x: worldX, y: worldY }, this.obstacles)
+  }
 
   /**
    * Process a detection message from a camera emulator
@@ -108,6 +129,17 @@ export class DetectionProcessor {
       )
 
       if (!isValid) {
+        continue
+      }
+
+      // Filter detections that project inside obstacles
+      if (this.isInsideObstacle(worldPoint.x, worldPoint.y)) {
+        this.obstacleFilterCount++
+        if (this.obstacleFilterCount <= 10 || this.obstacleFilterCount % 100 === 0) {
+          console.log(
+            `[DetectionProcessor] Filtered detection inside obstacle: (${worldPoint.x.toFixed(2)}, ${worldPoint.y.toFixed(2)}) [total filtered: ${this.obstacleFilterCount}]`
+          )
+        }
         continue
       }
 
