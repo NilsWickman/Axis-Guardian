@@ -11,33 +11,27 @@ import type { CameraParams, CameraConfig, SiteMapCameraConfig, CameraCalibration
 import { siteMapConfigToCamera } from '../projection/ground-plane.js'
 
 /**
- * K/R/T Calibration data storage
+ * K/R/T Calibration data from the Auditorium dataset (cam_param.mat)
  *
- * NOTE: K/R/T calibration is now disabled by default to use sitemap JSON config.
- * The hardcoded calibrations below are from the Auditorium dataset (cam_param.mat)
- * and are kept for reference only. They do not match the current sitemap config.
+ * NOTE: The K/R/T matrices from cam_param.mat use a different coordinate system
+ * than the sitemap. The coordinate transformation is complex because:
+ * - cam_param.mat: HC3 at origin (0,0), HC4 at (8.32, 13.45)
+ * - scene_metadata.xml: HC3 at (16.22, 0.3), HC4 at (0.9, 0.5)
+ * - sitemap: HC3 at (16.22, 11.7), HC4 at (0.9, 11.5)
  *
- * To use these calibrations, uncomment the entries below.
+ * The K/R/T projection produces coordinates in the cam_param.mat system,
+ * which would require a complex transformation to map to sitemap coordinates.
+ *
+ * For now, K/R/T calibrations are DISABLED to use the simpler legacy projection
+ * with azimuth/elevation from the sitemap. The sitemap values have been calibrated
+ * to match the scene_metadata.xml ground truth.
+ *
+ * To enable K/R/T projection, uncomment the calibrations below and implement
+ * the proper coordinate transformation.
  */
 const CAMERA_CALIBRATIONS: Record<string, CameraCalibration> = {
-  // All hardcoded calibrations disabled - using sitemap JSON config instead
-  // which uses the ground-plane projection with elevation/azimuth parameters.
-  //
-  // 'camera1': {  // HC3 - from cam_param.mat (ground-truth calibration)
-  //   K: [
-  //     [1480, 0, 960],
-  //     [0, 1480, 540],
-  //     [0, 0, 1],
-  //   ],
-  //   R: [
-  //     [0.26415998, 0.96365108, -0.0399512],
-  //     [0.01284627, -0.04493433, -0.99890734],
-  //     [-0.96439332, 0.26335812, -0.02424917],
-  //   ],
-  //   T: [8.319724452629636, 13.445955713668864, 1.5930329257377853],
-  //   center: [960, 540],
-  //   scale: 1,
-  // },
+  // K/R/T calibrations disabled - using legacy azimuth/elevation projection
+  // See tech-logs/krt-calibration-projection.md for implementation notes
 }
 
 

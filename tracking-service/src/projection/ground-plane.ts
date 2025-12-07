@@ -25,6 +25,7 @@ import type {
   DetectionBBox,
   SiteMapCameraConfig,
   CameraCalibration,
+  WorldTransform,
 } from '../types.js'
 import { undistortPoint } from './lens-distortion.js'
 
@@ -119,6 +120,11 @@ export function rotateAroundZ(v: Point3D, angleRad: number): Point3D {
 
 /**
  * Transform a ray from camera space to world space
+ *
+ * Elevation convention:
+ * - In our projection: positive = camera pitched down (looking at ground)
+ * - The sitemap/scene_metadata uses: negative = looking down, positive = looking up
+ * - We negate the elevation to match: -5° from sitemap becomes +5° internally = looking down
  */
 export function transformRayToWorld(
   rayCamera: Point3D,
@@ -126,7 +132,9 @@ export function transformRayToWorld(
   elevationDeg: number
 ): Point3D {
   // Step 1: Apply elevation rotation (pitch around X-axis)
-  const elevationRad = degToRad(-elevationDeg)
+  // Negate elevation because sitemap convention is opposite (negative = looking down)
+  // So -5° from sitemap becomes +5° = looking down at ground
+  const elevationRad = degToRad(elevationDeg)
   const rayElevated = rotateAroundX(rayCamera, elevationRad)
 
   // Step 2: Convert from camera coordinates to world coordinates
@@ -446,6 +454,22 @@ function solve3x3(A: number[][], b: number[]): number[] | null {
 }
 
 /**
+ * Apply 2D world coordinate transformation
+ * Transforms point from dataset coordinates to sitemap coordinates
+ *
+ * Formula: P_sitemap = scale * R * P_dataset + translation
+ */
+export function applyWorldTransform(point: Point2D, transform: WorldTransform): Point2D {
+  const { rotation: R, translation: t, scale: s = 1.0 } = transform
+
+  // Apply rotation and scale, then translation
+  return {
+    x: s * (R[0][0] * point.x + R[0][1] * point.y) + t[0],
+    y: s * (R[1][0] * point.x + R[1][1] * point.y) + t[1],
+  }
+}
+
+/**
  * Project image point to ground plane using K/R/T calibration matrices
  *
  * Formula from dataset README:
@@ -454,13 +478,16 @@ function solve3x3(A: number[][], b: number[]): number[] | null {
  *   KRT = K * R * T
  *   p = A \ KRT
  *   p = [world_x, world_y, 0]
+ *
+ * If a worldTransform is provided in calibration, the result is transformed
+ * from dataset coordinates to sitemap coordinates.
  */
 export function projectWithKRT(
   imageX: number,
   imageY: number,
   calibration: CameraCalibration
 ): { worldPoint: Point2D; isValid: boolean; reason?: string } {
-  const { K, R, T, center, scale } = calibration
+  const { K, R, T, center, scale, worldTransform } = calibration
 
   // Apply scale
   const x = imageX * scale
@@ -491,8 +518,15 @@ export function projectWithKRT(
   }
 
   // p[0] = world_x, p[1] = world_y (p[2] should be ~0 for ground plane)
+  let worldPoint: Point2D = { x: p[0], y: p[1] }
+
+  // Apply world coordinate transformation if provided
+  if (worldTransform) {
+    worldPoint = applyWorldTransform(worldPoint, worldTransform)
+  }
+
   return {
-    worldPoint: { x: p[0], y: p[1] },
+    worldPoint,
     isValid: true,
   }
 }

@@ -126,6 +126,19 @@ export interface DistortionCoeffs {
 }
 
 /**
+ * 2D rigid transformation for converting between coordinate systems
+ * Used to transform dataset coordinates to sitemap coordinates
+ */
+export interface WorldTransform {
+  /** 2x2 rotation matrix */
+  rotation: number[][]
+  /** [tx, ty] translation offset */
+  translation: number[]
+  /** Scale factor (default 1.0) */
+  scale?: number
+}
+
+/**
  * Camera calibration matrices (K/R/T) for accurate projection
  * From dataset cam_param.mat file
  */
@@ -142,6 +155,8 @@ export interface CameraCalibration {
   scale: number
   /** Optional lens distortion coefficients */
   distortion?: DistortionCoeffs
+  /** Optional world coordinate transformation (dataset to sitemap coords) */
+  worldTransform?: WorldTransform
 }
 
 // ============================================================================
