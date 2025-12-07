@@ -3,124 +3,14 @@
     class="person-position-overlay"
     :style="{ width: `${canvasWidth}px`, height: `${canvasHeight}px` }"
   >
-    <!-- Global track markers (cross-camera tracking) -->
-    <svg
-      v-if="globalTracks.length > 0"
+    <!-- Canvas for person tracking visualization -->
+    <canvas
+      ref="canvasRef"
       :width="canvasWidth"
       :height="canvasHeight"
       class="absolute inset-0 pointer-events-none"
       style="z-index: 10"
-    >
-      <!-- Trails (if enabled) - individual segments with fading opacity -->
-      <g v-if="showTrails">
-        <g v-for="track in visibleGlobalTracks" :key="`trail-${track.globalTrackId}`">
-          <line
-            v-for="segment in getTrailSegments(track)"
-            :key="segment.key"
-            :x1="segment.x1"
-            :y1="segment.y1"
-            :x2="segment.x2"
-            :y2="segment.y2"
-            :stroke="track.color"
-            stroke-width="2"
-            :opacity="segment.opacity"
-            stroke-linecap="round"
-          />
-        </g>
-      </g>
-
-      <!-- Global track position markers -->
-      <g v-for="track in visibleGlobalTracks" :key="track.globalTrackId">
-        <!-- Outer glow -->
-        <circle
-          :cx="worldToCanvasX(track.currentPosition.x)"
-          :cy="worldToCanvasY(track.currentPosition.y)"
-          :r="markerRadius + 4"
-          :fill="track.color"
-          opacity="0.2"
-        />
-
-        <!-- Main marker -->
-        <circle
-          :cx="worldToCanvasX(track.currentPosition.x)"
-          :cy="worldToCanvasY(track.currentPosition.y)"
-          :r="markerRadius"
-          :fill="track.color"
-          :opacity="getGlobalTrackOpacity(track)"
-          stroke="white"
-          stroke-width="2"
-          class="person-marker"
-        />
-
-        <!-- Confidence indicator ring -->
-        <circle
-          v-if="showConfidence"
-          :cx="worldToCanvasX(track.currentPosition.x)"
-          :cy="worldToCanvasY(track.currentPosition.y)"
-          :r="markerRadius + 6"
-          fill="none"
-          :stroke="track.color"
-          :stroke-width="2"
-          :opacity="track.confidence"
-          :stroke-dasharray="`${track.confidence * 40} 40`"
-        />
-
-        <!-- Person icon (optional) -->
-        <g
-          v-if="showPersonIcon"
-          :transform="`translate(${worldToCanvasX(track.currentPosition.x) - 6}, ${worldToCanvasY(track.currentPosition.y) - 8})`"
-        >
-          <path
-            d="M6 2a2 2 0 100 4 2 2 0 000-4zm0 6c-2 0-4 1-4 2v2h8v-2c0-1-2-2-4-2z"
-            fill="white"
-            opacity="0.9"
-          />
-        </g>
-
-        <!-- Track ID label -->
-        <text
-          :x="worldToCanvasX(track.currentPosition.x)"
-          :y="worldToCanvasY(track.currentPosition.y) - markerRadius - 6"
-          text-anchor="middle"
-          font-size="11"
-          font-weight="600"
-          :fill="track.color"
-          stroke="#000"
-          stroke-width="0.5"
-          class="track-label"
-        >
-          {{ formatTrackId(track.globalTrackId) }}
-        </text>
-      </g>
-
-      <!-- Debug: Unconfirmed tracks (dashed outline) -->
-      <g v-if="showDebugMode && unconfirmedTracks.length > 0">
-        <g v-for="track in unconfirmedTracks" :key="`unconfirmed-${track.globalTrackId}`">
-          <!-- Dashed circle for unconfirmed -->
-          <circle
-            :cx="worldToCanvasX(track.currentPosition.x)"
-            :cy="worldToCanvasY(track.currentPosition.y)"
-            :r="markerRadius"
-            fill="none"
-            stroke="#fbbf24"
-            stroke-width="2"
-            stroke-dasharray="4 2"
-            opacity="0.6"
-          />
-          <!-- Detection count label -->
-          <text
-            :x="worldToCanvasX(track.currentPosition.x)"
-            :y="worldToCanvasY(track.currentPosition.y) + markerRadius + 12"
-            text-anchor="middle"
-            font-size="10"
-            fill="#fbbf24"
-            opacity="0.8"
-          >
-            {{ track.detectionCount }}/3
-          </text>
-        </g>
-      </g>
-    </svg>
+    />
 
     <!-- Position count overlay -->
     <div
@@ -143,8 +33,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useGlobalTrackStore, type GlobalTrack } from '../../../stores/globalTracks'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useGlobalTrackStore, type GlobalTrack, type TrailPosition } from '../../../stores/globalTracks'
 import type { SiteMap } from '../../../stores/siteMaps'
 
 export interface PersonPositionOverlayProps {
@@ -155,7 +45,7 @@ export interface PersonPositionOverlayProps {
   showConfidence?: boolean
   showPersonIcon?: boolean
   showStats?: boolean
-  showDebugMode?: boolean // Show unconfirmed tracks and FOV cones
+  showDebugMode?: boolean
   markerRadius?: number
   maxTrailLength?: number
 }
@@ -172,12 +62,23 @@ const props = withDefaults(defineProps<PersonPositionOverlayProps>(), {
 
 const globalTrackStore = useGlobalTrackStore()
 
+// Canvas ref
+const canvasRef = ref<HTMLCanvasElement | null>(null)
+let animationFrameId: number | null = null
+let isAnimating = false
+
+// Interpolation state for smooth animation
+interface InterpolationState {
+  position: { x: number; y: number }
+  velocity: { x: number; y: number }
+  lastUpdateTime: number
+}
+const interpolationStates = new Map<string, InterpolationState>()
+
 // Computed data from global track store
 const globalTracks = computed(() => globalTrackStore.activeTracks)
 const globalTrackCount = computed(() => globalTrackStore.activeTrackCount)
 const pendingTrackCount = computed(() => globalTrackStore.pendingTrackCount)
-
-// Get all active tracks including unconfirmed (for debug mode)
 const allActiveTracks = computed(() => globalTrackStore.allActiveTracks)
 
 // Filter global tracks that are within the canvas bounds
@@ -185,26 +86,23 @@ const visibleGlobalTracks = computed(() => {
   return globalTracks.value.filter(track => {
     const x = worldToCanvasX(track.currentPosition.x)
     const y = worldToCanvasY(track.currentPosition.y)
-    return x >= 0 && x <= props.canvasWidth && y >= 0 && y <= props.canvasHeight
+    return x >= -50 && x <= props.canvasWidth + 50 && y >= -50 && y <= props.canvasHeight + 50
   })
 })
 
-// Unconfirmed tracks for debug mode (visible but not confirmed yet)
+// Unconfirmed tracks for debug mode
 const unconfirmedTracks = computed(() => {
   if (!props.showDebugMode) return []
   return allActiveTracks.value.filter(track => {
-    if (track.isConfirmed) return false // Skip confirmed
+    if (track.isConfirmed) return false
     const x = worldToCanvasX(track.currentPosition.x)
     const y = worldToCanvasY(track.currentPosition.y)
-    return x >= 0 && x <= props.canvasWidth && y >= 0 && y <= props.canvasHeight
+    return x >= -50 && x <= props.canvasWidth + 50 && y >= -50 && y <= props.canvasHeight + 50
   })
 })
 
 /**
  * Convert world coordinates (meters) to canvas coordinates (pixels)
- *
- * World coordinates: X=East, Y=North (meters)
- * Canvas coordinates: pixels at RENDER_SCALE (100 px/m)
  */
 function worldToCanvasX(worldX: number): number {
   const origin = props.siteMap.origin ?? { x: 0, y: 0 }
@@ -217,86 +115,319 @@ function worldToCanvasY(worldY: number): number {
 }
 
 /**
- * Get global track marker opacity based on age
- */
-function getGlobalTrackOpacity(track: GlobalTrack): number {
-  const now = Date.now()
-  const ageMs = now - track.lastSeen
-
-  // Fade out over 3 seconds
-  const fadeMs = 3000
-  const opacity = Math.max(0.3, 1 - (ageMs / fadeMs))
-  return Math.min(1, opacity)
-}
-
-/**
- * Trail segment with opacity for fading effect
- */
-interface TrailSegment {
-  key: string
-  x1: number
-  y1: number
-  x2: number
-  y2: number
-  opacity: number
-}
-
-/**
- * Generate trail segments with fading opacity based on age
- * Segments fade out over 3 seconds
- */
-function getTrailSegments(track: GlobalTrack): TrailSegment[] {
-  const trailPositions = track.trail.slice(0, props.maxTrailLength)
-  if (trailPositions.length < 2) return []
-
-  const now = Date.now()
-  const fadeMs = 3000 // Fade over 3 seconds
-  const segments: TrailSegment[] = []
-
-  for (let i = 0; i < trailPositions.length - 1; i++) {
-    const from = trailPositions[i]
-    const to = trailPositions[i + 1]
-
-    // Use the older point's timestamp to determine opacity
-    const ageMs = now - to.timestamp
-    const opacity = Math.max(0, 0.6 * (1 - ageMs / fadeMs))
-
-    // Skip segments that have fully faded
-    if (opacity <= 0) continue
-
-    segments.push({
-      key: `${track.globalTrackId}-seg-${i}`,
-      x1: worldToCanvasX(from.x),
-      y1: worldToCanvasY(from.y),
-      x2: worldToCanvasX(to.x),
-      y2: worldToCanvasY(to.y),
-      opacity,
-    })
-  }
-
-  return segments
-}
-
-/**
  * Format track ID for display (e.g., "global-5" -> "#5")
  */
 function formatTrackId(trackId: string): string {
   return trackId.replace('global-', '#')
 }
+
+/**
+ * Calculate velocity from trail positions
+ */
+function calculateVelocity(trail: TrailPosition[]): { x: number; y: number } {
+  if (trail.length < 2) return { x: 0, y: 0 }
+
+  // Use average of last 2-3 segments for smoother velocity
+  let totalVx = 0
+  let totalVy = 0
+  let count = 0
+
+  for (let i = 0; i < Math.min(3, trail.length - 1); i++) {
+    const dt = (trail[i].timestamp - trail[i + 1].timestamp) / 1000
+    if (dt > 0.01 && dt < 2) { // Valid time delta between 10ms and 2s
+      totalVx += (trail[i].x - trail[i + 1].x) / dt
+      totalVy += (trail[i].y - trail[i + 1].y) / dt
+      count++
+    }
+  }
+
+  if (count === 0) return { x: 0, y: 0 }
+
+  return {
+    x: totalVx / count,
+    y: totalVy / count,
+  }
+}
+
+/**
+ * Get interpolated position for a track
+ * Note: Velocity-based prediction disabled to avoid rubber-banding
+ */
+function getInterpolatedPosition(track: GlobalTrack, now: number): { x: number; y: number } {
+  const state = interpolationStates.get(track.globalTrackId)
+
+  if (!state) {
+    // First time seeing this track, initialize state
+    interpolationStates.set(track.globalTrackId, {
+      position: { ...track.currentPosition },
+      velocity: { x: 0, y: 0 },
+      lastUpdateTime: now,
+    })
+    return track.currentPosition
+  }
+
+  // Return current stored position (no velocity prediction)
+  return state.position
+}
+
+/**
+ * Update interpolation state when track position changes
+ * Note: Simplified - just updates position directly without blending
+ */
+function updateInterpolationState(track: GlobalTrack, now: number): void {
+  const state = interpolationStates.get(track.globalTrackId)
+
+  if (state) {
+    // Direct update - no blending
+    state.position = { ...track.currentPosition }
+    state.lastUpdateTime = now
+  } else {
+    interpolationStates.set(track.globalTrackId, {
+      position: { ...track.currentPosition },
+      velocity: { x: 0, y: 0 },
+      lastUpdateTime: now,
+    })
+  }
+}
+
+/**
+ * Clean up stale interpolation states
+ */
+function cleanupInterpolationStates(): void {
+  const activeTrackIds = new Set(globalTracks.value.map(t => t.globalTrackId))
+  for (const trackId of interpolationStates.keys()) {
+    if (!activeTrackIds.has(trackId)) {
+      interpolationStates.delete(trackId)
+    }
+  }
+}
+
+/**
+ * Draw trail with fading opacity
+ */
+function drawTrail(ctx: CanvasRenderingContext2D, track: GlobalTrack, interpolatedPos: { x: number; y: number }) {
+  if (!props.showTrails) return
+
+  const trail = track.trail.slice(0, props.maxTrailLength)
+  if (trail.length < 1) return
+
+  ctx.lineWidth = 2
+  ctx.lineCap = 'round'
+  ctx.strokeStyle = track.color
+
+  // Draw line from interpolated position to first trail point
+  if (trail.length >= 1) {
+    ctx.globalAlpha = 0.6
+    ctx.beginPath()
+    ctx.moveTo(worldToCanvasX(interpolatedPos.x), worldToCanvasY(interpolatedPos.y))
+    ctx.lineTo(worldToCanvasX(trail[0].x), worldToCanvasY(trail[0].y))
+    ctx.stroke()
+  }
+
+  // Draw remaining trail segments
+  for (let i = 0; i < trail.length - 1; i++) {
+    const opacity = 0.6 * (1 - (i + 1) / trail.length)
+    ctx.globalAlpha = opacity
+    ctx.beginPath()
+    ctx.moveTo(worldToCanvasX(trail[i].x), worldToCanvasY(trail[i].y))
+    ctx.lineTo(worldToCanvasX(trail[i + 1].x), worldToCanvasY(trail[i + 1].y))
+    ctx.stroke()
+  }
+
+  ctx.globalAlpha = 1
+}
+
+/**
+ * Draw marker with glow, main circle, confidence ring, icon, and label
+ */
+function drawMarker(ctx: CanvasRenderingContext2D, track: GlobalTrack, interpolatedPos: { x: number; y: number }) {
+  const x = worldToCanvasX(interpolatedPos.x)
+  const y = worldToCanvasY(interpolatedPos.y)
+  const radius = props.markerRadius
+
+  // Outer glow
+  ctx.beginPath()
+  ctx.arc(x, y, radius + 4, 0, Math.PI * 2)
+  ctx.fillStyle = track.color
+  ctx.globalAlpha = 0.2
+  ctx.fill()
+
+  // Main marker
+  ctx.beginPath()
+  ctx.arc(x, y, radius, 0, Math.PI * 2)
+  ctx.fillStyle = track.color
+  ctx.globalAlpha = 1
+  ctx.fill()
+  ctx.strokeStyle = 'white'
+  ctx.lineWidth = 2
+  ctx.stroke()
+
+  // Confidence indicator ring
+  if (props.showConfidence) {
+    ctx.beginPath()
+    const confidenceAngle = track.confidence * Math.PI * 2
+    ctx.arc(x, y, radius + 6, -Math.PI / 2, -Math.PI / 2 + confidenceAngle)
+    ctx.strokeStyle = track.color
+    ctx.lineWidth = 2
+    ctx.globalAlpha = track.confidence
+    ctx.stroke()
+    ctx.globalAlpha = 1
+  }
+
+  // Person icon (simplified - draw a small person shape)
+  if (props.showPersonIcon) {
+    ctx.fillStyle = 'white'
+    ctx.globalAlpha = 0.9
+    // Head
+    ctx.beginPath()
+    ctx.arc(x, y - 3, 2, 0, Math.PI * 2)
+    ctx.fill()
+    // Body
+    ctx.beginPath()
+    ctx.moveTo(x - 3, y + 4)
+    ctx.lineTo(x + 3, y + 4)
+    ctx.lineTo(x + 3, y)
+    ctx.lineTo(x - 3, y)
+    ctx.closePath()
+    ctx.fill()
+    ctx.globalAlpha = 1
+  }
+
+  // Track ID label
+  ctx.font = '600 11px ui-monospace, SFMono-Regular, Menlo, Monaco, monospace'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'bottom'
+
+  // Text shadow/outline
+  ctx.strokeStyle = '#000'
+  ctx.lineWidth = 2
+  ctx.strokeText(formatTrackId(track.globalTrackId), x, y - radius - 6)
+
+  // Text fill
+  ctx.fillStyle = track.color
+  ctx.fillText(formatTrackId(track.globalTrackId), x, y - radius - 6)
+}
+
+/**
+ * Draw unconfirmed track marker (dashed outline)
+ */
+function drawUnconfirmedMarker(ctx: CanvasRenderingContext2D, track: GlobalTrack) {
+  const x = worldToCanvasX(track.currentPosition.x)
+  const y = worldToCanvasY(track.currentPosition.y)
+  const radius = props.markerRadius
+
+  // Dashed circle
+  ctx.beginPath()
+  ctx.arc(x, y, radius, 0, Math.PI * 2)
+  ctx.strokeStyle = '#fbbf24'
+  ctx.lineWidth = 2
+  ctx.setLineDash([4, 2])
+  ctx.globalAlpha = 0.6
+  ctx.stroke()
+  ctx.setLineDash([])
+  ctx.globalAlpha = 1
+
+  // Detection count label
+  ctx.font = '10px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  ctx.fillStyle = '#fbbf24'
+  ctx.globalAlpha = 0.8
+  ctx.fillText(`${track.detectionCount}/3`, x, y + radius + 4)
+  ctx.globalAlpha = 1
+}
+
+/**
+ * Main animation loop - runs continuously for smooth interpolation
+ */
+function animate() {
+  if (!isAnimating) return
+
+  const canvas = canvasRef.value
+  if (!canvas) {
+    animationFrameId = requestAnimationFrame(animate)
+    return
+  }
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) {
+    animationFrameId = requestAnimationFrame(animate)
+    return
+  }
+
+  const now = Date.now()
+
+  // Clear canvas
+  ctx.clearRect(0, 0, props.canvasWidth, props.canvasHeight)
+
+  // Draw trails and markers with interpolated positions
+  for (const track of visibleGlobalTracks.value) {
+    const interpolatedPos = getInterpolatedPosition(track, now)
+    drawTrail(ctx, track, interpolatedPos)
+  }
+
+  for (const track of visibleGlobalTracks.value) {
+    const interpolatedPos = getInterpolatedPosition(track, now)
+    drawMarker(ctx, track, interpolatedPos)
+  }
+
+  // Draw unconfirmed tracks in debug mode
+  if (props.showDebugMode) {
+    for (const track of unconfirmedTracks.value) {
+      drawUnconfirmedMarker(ctx, track)
+    }
+  }
+
+  animationFrameId = requestAnimationFrame(animate)
+}
+
+/**
+ * Start the animation loop
+ */
+function startAnimation() {
+  if (isAnimating) return
+  isAnimating = true
+  animate()
+}
+
+/**
+ * Stop the animation loop
+ */
+function stopAnimation() {
+  isAnimating = false
+  if (animationFrameId !== null) {
+    cancelAnimationFrame(animationFrameId)
+    animationFrameId = null
+  }
+}
+
+// Watch for track changes and update interpolation states
+watch(
+  () => globalTracks.value,
+  (newTracks) => {
+    const now = Date.now()
+    for (const track of newTracks) {
+      updateInterpolationState(track, now)
+    }
+    cleanupInterpolationStates()
+  },
+  { deep: true }
+)
+
+// Start animation on mount
+onMounted(() => {
+  startAnimation()
+})
+
+// Cleanup on unmount
+onUnmounted(() => {
+  stopAnimation()
+  interpolationStates.clear()
+})
 </script>
 
 <style scoped>
 .person-position-overlay {
-  /* Position controlled by parent via inline styles */
   pointer-events: none;
-}
-
-.person-marker {
-  transition: opacity 0.3s ease;
-}
-
-.track-label {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 </style>

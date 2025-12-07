@@ -130,15 +130,18 @@ export function transformRayToWorld(
   const rayElevated = rotateAroundX(rayCamera, elevationRad)
 
   // Step 2: Convert from camera coordinates to world coordinates
+  // Negate X to flip horizontal axis: camera right (+X) becomes world left
+  // This corrects the mirror effect in the projection
   const rayIntermediate: Point3D = {
-    x: rayElevated.x,
+    x: -rayElevated.x,
     y: rayElevated.z,
     z: -rayElevated.y,
   }
 
   // Step 3: Apply azimuth rotation around world Z-axis
   // Azimuth convention: 0° = North (+Y), 90° = East (+X), clockwise
-  const azimuthRad = degToRad(azimuthDeg)
+  // Negate because rotateAroundZ is counter-clockwise positive
+  const azimuthRad = degToRad(-azimuthDeg)
   const rayWorld = rotateAroundZ(rayIntermediate, azimuthRad)
 
   return rayWorld
