@@ -255,7 +255,7 @@ describe('TrackManager', () => {
       trackManager.updateConfig({ correlationDistanceM: 999 })
       trackManager.resetConfig()
       const config = trackManager.getConfig()
-      expect(config.correlationDistanceM).toBe(0.5) // Default from DEFAULT_TRACKING_CONFIG (increased for projection error)
+      expect(config.correlationDistanceM).toBe(0.6) // Default from DEFAULT_TRACKING_CONFIG (increased for cross-camera projection variance)
     })
   })
 

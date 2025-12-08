@@ -48,6 +48,10 @@ export interface AssignmentConfig {
   directionConsistencyWeight: number
   /** Minimum speed (m/s) to consider direction constraint */
   minSpeedForDirection: number
+  /** Cost multiplier for cross-camera handoff (0-1, lower = more bonus) */
+  crossCameraBonus: number
+  /** Time window for cross-camera bonus (ms) - track must be seen by other camera within this time */
+  crossCameraBonusWindowMs: number
 }
 
 const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
@@ -60,6 +64,8 @@ const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
   crossingMaxCostMultiplier: 0.5,  // Use 50% of maxCost for crossing tracks
   directionConsistencyWeight: 0.3, // Penalize direction reversals during crossings
   minSpeedForDirection: 0.3,       // 0.3 m/s minimum to consider direction
+  crossCameraBonus: 0.7,           // 30% cost reduction for cross-camera handoff
+  crossCameraBonusWindowMs: 1000,  // Track must be seen by other camera within 1 second
 }
 
 /**
@@ -118,6 +124,18 @@ export function buildCostMatrix(
         // Same-camera penalty: if track already has different trackId from same camera
         // This prevents "stealing" tracks from the same camera
         cost *= config.sameCameraPenalty
+      } else if (!assoc) {
+        // Cross-camera bonus: if track is seen by OTHER cameras but not this one yet
+        // This encourages cross-camera handoff in overlap zones
+        const now = det.timestamp
+        const hasRecentCrossCamera = Array.from(track.cameraAssociations.entries()).some(
+          ([camId, camAssoc]) =>
+            camId !== det.cameraId &&
+            (now - camAssoc.lastSeen) < config.crossCameraBonusWindowMs
+        )
+        if (hasRecentCrossCamera) {
+          cost *= config.crossCameraBonus
+        }
       }
 
       // Add motion consistency cost

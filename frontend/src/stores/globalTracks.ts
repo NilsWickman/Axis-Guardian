@@ -94,6 +94,7 @@ export interface GlobalTrack {
   isConfirmed: boolean // True after MIN_DETECTIONS_TO_CONFIRM detections
   detectionCount: number // Total number of detections for this track
   confidence: number // Latest confidence value
+  state: 'unconfirmed' | 'confirmed' | 'occluded' // Track lifecycle state
   // Pending detections for multi-camera merge within time window
   pendingDetections: CameraDetection[]
 }
@@ -171,9 +172,10 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
 
   // Getters
   const activeTracks = computed(() => {
-    // Only return confirmed tracks to reduce false positives
+    // Only return confirmed tracks that are actively being detected (not occluded)
+    // Occluded tracks are maintained internally for re-identification but hidden from display
     return Array.from(tracks.value.values()).filter(
-      track => track.isActive && track.isConfirmed
+      track => track.isActive && track.isConfirmed && track.state !== 'occluded'
     )
   })
 
@@ -300,6 +302,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
       isConfirmed: false, // Not confirmed until MIN_DETECTIONS_TO_CONFIRM
       detectionCount: 1,
       confidence: detection.confidence,
+      state: 'unconfirmed',
       pendingDetections: [detection],
     }
 
@@ -356,6 +359,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     track.detectionCount++
     if (!track.isConfirmed && track.detectionCount >= config.value.minDetectionsToConfirm) {
       track.isConfirmed = true
+      track.state = 'confirmed'
     }
 
     // Add to pending detections for merge (limit to prevent memory growth)
@@ -590,6 +594,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     isConfirmed: boolean
     detectionCount: number
     confidence: number
+    state: 'unconfirmed' | 'confirmed' | 'occluded'
   }
 
   /**
@@ -646,6 +651,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
       existing.detectionCount = converted.detectionCount
       existing.confidence = converted.confidence
       existing.cameraAssociations = converted.cameraAssociations
+      existing.state = converted.state
     } else {
       // Insert new track
       tracks.value.set(converted.globalTrackId, converted)

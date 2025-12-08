@@ -83,7 +83,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import type { Detection } from '@/types/detection.types'
-import type { DetectionMetadata } from '@/composables/useWebRTCDetection'
+import type { DetectionMetadata } from '@/composables/useMediasoupDetection'
 
 interface Props {
   metadata: DetectionMetadata | null

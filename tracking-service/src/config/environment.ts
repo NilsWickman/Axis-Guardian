@@ -7,6 +7,13 @@ export interface EnvironmentConfig {
   host: string
   cameraEmulatorUrls: string[]
   logLevel: 'debug' | 'info' | 'warn' | 'error'
+  // ACAP client configuration
+  acapEnabled: boolean
+  acapBrokerHost: string
+  acapBrokerPort: number
+  acapTopicPrefix: string
+  acapUsername?: string
+  acapPassword?: string
 }
 
 export function loadEnvironment(): EnvironmentConfig {
@@ -17,5 +24,12 @@ export function loadEnvironment(): EnvironmentConfig {
       .split(',')
       .map(url => url.trim()),
     logLevel: (process.env.LOG_LEVEL ?? 'info') as EnvironmentConfig['logLevel'],
+    // ACAP client configuration
+    acapEnabled: process.env.ACAP_ENABLED === 'true',
+    acapBrokerHost: process.env.ACAP_BROKER_HOST ?? 'localhost',
+    acapBrokerPort: parseInt(process.env.ACAP_BROKER_PORT ?? '1883', 10),
+    acapTopicPrefix: process.env.ACAP_TOPIC_PREFIX ?? 'analytics_scene/raw',
+    acapUsername: process.env.ACAP_USERNAME,
+    acapPassword: process.env.ACAP_PASSWORD,
   }
 }

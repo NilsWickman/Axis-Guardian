@@ -304,9 +304,30 @@ export class DetectionProcessor {
 
     // Handle object format (for injection API)
     if (detection.bbox && typeof detection.bbox === 'object') {
-      const b = detection.bbox as unknown as { x?: number; y?: number; width?: number; height?: number }
+      const b = detection.bbox as unknown as {
+        x?: number
+        y?: number
+        width?: number
+        height?: number
+        left?: number
+        top?: number
+        right?: number
+        bottom?: number
+      }
+
+      // Handle {x, y, width, height} format
       if (b.x !== undefined && b.y !== undefined && b.width !== undefined && b.height !== undefined) {
         return { x: b.x, y: b.y, width: b.width, height: b.height }
+      }
+
+      // Handle {left, top, right, bottom} format (from camera emulators)
+      if (b.left !== undefined && b.top !== undefined && b.right !== undefined && b.bottom !== undefined) {
+        return {
+          x: b.left,
+          y: b.top,
+          width: b.right - b.left,
+          height: b.bottom - b.top,
+        }
       }
     }
 

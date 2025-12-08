@@ -6,6 +6,8 @@
       <div
         class="flex-1 bg-gray-900 relative overflow-hidden"
         ref="canvasContainer"
+        @mousemove="handleMouseMove"
+        @mouseleave="handleMouseLeave"
       >
         <canvas
           ref="mapCanvas"
@@ -35,6 +37,19 @@
             pointerEvents: 'none',
           }"
         />
+
+        <!-- Mouse Position Tooltip -->
+        <div
+          v-if="mousePosition && isMouseOverMap"
+          class="absolute px-2 py-1 bg-black/80 text-white text-xs rounded pointer-events-none whitespace-nowrap font-mono"
+          :style="{
+            left: `${mouseScreenPos.x + 12}px`,
+            top: `${mouseScreenPos.y - 8}px`,
+            zIndex: 20
+          }"
+        >
+          X: {{ mousePosition.x.toFixed(2) }}m, Y: {{ mousePosition.y.toFixed(2) }}m
+        </div>
 
         <!-- Debug Mode Toggle -->
         <button
@@ -100,7 +115,7 @@
 
           <!-- Detection Metadata Panel -->
           <DetectionMetadataPanel
-            :metadata="cameraDetectionMetadata[camera.id]"
+            :metadata="cameraMetadataMap[camera.id]"
             class="mt-1.5 bg-muted/20 rounded px-1.5 py-1"
           />
         </div>
@@ -193,29 +208,62 @@ const {
   cameras,
   isInitialized,
   connectionStatuses,
-  connections,
+  cameraMetadataMap,
   attachToVideoElement,
   setLoopForCamera,
 } = useCameraConnectionManager()
-
-// Reactive detection metadata - updates when connections change
-const cameraDetectionMetadata = computed(() => {
-  const metadata: Record<string, typeof connections.value[string]['latestMetadata']> = {}
-  for (const cameraId in connections.value) {
-    metadata[cameraId] = connections.value[cameraId]?.latestMetadata ?? null
-  }
-  return metadata
-})
 
 // State
 const selectedCamera = ref<Camera | null>(null)
 const thumbnailVideoRefs = ref<Record<string, HTMLVideoElement | null>>({})
 const showDebugMode = ref(false)
 
+// Mouse position tracking
+const mousePosition = ref<{ x: number; y: number } | null>(null)
+const mouseScreenPos = ref<{ x: number; y: number }>({ x: 0, y: 0 })
+const isMouseOverMap = ref(false)
+
 // Helper functions
 const getCameraName = (cameraId: string): string => {
   const camera = cameraStore.cameras.find(c => c.id === cameraId)
   return camera ? camera.name : cameraId
+}
+
+// Mouse position handlers - convert screen coords to world coords (meters)
+const handleMouseMove = (event: MouseEvent) => {
+  const container = canvasContainer.value
+  if (!container || !currentMap.value) return
+
+  const rect = container.getBoundingClientRect()
+  const mouseX = event.clientX - rect.left
+  const mouseY = event.clientY - rect.top
+
+  // Store screen position for tooltip
+  mouseScreenPos.value = { x: mouseX, y: mouseY }
+
+  // Convert screen position to canvas position (accounting for offset and scale)
+  const canvasX = (mouseX - offsetX.value) / scale.value
+  const canvasY = (mouseY - offsetY.value) / scale.value
+
+  // Convert canvas pixels to meters
+  const worldX = canvasX / RENDER_SCALE
+  const worldY = canvasY / RENDER_SCALE
+
+  // Check if within map bounds
+  const mapWidth = extractValue(currentMap.value.width)
+  const mapHeight = extractValue(currentMap.value.height)
+
+  if (worldX >= 0 && worldX <= mapWidth && worldY >= 0 && worldY <= mapHeight) {
+    mousePosition.value = { x: worldX, y: worldY }
+    isMouseOverMap.value = true
+  } else {
+    isMouseOverMap.value = false
+  }
+}
+
+const handleMouseLeave = () => {
+  isMouseOverMap.value = false
+  mousePosition.value = null
 }
 
 // Draw map
