@@ -29,6 +29,7 @@
     "fastify": "^4.26.0",
     "kalman-filter": "^2.3.0",
     "ml-matrix": "^6.12.1",
+    "mqtt": "^5.10.0",
     "msgpack-lite": "^0.1.26",
     "munkres": "^2.0.4",
     "zod": "^3.22.0"

@@ -517,20 +517,48 @@ export class TrackManager {
   }
 
   /**
-   * Check if a position is too close to existing confirmed tracks
-   * to create a new track (likely a duplicate detection)
+   * Check if a position is too close to existing tracks to create a new track
+   * (likely a duplicate detection in camera overlap zone)
+   *
+   * Uses different exclusion radii for confirmed vs unconfirmed tracks:
+   * - Confirmed tracks: smaller radius (config.exclusionRadius)
+   * - Unconfirmed tracks: larger radius (config.unconfirmedExclusionRadius)
+   *
+   * For unconfirmed tracks, only blocks if the detection is from a DIFFERENT camera.
+   * Same-camera detections at close positions are different people (camera can't see same person twice).
+   *
+   * @param worldX - X coordinate to check
+   * @param worldY - Y coordinate to check
+   * @param cameraId - Optional camera ID of the detection (for same-camera check)
    */
-  private isInExclusionZone(worldX: number, worldY: number): boolean {
-    const exclusionRadius = this.config.exclusionRadius ?? 0.3
+  private isInExclusionZone(worldX: number, worldY: number, cameraId?: string): boolean {
+    const confirmedExclusionRadius = this.config.exclusionRadius ?? 0.5
+    const unconfirmedExclusionRadius = this.config.unconfirmedExclusionRadius ?? 0.7
 
     for (const track of this.tracks.values()) {
-      if (!track.isActive || !track.isConfirmed) continue
+      if (!track.isActive) continue
+
+      // For unconfirmed tracks, only apply exclusion for DIFFERENT cameras
+      // Same camera seeing two things close together = two different people
+      if (!track.isConfirmed && cameraId) {
+        const trackCameras = Array.from(track.cameraAssociations.keys())
+        const sameCamera = trackCameras.includes(cameraId)
+        if (sameCamera) {
+          // Same camera - don't block (they're different people)
+          continue
+        }
+      }
+
+      // Use appropriate radius based on track confirmation status
+      const effectiveRadius = track.isConfirmed
+        ? confirmedExclusionRadius
+        : unconfirmedExclusionRadius
 
       const distance = calculateDistance(
         { x: worldX, y: worldY },
         track.currentPosition
       )
-      if (distance < exclusionRadius) {
+      if (distance < effectiveRadius) {
         return true
       }
     }
@@ -890,8 +918,8 @@ export class TrackManager {
     // IMPORTANT: Cluster detections from different cameras to prevent duplicates
     // when same person is seen by multiple cameras simultaneously
     const validUnmatched = finalUnmatched.filter(det => {
-      // Skip if within exclusion zone of confirmed track
-      if (this.isInExclusionZone(det.worldX, det.worldY)) {
+      // Skip if within exclusion zone (pass cameraId to allow same-camera detections)
+      if (this.isInExclusionZone(det.worldX, det.worldY, det.cameraId)) {
         return false
       }
       // Skip if confidence is too low
@@ -906,8 +934,12 @@ export class TrackManager {
 
     // Create one track per cluster (not per detection)
     for (const cluster of clusters) {
-      // Use centroid for exclusion zone check (in case filtering missed edge cases)
-      if (this.isInExclusionZone(cluster.centroid.x, cluster.centroid.y)) {
+      // Use centroid for exclusion zone check
+      // For multi-camera clusters, don't pass cameraId (all cameras in cluster are relevant)
+      const clusterCameraId = cluster.detections.length === 1
+        ? cluster.detections[0].cameraId
+        : undefined
+      if (this.isInExclusionZone(cluster.centroid.x, cluster.centroid.y, clusterCameraId)) {
         continue
       }
 
@@ -925,10 +957,12 @@ export class TrackManager {
 
   /**
    * Detect and merge duplicate tracks that represent the same person
+   * Includes unconfirmed tracks to catch duplicates early (cross-camera overlap)
    */
   private detectAndMergeDuplicates(): void {
-    const activeTracks = this.getActiveTracks()
-    const candidates = this.trackMerger.findMergeCandidates(activeTracks)
+    const activeTracks = this.getAllActiveTracks()
+    // Include unconfirmed tracks to catch duplicates early in cross-camera overlap zones
+    const candidates = this.trackMerger.findMergeCandidates(activeTracks, true)
 
     // Process merges (one at a time to avoid conflicts)
     const mergedTrackIds = new Set<string>()

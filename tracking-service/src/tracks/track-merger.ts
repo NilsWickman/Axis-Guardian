@@ -30,12 +30,18 @@ export interface TrackMergerConfig {
   mergeConfidenceThreshold: number
   /** Max velocity difference (m/s) to allow merge */
   mergeVelocityThreshold: number
+  /** Max distance between unconfirmed tracks to consider merging (tighter) */
+  unconfirmedMergeDistanceM: number
+  /** Min confidence for unconfirmed track merges (lower threshold) */
+  unconfirmedMergeConfidenceThreshold: number
 }
 
 const DEFAULT_MERGER_CONFIG: TrackMergerConfig = {
   mergeDistanceM: 0.6,
   mergeConfidenceThreshold: 0.7,
   mergeVelocityThreshold: 2.0,
+  unconfirmedMergeDistanceM: 0.4,
+  unconfirmedMergeConfidenceThreshold: 0.5,
 }
 
 /**
@@ -62,15 +68,30 @@ export class TrackMerger {
 
   /**
    * Find track pairs that might be duplicates
+   *
+   * @param tracks - Array of tracks to check
+   * @param includeUnconfirmed - Whether to include unconfirmed tracks in merge detection
    */
-  findMergeCandidates(tracks: GlobalTrack[]): MergeCandidate[] {
+  findMergeCandidates(tracks: GlobalTrack[], includeUnconfirmed: boolean = false): MergeCandidate[] {
     const candidates: MergeCandidate[] = []
-    const confirmedTracks = tracks.filter(t => t.isActive && t.isConfirmed)
 
-    for (let i = 0; i < confirmedTracks.length; i++) {
-      for (let j = i + 1; j < confirmedTracks.length; j++) {
-        const track1 = confirmedTracks[i]
-        const track2 = confirmedTracks[j]
+    // Filter eligible tracks: active + (confirmed OR unconfirmed with at least 1 detection)
+    const eligibleTracks = tracks.filter(t =>
+      t.isActive && (t.isConfirmed || (includeUnconfirmed && t.detectionCount >= 1))
+    )
+
+    for (let i = 0; i < eligibleTracks.length; i++) {
+      for (let j = i + 1; j < eligibleTracks.length; j++) {
+        const track1 = eligibleTracks[i]
+        const track2 = eligibleTracks[j]
+
+        // Determine if this is an unconfirmed merge (at least one track unconfirmed)
+        const isUnconfirmedMerge = !track1.isConfirmed || !track2.isConfirmed
+
+        // Use tighter distance for unconfirmed tracks
+        const effectiveMergeDistance = isUnconfirmedMerge
+          ? this.config.unconfirmedMergeDistanceM
+          : this.config.mergeDistanceM
 
         const distance = calculateDistance(
           track1.currentPosition,
@@ -78,11 +99,24 @@ export class TrackMerger {
         )
 
         // Quick reject if too far apart
-        if (distance > this.config.mergeDistanceM) continue
+        if (distance > effectiveMergeDistance) continue
+
+        // For unconfirmed tracks, require different cameras (same camera = different people)
+        if (isUnconfirmedMerge) {
+          const cameras1 = Array.from(track1.cameraAssociations.keys())
+          const cameras2 = Array.from(track2.cameraAssociations.keys())
+          const hasOverlap = cameras1.some(c => cameras2.includes(c))
+          if (hasOverlap) continue  // Same camera sees both - different people
+        }
 
         const confidence = this.calculateMergeConfidence(track1, track2, distance)
 
-        if (confidence > this.config.mergeConfidenceThreshold) {
+        // Use lower threshold for unconfirmed tracks
+        const effectiveThreshold = isUnconfirmedMerge
+          ? this.config.unconfirmedMergeConfidenceThreshold
+          : this.config.mergeConfidenceThreshold
+
+        if (confidence > effectiveThreshold) {
           candidates.push({
             track1,
             track2,

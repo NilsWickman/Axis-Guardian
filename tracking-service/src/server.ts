@@ -13,6 +13,7 @@ import { registerRoutes } from './api/routes.js'
 import { WebSocketBroadcaster, registerWebSocket } from './api/websocket.js'
 import { loadEnvironment } from './config/environment.js'
 import { loadSiteMapConfig } from './config/sitemap-loader.js'
+import { AcapClient } from './acap/acap-client.js'
 import type { CameraParams } from './types.js'
 import { dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
@@ -24,6 +25,7 @@ export interface TrackingServiceComponents {
   cameraRegistry: CameraRegistry
   detectionProcessor: DetectionProcessor
   broadcaster: WebSocketBroadcaster
+  acapClient: AcapClient | null
 }
 
 export interface CreateServerOptions {
@@ -106,7 +108,7 @@ export async function startServer() {
   }
 }
 
-export async function createServerWithComponents(options: CreateServerOptions = {}): Promise<{ app: FastifyInstance; trackManager: TrackManager }> {
+export async function createServerWithComponents(options: CreateServerOptions = {}): Promise<{ app: FastifyInstance; trackManager: TrackManager; acapClient: AcapClient | null }> {
   const env = loadEnvironment()
   const port = options.port ?? env.port
   const host = options.host ?? env.host
@@ -155,17 +157,41 @@ export async function createServerWithComponents(options: CreateServerOptions = 
     trackManager.cleanupExpiredTracks()
   }, 1000)
 
-  // Register routes
-  registerRoutes(app, trackManager, detectionProcessor, cameraRegistry)
+  // Initialize ACAP client if enabled
+  let acapClient: AcapClient | null = null
+  if (env.acapEnabled) {
+    acapClient = new AcapClient(detectionProcessor, cameraRegistry, {
+      brokerHost: env.acapBrokerHost,
+      brokerPort: env.acapBrokerPort,
+      topicPrefix: env.acapTopicPrefix,
+      username: env.acapUsername,
+      password: env.acapPassword,
+    })
+
+    try {
+      await acapClient.connect()
+      console.log('[ACAP] Client connected and subscribed')
+    } catch (error) {
+      console.error('[ACAP] Failed to connect:', error)
+      // Don't fail server startup if ACAP fails
+      acapClient = null
+    }
+  }
+
+  // Register routes (pass acapClient for runtime control)
+  registerRoutes(app, trackManager, detectionProcessor, cameraRegistry, acapClient)
   registerWebSocket(app, broadcaster)
 
   // Cleanup on shutdown
-  app.addHook('onClose', () => {
+  app.addHook('onClose', async () => {
     clearInterval(cleanupInterval)
+    if (acapClient) {
+      await acapClient.disconnect()
+    }
   })
 
   // Start listening
   await app.listen({ port, host })
 
-  return { app, trackManager }
+  return { app, trackManager, acapClient }
 }

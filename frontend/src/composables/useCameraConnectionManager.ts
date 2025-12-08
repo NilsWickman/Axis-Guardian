@@ -54,6 +54,10 @@ const cameraConnections = reactive<Record<string, CameraConnection>>({})
 const isInitialized = ref(false)
 const isInitializing = ref(false)
 
+// Reactive metadata map - updated directly when detection callbacks fire
+// This provides a simpler reactive chain than accessing through cameraConnections
+const cameraMetadataMap = reactive<Record<string, DetectionMetadata | null>>({})
+
 // Available cameras - populated from JSON config
 const cameras = ref<Camera[]>([])
 
@@ -187,10 +191,16 @@ async function initializeConnections() {
         stateWatchStop: null
       }
 
+      // Initialize metadata map entry
+      cameraMetadataMap[camera.id] = null
+
       // Set up detection callback to store latest metadata
       // Normalize camera_id in metadata to match frontend camera IDs
+      // Update both cameraConnections (for backward compat) and cameraMetadataMap (for reactivity)
       connection.setDetectionCallback((metadata) => {
-        cameraConnections[camera.id].latestMetadata = normalizeMetadata(metadata)
+        const normalizedMetadata = normalizeMetadata(metadata)
+        cameraConnections[camera.id].latestMetadata = normalizedMetadata
+        cameraMetadataMap[camera.id] = normalizedMetadata
       })
 
       // Monitor connection state reactively (not polling)
@@ -594,6 +604,8 @@ export function useCameraConnectionManager() {
     isInitializing: computed(() => isInitializing.value),
     connections: computed(() => getAllConnections()),
     connectionStatuses: computed(() => getConnectionStatuses()),
+    // Reactive metadata map - use this for detection display (better reactivity)
+    cameraMetadataMap,
 
     // Methods
     initializeConnections,

@@ -11,6 +11,7 @@ import { DetectionProcessor } from '../detection/detection-processor.js'
 import { CameraRegistry } from '../detection/camera-registry.js'
 import { getSiteMapConfigJson, isDatabaseSeeded } from '../db/repositories.js'
 import { getPipelineLogger } from '../debug/pipeline-logger.js'
+import type { AcapClient } from '../acap/acap-client.js'
 
 // Stats tracking (exported for display)
 export let detectionsReceived = 0
@@ -115,7 +116,8 @@ export function registerRoutes(
   app: FastifyInstance,
   trackManager: TrackManager,
   detectionProcessor: DetectionProcessor,
-  cameraRegistry: CameraRegistry
+  cameraRegistry: CameraRegistry,
+  acapClient: AcapClient | null = null
 ): void {
   // Health check
   app.get('/api/health', async () => {
@@ -457,6 +459,96 @@ export function registerRoutes(
     return {
       sessionId: request.params.id,
       stats,
+    }
+  })
+
+  // ============================================================================
+  // ACAP Client API
+  // ============================================================================
+
+  // Get ACAP client status
+  app.get('/api/acap/status', async () => {
+    if (!acapClient) {
+      return {
+        enabled: false,
+        connected: false,
+        message: 'ACAP client not initialized (set ACAP_ENABLED=true)',
+      }
+    }
+
+    return {
+      enabled: true,
+      ...acapClient.getStatus(),
+    }
+  })
+
+  // Enable ACAP client (connect)
+  app.post('/api/acap/enable', async (_request: FastifyRequest, reply: FastifyReply) => {
+    if (!acapClient) {
+      return reply.status(400).send({
+        error: 'ACAP client not initialized',
+        message: 'Set ACAP_ENABLED=true and restart the server',
+      })
+    }
+
+    if (acapClient.isConnected()) {
+      return {
+        success: true,
+        message: 'ACAP client already connected',
+        status: acapClient.getStatus(),
+      }
+    }
+
+    try {
+      await acapClient.connect()
+      return {
+        success: true,
+        message: 'ACAP client connected',
+        status: acapClient.getStatus(),
+      }
+    } catch (error) {
+      return reply.status(500).send({
+        error: 'Failed to connect ACAP client',
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
+  })
+
+  // Disable ACAP client (disconnect)
+  app.post('/api/acap/disable', async (_request: FastifyRequest, reply: FastifyReply) => {
+    if (!acapClient) {
+      return reply.status(400).send({
+        error: 'ACAP client not initialized',
+      })
+    }
+
+    if (!acapClient.isConnected()) {
+      return {
+        success: true,
+        message: 'ACAP client already disconnected',
+      }
+    }
+
+    await acapClient.disconnect()
+    return {
+      success: true,
+      message: 'ACAP client disconnected',
+    }
+  })
+
+  // Reset ACAP client statistics
+  app.post('/api/acap/reset-stats', async (_request: FastifyRequest, reply: FastifyReply) => {
+    if (!acapClient) {
+      return reply.status(400).send({
+        error: 'ACAP client not initialized',
+      })
+    }
+
+    acapClient.resetStats()
+    return {
+      success: true,
+      message: 'ACAP statistics reset',
+      status: acapClient.getStatus(),
     }
   })
 }

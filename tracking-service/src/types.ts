@@ -107,6 +107,8 @@ export interface SiteMapCameraConfig {
   resolution?: ImageResolution
   /** Lens distortion coefficients */
   distortion?: DistortionCoeffs
+  /** ACAP device ID for mapping live camera MQTT topics to this camera */
+  acapDeviceId?: string
 }
 
 /**
@@ -318,26 +320,35 @@ export interface TrackingConfig {
   mergeDistanceM: number
   /** Min confidence score (0-1) required to merge tracks */
   mergeConfidenceThreshold: number
+  /** Exclusion radius for unconfirmed tracks (larger to prevent duplicates in overlap zone) */
+  unconfirmedExclusionRadius: number
+  /** Max distance between unconfirmed tracks to consider merging (tighter than confirmed) */
+  unconfirmedMergeDistanceM: number
+  /** Cost multiplier for cross-camera handoff (0-1, lower = more bonus) */
+  crossCameraBonus: number
 }
 
 export const DEFAULT_TRACKING_CONFIG: TrackingConfig = {
-  correlationDistanceM: 0.5,  // Increased from 0.3 to handle projection error
+  correlationDistanceM: 0.6,       // Increased from 0.5 to handle cross-camera projection variance
   mergeWindowMs: 200,
-  trackExpiryMs: 1000,
+  trackExpiryMs: 5000,             // Tracks expire after 5 seconds without detections
   maxTrailLength: 20,
-  minDetectionsToConfirm: 2,  // Reduced from 3 for faster track confirmation
+  minDetectionsToConfirm: 2,       // Reduced from 3 for faster track confirmation
   maxVelocityMs: 50,
   unconfirmedTrackExpiryMs: 2000,  // Ghost tracks expire faster
   minCreationConfidence: 0.7,      // Require higher confidence for new tracks
-  exclusionRadius: 0.5,            // Increased from 0.3 to handle projection error
+  exclusionRadius: 0.5,            // Exclusion radius for confirmed tracks
   crossingProximityThreshold: 1.5, // Detect crossing when tracks within 1.5m
-  occlusionCoastTimeMs: 1000,      // Coast for 1 second during occlusion (fast fadeout)
-  reidentificationGateMultiplier: 3.0, // 3x expanded gate for re-ID
-  missedFramesBeforeOcclusion: 2,  // Require 2 missed frames before transitioning to occluded (fast fadeout)
+  occlusionCoastTimeMs: 3000,      // Coast for 3 seconds during occlusion (allows walking behind pillars)
+  reidentificationGateMultiplier: 4.0, // 4x expanded gate for re-ID after occlusion
+  missedFramesBeforeOcclusion: 5,  // Require 5 missed frames before transitioning to occluded
   detectionsToExitOcclusion: 2,    // Require 2 detections to exit occlusion state
   clusteringDistanceM: 0.6,        // Cluster detections within 0.6m from different cameras
   mergeDistanceM: 0.6,             // Consider merging tracks within 0.6m
   mergeConfidenceThreshold: 0.7,   // Require 70% confidence to merge tracks
+  unconfirmedExclusionRadius: 0.7, // Larger exclusion for unconfirmed (prevent duplicates in overlap)
+  unconfirmedMergeDistanceM: 0.4,  // Tighter merge distance for unconfirmed tracks
+  crossCameraBonus: 0.7,           // 30% cost reduction for cross-camera handoff
 }
 
 // ============================================================================

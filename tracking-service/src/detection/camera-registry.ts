@@ -53,6 +53,8 @@ const CAMERA_ID_MAP: Record<string, string> = {
 
 export class CameraRegistry {
   private cameras: Map<string, CameraParams> = new Map()
+  /** Reverse lookup: ACAP device ID -> internal camera ID */
+  private acapDeviceIdMap: Map<string, string> = new Map()
 
   /**
    * Add or update a camera configuration
@@ -114,6 +116,21 @@ export class CameraRegistry {
   }
 
   /**
+   * Get internal camera ID by ACAP device ID
+   * Used for mapping live camera MQTT topics to internal cameras
+   */
+  getCameraByAcapDeviceId(acapDeviceId: string): string | null {
+    return this.acapDeviceIdMap.get(acapDeviceId) ?? null
+  }
+
+  /**
+   * Register an ACAP device ID mapping for a camera
+   */
+  setAcapDeviceId(cameraId: string, acapDeviceId: string): void {
+    this.acapDeviceIdMap.set(acapDeviceId, cameraId)
+  }
+
+  /**
    * Get all camera IDs
    */
   getCameraIds(): string[] {
@@ -135,8 +152,14 @@ export class CameraRegistry {
    */
   loadFromSiteMapConfig(configs: SiteMapCameraConfig[]): void {
     this.cameras.clear()
+    this.acapDeviceIdMap.clear()
     for (const config of configs) {
       this.cameras.set(config.id, siteMapConfigToCamera(config))
+      // Register ACAP device ID mapping if specified
+      if (config.acapDeviceId) {
+        this.acapDeviceIdMap.set(config.acapDeviceId, config.id)
+        console.log(`[CameraRegistry] Mapped ACAP device ${config.acapDeviceId} -> ${config.id}`)
+      }
     }
   }
 
@@ -145,6 +168,7 @@ export class CameraRegistry {
    */
   clear(): void {
     this.cameras.clear()
+    this.acapDeviceIdMap.clear()
   }
 
   /**
