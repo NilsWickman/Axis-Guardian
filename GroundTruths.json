@@ -1,0 +1,4542 @@
+{
+  "version": "2.0",
+  "createdAt": "2025-12-08T23:56:08.411Z",
+  "updatedAt": "2025-12-09T00:22:27.896Z",
+  "room": {
+    "width": 18,
+    "height": 12
+  },
+  "cameras": [
+    {
+      "cameraId": "camera1",
+      "videoFile": "hc3-preprocessed",
+      "detectionsFile": "/preprocessed/1080p/view-HC3-preprocessed.detections.json"
+    },
+    {
+      "cameraId": "camera2",
+      "videoFile": "hc4-preprocessed",
+      "detectionsFile": "/preprocessed/1080p/view-HC4-preprocessed.detections.json"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "ann_1765238186440_fh8igf7ax",
+      "groundPosition": {
+        "x": 9.288461538461538,
+        "y": 1.5865384615384617
+      },
+      "timestamp": 0.3670337003670337,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-08T23:56:26.440Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 11,
+          "timestamp": 0.3670337003670337,
+          "trackId": 298,
+          "bbox": {
+            "left": 0.34697162410546273,
+            "top": 0.38309101812268065,
+            "right": 0.3792919032181695,
+            "bottom": 0.5627678000810976
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 11,
+          "timestamp": 0.3670337003670337,
+          "trackId": 3,
+          "bbox": {
+            "left": 0.23166019714770802,
+            "top": 0.534058637570909,
+            "right": 0.26675725511244386,
+            "bottom": 0.7214670096586916
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238204043_upvhbhus4",
+      "groundPosition": {
+        "x": 15.432692307692307,
+        "y": 2.596153846153846
+      },
+      "timestamp": 0.3670337003670337,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-08T23:56:44.043Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 11,
+          "timestamp": 0.3670337003670337,
+          "trackId": 300,
+          "bbox": {
+            "left": 0.6200558011027142,
+            "top": 0.365879112272898,
+            "right": 0.6620057539366059,
+            "bottom": 0.5072163401766046
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 11,
+          "timestamp": 0.3670337003670337,
+          "trackId": 8,
+          "bbox": {
+            "left": 0.661578278764231,
+            "top": 0.5481042190306029,
+            "right": 0.7153850034983019,
+            "bottom": 0.753622771750527
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238209691_r1uzt73up",
+      "groundPosition": {
+        "x": 15.807692307692307,
+        "y": 2.25
+      },
+      "timestamp": 0.3670337003670337,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-08T23:56:49.691Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 11,
+          "timestamp": 0.3670337003670337,
+          "trackId": 2,
+          "bbox": {
+            "left": 0.7067645547555806,
+            "top": 0.4381232132458925,
+            "right": 0.7746505292617822,
+            "bottom": 0.7549223748697419
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 11,
+          "timestamp": 0.3670337003670337,
+          "trackId": 301,
+          "bbox": {
+            "left": 0.6144571258970029,
+            "top": 0.35019050486166153,
+            "right": 0.6356950824780009,
+            "bottom": 0.4867190795161315
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238219048_3raukob2w",
+      "groundPosition": {
+        "x": 16.817307692307693,
+        "y": 4.009615384615384
+      },
+      "timestamp": 0.3670337003670337,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-08T23:56:59.048Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 11,
+          "timestamp": 0.3670337003670337,
+          "trackId": 5,
+          "bbox": {
+            "left": 0.7656927209436997,
+            "top": 0.5015442994981889,
+            "right": 0.7981535079164284,
+            "bottom": 0.7229667673163261
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238236581_4p8dkh3fo",
+      "groundPosition": {
+        "x": 15.115384615384615,
+        "y": 2.942307692307692
+      },
+      "timestamp": 4.404404404404405,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-08T23:57:16.581Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 132,
+          "timestamp": 4.404404404404405,
+          "trackId": 24,
+          "bbox": {
+            "left": 0.6312537898930587,
+            "top": 0.49069735472677584,
+            "right": 0.6901903432378353,
+            "bottom": 0.800447152303168
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 132,
+          "timestamp": 4.404404404404405,
+          "trackId": 321,
+          "bbox": {
+            "left": 0.6552718873761713,
+            "top": 0.35226518962373643,
+            "right": 0.6858152330224432,
+            "bottom": 0.5122089674883232
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238254987_kpzgrc514",
+      "groundPosition": {
+        "x": 14.163461538461538,
+        "y": 1.528846153846154
+      },
+      "timestamp": 4.404404404404405,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-08T23:57:34.987Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 132,
+          "timestamp": 4.404404404404405,
+          "trackId": 4,
+          "bbox": {
+            "left": 0.5363775797097348,
+            "top": 0.509610889850005,
+            "right": 0.5734209943141125,
+            "bottom": 0.73741847130295
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238260660_pstbofow4",
+      "groundPosition": {
+        "x": 13.413461538461538,
+        "y": 2.192307692307692
+      },
+      "timestamp": 4.404404404404405,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-08T23:57:40.660Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 132,
+          "timestamp": 4.404404404404405,
+          "trackId": 44,
+          "bbox": {
+            "left": 0.46424029293963526,
+            "top": 0.5275638148911381,
+            "right": 0.5046357125995411,
+            "bottom": 0.7483035829213768
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238281738_cxan8hkvs",
+      "groundPosition": {
+        "x": 13.673076923076922,
+        "y": 2.7115384615384612
+      },
+      "timestamp": 7.040373707040374,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-08T23:58:01.738Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 211,
+          "timestamp": 7.040373707040374,
+          "trackId": 24,
+          "bbox": {
+            "left": 0.4711986096494388,
+            "top": 0.49856798683867765,
+            "right": 0.5290546646371737,
+            "bottom": 0.7819850454076038
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 211,
+          "timestamp": 7.040373707040374,
+          "trackId": 321,
+          "bbox": {
+            "left": 0.5963725153975655,
+            "top": 0.35523182049324054,
+            "right": 0.6325667466425565,
+            "bottom": 0.5252610302606681
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238291494_q21zukqzs",
+      "groundPosition": {
+        "x": 14.451923076923077,
+        "y": 0.6346153846153846
+      },
+      "timestamp": 7.040373707040374,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-08T23:58:11.494Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 211,
+          "timestamp": 7.040373707040374,
+          "trackId": 67,
+          "bbox": {
+            "left": 0.6080439286418264,
+            "top": 0.5114204255944922,
+            "right": 0.6451209511900865,
+            "bottom": 0.6343491051766476
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 211,
+          "timestamp": 7.040373707040374,
+          "trackId": 335,
+          "bbox": {
+            "left": 0.5188036901891785,
+            "top": 0.3672319241211247,
+            "right": 0.5436191042330513,
+            "bottom": 0.5047050991617837
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238332612_8vxkmlf2o",
+      "groundPosition": {
+        "x": 13.125,
+        "y": 0.6346153846153846
+      },
+      "timestamp": 11.311311311311313,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-08T23:58:52.612Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 339,
+          "timestamp": 11.311311311311313,
+          "trackId": 345,
+          "bbox": {
+            "left": 0.4679424996043772,
+            "top": 0.3569716546381457,
+            "right": 0.5046138909409429,
+            "bottom": 0.5267420281641969
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 339,
+          "timestamp": 11.311311311311313,
+          "trackId": 24,
+          "bbox": {
+            "left": 0.4374190195395549,
+            "top": 0.5008088167871004,
+            "right": 0.4812112029891375,
+            "bottom": 0.7275632560448021
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238341224_q3yqf8ery",
+      "groundPosition": {
+        "x": 7.413461538461538,
+        "y": 8.740384615384615
+      },
+      "timestamp": 11.311311311311313,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-08T23:59:01.224Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 339,
+          "timestamp": 11.311311311311313,
+          "trackId": 350,
+          "bbox": {
+            "left": 0.8976108034544233,
+            "top": 0.3414515613243957,
+            "right": 0.964042320332347,
+            "bottom": 0.6470219274253033
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238346028_s6dum6zbz",
+      "groundPosition": {
+        "x": 6.634615384615384,
+        "y": 9.923076923076923
+      },
+      "timestamp": 11.311311311311313,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-08T23:59:06.028Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 339,
+          "timestamp": 11.311311311311313,
+          "trackId": 354,
+          "bbox": {
+            "left": 0.920076377803549,
+            "top": 0.37523694843661315,
+            "right": 0.9994388678241025,
+            "bottom": 0.834576404405016
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238352633_k296c8lxe",
+      "groundPosition": {
+        "x": 17.94230769230769,
+        "y": 1.0384615384615383
+      },
+      "timestamp": 11.311311311311313,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-08T23:59:12.633Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 339,
+          "timestamp": 11.311311311311313,
+          "trackId": 347,
+          "bbox": {
+            "left": 0.6552171027399539,
+            "top": 0.36735353611492855,
+            "right": 0.6829482470455712,
+            "bottom": 0.48612853045515303
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238363355_gz5el13xa",
+      "groundPosition": {
+        "x": 14.826923076923077,
+        "y": 1.0096153846153846
+      },
+      "timestamp": 11.311311311311313,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-08T23:59:23.355Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 339,
+          "timestamp": 11.311311311311313,
+          "trackId": 67,
+          "bbox": {
+            "left": 0.6501141135791548,
+            "top": 0.5133191998216735,
+            "right": 0.6871905151455099,
+            "bottom": 0.6352919112894376
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 339,
+          "timestamp": 11.311311311311313,
+          "trackId": 351,
+          "bbox": {
+            "left": 0.53515625,
+            "top": 0.36698236334278483,
+            "right": 0.54765625,
+            "bottom": 0.5076491792792781
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238373442_kp3glv22h",
+      "groundPosition": {
+        "x": 7.644230769230769,
+        "y": 8.596153846153847
+      },
+      "timestamp": 11.811811811811813,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-08T23:59:33.442Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 354,
+          "timestamp": 11.811811811811813,
+          "trackId": 354,
+          "bbox": {
+            "left": 0.8951335148955405,
+            "top": 0.35814283530020913,
+            "right": 0.9804838222298301,
+            "bottom": 0.8116581784575471
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238388633_g81r8n556",
+      "groundPosition": {
+        "x": 17.94230769230769,
+        "y": 1.0673076923076923
+      },
+      "timestamp": 11.811811811811813,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-08T23:59:48.633Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 354,
+          "timestamp": 11.811811811811813,
+          "trackId": 82,
+          "bbox": {
+            "left": 0.8547117335642025,
+            "top": 0.5150652755163597,
+            "right": 0.9031250000000001,
+            "bottom": 0.7479743758251809
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238393464_81agmtslp",
+      "groundPosition": {
+        "x": 15.346153846153845,
+        "y": 1.3557692307692306
+      },
+      "timestamp": 11.811811811811813,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-08T23:59:53.464Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 354,
+          "timestamp": 11.811811811811813,
+          "trackId": 67,
+          "bbox": {
+            "left": 0.6510343185841212,
+            "top": 0.5135236638306669,
+            "right": 0.6928673644844004,
+            "bottom": 0.6350874472804444
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238398780_jlqvcz3sz",
+      "groundPosition": {
+        "x": 16.182692307692307,
+        "y": 0.34615384615384615
+      },
+      "timestamp": 11.811811811811813,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-08T23:59:58.780Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 354,
+          "timestamp": 11.811811811811813,
+          "trackId": 44,
+          "bbox": {
+            "left": 0.7219298507670955,
+            "top": 0.5176933414918634,
+            "right": 0.7594901938080517,
+            "bottom": 0.7071728353136488
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238402724_cyf4d5x7s",
+      "groundPosition": {
+        "x": 16.903846153846153,
+        "y": 0.11538461538461538
+      },
+      "timestamp": 11.811811811811813,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:00:02.724Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 354,
+          "timestamp": 11.811811811811813,
+          "trackId": 64,
+          "bbox": {
+            "left": 0.7657737984657325,
+            "top": 0.5034951158328058,
+            "right": 0.8034260961268084,
+            "bottom": 0.6925799004554315
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238415895_yqcf3a1mp",
+      "groundPosition": {
+        "x": 13.153846153846153,
+        "y": 0.6634615384615384
+      },
+      "timestamp": 11.811811811811813,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:00:15.895Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 354,
+          "timestamp": 11.811811811811813,
+          "trackId": 24,
+          "bbox": {
+            "left": 0.44624357253247493,
+            "top": 0.5019630806310085,
+            "right": 0.4869729618313551,
+            "bottom": 0.7336495479264481
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 354,
+          "timestamp": 11.811811811811813,
+          "trackId": 345,
+          "bbox": {
+            "left": 0.4798503572914931,
+            "top": 0.3576614824051959,
+            "right": 0.522307122878294,
+            "bottom": 0.5249595995582305
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238428784_n3l9rrqas",
+      "groundPosition": {
+        "x": 13.211538461538462,
+        "y": 0.8365384615384615
+      },
+      "timestamp": 12.379045712379046,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:00:28.784Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 371,
+          "timestamp": 12.379045712379046,
+          "trackId": 345,
+          "bbox": {
+            "left": 0.49826347148130185,
+            "top": 0.35584775111762973,
+            "right": 0.531557281106508,
+            "bottom": 0.5247130310993313
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 371,
+          "timestamp": 12.379045712379046,
+          "trackId": 24,
+          "bbox": {
+            "left": 0.45923970409190085,
+            "top": 0.499524570629445,
+            "right": 0.5123896678409784,
+            "bottom": 0.734877417198551
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238433905_zcjsgdfua",
+      "groundPosition": {
+        "x": 15.086538461538462,
+        "y": 1.3557692307692306
+      },
+      "timestamp": 12.379045712379046,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:00:33.905Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 371,
+          "timestamp": 12.379045712379046,
+          "trackId": 67,
+          "bbox": {
+            "left": 0.6537803715198819,
+            "top": 0.5146436285602718,
+            "right": 0.6990468489493205,
+            "bottom": 0.634523663680487
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238441347_3man4148f",
+      "groundPosition": {
+        "x": 17.365384615384613,
+        "y": 0.951923076923077
+      },
+      "timestamp": 12.379045712379046,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:00:41.347Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 371,
+          "timestamp": 12.379045712379046,
+          "trackId": 82,
+          "bbox": {
+            "left": 0.8325011644737105,
+            "top": 0.5079645778487617,
+            "right": 0.8818284004913259,
+            "bottom": 0.7477164805853477
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 371,
+          "timestamp": 12.379045712379046,
+          "trackId": 347,
+          "bbox": {
+            "left": 0.6208121002591547,
+            "top": 0.36634544281287607,
+            "right": 0.6453929180050155,
+            "bottom": 0.48868379140832274
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238483233_xjj2afpts",
+      "groundPosition": {
+        "x": 14.019230769230768,
+        "y": 1.096153846153846
+      },
+      "timestamp": 13.880547213880547,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:01:23.233Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 416,
+          "timestamp": 13.880547213880547,
+          "trackId": 345,
+          "bbox": {
+            "left": 0.5024052882190936,
+            "top": 0.3571679101893358,
+            "right": 0.5367263488952112,
+            "bottom": 0.5143820134731796
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 416,
+          "timestamp": 13.880547213880547,
+          "trackId": 24,
+          "bbox": {
+            "left": 0.5386456670047827,
+            "top": 0.497101289899424,
+            "right": 0.5808478755230752,
+            "bottom": 0.7282562484422006
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238504031_myfcocxgq",
+      "groundPosition": {
+        "x": 15.173076923076922,
+        "y": 1.096153846153846
+      },
+      "timestamp": 13.880547213880547,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:01:44.031Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 416,
+          "timestamp": 13.880547213880547,
+          "trackId": 359,
+          "bbox": {
+            "left": 0.6342590758860138,
+            "top": 0.35269449741712583,
+            "right": 0.6564653152501695,
+            "bottom": 0.48308135388131196
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 416,
+          "timestamp": 13.880547213880547,
+          "trackId": 67,
+          "bbox": {
+            "left": 0.6509045624449487,
+            "top": 0.5157971801178501,
+            "right": 0.6882502416182873,
+            "bottom": 0.6340563980325427
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238514349_3no9xv38o",
+      "groundPosition": {
+        "x": 8.596153846153847,
+        "y": 7.269230769230769
+      },
+      "timestamp": 14.047380714047382,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:01:54.349Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 421,
+          "timestamp": 14.047380714047382,
+          "trackId": 372,
+          "bbox": {
+            "left": 0.705037783340284,
+            "top": 0.3704289790406528,
+            "right": 0.7407794390096328,
+            "bottom": 0.6478537943679867
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238519861_bse24kv2t",
+      "groundPosition": {
+        "x": 8.278846153846153,
+        "y": 8.365384615384615
+      },
+      "timestamp": 14.047380714047382,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:01:59.861Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 421,
+          "timestamp": 14.047380714047382,
+          "trackId": 366,
+          "bbox": {
+            "left": 0.896040649682376,
+            "top": 0.3039884505218897,
+            "right": 0.9852242693264609,
+            "bottom": 0.777051547355486
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238534792_dq6hzm0zd",
+      "groundPosition": {
+        "x": 9.057692307692307,
+        "y": 6.1730769230769225
+      },
+      "timestamp": 14.547881214547882,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:02:14.792Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 436,
+          "timestamp": 14.547881214547882,
+          "trackId": 372,
+          "bbox": {
+            "left": 0.6744531679798083,
+            "top": 0.353211179374705,
+            "right": 0.7411848660214935,
+            "bottom": 0.6494665274754243
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238538146_tqtumynf6",
+      "groundPosition": {
+        "x": 8.509615384615385,
+        "y": 8.192307692307692
+      },
+      "timestamp": 14.547881214547882,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:02:18.146Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 436,
+          "timestamp": 14.547881214547882,
+          "trackId": 366,
+          "bbox": {
+            "left": 0.8970148042250776,
+            "top": 0.341814888758394,
+            "right": 0.9339600152194287,
+            "bottom": 0.74082927173958
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238545926_lcqpx6p3x",
+      "groundPosition": {
+        "x": 14.451923076923077,
+        "y": 1.2403846153846154
+      },
+      "timestamp": 14.547881214547882,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:02:25.926Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 436,
+          "timestamp": 14.547881214547882,
+          "trackId": 345,
+          "bbox": {
+            "left": 0.49589239186501766,
+            "top": 0.36744197592219685,
+            "right": 0.5330392636353439,
+            "bottom": 0.5129298889663003
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 436,
+          "timestamp": 14.547881214547882,
+          "trackId": 24,
+          "bbox": {
+            "left": 0.5473345194171096,
+            "top": 0.5113808826620386,
+            "right": 0.5990574484871141,
+            "bottom": 0.7223447011859727
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238549779_t9qmzwxa0",
+      "groundPosition": {
+        "x": 15.173076923076922,
+        "y": 1.3269230769230769
+      },
+      "timestamp": 14.547881214547882,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:02:29.779Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 436,
+          "timestamp": 14.547881214547882,
+          "trackId": 67,
+          "bbox": {
+            "left": 0.6579113865200785,
+            "top": 0.5164836893852729,
+            "right": 0.6977637991633482,
+            "bottom": 0.6341960976605026
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238562357_n8kd0bgit",
+      "groundPosition": {
+        "x": 17.307692307692307,
+        "y": 0.4903846153846154
+      },
+      "timestamp": 14.547881214547882,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:02:42.357Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 436,
+          "timestamp": 14.547881214547882,
+          "trackId": 88,
+          "bbox": {
+            "left": 0.8431919533761261,
+            "top": 0.4854100907859398,
+            "right": 0.8922042789952044,
+            "bottom": 0.7413436925211631
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 436,
+          "timestamp": 14.547881214547882,
+          "trackId": 359,
+          "bbox": {
+            "left": 0.613498239022232,
+            "top": 0.3545600188979415,
+            "right": 0.6383904377197154,
+            "bottom": 0.48489487734959946
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238581724_acpm1t2al",
+      "groundPosition": {
+        "x": 9.778846153846153,
+        "y": 5.855769230769231
+      },
+      "timestamp": 15.031698365031698,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:03:01.724Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 450,
+          "timestamp": 15.015015015015015,
+          "trackId": 93,
+          "bbox": {
+            "left": 0.00009183579482313879,
+            "top": 0.523693890918071,
+            "right": 0.09529374714646278,
+            "bottom": 0.890194997970818
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 451,
+          "timestamp": 15.048381715048382,
+          "trackId": 93,
+          "bbox": {
+            "left": 0.00009326022591941502,
+            "top": 0.5227496865705701,
+            "right": 0.09548464811110677,
+            "bottom": 0.8874434192306809
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238591789_ndimj0gok",
+      "groundPosition": {
+        "x": 14.509615384615383,
+        "y": 1.2403846153846154
+      },
+      "timestamp": 15.048381715048382,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:03:11.789Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 451,
+          "timestamp": 15.048381715048382,
+          "trackId": 345,
+          "bbox": {
+            "left": 0.49590100342332444,
+            "top": 0.371916166387403,
+            "right": 0.5313898616904777,
+            "bottom": 0.5131529866125611
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 451,
+          "timestamp": 15.048381715048382,
+          "trackId": 24,
+          "bbox": {
+            "left": 0.5481022734915721,
+            "top": 0.5182557036694405,
+            "right": 0.6020928369891717,
+            "bottom": 0.7223560255209152
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238595948_da95m7i5m",
+      "groundPosition": {
+        "x": 17.076923076923077,
+        "y": 0.375
+      },
+      "timestamp": 15.048381715048382,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:03:15.948Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 451,
+          "timestamp": 15.048381715048382,
+          "trackId": 88,
+          "bbox": {
+            "left": 0.8090227063354635,
+            "top": 0.4865734430689906,
+            "right": 0.8586606887045166,
+            "bottom": 0.7385212901050723
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238607691_qmlenq2f5",
+      "groundPosition": {
+        "x": 9.173076923076923,
+        "y": 6
+      },
+      "timestamp": 15.38204871538205,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:03:27.691Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 461,
+          "timestamp": 15.38204871538205,
+          "trackId": 372,
+          "bbox": {
+            "left": 0.6587208549361925,
+            "top": 0.3650762476931151,
+            "right": 0.7323911689549045,
+            "bottom": 0.6266802048323711
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238616808_a10pfvou2",
+      "groundPosition": {
+        "x": 11.278846153846153,
+        "y": 4.73076923076923
+      },
+      "timestamp": 15.915915915915917,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:03:36.808Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 477,
+          "timestamp": 15.915915915915917,
+          "trackId": 93,
+          "bbox": {
+            "left": 0.12164540690329503,
+            "top": 0.5187452714047739,
+            "right": 0.20099775947791068,
+            "bottom": 0.8540895523170521
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238621624_espt02z6m",
+      "groundPosition": {
+        "x": 11.278846153846153,
+        "y": 4.701923076923077
+      },
+      "timestamp": 15.915915915915917,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:03:41.624Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 477,
+          "timestamp": 15.915915915915917,
+          "trackId": 383,
+          "bbox": {
+            "left": 0.6333396139790096,
+            "top": 0.35957984914993885,
+            "right": 0.6754658712638459,
+            "bottom": 0.5718459851137262
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238641310_7o0l2w28q",
+      "groundPosition": {
+        "x": 9.08653846153846,
+        "y": 5.509615384615384
+      },
+      "timestamp": 16.28294961628295,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:04:01.310Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 488,
+          "timestamp": 16.28294961628295,
+          "trackId": 372,
+          "bbox": {
+            "left": 0.6579917080283902,
+            "top": 0.3620107923339274,
+            "right": 0.7259949248057856,
+            "bottom": 0.600901747593747
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 488,
+          "timestamp": 16.28294961628295,
+          "trackId": 97,
+          "bbox": {
+            "left": 0.00008243206498585768,
+            "top": 0.5480720066694941,
+            "right": 0.045312644894608095,
+            "bottom": 0.8829114094548497
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238646858_riyqudjpi",
+      "groundPosition": {
+        "x": 16.875,
+        "y": 0.3173076923076923
+      },
+      "timestamp": 16.38304971638305,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:04:06.858Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 491,
+          "timestamp": 16.38304971638305,
+          "trackId": 88,
+          "bbox": {
+            "left": 0.7654473029423081,
+            "top": 0.4879567773840885,
+            "right": 0.8115725752994329,
+            "bottom": 0.7198901637291814
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238650556_lqpge4jib",
+      "groundPosition": {
+        "x": 15.317307692307693,
+        "y": 1.4423076923076923
+      },
+      "timestamp": 16.38304971638305,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:04:10.556Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 491,
+          "timestamp": 16.38304971638305,
+          "trackId": 67,
+          "bbox": {
+            "left": 0.6775783092856412,
+            "top": 0.514875158338969,
+            "right": 0.7364339046619618,
+            "bottom": 0.7398738030099915
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238657312_fg0qzqnml",
+      "groundPosition": {
+        "x": 14.509615384615383,
+        "y": 1.2115384615384615
+      },
+      "timestamp": 16.38304971638305,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:04:17.312Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 491,
+          "timestamp": 16.38304971638305,
+          "trackId": 24,
+          "bbox": {
+            "left": 0.553894435612206,
+            "top": 0.5108859457481912,
+            "right": 0.5996647053794676,
+            "bottom": 0.7243230773291616
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 491,
+          "timestamp": 16.38304971638305,
+          "trackId": 345,
+          "bbox": {
+            "left": 0.5040660899635353,
+            "top": 0.36491912171841073,
+            "right": 0.5442657921486461,
+            "bottom": 0.5129258958037914
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238670530_ywyhqr3sz",
+      "groundPosition": {
+        "x": 12.028846153846153,
+        "y": 4.0673076923076925
+      },
+      "timestamp": 16.649983316649983,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:04:30.530Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 499,
+          "timestamp": 16.649983316649983,
+          "trackId": 93,
+          "bbox": {
+            "left": 0.19616947658743214,
+            "top": 0.5177147834846728,
+            "right": 0.26676162891877464,
+            "bottom": 0.8302295422998412
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 499,
+          "timestamp": 16.649983316649983,
+          "trackId": 383,
+          "bbox": {
+            "left": 0.609027695758068,
+            "top": 0.3573428579058797,
+            "right": 0.6534659037682178,
+            "bottom": 0.5643678402216966
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238682554_xafyhr81w",
+      "groundPosition": {
+        "x": 11.423076923076923,
+        "y": 4.73076923076923
+      },
+      "timestamp": 16.816816816816818,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:04:42.554Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 504,
+          "timestamp": 16.816816816816818,
+          "trackId": 97,
+          "bbox": {
+            "left": 0.025326433690600895,
+            "top": 0.5320004888592333,
+            "right": 0.11188902334121428,
+            "bottom": 0.8754710982920522
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 504,
+          "timestamp": 16.816816816816818,
+          "trackId": 372,
+          "bbox": {
+            "left": 0.6510117690839881,
+            "top": 0.36270771352760506,
+            "right": 0.7144568096261197,
+            "bottom": 0.5880028494077166
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238690251_0ydyvoq6a",
+      "groundPosition": {
+        "x": 9.144230769230768,
+        "y": 6.259615384615384
+      },
+      "timestamp": 17.050383717050384,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:04:50.251Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 511,
+          "timestamp": 17.050383717050384,
+          "trackId": 386,
+          "bbox": {
+            "left": 0.7092012529251027,
+            "top": 0.3206016889991838,
+            "right": 0.740489333629794,
+            "bottom": 0.6344744929255677
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238699563_gdj4uwie3",
+      "groundPosition": {
+        "x": 15.605769230769232,
+        "y": 1.5
+      },
+      "timestamp": 17.050383717050384,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:04:59.563Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 511,
+          "timestamp": 17.050383717050384,
+          "trackId": 67,
+          "bbox": {
+            "left": 0.6853576477492825,
+            "top": 0.5111057693046189,
+            "right": 0.7410302579023479,
+            "bottom": 0.7427812018104389
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238710407_pe95cgh0w",
+      "groundPosition": {
+        "x": 11.913461538461538,
+        "y": 4.528846153846153
+      },
+      "timestamp": 17.51751751751752,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:05:10.407Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 525,
+          "timestamp": 17.51751751751752,
+          "trackId": 372,
+          "bbox": {
+            "left": 0.6473487974264985,
+            "top": 0.3621735161527224,
+            "right": 0.6968233410949703,
+            "bottom": 0.5745738134918845
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 525,
+          "timestamp": 17.51751751751752,
+          "trackId": 97,
+          "bbox": {
+            "left": 0.11283109570463584,
+            "top": 0.5283004536318627,
+            "right": 0.19141247031179065,
+            "bottom": 0.8610972422991853
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238713489_az2ezq9u5",
+      "groundPosition": {
+        "x": 12.317307692307693,
+        "y": 3.5769230769230766
+      },
+      "timestamp": 17.51751751751752,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:05:13.489Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 525,
+          "timestamp": 17.51751751751752,
+          "trackId": 93,
+          "bbox": {
+            "left": 0.2789468128996233,
+            "top": 0.5157375286697841,
+            "right": 0.3378386680379937,
+            "bottom": 0.8064219887507911
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238717493_v2c3c03g6",
+      "groundPosition": {
+        "x": 14.336538461538462,
+        "y": 1.7884615384615383
+      },
+      "timestamp": 17.51751751751752,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:05:17.493Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 525,
+          "timestamp": 17.51751751751752,
+          "trackId": 24,
+          "bbox": {
+            "left": 0.5365972931968875,
+            "top": 0.501505451265685,
+            "right": 0.5861517173637023,
+            "bottom": 0.7413999679247276
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238730043_w5ngnxlup",
+      "groundPosition": {
+        "x": 12.346153846153845,
+        "y": 3.5769230769230766
+      },
+      "timestamp": 17.550884217550884,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:05:30.043Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 526,
+          "timestamp": 17.550884217550884,
+          "trackId": 383,
+          "bbox": {
+            "left": 0.5853951176175876,
+            "top": 0.35950932451982104,
+            "right": 0.6364531904362213,
+            "bottom": 0.5548708582977279
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238742201_0cze825u9",
+      "groundPosition": {
+        "x": 16.788461538461537,
+        "y": 0.375
+      },
+      "timestamp": 18.184851518184853,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:05:42.201Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 545,
+          "timestamp": 18.184851518184853,
+          "trackId": 88,
+          "bbox": {
+            "left": 0.7719348284174151,
+            "top": 0.4906162953798136,
+            "right": 0.8034174854805399,
+            "bottom": 0.7127962097962148
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238757072_9u4iyov7u",
+      "groundPosition": {
+        "x": 12.144230769230768,
+        "y": 3.9807692307692304
+      },
+      "timestamp": 18.284951618284953,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:05:57.072Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 548,
+          "timestamp": 18.284951618284953,
+          "trackId": 372,
+          "bbox": {
+            "left": 0.6363064400913289,
+            "top": 0.3648733693127778,
+            "right": 0.6778039548222081,
+            "bottom": 0.5660175714228224
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 548,
+          "timestamp": 18.284951618284953,
+          "trackId": 97,
+          "bbox": {
+            "left": 0.19058256097212345,
+            "top": 0.5258171918682214,
+            "right": 0.27762785451853156,
+            "bottom": 0.840307779226337
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238764130_187loqhzf",
+      "groundPosition": {
+        "x": 12.375,
+        "y": 3.519230769230769
+      },
+      "timestamp": 18.284951618284953,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:06:04.130Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 548,
+          "timestamp": 18.284951618284953,
+          "trackId": 93,
+          "bbox": {
+            "left": 0.3081651035519156,
+            "top": 0.5138700738837205,
+            "right": 0.3575750830817674,
+            "bottom": 0.7990052019459444
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 548,
+          "timestamp": 18.284951618284953,
+          "trackId": 383,
+          "bbox": {
+            "left": 0.5773244306145852,
+            "top": 0.35851252106617315,
+            "right": 0.6226600901336052,
+            "bottom": 0.5493508166084742
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238769062_y8uhu4bx2",
+      "groundPosition": {
+        "x": 9.663461538461538,
+        "y": 6.403846153846153
+      },
+      "timestamp": 18.284951618284953,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:06:09.062Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 548,
+          "timestamp": 18.284951618284953,
+          "trackId": 386,
+          "bbox": {
+            "left": 0.6697115981774797,
+            "top": 0.329926560415904,
+            "right": 0.7294062762385685,
+            "bottom": 0.6107510292243097
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238784720_183l1v88g",
+      "groundPosition": {
+        "x": 10.009615384615385,
+        "y": 5.971153846153847
+      },
+      "timestamp": 18.952285618952285,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:06:24.720Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 568,
+          "timestamp": 18.952285618952285,
+          "trackId": 101,
+          "bbox": {
+            "left": 0.000035400520771747564,
+            "top": 0.4896497952189195,
+            "right": 0.07287930619880495,
+            "bottom": 0.8661716277702861
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 568,
+          "timestamp": 18.952285618952285,
+          "trackId": 386,
+          "bbox": {
+            "left": 0.6374839842340906,
+            "top": 0.333506683820769,
+            "right": 0.6987727317323811,
+            "bottom": 0.5976603529273679
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238796656_w19r6s8y8",
+      "groundPosition": {
+        "x": 12.375,
+        "y": 3.4615384615384612
+      },
+      "timestamp": 18.952285618952285,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:06:36.656Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 568,
+          "timestamp": 18.952285618952285,
+          "trackId": 383,
+          "bbox": {
+            "left": 0.5767692863411205,
+            "top": 0.3588828712913145,
+            "right": 0.626710268801782,
+            "bottom": 0.5488404421468288
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 568,
+          "timestamp": 18.952285618952285,
+          "trackId": 93,
+          "bbox": {
+            "left": 0.31359153898178377,
+            "top": 0.5130193903006398,
+            "right": 0.3610301949669435,
+            "bottom": 0.7816449531534259
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238811859_5uqc6n9oi",
+      "groundPosition": {
+        "x": 10.817307692307693,
+        "y": 5.278846153846153
+      },
+      "timestamp": 19.486152819486154,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:06:51.859Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 584,
+          "timestamp": 19.486152819486154,
+          "trackId": 386,
+          "bbox": {
+            "left": 0.6220759380503369,
+            "top": 0.33659051382098765,
+            "right": 0.6735295794751134,
+            "bottom": 0.590657775376995
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 584,
+          "timestamp": 19.486152819486154,
+          "trackId": 101,
+          "bbox": {
+            "left": 0.03270004952783716,
+            "top": 0.4903072489124912,
+            "right": 0.14324341504795474,
+            "bottom": 0.8568101181159261
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238815449_roxwvb9un",
+      "groundPosition": {
+        "x": 14.394230769230768,
+        "y": 1.846153846153846
+      },
+      "timestamp": 19.486152819486154,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:06:55.449Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 584,
+          "timestamp": 19.486152819486154,
+          "trackId": 24,
+          "bbox": {
+            "left": 0.538740028414047,
+            "top": 0.5107111343812081,
+            "right": 0.5918177708628708,
+            "bottom": 0.7450346894622819
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238818635_f8ix3go72",
+      "groundPosition": {
+        "x": 15.548076923076922,
+        "y": 1.7596153846153846
+      },
+      "timestamp": 19.486152819486154,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:06:58.635Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 584,
+          "timestamp": 19.486152819486154,
+          "trackId": 67,
+          "bbox": {
+            "left": 0.6913037670251174,
+            "top": 0.5191714616363448,
+            "right": 0.7430185646861934,
+            "bottom": 0.7514038498897204
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238823948_2gqeuklmf",
+      "groundPosition": {
+        "x": 17.682692307692307,
+        "y": 0.7788461538461539
+      },
+      "timestamp": 19.486152819486154,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:07:03.948Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 584,
+          "timestamp": 19.486152819486154,
+          "trackId": 88,
+          "bbox": {
+            "left": 0.8017210787325226,
+            "top": 0.49121721654008754,
+            "right": 0.8581294787443315,
+            "bottom": 0.7399785362205584
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238862940_hhwac7xy0",
+      "groundPosition": {
+        "x": 12.778846153846153,
+        "y": 3.519230769230769
+      },
+      "timestamp": 30.897564230897565,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:07:42.940Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 926,
+          "timestamp": 30.897564230897565,
+          "trackId": 396,
+          "bbox": {
+            "left": 0.525844813290672,
+            "top": 0.3944853415168234,
+            "right": 0.5475926867093281,
+            "bottom": 0.5076520038976309
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 926,
+          "timestamp": 30.897564230897565,
+          "trackId": 101,
+          "bbox": {
+            "left": 0.36990492857406687,
+            "top": 0.48500935737499784,
+            "right": 0.44744412231814945,
+            "bottom": 0.8000000000000002
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238865980_ic9dwq0xq",
+      "groundPosition": {
+        "x": 14.798076923076922,
+        "y": 1.4134615384615383
+      },
+      "timestamp": 30.897564230897565,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:07:45.980Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 926,
+          "timestamp": 30.897564230897565,
+          "trackId": 118,
+          "bbox": {
+            "left": 0.5917206485734474,
+            "top": 0.5534722222222223,
+            "right": 0.6387557441524326,
+            "bottom": 0.6355718616429954
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238868988_zkgkac5ny",
+      "groundPosition": {
+        "x": 15.317307692307693,
+        "y": 1.4134615384615383
+      },
+      "timestamp": 30.897564230897565,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:07:48.988Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 926,
+          "timestamp": 30.897564230897565,
+          "trackId": 120,
+          "bbox": {
+            "left": 0.6350336773416606,
+            "top": 0.5158961404397016,
+            "right": 0.6740954556260762,
+            "bottom": 0.634756946222468
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238877581_fza345bhc",
+      "groundPosition": {
+        "x": 16.557692307692307,
+        "y": 0.951923076923077
+      },
+      "timestamp": 30.897564230897565,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:07:57.581Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 926,
+          "timestamp": 30.897564230897565,
+          "trackId": 110,
+          "bbox": {
+            "left": 0.7261026119141257,
+            "top": 0.5038509335822441,
+            "right": 0.7831827043719636,
+            "bottom": 0.7419541823591016
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238882244_s3q27lg06",
+      "groundPosition": {
+        "x": 16.961538461538463,
+        "y": 0.2019230769230769
+      },
+      "timestamp": 30.897564230897565,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:08:02.244Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 926,
+          "timestamp": 30.897564230897565,
+          "trackId": 119,
+          "bbox": {
+            "left": 0.7651305434795348,
+            "top": 0.4925636095714839,
+            "right": 0.8050090135481432,
+            "bottom": 0.7073815818189813
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238899874_lo3bzyoje",
+      "groundPosition": {
+        "x": 15.836538461538462,
+        "y": 2.019230769230769
+      },
+      "timestamp": 39.10577243910577,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:08:19.874Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 1172,
+          "timestamp": 39.10577243910577,
+          "trackId": 101,
+          "bbox": {
+            "left": 0.6899404751417065,
+            "top": 0.48296065551816203,
+            "right": 0.7538427970138392,
+            "bottom": 0.7637020456869619
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 1172,
+          "timestamp": 39.10577243910577,
+          "trackId": 386,
+          "bbox": {
+            "left": 0.6094949650665445,
+            "top": 0.3486878183832966,
+            "right": 0.6424812225927569,
+            "bottom": 0.5038397033771264
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238902755_btdz7jv6o",
+      "groundPosition": {
+        "x": 15.375,
+        "y": 1.3846153846153846
+      },
+      "timestamp": 39.10577243910577,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:08:22.755Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 1172,
+          "timestamp": 39.10577243910577,
+          "trackId": 134,
+          "bbox": {
+            "left": 0.648416169496626,
+            "top": 0.5617364453856738,
+            "right": 0.6901017442286929,
+            "bottom": 0.6350248864441164
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238909666_x093j4o3w",
+      "groundPosition": {
+        "x": 14.855769230769232,
+        "y": 1.3846153846153846
+      },
+      "timestamp": 39.10577243910577,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:08:29.666Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 1172,
+          "timestamp": 39.10577243910577,
+          "trackId": 413,
+          "bbox": {
+            "left": 0.5259384492867237,
+            "top": 0.3979172723020923,
+            "right": 0.5474990507132765,
+            "bottom": 0.5083333333333334
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 1172,
+          "timestamp": 39.10577243910577,
+          "trackId": 132,
+          "bbox": {
+            "left": 0.5921461768425368,
+            "top": 0.5544585210505054,
+            "right": 0.6385146215686921,
+            "bottom": 0.6362023860844742
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238924989_ecauv3s4s",
+      "groundPosition": {
+        "x": 14.798076923076922,
+        "y": 1.4134615384615383
+      },
+      "timestamp": 50.283616950283616,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:08:44.989Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 1507,
+          "timestamp": 50.283616950283616,
+          "trackId": 132,
+          "bbox": {
+            "left": 0.5851562500000002,
+            "top": 0.555883881627399,
+            "right": 0.6414062500000001,
+            "bottom": 0.6351715397505036
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238928378_4i6q0csuo",
+      "groundPosition": {
+        "x": 15.259615384615383,
+        "y": 1.4134615384615383
+      },
+      "timestamp": 50.283616950283616,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:08:48.378Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 1507,
+          "timestamp": 50.283616950283616,
+          "trackId": 134,
+          "bbox": {
+            "left": 0.6450756593103664,
+            "top": 0.5639347612252992,
+            "right": 0.6881220447578859,
+            "bottom": 0.6368950947056385
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238936651_rxalyxs46",
+      "groundPosition": {
+        "x": 14.769230769230768,
+        "y": 1.4423076923076923
+      },
+      "timestamp": 59.95995995995996,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:08:56.651Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 1797,
+          "timestamp": 59.95995995995996,
+          "trackId": 414,
+          "bbox": {
+            "left": 0.5245972837300354,
+            "top": 0.3983194974683651,
+            "right": 0.5476562500000001,
+            "bottom": 0.5074822915603184
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 1797,
+          "timestamp": 59.95995995995996,
+          "trackId": 132,
+          "bbox": {
+            "left": 0.5891950717272668,
+            "top": 0.5565577175375359,
+            "right": 0.6425229157240128,
+            "bottom": 0.6351351791466144
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238939539_p8zf5jooj",
+      "groundPosition": {
+        "x": 15.317307692307693,
+        "y": 1.4134615384615383
+      },
+      "timestamp": 59.95995995995996,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:08:59.539Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 1797,
+          "timestamp": 59.95995995995996,
+          "trackId": 134,
+          "bbox": {
+            "left": 0.6514053007132764,
+            "top": 0.5660219762098246,
+            "right": 0.6873428007132762,
+            "bottom": 0.6368553095431579
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238979280_v8ixhgq98",
+      "groundPosition": {
+        "x": 14.798076923076922,
+        "y": 1.4134615384615383
+      },
+      "timestamp": 60.7273940607274,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:09:39.280Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 1820,
+          "timestamp": 60.7273940607274,
+          "trackId": 414,
+          "bbox": {
+            "left": 0.5259318609174425,
+            "top": 0.39564623707590785,
+            "right": 0.5478068609174425,
+            "bottom": 0.5068211507492127
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 1820,
+          "timestamp": 60.7273940607274,
+          "trackId": 132,
+          "bbox": {
+            "left": 0.5939623314924758,
+            "top": 0.5540220667976438,
+            "right": 0.6330014959929385,
+            "bottom": 0.6344194379764378
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238981696_8neuv30d5",
+      "groundPosition": {
+        "x": 15.317307692307693,
+        "y": 1.3846153846153846
+      },
+      "timestamp": 60.7273940607274,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:09:41.696Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 1820,
+          "timestamp": 60.7273940607274,
+          "trackId": 134,
+          "bbox": {
+            "left": 0.6511718750000001,
+            "top": 0.565919559299022,
+            "right": 0.6871093750000001,
+            "bottom": 0.6378034581551311
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238987613_umbqy3h57",
+      "groundPosition": {
+        "x": 15.346153846153845,
+        "y": 1.4134615384615383
+      },
+      "timestamp": 68.70203536870204,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:09:47.613Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 2059,
+          "timestamp": 68.70203536870204,
+          "trackId": 134,
+          "bbox": {
+            "left": 0.6514512203737216,
+            "top": 0.5665692254859795,
+            "right": 0.6873887203737216,
+            "bottom": 0.6374025588193128
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765238991974_q1xsa8imw",
+      "groundPosition": {
+        "x": 14.826923076923077,
+        "y": 1.4134615384615383
+      },
+      "timestamp": 68.70203536870204,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:09:51.974Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 2059,
+          "timestamp": 68.70203536870204,
+          "trackId": 414,
+          "bbox": {
+            "left": 0.5261718750000001,
+            "top": 0.3990516347059109,
+            "right": 0.5480468750000002,
+            "bottom": 0.5076133443399138
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239006651_rp0napqxf",
+      "groundPosition": {
+        "x": 14.855769230769232,
+        "y": 1.3846153846153846
+      },
+      "timestamp": 100,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:10:06.651Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 2997,
+          "timestamp": 100,
+          "trackId": 414,
+          "bbox": {
+            "left": 0.5261929003239271,
+            "top": 0.3997702402722924,
+            "right": 0.5480015395606311,
+            "bottom": 0.5072004341896359
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 2997,
+          "timestamp": 100,
+          "trackId": 132,
+          "bbox": {
+            "left": 0.5945312500000001,
+            "top": 0.556028725144091,
+            "right": 0.6337683443483699,
+            "bottom": 0.6345605403468909
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239009965_qi1wbf8i4",
+      "groundPosition": {
+        "x": 15.317307692307693,
+        "y": 1.4134615384615383
+      },
+      "timestamp": 100,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:10:09.965Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 2997,
+          "timestamp": 100,
+          "trackId": 134,
+          "bbox": {
+            "left": 0.65078125,
+            "top": 0.567059735225451,
+            "right": 0.6867187500000002,
+            "bottom": 0.6375775974881644
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239058572_baoeonbrx",
+      "groundPosition": {
+        "x": 14.711538461538462,
+        "y": 1.3846153846153846
+      },
+      "timestamp": 160.29362696029364,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:10:58.572Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4804,
+          "timestamp": 160.29362696029364,
+          "trackId": 132,
+          "bbox": {
+            "left": 0.5695977514119421,
+            "top": 0.5128364951009611,
+            "right": 0.6127397215448072,
+            "bottom": 0.6441255861334623
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239061298_dhzab7rle",
+      "groundPosition": {
+        "x": 15.230769230769232,
+        "y": 1.4423076923076923
+      },
+      "timestamp": 160.29362696029364,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:11:01.298Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4804,
+          "timestamp": 160.29362696029364,
+          "trackId": 134,
+          "bbox": {
+            "left": 0.6444380709504719,
+            "top": 0.5189435654688745,
+            "right": 0.6840432164018925,
+            "bottom": 0.6363303769025164
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239063634_8t78asial",
+      "groundPosition": {
+        "x": 17.10576923076923,
+        "y": 0.2019230769230769
+      },
+      "timestamp": 160.29362696029364,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:11:03.634Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4804,
+          "timestamp": 160.29362696029364,
+          "trackId": 147,
+          "bbox": {
+            "left": 0.7649476053244059,
+            "top": 0.4918460358484164,
+            "right": 0.8046968692010287,
+            "bottom": 0.7021295316632895
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239078472_en4cbbhq9",
+      "groundPosition": {
+        "x": 17.79807692307692,
+        "y": 0.7211538461538461
+      },
+      "timestamp": 161.29462796129462,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:11:18.472Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 4834,
+          "timestamp": 161.29462796129462,
+          "trackId": 422,
+          "bbox": {
+            "left": 0.6330525319385265,
+            "top": 0.3576102494258034,
+            "right": 0.6614768465491114,
+            "bottom": 0.4874068506304092
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4834,
+          "timestamp": 161.29462796129462,
+          "trackId": 147,
+          "bbox": {
+            "left": 0.8069710111681692,
+            "top": 0.49338170325916125,
+            "right": 0.8810940770436128,
+            "bottom": 0.7565453729789736
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239081191_cn40glvf5",
+      "groundPosition": {
+        "x": 14.971153846153845,
+        "y": 1.3269230769230769
+      },
+      "timestamp": 161.29462796129462,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:11:21.191Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4834,
+          "timestamp": 161.29462796129462,
+          "trackId": 134,
+          "bbox": {
+            "left": 0.6061156487059027,
+            "top": 0.5313259579304436,
+            "right": 0.6645145700025598,
+            "bottom": 0.635356864820548
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239090212_bqjebaxrz",
+      "groundPosition": {
+        "x": 13.932692307692307,
+        "y": 1.2403846153846154
+      },
+      "timestamp": 161.29462796129462,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:11:30.212Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4834,
+          "timestamp": 161.29462796129462,
+          "trackId": 132,
+          "bbox": {
+            "left": 0.4721527970555909,
+            "top": 0.4933671501256661,
+            "right": 0.5352454222229064,
+            "bottom": 0.7340564204125792
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 4834,
+          "timestamp": 161.29462796129462,
+          "trackId": 414,
+          "bbox": {
+            "left": 0.49848944789807315,
+            "top": 0.3537361581747468,
+            "right": 0.5389200006201373,
+            "bottom": 0.5223679874029317
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239099927_r94oaybko",
+      "groundPosition": {
+        "x": 14.480769230769232,
+        "y": 1.0096153846153846
+      },
+      "timestamp": 161.9285952619286,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:11:39.927Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 4853,
+          "timestamp": 161.9285952619286,
+          "trackId": 423,
+          "bbox": {
+            "left": 0.5025624368979815,
+            "top": 0.37258605311752696,
+            "right": 0.5352753217379391,
+            "bottom": 0.5069743092116554
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4853,
+          "timestamp": 161.9285952619286,
+          "trackId": 134,
+          "bbox": {
+            "left": 0.5654927244563476,
+            "top": 0.5213304986762283,
+            "right": 0.6069419167765004,
+            "bottom": 0.6703049086204822
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239105810_j03w73lsn",
+      "groundPosition": {
+        "x": 11.884615384615383,
+        "y": 1.5865384615384617
+      },
+      "timestamp": 161.9285952619286,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:11:45.810Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 4853,
+          "timestamp": 161.9285952619286,
+          "trackId": 414,
+          "bbox": {
+            "left": 0.4669409514369313,
+            "top": 0.3573054918177186,
+            "right": 0.5019436428483965,
+            "bottom": 0.5346941220717618
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239116293_v65s0jo7v",
+      "groundPosition": {
+        "x": 10.673076923076923,
+        "y": 1.673076923076923
+      },
+      "timestamp": 162.69602936269604,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:11:56.293Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 4876,
+          "timestamp": 162.69602936269604,
+          "trackId": 414,
+          "bbox": {
+            "left": 0.4007266578196872,
+            "top": 0.3600146107170397,
+            "right": 0.44616581132540606,
+            "bottom": 0.5510118885853028
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4876,
+          "timestamp": 162.69602936269604,
+          "trackId": 132,
+          "bbox": {
+            "left": 0.28995448957369435,
+            "top": 0.5057770017941483,
+            "right": 0.35072494081370864,
+            "bottom": 0.7268993534100353
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239124055_j6x0hx8ut",
+      "groundPosition": {
+        "x": 12.807692307692307,
+        "y": 0.9807692307692308
+      },
+      "timestamp": 162.69602936269604,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:12:04.055Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4876,
+          "timestamp": 162.69602936269604,
+          "trackId": 134,
+          "bbox": {
+            "left": 0.467776785403848,
+            "top": 0.5154448032739388,
+            "right": 0.524079524039362,
+            "bottom": 0.7293015162369798
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 4876,
+          "timestamp": 162.69602936269604,
+          "trackId": 423,
+          "bbox": {
+            "left": 0.49534226164169914,
+            "top": 0.36806562476111904,
+            "right": 0.5274247268482835,
+            "bottom": 0.5213807526220763
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239135679_yb1rfoybr",
+      "groundPosition": {
+        "x": 8.913461538461538,
+        "y": 1.5
+      },
+      "timestamp": 163.29662996329662,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:12:15.679Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 4894,
+          "timestamp": 163.29662996329662,
+          "trackId": 414,
+          "bbox": {
+            "left": 0.3445198343343105,
+            "top": 0.3609925389266483,
+            "right": 0.3910359031506136,
+            "bottom": 0.5591022368397375
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4894,
+          "timestamp": 163.29662996329662,
+          "trackId": 132,
+          "bbox": {
+            "left": 0.2463979002492468,
+            "top": 0.5058109248237138,
+            "right": 0.2959526785557619,
+            "bottom": 0.7204638186050017
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239138252_m9loi5lr2",
+      "groundPosition": {
+        "x": 16.903846153846153,
+        "y": 0.4903846153846154
+      },
+      "timestamp": 163.29662996329662,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:12:18.252Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4894,
+          "timestamp": 163.29662996329662,
+          "trackId": 150,
+          "bbox": {
+            "left": 0.7641285166589186,
+            "top": 0.48487535004607707,
+            "right": 0.8286216165801951,
+            "bottom": 0.7235937252687457
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239143085_wsj6bkwam",
+      "groundPosition": {
+        "x": 10.932692307692307,
+        "y": 1.3269230769230769
+      },
+      "timestamp": 163.29662996329662,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:12:23.085Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 4894,
+          "timestamp": 163.29662996329662,
+          "trackId": 423,
+          "bbox": {
+            "left": 0.45951059116707504,
+            "top": 0.37178343623285437,
+            "right": 0.5002630318182021,
+            "bottom": 0.5338023556323939
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239170445_k8yvqygqr",
+      "groundPosition": {
+        "x": 16.384615384615383,
+        "y": 1.9903846153846152
+      },
+      "timestamp": 163.8304971638305,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:12:50.445Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 4910,
+          "timestamp": 163.8304971638305,
+          "trackId": 431,
+          "bbox": {
+            "left": 0.6275812261280316,
+            "top": 0.35433635901487054,
+            "right": 0.6615610112602407,
+            "bottom": 0.49495494251340894
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4910,
+          "timestamp": 163.8304971638305,
+          "trackId": 150,
+          "bbox": {
+            "left": 0.7479390240823406,
+            "top": 0.4912987506981452,
+            "right": 0.8173258040634143,
+            "bottom": 0.7603890187412563
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239181555_22001s3dt",
+      "groundPosition": {
+        "x": 7.528846153846153,
+        "y": 1.5
+      },
+      "timestamp": 163.8304971638305,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:13:01.555Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 4910,
+          "timestamp": 163.8304971638305,
+          "trackId": 414,
+          "bbox": {
+            "left": 0.2822701426785422,
+            "top": 0.3672841391976036,
+            "right": 0.33243113179977946,
+            "bottom": 0.5683726166216918
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4910,
+          "timestamp": 163.8304971638305,
+          "trackId": 132,
+          "bbox": {
+            "left": 0.20514375169003626,
+            "top": 0.5179833781037286,
+            "right": 0.25694236222533207,
+            "bottom": 0.7139865984946844
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239186860_jh124frjo",
+      "groundPosition": {
+        "x": 9.634615384615385,
+        "y": 1.2692307692307692
+      },
+      "timestamp": 163.8304971638305,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:13:06.860Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4910,
+          "timestamp": 163.8304971638305,
+          "trackId": 159,
+          "bbox": {
+            "left": 0.2922939297527135,
+            "top": 0.5198145987343121,
+            "right": 0.34412236798839785,
+            "bottom": 0.7250436794322648
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 4910,
+          "timestamp": 163.8304971638305,
+          "trackId": 423,
+          "bbox": {
+            "left": 0.4031896911591961,
+            "top": 0.3724851256765556,
+            "right": 0.43992358017468264,
+            "bottom": 0.5488924005243784
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239206353_5ghvy9j0e",
+      "groundPosition": {
+        "x": 5.855769230769231,
+        "y": 1.3557692307692306
+      },
+      "timestamp": 164.46446446446447,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:13:26.353Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 4929,
+          "timestamp": 164.46446446446447,
+          "trackId": 433,
+          "bbox": {
+            "left": 0.15590331451573325,
+            "top": 0.36802201735296625,
+            "right": 0.19612986900618185,
+            "bottom": 0.5979062057275032
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4929,
+          "timestamp": 164.46446446446447,
+          "trackId": 132,
+          "bbox": {
+            "left": 0.1327456372077471,
+            "top": 0.5120177003364832,
+            "right": 0.18825201084771673,
+            "bottom": 0.7043924161012045
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239214182_2pqdepa3k",
+      "groundPosition": {
+        "x": 7.701923076923077,
+        "y": 1.0673076923076923
+      },
+      "timestamp": 164.46446446446447,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:13:34.182Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4929,
+          "timestamp": 164.46446446446447,
+          "trackId": 159,
+          "bbox": {
+            "left": 0.20042272977018713,
+            "top": 0.5197968609721099,
+            "right": 0.25263996809216893,
+            "bottom": 0.7202357184072564
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 4929,
+          "timestamp": 164.46446446446447,
+          "trackId": 423,
+          "bbox": {
+            "left": 0.3113040723726977,
+            "top": 0.37554718601001325,
+            "right": 0.3529028208700081,
+            "bottom": 0.5720020077651715
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239219749_i3srw88dv",
+      "groundPosition": {
+        "x": 13.990384615384615,
+        "y": 4.73076923076923
+      },
+      "timestamp": 164.46446446446447,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:13:39.749Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 4929,
+          "timestamp": 164.46446446446447,
+          "trackId": 431,
+          "bbox": {
+            "left": 0.6897079977210628,
+            "top": 0.34789779097852963,
+            "right": 0.7282218455006348,
+            "bottom": 0.5124348686287821
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4929,
+          "timestamp": 164.46446446446447,
+          "trackId": 150,
+          "bbox": {
+            "left": 0.6200724928393286,
+            "top": 0.48591223446964504,
+            "right": 0.7066923582955443,
+            "bottom": 0.8242094211859335
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239230896_5cypsx4b9",
+      "groundPosition": {
+        "x": 16.64423076923077,
+        "y": 2.596153846153846
+      },
+      "timestamp": 164.86486486486487,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:13:50.896Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4941,
+          "timestamp": 164.86486486486487,
+          "trackId": 162,
+          "bbox": {
+            "left": 0.7380287583751932,
+            "top": 0.5002120634900767,
+            "right": 0.8177054038060974,
+            "bottom": 0.7752943661470102
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 4941,
+          "timestamp": 164.86486486486487,
+          "trackId": 435,
+          "bbox": {
+            "left": 0.6489427442102755,
+            "top": 0.3588481760756838,
+            "right": 0.6894219558418789,
+            "bottom": 0.49772575822745974
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239237038_lkbat5cxc",
+      "groundPosition": {
+        "x": 5.394230769230769,
+        "y": 0.951923076923077
+      },
+      "timestamp": 165.0316983650317,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:13:57.038Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 4946,
+          "timestamp": 165.0316983650317,
+          "trackId": 433,
+          "bbox": {
+            "left": 0.047119965322627744,
+            "top": 0.36711210023660795,
+            "right": 0.11828504121065975,
+            "bottom": 0.622672547124908
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239254547_6pyj6wddl",
+      "groundPosition": {
+        "x": 11.884615384615383,
+        "y": 6.836538461538461
+      },
+      "timestamp": 165.331998665332,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:14:14.547Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4955,
+          "timestamp": 165.331998665332,
+          "trackId": 150,
+          "bbox": {
+            "left": 0.18507087455989485,
+            "top": 0.46647515512736154,
+            "right": 0.33205945274367193,
+            "bottom": 0.9538199377057855
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239269639_lu20mwl38",
+      "groundPosition": {
+        "x": 16.64423076923077,
+        "y": 5.394230769230769
+      },
+      "timestamp": 165.63229896563232,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:14:29.639Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4964,
+          "timestamp": 165.63229896563232,
+          "trackId": 162,
+          "bbox": {
+            "left": 0.7461722056840421,
+            "top": 0.47738942965385706,
+            "right": 0.861971948758406,
+            "bottom": 0.9334255353431522
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239340934_wq8uqwviq",
+      "groundPosition": {
+        "x": 5.019230769230769,
+        "y": 1.153846153846154
+      },
+      "timestamp": 165.7323990657324,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:15:40.934Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4967,
+          "timestamp": 165.7323990657324,
+          "trackId": 159,
+          "bbox": {
+            "left": 0.04764842303519265,
+            "top": 0.531438722239559,
+            "right": 0.09068352459463677,
+            "bottom": 0.7039787387909195
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 4967,
+          "timestamp": 165.7323990657324,
+          "trackId": 448,
+          "bbox": {
+            "left": 0.05692306987450921,
+            "top": 0.3889001213455155,
+            "right": 0.1208783939095826,
+            "bottom": 0.6251039682447727
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239347624_dtyiakyl8",
+      "groundPosition": {
+        "x": 10.701923076923077,
+        "y": 8.480769230769232
+      },
+      "timestamp": 165.7323990657324,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:15:47.624Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 4967,
+          "timestamp": 165.7323990657324,
+          "trackId": 451,
+          "bbox": {
+            "left": 0.8973980610066018,
+            "top": 0.31807707432065585,
+            "right": 0.9405720038846759,
+            "bottom": 0.6020200974237964
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239359989_sxfpcp0sz",
+      "groundPosition": {
+        "x": 17.076923076923077,
+        "y": 1.3269230769230769
+      },
+      "timestamp": 166.49983316649983,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:15:59.989Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 4990,
+          "timestamp": 166.49983316649983,
+          "trackId": 455,
+          "bbox": {
+            "left": 0.6216650495272835,
+            "top": 0.36704165903410463,
+            "right": 0.6463342280502461,
+            "bottom": 0.49211986776751737
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239373211_mxvqmhju6",
+      "groundPosition": {
+        "x": 16.788461538461537,
+        "y": 7.096153846153847
+      },
+      "timestamp": 166.6332999666333,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:16:13.211Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 4994,
+          "timestamp": 166.6332999666333,
+          "trackId": 174,
+          "bbox": {
+            "left": 0.7350583217608364,
+            "top": 0.5406495930939672,
+            "right": 0.8565864240847277,
+            "bottom": 0.9882135559925719
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 4994,
+          "timestamp": 166.6332999666333,
+          "trackId": 456,
+          "bbox": {
+            "left": 0.9215241671432886,
+            "top": 0.35988352597092393,
+            "right": 0.9591720536048711,
+            "bottom": 0.5276172962179689
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239381859_jy5mq6hgi",
+      "groundPosition": {
+        "x": 17.04807692307692,
+        "y": 2.682692307692308
+      },
+      "timestamp": 166.86686686686687,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:16:21.859Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5001,
+          "timestamp": 166.86686686686687,
+          "trackId": 457,
+          "bbox": {
+            "left": 0.6749752897080694,
+            "top": 0.36588427682763686,
+            "right": 0.708176626942338,
+            "bottom": 0.4965921693433303
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239398959_c8illzwfx",
+      "groundPosition": {
+        "x": 16.932692307692307,
+        "y": 5.3076923076923075
+      },
+      "timestamp": 167.7344010677344,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:16:38.959Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5027,
+          "timestamp": 167.7344010677344,
+          "trackId": 183,
+          "bbox": {
+            "left": 0.8048590142826908,
+            "top": 0.5058646003623135,
+            "right": 0.9118004592274259,
+            "bottom": 0.9589557615410452
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239419376_89aeqbre8",
+      "groundPosition": {
+        "x": 16.615384615384613,
+        "y": 2.1346153846153846
+      },
+      "timestamp": 168.60193526860195,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:16:59.376Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5053,
+          "timestamp": 168.60193526860195,
+          "trackId": 465,
+          "bbox": {
+            "left": 0.6664029084900973,
+            "top": 0.3718717485598858,
+            "right": 0.6956111858111227,
+            "bottom": 0.5000224539321924
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5053,
+          "timestamp": 168.60193526860195,
+          "trackId": 201,
+          "bbox": {
+            "left": 0.7488975009998272,
+            "top": 0.5364967761993363,
+            "right": 0.8087388052552461,
+            "bottom": 0.7765322337243842
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239428910_lr4cpb761",
+      "groundPosition": {
+        "x": 16.35576923076923,
+        "y": 4.6730769230769225
+      },
+      "timestamp": 169.20253586920253,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:17:08.910Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5071,
+          "timestamp": 169.20253586920253,
+          "trackId": 201,
+          "bbox": {
+            "left": 0.7192893896991098,
+            "top": 0.5361861421099227,
+            "right": 0.8149306928908799,
+            "bottom": 0.858551895075687
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239436635_jlb9eqwe9",
+      "groundPosition": {
+        "x": 17.451923076923077,
+        "y": 1.3557692307692306
+      },
+      "timestamp": 169.2192192192192,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:17:16.635Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5071,
+          "timestamp": 169.20253586920253,
+          "trackId": 468,
+          "bbox": {
+            "left": 0.6234552320366001,
+            "top": 0.37131988294950596,
+            "right": 0.6491752496990583,
+            "bottom": 0.4874557059538128
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5072,
+          "timestamp": 169.23590256923592,
+          "trackId": 210,
+          "bbox": {
+            "left": 0.7879855277624203,
+            "top": 0.5266743757575217,
+            "right": 0.8428135227144551,
+            "bottom": 0.7505902528693856
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239451073_wyz6u2hpq",
+      "groundPosition": {
+        "x": 17.826923076923077,
+        "y": 1.0096153846153846
+      },
+      "timestamp": 169.96996996996998,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:17:31.073Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5094,
+          "timestamp": 169.96996996996998,
+          "trackId": 470,
+          "bbox": {
+            "left": 0.6492367898002943,
+            "top": 0.37249893336456097,
+            "right": 0.6749588852538089,
+            "bottom": 0.4878721546938654
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239461475_yq66bvis1",
+      "groundPosition": {
+        "x": 17.01923076923077,
+        "y": 3.317307692307692
+      },
+      "timestamp": 170.60393727060395,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:17:41.475Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5113,
+          "timestamp": 170.60393727060395,
+          "trackId": 224,
+          "bbox": {
+            "left": 0.7389119788725773,
+            "top": 0.5228762756344509,
+            "right": 0.8154144814612788,
+            "bottom": 0.8094497647439987
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5113,
+          "timestamp": 170.60393727060395,
+          "trackId": 470,
+          "bbox": {
+            "left": 0.7020090971107107,
+            "top": 0.3669257002811813,
+            "right": 0.7306076965674468,
+            "bottom": 0.5027069809152451
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239466739_4mftc3rdr",
+      "groundPosition": {
+        "x": 15.980769230769232,
+        "y": 2.3365384615384612
+      },
+      "timestamp": 170.60393727060395,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:17:46.739Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5113,
+          "timestamp": 170.60393727060395,
+          "trackId": 483,
+          "bbox": {
+            "left": 0.617882252669863,
+            "top": 0.37890002526374617,
+            "right": 0.6458870731047669,
+            "bottom": 0.4976651406944242
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5113,
+          "timestamp": 170.60393727060395,
+          "trackId": 229,
+          "bbox": {
+            "left": 0.7185123959051015,
+            "top": 0.533906948643906,
+            "right": 0.7626691871769872,
+            "bottom": 0.7518482680161606
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239476378_iky8hll3y",
+      "groundPosition": {
+        "x": 16.759615384615383,
+        "y": 5.192307692307692
+      },
+      "timestamp": 171.20453787120454,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:17:56.378Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5131,
+          "timestamp": 171.20453787120454,
+          "trackId": 224,
+          "bbox": {
+            "left": 0.7567168650946918,
+            "top": 0.5026134921572293,
+            "right": 0.866373973810737,
+            "bottom": 0.9338297779196396
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239484551_cdaohqofo",
+      "groundPosition": {
+        "x": 14.884615384615383,
+        "y": 3
+      },
+      "timestamp": 171.20453787120454,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:18:04.551Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5131,
+          "timestamp": 171.20453787120454,
+          "trackId": 483,
+          "bbox": {
+            "left": 0.6565392390840166,
+            "top": 0.3747566046527316,
+            "right": 0.6865707718526263,
+            "bottom": 0.5143961809852119
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5131,
+          "timestamp": 171.20453787120454,
+          "trackId": 229,
+          "bbox": {
+            "left": 0.5974240216459258,
+            "top": 0.5316182923201069,
+            "right": 0.6700761800307579,
+            "bottom": 0.7952840788097415
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239496369_myppx49bj",
+      "groundPosition": {
+        "x": 16.990384615384613,
+        "y": 0.43269230769230765
+      },
+      "timestamp": 172.00533867200534,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:18:16.369Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5155,
+          "timestamp": 172.00533867200534,
+          "trackId": 236,
+          "bbox": {
+            "left": 0.773466861352367,
+            "top": 0.511056906377691,
+            "right": 0.8149802977320856,
+            "bottom": 0.7184705340891812
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239498795_szpj9jtl0",
+      "groundPosition": {
+        "x": 16.35576923076923,
+        "y": 0.2884615384615385
+      },
+      "timestamp": 172.00533867200534,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:18:18.795Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5155,
+          "timestamp": 172.00533867200534,
+          "trackId": 244,
+          "bbox": {
+            "left": 0.7370577660452037,
+            "top": 0.48755110302275967,
+            "right": 0.7798452551515817,
+            "bottom": 0.6902633915015514
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239519535_awnuzpsgb",
+      "groundPosition": {
+        "x": 15.778846153846153,
+        "y": 1.153846153846154
+      },
+      "timestamp": 173.0730730730731,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:18:39.535Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5187,
+          "timestamp": 173.0730730730731,
+          "trackId": 244,
+          "bbox": {
+            "left": 0.7105513714676129,
+            "top": 0.48433400440808105,
+            "right": 0.7656620197164864,
+            "bottom": 0.7300456050572216
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239523924_n0ojbyu2d",
+      "groundPosition": {
+        "x": 16.788461538461537,
+        "y": 2.567307692307692
+      },
+      "timestamp": 173.0730730730731,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:18:43.924Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5187,
+          "timestamp": 173.0730730730731,
+          "trackId": 491,
+          "bbox": {
+            "left": 0.6804416023748239,
+            "top": 0.367402067205599,
+            "right": 0.7119215481285919,
+            "bottom": 0.498582050958439
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239529650_oehqyyi2b",
+      "groundPosition": {
+        "x": 15.836538461538462,
+        "y": 1.4134615384615383
+      },
+      "timestamp": 173.27327327327328,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:18:49.650Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5193,
+          "timestamp": 173.27327327327328,
+          "trackId": 493,
+          "bbox": {
+            "left": 0.5996324963408781,
+            "top": 0.35148210920726314,
+            "right": 0.63051758426255,
+            "bottom": 0.47810029979729324
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239538734_sklhololo",
+      "groundPosition": {
+        "x": 9.83653846153846,
+        "y": 8.394230769230768
+      },
+      "timestamp": 173.4734734734735,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:18:58.734Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5199,
+          "timestamp": 173.4734734734735,
+          "trackId": 495,
+          "bbox": {
+            "left": 0.8959993997052997,
+            "top": 0.36808788226783234,
+            "right": 0.9580137774168872,
+            "bottom": 0.677891573912939
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239549676_7zact5t3f",
+      "groundPosition": {
+        "x": 15.519230769230768,
+        "y": 3.0865384615384612
+      },
+      "timestamp": 173.8405071738405,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:19:09.676Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5210,
+          "timestamp": 173.8405071738405,
+          "trackId": 493,
+          "bbox": {
+            "left": 0.6262269950704769,
+            "top": 0.3504398201037931,
+            "right": 0.6712196153109385,
+            "bottom": 0.5023491257364602
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5210,
+          "timestamp": 173.8405071738405,
+          "trackId": 244,
+          "bbox": {
+            "left": 0.6933630332785473,
+            "top": 0.48672981676861404,
+            "right": 0.7709914538719203,
+            "bottom": 0.7767838662993717
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239557474_g9ndcyvqd",
+      "groundPosition": {
+        "x": 17.278846153846153,
+        "y": 4.961538461538462
+      },
+      "timestamp": 173.8405071738405,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:19:17.474Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5210,
+          "timestamp": 173.8405071738405,
+          "trackId": 236,
+          "bbox": {
+            "left": 0.7989555814885781,
+            "top": 0.5165593696120989,
+            "right": 0.8871572860826958,
+            "bottom": 0.9185290834854062
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239572414_097ebbd8z",
+      "groundPosition": {
+        "x": 14.740384615384615,
+        "y": 3.317307692307692
+      },
+      "timestamp": 174.6413079746413,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:19:32.414Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5234,
+          "timestamp": 174.6413079746413,
+          "trackId": 244,
+          "bbox": {
+            "left": 0.514501595708135,
+            "top": 0.5026245309646843,
+            "right": 0.6210958738237988,
+            "bottom": 0.7998452972909298
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5234,
+          "timestamp": 174.6413079746413,
+          "trackId": 493,
+          "bbox": {
+            "left": 0.6346563543186833,
+            "top": 0.35887220030061634,
+            "right": 0.6755470947247855,
+            "bottom": 0.5225440182121444
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239584137_tm04j767r",
+      "groundPosition": {
+        "x": 12.346153846153845,
+        "y": 3.9230769230769234
+      },
+      "timestamp": 175.24190857524192,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:19:44.137Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5252,
+          "timestamp": 175.24190857524192,
+          "trackId": 493,
+          "bbox": {
+            "left": 0.612808922125137,
+            "top": 0.34340295351625255,
+            "right": 0.651445494919069,
+            "bottom": 0.5442067160627163
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5252,
+          "timestamp": 175.24190857524192,
+          "trackId": 244,
+          "bbox": {
+            "left": 0.3188731468437117,
+            "top": 0.4890200700442804,
+            "right": 0.419242921517408,
+            "bottom": 0.8017244884678753
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239592523_picaugcl5",
+      "groundPosition": {
+        "x": 14.480769230769232,
+        "y": 2.971153846153846
+      },
+      "timestamp": 175.24190857524192,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:19:52.523Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5252,
+          "timestamp": 175.24190857524192,
+          "trackId": 268,
+          "bbox": {
+            "left": 0.5308724228866001,
+            "top": 0.5299244095788631,
+            "right": 0.621250338318587,
+            "bottom": 0.8115383499409423
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5252,
+          "timestamp": 175.24190857524192,
+          "trackId": 501,
+          "bbox": {
+            "left": 0.6610259976765788,
+            "top": 0.36961470164603394,
+            "right": 0.6949789017588127,
+            "bottom": 0.5203555322983934
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239597694_d8d1k2mil",
+      "groundPosition": {
+        "x": 17.567307692307693,
+        "y": 1.0384615384615383
+      },
+      "timestamp": 175.37537537537537,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:19:57.694Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5256,
+          "timestamp": 175.37537537537537,
+          "trackId": 252,
+          "bbox": {
+            "left": 0.7940748304793209,
+            "top": 0.5045507323789826,
+            "right": 0.8647530364643302,
+            "bottom": 0.7541900941422507
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239601617_kr1pvihn1",
+      "groundPosition": {
+        "x": 16.903846153846153,
+        "y": 0.4038461538461538
+      },
+      "timestamp": 175.4421087754421,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:20:01.617Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5258,
+          "timestamp": 175.4421087754421,
+          "trackId": 283,
+          "bbox": {
+            "left": 0.765661306419322,
+            "top": 0.5044328964367563,
+            "right": 0.8085835364155155,
+            "bottom": 0.6966113699549517
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239607403_qd1t68iht",
+      "groundPosition": {
+        "x": 17.884615384615383,
+        "y": 0.576923076923077
+      },
+      "timestamp": 175.57557557557558,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:20:07.403Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5262,
+          "timestamp": 175.57557557557558,
+          "trackId": 503,
+          "bbox": {
+            "left": 0.6516365642900932,
+            "top": 0.3596868668841126,
+            "right": 0.6804710100097602,
+            "bottom": 0.49013811984450123
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239618725_5w3j3mqrk",
+      "groundPosition": {
+        "x": 9.028846153846153,
+        "y": 4.903846153846153
+      },
+      "timestamp": 175.8425091758425,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:20:18.725Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5270,
+          "timestamp": 175.8425091758425,
+          "trackId": 493,
+          "bbox": {
+            "left": 0.5868024550061417,
+            "top": 0.34424342812124337,
+            "right": 0.6389123772690349,
+            "bottom": 0.5798416860308728
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5270,
+          "timestamp": 175.8425091758425,
+          "trackId": 244,
+          "bbox": {
+            "left": 0.09125720698086812,
+            "top": 0.4993366818766209,
+            "right": 0.19754754049160764,
+            "bottom": 0.8238540605415873
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239627291_oexk0c141",
+      "groundPosition": {
+        "x": 12.663461538461538,
+        "y": 4.5576923076923075
+      },
+      "timestamp": 175.8425091758425,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:20:27.291Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5270,
+          "timestamp": 175.8425091758425,
+          "trackId": 268,
+          "bbox": {
+            "left": 0.28479907660197895,
+            "top": 0.5252117301530058,
+            "right": 0.3821145472193713,
+            "bottom": 0.8499627526168285
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5270,
+          "timestamp": 175.8425091758425,
+          "trackId": 501,
+          "bbox": {
+            "left": 0.6783847276390277,
+            "top": 0.35890001495273205,
+            "right": 0.7150574178805724,
+            "bottom": 0.551870553246592
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239639502_l8a0dqdcu",
+      "groundPosition": {
+        "x": 7.903846153846153,
+        "y": 5.3076923076923075
+      },
+      "timestamp": 176.40974307640974,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:20:39.502Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5287,
+          "timestamp": 176.40974307640974,
+          "trackId": 493,
+          "bbox": {
+            "left": 0.5612867744025731,
+            "top": 0.33934109277779567,
+            "right": 0.6297173598695058,
+            "bottom": 0.6335789724611809
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239643811_je9yfhh4m",
+      "groundPosition": {
+        "x": 9.317307692307692,
+        "y": 5.480769230769231
+      },
+      "timestamp": 176.40974307640974,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:20:43.811Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5287,
+          "timestamp": 176.40974307640974,
+          "trackId": 501,
+          "bbox": {
+            "left": 0.6728777863803931,
+            "top": 0.3597897333537968,
+            "right": 0.7217676857796594,
+            "bottom": 0.5945869916383799
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239651680_i08ra2q6o",
+      "groundPosition": {
+        "x": 5.855769230769231,
+        "y": 6.519230769230769
+      },
+      "timestamp": 177.01034367701035,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:20:51.680Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5305,
+          "timestamp": 177.01034367701035,
+          "trackId": 493,
+          "bbox": {
+            "left": 0.5293831128476608,
+            "top": 0.3298316448479245,
+            "right": 0.6186258452983846,
+            "bottom": 0.708292185546155
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239657664_eey4nbx1g",
+      "groundPosition": {
+        "x": 6.663461538461538,
+        "y": 7.009615384615384
+      },
+      "timestamp": 177.01034367701035,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:20:57.664Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5305,
+          "timestamp": 177.01034367701035,
+          "trackId": 501,
+          "bbox": {
+            "left": 0.6569725077900804,
+            "top": 0.35778171585283997,
+            "right": 0.7226453574545848,
+            "bottom": 0.663299728698538
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239660712_hlto77wjw",
+      "groundPosition": {
+        "x": 16.759615384615383,
+        "y": 0.8942307692307692
+      },
+      "timestamp": 177.01034367701035,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:21:00.712Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5305,
+          "timestamp": 177.01034367701035,
+          "trackId": 288,
+          "bbox": {
+            "left": 0.7528118775208272,
+            "top": 0.5161031727656213,
+            "right": 0.8178281418440431,
+            "bottom": 0.7315545006736439
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239672661_qhaadjh4k",
+      "groundPosition": {
+        "x": 4.615384615384616,
+        "y": 7.961538461538461
+      },
+      "timestamp": 177.57757757757759,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:21:12.661Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5322,
+          "timestamp": 177.57757757757759,
+          "trackId": 493,
+          "bbox": {
+            "left": 0.486510488396518,
+            "top": 0.3267021278564926,
+            "right": 0.6045517736288892,
+            "bottom": 0.827799525437439
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239677055_ad03c2lyv",
+      "groundPosition": {
+        "x": 5.7980769230769225,
+        "y": 7.846153846153847
+      },
+      "timestamp": 177.57757757757759,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:21:17.055Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5322,
+          "timestamp": 177.57757757757759,
+          "trackId": 501,
+          "bbox": {
+            "left": 0.6308368914425154,
+            "top": 0.35762252039200493,
+            "right": 0.7183133463855366,
+            "bottom": 0.7609224750043595
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239684230_735fptpcx",
+      "groundPosition": {
+        "x": 15.432692307692307,
+        "y": 2.596153846153846
+      },
+      "timestamp": 177.74441107774442,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:21:24.230Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5327,
+          "timestamp": 177.74441107774442,
+          "trackId": 514,
+          "bbox": {
+            "left": 0.6093007199547832,
+            "top": 0.37579316676440794,
+            "right": 0.6496145709687655,
+            "bottom": 0.501946832280393
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5327,
+          "timestamp": 177.74441107774442,
+          "trackId": 288,
+          "bbox": {
+            "left": 0.6878373397369236,
+            "top": 0.5220252088402437,
+            "right": 0.7591092917962253,
+            "bottom": 0.7643425687957316
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239693165_diwuyf07n",
+      "groundPosition": {
+        "x": 3.2307692307692304,
+        "y": 9.028846153846153
+      },
+      "timestamp": 178.11144477811146,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:21:33.165Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5338,
+          "timestamp": 178.11144477811146,
+          "trackId": 493,
+          "bbox": {
+            "left": 0.4169412009543044,
+            "top": 0.2811317015141514,
+            "right": 0.5737114169417914,
+            "bottom": 0.9908059425436085
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239695150_7d6mwnuuz",
+      "groundPosition": {
+        "x": 4.153846153846153,
+        "y": 9.317307692307692
+      },
+      "timestamp": 178.11144477811146,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:21:35.150Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5338,
+          "timestamp": 178.11144477811146,
+          "trackId": 501,
+          "bbox": {
+            "left": 0.6058645264683575,
+            "top": 0.3607076794659483,
+            "right": 0.7212604362373946,
+            "bottom": 0.9282091282008645
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239702723_lk5ia9iz2",
+      "groundPosition": {
+        "x": 1.9326923076923077,
+        "y": 9.519230769230768
+      },
+      "timestamp": 178.6453119786453,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:21:42.723Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5354,
+          "timestamp": 178.6453119786453,
+          "trackId": 493,
+          "bbox": {
+            "left": 0.15010559988387864,
+            "top": 0.19968737025526578,
+            "right": 0.4623136087339953,
+            "bottom": 0.9880581006373846
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239704629_3h3r0d5at",
+      "groundPosition": {
+        "x": 2.394230769230769,
+        "y": 9.894230769230768
+      },
+      "timestamp": 178.6453119786453,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:21:44.629Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5354,
+          "timestamp": 178.6453119786453,
+          "trackId": 501,
+          "bbox": {
+            "left": 0.5450294762068101,
+            "top": 0.34805066297186193,
+            "right": 0.7124698728365035,
+            "bottom": 0.9926222902198063
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239708235_ydqu50wcs",
+      "groundPosition": {
+        "x": 13.846153846153845,
+        "y": 2.4519230769230766
+      },
+      "timestamp": 178.6453119786453,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:21:48.235Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5354,
+          "timestamp": 178.6453119786453,
+          "trackId": 288,
+          "bbox": {
+            "left": 0.4989816110573342,
+            "top": 0.5277408198806048,
+            "right": 0.5849771488897401,
+            "bottom": 0.7666830023917853
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239721139_42n7cbht2",
+      "groundPosition": {
+        "x": 11.307692307692307,
+        "y": 1.5
+      },
+      "timestamp": 179.4794794794795,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:22:01.139Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5379,
+          "timestamp": 179.4794794794795,
+          "trackId": 296,
+          "bbox": {
+            "left": 0.30225229846383683,
+            "top": 0.5199905006162839,
+            "right": 0.35362112957793407,
+            "bottom": 0.7321533621739011
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5379,
+          "timestamp": 179.4794794794795,
+          "trackId": 519,
+          "bbox": {
+            "left": 0.45704836506868685,
+            "top": 0.37273339615823453,
+            "right": 0.5064439344214181,
+            "bottom": 0.5419050060466063
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239728290_66nytv422",
+      "groundPosition": {
+        "x": 7.125,
+        "y": 1.5576923076923077
+      },
+      "timestamp": 180.3803803803804,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:22:08.290Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5406,
+          "timestamp": 180.3803803803804,
+          "trackId": 296,
+          "bbox": {
+            "left": 0.16435248120420157,
+            "top": 0.5262101270222709,
+            "right": 0.22091176737268808,
+            "bottom": 0.7250050162552766
+          }
+        },
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5406,
+          "timestamp": 180.3803803803804,
+          "trackId": 519,
+          "bbox": {
+            "left": 0.2928654956253093,
+            "top": 0.38403393613439185,
+            "right": 0.3565787122156129,
+            "bottom": 0.5758843687133177
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239738285_6ma9iyyrc",
+      "groundPosition": {
+        "x": 5.567307692307692,
+        "y": 1.5
+      },
+      "timestamp": 181.14781448114783,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:22:18.285Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5429,
+          "timestamp": 181.14781448114783,
+          "trackId": 525,
+          "bbox": {
+            "left": 0.093908512222997,
+            "top": 0.3955097149304679,
+            "right": 0.16656833422256012,
+            "bottom": 0.6194160522601045
+          }
+        },
+        {
+          "cameraId": "camera1",
+          "videoFile": "hc3-preprocessed",
+          "frameNumber": 5429,
+          "timestamp": 181.14781448114783,
+          "trackId": 296,
+          "bbox": {
+            "left": 0.04815063145056986,
+            "top": 0.5353954926424194,
+            "right": 0.09860241656955585,
+            "bottom": 0.7100438850787097
+          }
+        }
+      ]
+    },
+    {
+      "id": "ann_1765239747896_5ngm8nvo3",
+      "groundPosition": {
+        "x": 4.586538461538462,
+        "y": 1.125
+      },
+      "timestamp": 181.5815815815816,
+      "confidence": "certain",
+      "annotatedAt": "2025-12-09T00:22:27.896Z",
+      "linkedDetections": [
+        {
+          "cameraId": "camera2",
+          "videoFile": "hc4-preprocessed",
+          "frameNumber": 5442,
+          "timestamp": 181.5815815815816,
+          "trackId": 526,
+          "bbox": {
+            "left": 0.0000732421875,
+            "top": 0.5649305555555556,
+            "right": 0.029150390625,
+            "bottom": 0.6496527777777777
+          }
+        }
+      ]
+    }
+  ]
+}

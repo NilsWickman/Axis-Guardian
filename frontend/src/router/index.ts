@@ -158,6 +158,15 @@ const routes: RouteRecordRaw[] = [
       title: 'System Settings',
     },
   },
+  // Calibration
+  {
+    path: '/calibration/annotator',
+    name: 'CalibrationAnnotator',
+    component: () => import('@/views/calibration/CalibrationAnnotator.vue'),
+    meta: {
+      title: 'Ground Truth Annotator',
+    },
+  },
 ]
 
 const router = createRouter({

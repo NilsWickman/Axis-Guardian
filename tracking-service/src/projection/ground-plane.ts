@@ -124,9 +124,9 @@ export function rotateAroundZ(v: Point3D, angleRad: number): Point3D {
  * Transform a ray from camera space to world space
  *
  * Elevation convention:
- * - In our projection: positive = camera pitched down (looking at ground)
- * - The sitemap/scene_metadata uses: negative = looking down, positive = looking up
- * - We negate the elevation to match: -5° from sitemap becomes +5° internally = looking down
+ * - The sitemap uses: negative = looking down, positive = looking up
+ * - In our rotation math: positive angle = pitch down (ray direction tilts toward -Y in camera space)
+ * - We negate the elevation to convert: sitemap -5° becomes internal +5° = looking down
  */
 export function transformRayToWorld(
   rayCamera: Point3D,
@@ -134,14 +134,18 @@ export function transformRayToWorld(
   elevationDeg: number
 ): Point3D {
   // Step 1: Apply elevation rotation (pitch around X-axis)
-  // Negate elevation because sitemap convention is opposite (negative = looking down)
-  // So -5° from sitemap becomes +5° = looking down at ground
-  const elevationRad = degToRad(elevationDeg)
+  // Positive elevation = camera looking down toward ground
+  // Negate because rotateAroundX rotates Y toward Z (up in camera space)
+  // but we want positive elevation to rotate toward -Y (down in camera space)
+  const elevationRad = degToRad(-elevationDeg)
   const rayElevated = rotateAroundX(rayCamera, elevationRad)
 
   // Step 2: Convert from camera coordinates to world coordinates
-  // Negate X to flip horizontal axis: camera right (+X) becomes world left
-  // This corrects the mirror effect in the projection
+  // Camera space: X=right, Y=down, Z=forward
+  // World space:  X=east, Y=north, Z=up
+  // Mapping: camera Z (forward) → world Y (north when azimuth=0)
+  //          camera X (right) → world X (east when azimuth=0), negated for handedness
+  //          camera Y (down) → world Z: negate because looking down in camera = negative Z in world
   const rayIntermediate: Point3D = {
     x: -rayElevated.x,
     y: rayElevated.z,

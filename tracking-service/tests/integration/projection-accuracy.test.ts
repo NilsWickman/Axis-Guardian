@@ -44,7 +44,7 @@ describe('Projection Accuracy with Real Cameras', () => {
 
     it('projects center of image to a point within the room', () => {
       const bbox = { x: 0.4, y: 0.3, width: 0.2, height: 0.4 }
-      const result = projectDetectionToGround(bbox, camera1, true)
+      const result = projectDetectionToGround(bbox, camera1, [], true)
 
       console.log('Camera 1 center projection:', result)
 
@@ -60,8 +60,8 @@ describe('Projection Accuracy with Real Cameras', () => {
       const leftBbox = { x: 0.1, y: 0.5, width: 0.1, height: 0.3 }
       const centerBbox = { x: 0.45, y: 0.5, width: 0.1, height: 0.3 }
 
-      const leftResult = projectDetectionToGround(leftBbox, camera1, true)
-      const centerResult = projectDetectionToGround(centerBbox, camera1, true)
+      const leftResult = projectDetectionToGround(leftBbox, camera1, [], true)
+      const centerResult = projectDetectionToGround(centerBbox, camera1, [], true)
 
       console.log('Left projection:', leftResult.worldPoint)
       console.log('Center projection:', centerResult.worldPoint)
@@ -81,8 +81,8 @@ describe('Projection Accuracy with Real Cameras', () => {
       const bottomBbox = { x: 0.45, y: 0.7, width: 0.1, height: 0.2 }
       const topBbox = { x: 0.45, y: 0.1, width: 0.1, height: 0.2 }
 
-      const bottomResult = projectDetectionToGround(bottomBbox, camera1, true)
-      const topResult = projectDetectionToGround(topBbox, camera1, true)
+      const bottomResult = projectDetectionToGround(bottomBbox, camera1, [], true)
+      const topResult = projectDetectionToGround(topBbox, camera1, [], true)
 
       if (bottomResult.isValid && topResult.isValid) {
         const camPos = camera1.position
@@ -107,7 +107,7 @@ describe('Projection Accuracy with Real Cameras', () => {
       // A person at the edge of a 60° FOV camera at 45° elevation
       // with 1.5m height should produce projections within reasonable range
       const personBbox = { x: 0.3, y: 0.4, width: 0.15, height: 0.35 }
-      const result = projectDetectionToGround(personBbox, camera1, true)
+      const result = projectDetectionToGround(personBbox, camera1, [], true)
 
       expect(result.isValid).toBe(true)
 
@@ -134,7 +134,7 @@ describe('Projection Accuracy with Real Cameras', () => {
       // Use a standing person bbox in lower portion of image
       // With negative elevation, only lower image points intersect the ground plane reasonably
       const bbox = { x: 0.4, y: 0.5, width: 0.12, height: 0.4 }
-      const result = projectDetectionToGround(bbox, camera2, true)
+      const result = projectDetectionToGround(bbox, camera2, [], true)
 
       console.log('Camera 2 lower projection:', result)
 
@@ -149,8 +149,8 @@ describe('Projection Accuracy with Real Cameras', () => {
     it('produces projections in a different area than camera 1', () => {
       const bbox = { x: 0.4, y: 0.5, width: 0.2, height: 0.3 }
 
-      const result1 = projectDetectionToGround(bbox, camera1, true)
-      const result2 = projectDetectionToGround(bbox, camera2, true)
+      const result1 = projectDetectionToGround(bbox, camera1, [], true)
+      const result2 = projectDetectionToGround(bbox, camera2, [], true)
 
       console.log('Camera 1 projection:', result1.worldPoint)
       console.log('Camera 2 projection:', result2.worldPoint)
@@ -170,7 +170,7 @@ describe('Projection Accuracy with Real Cameras', () => {
   describe('Edge Cases', () => {
     it('handles bbox at image edge', () => {
       const edgeBbox = { x: 0.0, y: 0.5, width: 0.1, height: 0.3 }
-      const result = projectDetectionToGround(edgeBbox, camera1, true)
+      const result = projectDetectionToGround(edgeBbox, camera1, [], true)
 
       // May or may not be valid depending on geometry
       console.log('Edge bbox result:', result)
@@ -178,7 +178,7 @@ describe('Projection Accuracy with Real Cameras', () => {
 
     it('handles small bbox (distant person)', () => {
       const smallBbox = { x: 0.48, y: 0.2, width: 0.04, height: 0.1 }
-      const result = projectDetectionToGround(smallBbox, camera1, true)
+      const result = projectDetectionToGround(smallBbox, camera1, [], true)
 
       console.log('Small bbox (distant) result:', result)
 
@@ -196,7 +196,7 @@ describe('Projection Accuracy with Real Cameras', () => {
 
     it('handles large bbox (close person)', () => {
       const largeBbox = { x: 0.3, y: 0.5, width: 0.4, height: 0.45 }
-      const result = projectDetectionToGround(largeBbox, camera1, true)
+      const result = projectDetectionToGround(largeBbox, camera1, [], true)
 
       console.log('Large bbox (close) result:', result)
 
@@ -237,7 +237,7 @@ describe('Projection Accuracy with Real Cameras', () => {
       expect(bbox.width).toBeCloseTo(0.08125, 5)
       expect(bbox.height).toBeCloseTo(0.3638888888888889, 5)
 
-      const result = projectDetectionToGround(bbox, camera1, true)
+      const result = projectDetectionToGround(bbox, camera1, [], true)
       console.log('Converted emulator bbox projection:', result)
 
       // This is a real detection from camera-HC3
@@ -288,8 +288,8 @@ describe('Multi-Camera Correlation Scenario', () => {
     const cam1Bbox = { x: 0.45, y: 0.4, width: 0.1, height: 0.35 }
     const cam2Bbox = { x: 0.55, y: 0.4, width: 0.1, height: 0.35 }
 
-    const result1 = projectDetectionToGround(cam1Bbox, camera1, true)
-    const result2 = projectDetectionToGround(cam2Bbox, camera2, true)
+    const result1 = projectDetectionToGround(cam1Bbox, camera1, [], true)
+    const result2 = projectDetectionToGround(cam2Bbox, camera2, [], true)
 
     console.log('Camera 1 center-ish projection:', result1.worldPoint)
     console.log('Camera 2 center-ish projection:', result2.worldPoint)

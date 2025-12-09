@@ -142,6 +142,14 @@ function formatTrackId(trackId: string): string {
 }
 
 /**
+ * Format track label with ID and detection count
+ */
+function formatTrackLabel(track: GlobalTrack): string {
+  const id = track.globalTrackId.replace('global-', '#')
+  return `${id} (${track.detectionCount})`
+}
+
+/**
  * Get interpolated position for a track
  * Uses time-based exponential smoothing for frame-rate-independent animation
  */
@@ -295,7 +303,8 @@ function drawMarker(ctx: CanvasRenderingContext2D, track: GlobalTrack, interpola
     ctx.globalAlpha = 1
   }
 
-  // Track ID label
+  // Track ID label with detection count
+  const label = formatTrackLabel(track)
   ctx.font = '600 11px ui-monospace, SFMono-Regular, Menlo, Monaco, monospace'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'bottom'
@@ -303,11 +312,11 @@ function drawMarker(ctx: CanvasRenderingContext2D, track: GlobalTrack, interpola
   // Text shadow/outline
   ctx.strokeStyle = '#000'
   ctx.lineWidth = 2
-  ctx.strokeText(formatTrackId(track.globalTrackId), x, y - radius - 6)
+  ctx.strokeText(label, x, y - radius - 6)
 
   // Text fill
   ctx.fillStyle = track.color
-  ctx.fillText(formatTrackId(track.globalTrackId), x, y - radius - 6)
+  ctx.fillText(label, x, y - radius - 6)
 }
 
 /**

@@ -331,7 +331,7 @@ export interface TrackingConfig {
 export const DEFAULT_TRACKING_CONFIG: TrackingConfig = {
   correlationDistanceM: 0.6,       // Increased from 0.5 to handle cross-camera projection variance
   mergeWindowMs: 200,
-  trackExpiryMs: 5000,             // Tracks expire after 5 seconds without detections
+  trackExpiryMs: 10000,            // Tracks expire after 10 seconds without detections
   maxTrailLength: 20,
   minDetectionsToConfirm: 2,       // Reduced from 3 for faster track confirmation
   maxVelocityMs: 50,
@@ -339,7 +339,7 @@ export const DEFAULT_TRACKING_CONFIG: TrackingConfig = {
   minCreationConfidence: 0.7,      // Require higher confidence for new tracks
   exclusionRadius: 0.5,            // Exclusion radius for confirmed tracks
   crossingProximityThreshold: 1.5, // Detect crossing when tracks within 1.5m
-  occlusionCoastTimeMs: 3000,      // Coast for 3 seconds during occlusion (allows walking behind pillars)
+  occlusionCoastTimeMs: 7000,      // Coast for 7 seconds during occlusion (allows walking behind pillars)
   reidentificationGateMultiplier: 4.0, // 4x expanded gate for re-ID after occlusion
   missedFramesBeforeOcclusion: 5,  // Require 5 missed frames before transitioning to occluded
   detectionsToExitOcclusion: 2,    // Require 2 detections to exit occlusion state

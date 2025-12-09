@@ -1,5 +1,8 @@
 packages:
-  - 'frontend'
-  - 'tracking-service'
-  - 'camera-emulator'
-  - 'shared/types'
+  - frontend
+  - tracking-service
+  - camera-emulator
+  - shared/types
+
+ignoredBuiltDependencies:
+  - canvas

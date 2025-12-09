@@ -189,3 +189,5 @@ simulation/mediamtx/mediamtx.custom.yml
 
 # Camera calibration files
 tracking-service/calibration-*
+tracking-service/visualization-output/
+tracking-service/snapshots/

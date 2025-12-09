@@ -11,27 +11,104 @@ import type { CameraParams, CameraConfig, SiteMapCameraConfig, CameraCalibration
 import { siteMapConfigToCamera } from '../projection/ground-plane.js'
 
 /**
+ * World coordinate transformation from K/R/T dataset coords to sitemap coords
+ *
+ * The transformation involves two steps:
+ * 1. K/R/T -> scene_metadata: similarity transform (rotation + scale)
+ * 2. scene_metadata -> sitemap: Y reflection (y' = 12 - y)
+ *
+ * Dataset coordinate system (from cam_param.mat T vectors):
+ *   - HC4 at origin (0, 0)
+ *   - HC3 at (8.32, 13.45)
+ *
+ * scene_metadata coordinate system:
+ *   - HC4 at (0.9, 0.5)
+ *   - HC3 at (16.22, 0.3)
+ *
+ * Sitemap coordinate system:
+ *   - HC4 at (0.9, 11.5)
+ *   - HC3 at (16.22, 11.7)
+ *
+ * Combined transform (includes Y reflection):
+ *   x_sitemap = 0.499053*x + 0.830586*y + 0.9
+ *   y_sitemap = 0.830586*x - 0.499053*y + 11.5
+ */
+const WORLD_TRANSFORM = {
+  // This is NOT a standard rotation matrix due to the Y reflection
+  // Matrix: [[a, -b], [-b, -a]] where a=0.499053, b=-0.830586
+  rotation: [
+    [0.499053, 0.830586],
+    [0.830586, -0.499053],
+  ],
+  translation: [0.9, 11.5],
+  scale: 1.0,
+}
+
+/**
  * K/R/T Calibration data from the Auditorium dataset (cam_param.mat)
  *
- * NOTE: The K/R/T matrices from cam_param.mat use a different coordinate system
- * than the sitemap. The coordinate transformation is complex because:
- * - cam_param.mat: HC3 at origin (0,0), HC4 at (8.32, 13.45)
- * - scene_metadata.xml: HC3 at (16.22, 0.3), HC4 at (0.9, 0.5)
- * - sitemap: HC3 at (16.22, 11.7), HC4 at (0.9, 11.5)
+ * These matrices were extracted from the MATLAB calibration file and provide
+ * accurate ground-plane projection using the formula from the dataset README:
  *
- * The K/R/T projection produces coordinates in the cam_param.mat system,
- * which would require a complex transformation to map to sitemap coordinates.
+ *   A = K * R
+ *   A = [A(:, 1:2), [cx - x; cy - y; -1]]
+ *   KRT = K * R * T
+ *   p = A \ KRT  (solve linear system)
  *
- * For now, K/R/T calibrations are DISABLED to use the simpler legacy projection
- * with azimuth/elevation from the sitemap. The sitemap values have been calibrated
- * to match the scene_metadata.xml ground truth.
- *
- * To enable K/R/T projection, uncomment the calibrations below and implement
- * the proper coordinate transformation.
+ * The worldTransform converts from dataset coordinates to sitemap coordinates.
  */
 const CAMERA_CALIBRATIONS: Record<string, CameraCalibration> = {
-  // K/R/T calibrations disabled - using legacy azimuth/elevation projection
-  // See tech-logs/krt-calibration-projection.md for implementation notes
+  // HC3 (camera1) - mounted at position (16.22, 11.7) in sitemap
+  camera1: {
+    K: [
+      [1480, 0, 0],
+      [0, 1480, 0],
+      [0, 0, 1],
+    ],
+    R: [
+      [0.26415998, 0.96365108, -0.0399512],
+      [0.01284627, -0.04493433, -0.99890734],
+      [-0.96439332, 0.26335812, -0.02424917],
+    ],
+    T: [8.31972445, 13.44595571, 1.59303293],
+    center: [960, 540],
+    scale: 1,
+    worldTransform: WORLD_TRANSFORM,
+  },
+  // HC4 (camera2) - mounted at position (0.9, 11.5) in sitemap
+  camera2: {
+    K: [
+      [2350, 0, 0],
+      [0, 2350, 0],
+      [0, 0, 1],
+    ],
+    R: [
+      [1, 0, 0],
+      [0, -0.08715574, -0.9961947],
+      [0, 0.9961947, -0.08715574],
+    ],
+    T: [0, 0, 1.5],
+    center: [960, 540],
+    scale: 1,
+    worldTransform: WORLD_TRANSFORM,
+  },
+}
+
+/**
+ * Camera bias corrections from cross-camera correlation evaluation (Dev2)
+ *
+ * These offsets compensate for systematic projection errors identified through
+ * ground truth analysis. Applied after projection to align positions across cameras.
+ *
+ * Measured biases:
+ * - camera1 (HC3): X: -0.083m, Y: -0.050m (minimal, near-zero correction)
+ * - camera2 (HC4): X: +0.438m, Y: -0.125m (significant X bias)
+ *
+ * Reference: docs/CORRELATION_EVALUATION_REPORT.md
+ */
+export const CAMERA_BIAS_CORRECTIONS: Record<string, { x: number; y: number }> = {
+  camera1: { x: +0.083, y: +0.050 },   // Compensate for -0.083/-0.050 bias
+  camera2: { x: -0.438, y: +0.125 },   // Compensate for +0.438/-0.125 bias
 }
 
 
@@ -106,6 +183,15 @@ export class CameraRegistry {
   hasCalibration(cameraId: string): boolean {
     const normalizedId = this.normalizeCameraId(cameraId)
     return normalizedId in CAMERA_CALIBRATIONS
+  }
+
+  /**
+   * Get bias correction for a camera (from cross-camera evaluation)
+   * Returns offset to add to projected coordinates
+   */
+  getBiasCorrection(cameraId: string): { x: number; y: number } {
+    const normalizedId = this.normalizeCameraId(cameraId)
+    return CAMERA_BIAS_CORRECTIONS[normalizedId] ?? { x: 0, y: 0 }
   }
 
   /**

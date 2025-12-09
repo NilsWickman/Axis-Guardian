@@ -77,6 +77,43 @@ export function distance(p1: Point, p2: Point): number {
 }
 
 /**
+ * Check if a point lies on a line segment (within tolerance)
+ */
+export function isPointOnLineSegment(point: Point, segment: LineSegment, tolerance: number = 1): boolean {
+  const { start, end } = segment
+
+  // Check if point is within bounding box (with tolerance)
+  const minX = Math.min(start.x, end.x) - tolerance
+  const maxX = Math.max(start.x, end.x) + tolerance
+  const minY = Math.min(start.y, end.y) - tolerance
+  const maxY = Math.max(start.y, end.y) + tolerance
+
+  if (point.x < minX || point.x > maxX || point.y < minY || point.y > maxY) {
+    return false
+  }
+
+  // Calculate distance from point to line segment
+  const segmentLength = distance(start, end)
+  if (segmentLength < 0.001) {
+    // Degenerate segment (point)
+    return distance(point, start) <= tolerance
+  }
+
+  // Project point onto line and check distance
+  const t = Math.max(0, Math.min(1,
+    ((point.x - start.x) * (end.x - start.x) + (point.y - start.y) * (end.y - start.y)) /
+    (segmentLength * segmentLength)
+  ))
+
+  const projection = {
+    x: start.x + t * (end.x - start.x),
+    y: start.y + t * (end.y - start.y)
+  }
+
+  return distance(point, projection) <= tolerance
+}
+
+/**
  * Get intersection of a ray with a circle
  * Returns the closest intersection point, or null if no intersection
  */
@@ -582,7 +619,7 @@ export function calculateVisibleFOV(
   }
 
   // Cast rays at each angle
-  const visiblePoints: Point[] = [cameraPosition]
+  const rawPoints: Point[] = []
 
   for (const angle of uniqueAngles) {
     const direction = {
@@ -591,7 +628,131 @@ export function calculateVisibleFOV(
     }
 
     const hitPoint = castRay(cameraPosition, direction, viewDistance, walls, effectiveCircles, effectiveRectangles)
-    visiblePoints.push(hitPoint)
+    rawPoints.push(hitPoint)
+  }
+
+  // Post-process: insert arc/edge points between consecutive points on same obstacle
+  const visiblePoints: Point[] = [cameraPosition]
+
+  for (let i = 0; i < rawPoints.length; i++) {
+    const current = rawPoints[i]
+    const next = rawPoints[(i + 1) % rawPoints.length]
+
+    visiblePoints.push(current)
+
+    let handled = false
+
+    // Check if both points lie on the same circle (within tolerance)
+    if (!handled) {
+      for (const circle of effectiveCircles) {
+        const distCurrent = distance(current, circle.center)
+        const distNext = distance(next, circle.center)
+        const tolerance = 2 // pixels
+
+        if (Math.abs(distCurrent - circle.radius) < tolerance &&
+            Math.abs(distNext - circle.radius) < tolerance) {
+          // Both points are on this circle - add arc points between them
+          const angleCurrent = Math.atan2(current.y - circle.center.y, current.x - circle.center.x)
+          const angleNext = Math.atan2(next.y - circle.center.y, next.x - circle.center.x)
+
+          // Calculate the arc angle difference
+          let angleDiff = angleNext - angleCurrent
+
+          // Normalize angleDiff to [-π, π] to get the shorter arc
+          while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI
+          while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI
+
+          // Only add arc points if the angular span is significant (> 5 degrees)
+          if (Math.abs(angleDiff) > 0.09) {
+            const numArcPoints = Math.max(2, Math.floor(Math.abs(angleDiff) / 0.15)) // ~8.5 degrees per point
+            for (let j = 1; j < numArcPoints; j++) {
+              const t = j / numArcPoints
+              const arcAngle = angleCurrent + angleDiff * t
+              visiblePoints.push({
+                x: circle.center.x + circle.radius * Math.cos(arcAngle),
+                y: circle.center.y + circle.radius * Math.sin(arcAngle)
+              })
+            }
+          }
+          handled = true
+          break
+        }
+      }
+    }
+
+    // Check if both points lie on edges of the same rectangle
+    if (!handled) {
+      for (const rect of effectiveRectangles) {
+        const edges = getRectangleEdges(rect)
+        const tolerance = 2 // pixels
+
+        // Find which edge each point is on
+        let currentEdgeIdx = -1
+        let nextEdgeIdx = -1
+
+        for (let e = 0; e < edges.length; e++) {
+          if (isPointOnLineSegment(current, edges[e], tolerance)) {
+            currentEdgeIdx = e
+          }
+          if (isPointOnLineSegment(next, edges[e], tolerance)) {
+            nextEdgeIdx = e
+          }
+        }
+
+        // If both points are on edges of this rectangle (possibly different edges)
+        if (currentEdgeIdx >= 0 && nextEdgeIdx >= 0) {
+          if (currentEdgeIdx !== nextEdgeIdx) {
+            // Points are on different edges - need to add corner(s)
+            // Get rectangle corners
+            const corners = [
+              edges[0].start, // corner 0
+              edges[1].start, // corner 1
+              edges[2].start, // corner 2
+              edges[3].start, // corner 3
+            ]
+
+            // Find corners between the two edges (going the short way around)
+            // Each edge connects corner[i] to corner[(i+1)%4]
+            // So edge i ends at corner (i+1)%4
+
+            // The corner at the end of currentEdge
+            const cornerAfterCurrent = (currentEdgeIdx + 1) % 4
+            // The corner at the start of nextEdge
+            const cornerBeforeNext = nextEdgeIdx
+
+            // Determine which corners to traverse (could be 1 or more)
+            // Go from cornerAfterCurrent to cornerBeforeNext
+            let c = cornerAfterCurrent
+            const cornersToAdd: Point[] = []
+
+            // Walk around corners (max 3 corners between any two edges)
+            for (let step = 0; step < 4; step++) {
+              if (c === cornerBeforeNext) break
+              cornersToAdd.push(corners[c])
+              c = (c + 1) % 4
+            }
+
+            // Check if going the other way is shorter
+            let cReverse = cornerAfterCurrent
+            const cornersReverse: Point[] = []
+            for (let step = 0; step < 4; step++) {
+              cReverse = (cReverse + 3) % 4 // go backwards
+              if (cReverse === cornerBeforeNext) break
+              cornersReverse.push(corners[cReverse])
+            }
+
+            // Use the shorter path
+            const cornersPath = cornersToAdd.length <= cornersReverse.length ? cornersToAdd : cornersReverse.reverse()
+
+            for (const corner of cornersPath) {
+              visiblePoints.push(corner)
+            }
+          }
+          handled = true
+          break
+        }
+      }
+    }
   }
 
   // Close the polygon
@@ -611,6 +772,314 @@ export function drawPolygon(ctx: CanvasRenderingContext2D, points: Point[], fill
 
   for (let i = 1; i < points.length; i++) {
     ctx.lineTo(points[i].x, points[i].y)
+  }
+
+  ctx.closePath()
+
+  if (fillStyle) {
+    ctx.fillStyle = fillStyle
+    ctx.fill()
+  }
+
+  if (strokeStyle) {
+    ctx.strokeStyle = strokeStyle
+    ctx.lineWidth = lineWidth || 2
+    ctx.stroke()
+  }
+}
+
+/**
+ * Represents a segment of the FOV polygon that may be either a line or an arc
+ */
+export interface FOVSegment {
+  type: 'line' | 'arc'
+  point: Point  // For line: the endpoint. For arc: the center of the circle
+  // Arc-specific properties
+  radius?: number
+  startAngle?: number
+  endAngle?: number
+  anticlockwise?: boolean
+}
+
+/**
+ * Calculate the visible FOV polygon with proper arc segments around circular obstacles
+ * This produces smoother curves around pillars instead of treating them like pentagons
+ */
+export function calculateVisibleFOVWithArcs(
+  cameraPosition: Point,
+  rotation: number, // azimuth in degrees (0° = North/+Y, clockwise)
+  fov: number, // field of view in degrees
+  viewDistance: number, // in pixels
+  walls: LineSegment[],
+  circles: CircleObstacle[] = [],
+  rectangles: RectangleObstacle[] = [],
+  heightOptions?: HeightAwareOptions
+): FOVSegment[] {
+  // Filter obstacles based on height if height-aware options provided
+  let effectiveCircles = circles
+  let effectiveRectangles = rectangles
+
+  if (heightOptions) {
+    const { cameraHeight, targetHeight, pixelsPerMeter } = heightOptions
+
+    effectiveCircles = circles.filter((circle) =>
+      doesObstacleBlockView(
+        cameraPosition,
+        circle.center,
+        circle.obstacleHeight,
+        cameraHeight,
+        targetHeight,
+        pixelsPerMeter
+      )
+    )
+
+    effectiveRectangles = rectangles.filter((rect) =>
+      doesObstacleBlockView(
+        cameraPosition,
+        rect.center,
+        rect.obstacleHeight,
+        cameraHeight,
+        targetHeight,
+        pixelsPerMeter
+      )
+    )
+  }
+
+  // Convert from azimuth (0° = North/+Y world, clockwise) to canvas angle
+  const canvasAngle = 90 - rotation
+  const rotationRad = (canvasAngle * Math.PI) / 180
+  const halfFovRad = (fov / 2) * (Math.PI / 180)
+
+  const leftAngle = rotationRad - halfFovRad
+  const rightAngle = rotationRad + halfFovRad
+
+  // Collect all angles to cast rays at, along with metadata about what they hit
+  interface RayResult {
+    angle: number
+    point: Point
+    hitCircle: CircleObstacle | null
+    isEntryTangent: boolean  // true if this is the "entry" tangent (first hit on circle)
+    isExitTangent: boolean   // true if this is the "exit" tangent (leaving circle)
+  }
+
+  const rayResults: RayResult[] = []
+
+  // Helper: cast a ray and determine what it hits
+  const castAndRecord = (angle: number, isEntryTangent = false, isExitTangent = false, expectedCircle: CircleObstacle | null = null) => {
+    const direction = { x: Math.cos(angle), y: Math.sin(angle) }
+    const hitPoint = castRay(cameraPosition, direction, viewDistance, walls, effectiveCircles, effectiveRectangles)
+
+    // Check if we hit the expected circle
+    let hitCircle: CircleObstacle | null = null
+    if (expectedCircle) {
+      const distToHit = distance(cameraPosition, hitPoint)
+      const distToCircle = distance(cameraPosition, expectedCircle.center)
+      // If the hit point is approximately at the circle's edge
+      const hitDistFromCenter = distance(hitPoint, expectedCircle.center)
+      if (Math.abs(hitDistFromCenter - expectedCircle.radius) < 1 && distToHit < distToCircle + expectedCircle.radius) {
+        hitCircle = expectedCircle
+      }
+    }
+
+    rayResults.push({
+      angle,
+      point: hitPoint,
+      hitCircle,
+      isEntryTangent: isEntryTangent && hitCircle !== null,
+      isExitTangent: isExitTangent && hitCircle !== null,
+    })
+  }
+
+  // 1. Add regular sweep angles
+  const numRays = Math.max(Math.floor(fov / 2), 20)
+  const angleStep = (fov * Math.PI / 180) / numRays
+  for (let i = 0; i <= numRays; i++) {
+    const angle = rightAngle - i * angleStep
+    castAndRecord(angle)
+  }
+
+  // 2. Add angles to wall endpoints
+  for (const wall of walls) {
+    for (const point of [wall.start, wall.end]) {
+      const dx = point.x - cameraPosition.x
+      const dy = point.y - cameraPosition.y
+      const angle = Math.atan2(dy, dx)
+      if (isAngleInFOV(angle, leftAngle, rightAngle)) {
+        castAndRecord(angle + 0.0001)
+        castAndRecord(angle - 0.0001)
+      }
+    }
+  }
+
+  // 3. Add angles to rectangle corners
+  for (const rect of effectiveRectangles) {
+    const edges = getRectangleEdges(rect)
+    for (const edge of edges) {
+      for (const point of [edge.start, edge.end]) {
+        const dx = point.x - cameraPosition.x
+        const dy = point.y - cameraPosition.y
+        const angle = Math.atan2(dy, dx)
+        if (isAngleInFOV(angle, leftAngle, rightAngle)) {
+          castAndRecord(angle + 0.0001)
+          castAndRecord(angle - 0.0001)
+        }
+      }
+    }
+  }
+
+  // 4. Add angles to circle tangent points with metadata
+  for (const circle of effectiveCircles) {
+    const tangents = getCircleTangentPoints(cameraPosition, circle)
+    if (tangents.length === 2) {
+      const dx0 = tangents[0].x - cameraPosition.x
+      const dy0 = tangents[0].y - cameraPosition.y
+      const angle0 = Math.atan2(dy0, dx0)
+
+      const dx1 = tangents[1].x - cameraPosition.x
+      const dy1 = tangents[1].y - cameraPosition.y
+      const angle1 = Math.atan2(dy1, dx1)
+
+      // Determine which tangent is "entry" and which is "exit" based on sweep direction
+      // Sweep is from right (high angle) to left (low angle)
+      const normAngle0 = normalizeAngle(angle0)
+      const normAngle1 = normalizeAngle(angle1)
+
+      let entryAngle: number, exitAngle: number
+      // In our sweep (right to left, high to low), entry comes first (higher angle)
+      if (normAngle0 > normAngle1) {
+        entryAngle = angle0
+        exitAngle = angle1
+      } else {
+        entryAngle = angle1
+        exitAngle = angle0
+      }
+
+      if (isAngleInFOV(entryAngle, leftAngle, rightAngle)) {
+        castAndRecord(entryAngle + 0.0001, true, false, circle)
+        castAndRecord(entryAngle - 0.0001, true, false, circle)
+      }
+      if (isAngleInFOV(exitAngle, leftAngle, rightAngle)) {
+        castAndRecord(exitAngle + 0.0001, false, true, circle)
+        castAndRecord(exitAngle - 0.0001, false, true, circle)
+      }
+    }
+  }
+
+  // Sort by angle (right to left / descending)
+  rayResults.sort((a, b) => normalizeAngle(b.angle) - normalizeAngle(a.angle))
+
+  // Remove duplicates
+  const uniqueResults: RayResult[] = []
+  for (const result of rayResults) {
+    if (uniqueResults.length === 0 ||
+        Math.abs(normalizeAngle(result.angle) - normalizeAngle(uniqueResults[uniqueResults.length - 1].angle)) > 0.00005) {
+      uniqueResults.push(result)
+    } else if (result.hitCircle && !uniqueResults[uniqueResults.length - 1].hitCircle) {
+      // Prefer results with circle metadata
+      uniqueResults[uniqueResults.length - 1] = result
+    }
+  }
+
+  // Build the FOV segments
+  const segments: FOVSegment[] = []
+  segments.push({ type: 'line', point: cameraPosition })
+
+  let currentCircle: CircleObstacle | null = null
+  let arcStartAngle: number | null = null
+
+  for (let i = 0; i < uniqueResults.length; i++) {
+    const result = uniqueResults[i]
+
+    // Check if we're entering or exiting a circle's shadow
+    if (result.hitCircle && result.isEntryTangent && currentCircle === null) {
+      // Entering a circle - start tracking for arc
+      currentCircle = result.hitCircle
+      arcStartAngle = Math.atan2(
+        result.point.y - result.hitCircle.center.y,
+        result.point.x - result.hitCircle.center.x
+      )
+      segments.push({ type: 'line', point: result.point })
+    } else if (result.hitCircle && result.isExitTangent && currentCircle === result.hitCircle) {
+      // Exiting the same circle - add arc segment
+      const arcEndAngle = Math.atan2(
+        result.point.y - currentCircle.center.y,
+        result.point.x - currentCircle.center.x
+      )
+
+      // Determine arc direction - we want the shorter arc on the side facing camera
+      // The arc should go around the side of the circle facing away from the camera
+      const cameraToCenter = Math.atan2(
+        currentCircle.center.y - cameraPosition.y,
+        currentCircle.center.x - cameraPosition.x
+      )
+
+      // Calculate angular difference to determine arc direction
+      let startNorm = normalizeAngle(arcStartAngle!)
+      let endNorm = normalizeAngle(arcEndAngle)
+
+      // We want the arc on the far side from camera (the occluded side)
+      // Calculate which direction gives us the arc facing away from camera
+      const midAngleCW = normalizeAngle((startNorm + endNorm) / 2)
+      const midAngleCCW = normalizeAngle((startNorm + endNorm) / 2 + Math.PI)
+
+      // Check which midpoint is further from camera direction
+      const cwDiff = Math.abs(normalizeAngle(midAngleCW - cameraToCenter))
+      const ccwDiff = Math.abs(normalizeAngle(midAngleCCW - cameraToCenter))
+
+      // If CW midpoint is closer to "away from camera", go CW; otherwise go CCW
+      const anticlockwise = cwDiff < Math.PI / 2 ? false : true
+
+      segments.push({
+        type: 'arc',
+        point: currentCircle.center,
+        radius: currentCircle.radius,
+        startAngle: arcStartAngle!,
+        endAngle: arcEndAngle,
+        anticlockwise,
+      })
+
+      currentCircle = null
+      arcStartAngle = null
+      segments.push({ type: 'line', point: result.point })
+    } else {
+      // Regular point
+      segments.push({ type: 'line', point: result.point })
+    }
+  }
+
+  // Close back to camera
+  segments.push({ type: 'line', point: cameraPosition })
+
+  return segments
+}
+
+/**
+ * Draw FOV segments (lines and arcs) on a canvas
+ */
+export function drawFOVSegments(
+  ctx: CanvasRenderingContext2D,
+  segments: FOVSegment[],
+  fillStyle?: string,
+  strokeStyle?: string,
+  lineWidth?: number
+) {
+  if (segments.length < 2) return
+
+  ctx.beginPath()
+
+  // Start at first point
+  const first = segments[0]
+  if (first.type === 'line') {
+    ctx.moveTo(first.point.x, first.point.y)
+  }
+
+  for (let i = 1; i < segments.length; i++) {
+    const seg = segments[i]
+    if (seg.type === 'line') {
+      ctx.lineTo(seg.point.x, seg.point.y)
+    } else if (seg.type === 'arc' && seg.radius && seg.startAngle !== undefined && seg.endAngle !== undefined) {
+      ctx.arc(seg.point.x, seg.point.y, seg.radius, seg.startAngle, seg.endAngle, seg.anticlockwise)
+    }
   }
 
   ctx.closePath()

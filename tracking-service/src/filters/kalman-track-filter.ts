@@ -34,11 +34,19 @@ export interface KalmanFilterConfig {
 /**
  * Default Kalman filter configuration
  * Tuned for walking pedestrians (~1.4 m/s typical speed)
- * Optimized for better prediction during brief occlusions
+ *
+ * Values based on evaluation by Dev4 (see docs/KALMAN_FILTER_TUNING.md):
+ * - q_vel=1.0: Velocity process noise for walking (captures 0.5-2.0 m/s² accelerations)
+ * - r_pos=0.25: Measurement noise (~0.5m std from camera projection error)
+ *
+ * These values provide:
+ * - 1-step prediction RMSE: ~0.43m at 10Hz
+ * - Good velocity responsiveness for direction changes
+ * - Balance between smoothing and tracking lag
  */
 export const DEFAULT_KALMAN_CONFIG: KalmanFilterConfig = {
-  processNoise: 0.5,              // Higher for better handling of sudden stops/starts (pedestrian motion)
-  measurementNoise: 0.2,          // Lower for faster response to direction changes (was 0.4)
+  processNoise: 1.0,              // Velocity process noise (m/s)² - tuned for walking accelerations
+  measurementNoise: 0.25,         // Position measurement noise (m²) - based on ~0.5m projection std
   initialPositionUncertainty: 1,  // Initial position uncertainty 1m
   initialVelocityUncertainty: 1,  // Initial velocity uncertainty 1m/s
 }
