@@ -251,7 +251,7 @@ describe('projectDetectionToGround', () => {
 
   it('projects normalized bbox to world coordinates', () => {
     const bbox = { x: 0.4, y: 0.3, width: 0.2, height: 0.4 }
-    const result = projectDetectionToGround(bbox, camera, true)
+    const result = projectDetectionToGround(bbox, camera, [], true)
     expect(result.isValid).toBe(true)
     expect(result.worldPoint.x).toBeCloseTo(camera.position.x, 0) // Near center
   })

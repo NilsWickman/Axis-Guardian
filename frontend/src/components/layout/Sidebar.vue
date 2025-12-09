@@ -19,6 +19,7 @@
     Box,
     Code,
     Film,
+    Crosshair,
   } from 'lucide-vue-next'
   import { useTheme } from '@/composables/useTheme'
 
@@ -99,6 +100,11 @@
           name: 'Frame Review',
           path: '/cameras/frame-review',
           icon: Film,
+        },
+        {
+          name: 'Ground Truth Annotator',
+          path: '/calibration/annotator',
+          icon: Crosshair,
         },
       ],
     },

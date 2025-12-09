@@ -152,6 +152,14 @@ export class DetectionProcessor {
         projectionReason = legacyResult.reason
       }
 
+      // Apply camera-specific bias correction (from cross-camera evaluation)
+      // This compensates for systematic projection errors identified in ground truth analysis
+      const biasCorrection = this.cameraRegistry.getBiasCorrection(cameraId)
+      worldPoint = {
+        x: worldPoint.x + biasCorrection.x,
+        y: worldPoint.y + biasCorrection.y,
+      }
+
       // Log projected position (key available for linking in future)
       logger.logProjectedPosition(
         cameraId,
@@ -234,11 +242,16 @@ export class DetectionProcessor {
         return null
       }
 
+      // Apply camera-specific bias correction
+      const biasCorrection = this.cameraRegistry.getBiasCorrection(normalizedCameraId)
+      const correctedX = result.worldPoint.x + biasCorrection.x
+      const correctedY = result.worldPoint.y + biasCorrection.y
+
       const track = this.trackManager.processDetection(
         normalizedCameraId,
         trackId,
-        result.worldPoint.x,
-        result.worldPoint.y,
+        correctedX,
+        correctedY,
         confidence
       )
 
@@ -265,11 +278,16 @@ export class DetectionProcessor {
       return null
     }
 
+    // Apply camera-specific bias correction
+    const biasCorrection = this.cameraRegistry.getBiasCorrection(normalizedCameraId)
+    const correctedX = result.worldPoint.x + biasCorrection.x
+    const correctedY = result.worldPoint.y + biasCorrection.y
+
     const track = this.trackManager.processDetection(
       normalizedCameraId,
       trackId,
-      result.worldPoint.x,
-      result.worldPoint.y,
+      correctedX,
+      correctedY,
       confidence
     )
 

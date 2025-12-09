@@ -137,8 +137,8 @@ describe('Simulation API Flow', () => {
       mockTime += 100
       detectionProcessor.processWorldPosition('camera1', 5.2, 5.0, 0.9, 1)
 
-      // Advance time past expiry (default 5000ms)
-      mockTime += 6000
+      // Advance time past expiry (default 10000ms)
+      mockTime += 11000
       trackManager.cleanupExpiredTracks()
 
       const track = trackManager.getTrackById('global-1')
@@ -153,8 +153,8 @@ describe('Simulation API Flow', () => {
       mockTime += 100
       detectionProcessor.processWorldPosition('camera1', 5.2, 5.0, 0.9, 1)
 
-      // Advance time past double expiry
-      mockTime += 11000
+      // Advance time past double expiry (10000ms * 2)
+      mockTime += 21000
       trackManager.cleanupExpiredTracks()
 
       const track = trackManager.getTrackById('global-1')
@@ -314,7 +314,7 @@ describe('Simulation API Flow', () => {
       mockTime += 100
       detectionProcessor.processWorldPosition('camera1', 5.2, 5.0, 0.9, 1)
 
-      mockTime += 6000
+      mockTime += 11000  // Past 10000ms expiry
       trackManager.cleanupExpiredTracks()
 
       expect(expiredTrackId).toBe('global-1')

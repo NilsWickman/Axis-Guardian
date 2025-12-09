@@ -126,8 +126,8 @@ describe('TrackManager', () => {
       expect(track.isActive).toBe(true)
       expect(track.isConfirmed).toBe(true)
 
-      // Advance time past expiry (default 5000ms)
-      mockTime += 6000
+      // Advance time past expiry (default 10000ms)
+      mockTime += 11000
       trackManager.cleanupExpiredTracks()
 
       const expiredTrack = trackManager.getTrackById('global-1')
@@ -142,8 +142,8 @@ describe('TrackManager', () => {
       mockTime += 100
       trackManager.processDetection('camera1', 1, 5.2, 5.0, 0.9)
 
-      // Advance time past double expiry
-      mockTime += 11000
+      // Advance time past double expiry (default 10000ms * 2)
+      mockTime += 21000
       trackManager.cleanupExpiredTracks()
 
       const track = trackManager.getTrackById('global-1')
@@ -310,7 +310,7 @@ describe('TrackManager', () => {
       mockTime += 100
       trackManager.processDetection('camera1', 1, 5.2, 5.0, 0.9)
 
-      mockTime += 6000
+      mockTime += 11000  // Past 10000ms expiry
       trackManager.cleanupExpiredTracks()
 
       expect(expiredTrack).toBe('global-1')
