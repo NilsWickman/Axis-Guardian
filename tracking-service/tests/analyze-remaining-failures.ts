@@ -94,13 +94,22 @@ async function main() {
     const cameraIds = Object.keys(projections)
     if (cameraIds.length === 0) continue
 
+    // Apply smart camera selection (same logic as test)
     let finalPosition: Point2D
     if (cameraIds.length === 1) {
       finalPosition = projections[cameraIds[0]]
     } else {
-      finalPosition = {
-        x: cameraIds.reduce((s, c) => s + projections[c].x, 0) / cameraIds.length,
-        y: cameraIds.reduce((s, c) => s + projections[c].y, 0) / cameraIds.length,
+      // Check divergence
+      const dist = distance(projections['camera1']!, projections['camera2']!)
+      if (dist > 0.6) {
+        // Divergent - pick camera1 (more reliable)
+        finalPosition = projections['camera1'] || projections['camera2']!
+      } else {
+        // Close enough - average them
+        finalPosition = {
+          x: cameraIds.reduce((s, c) => s + projections[c].x, 0) / cameraIds.length,
+          y: cameraIds.reduce((s, c) => s + projections[c].y, 0) / cameraIds.length,
+        }
       }
     }
 

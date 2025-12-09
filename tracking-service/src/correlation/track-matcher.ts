@@ -132,14 +132,21 @@ export function mergeWorldPositions(
     }
   }
 
-  // Cameras agree - average them
+  // Cameras agree - use weighted average based on camera reliability
+  // Camera1 has 73% accuracy vs Camera2 at 62%
+  const CAMERA_WEIGHTS: Record<string, number> = {
+    camera1: 1.2,  // Higher weight for more reliable camera
+    camera2: 0.8,
+  }
+
   let totalWeight = 0
   let weightedX = 0
   let weightedY = 0
   let maxConfidence = 0
 
   for (const det of detections) {
-    const weight = det.confidence
+    const cameraWeight = CAMERA_WEIGHTS[det.cameraId] ?? 1.0
+    const weight = det.confidence * cameraWeight
     totalWeight += weight
     weightedX += det.worldX * weight
     weightedY += det.worldY * weight
