@@ -132,12 +132,37 @@ export interface DistortionCoeffs {
  * Used to transform dataset coordinates to sitemap coordinates
  */
 export interface WorldTransform {
-  /** 2x2 rotation matrix */
+  /** 2x2 rotation matrix (for affine transform) */
   rotation: number[][]
-  /** [tx, ty] translation offset */
+  /** [tx, ty] translation offset (for affine transform) */
   translation: number[]
   /** Scale factor (default 1.0) */
   scale?: number
+  /**
+   * Polynomial transform coefficients (if provided, overrides affine transform)
+   * Quadratic (6 coeffs): c0 + c1*x + c2*y + c3*x^2 + c4*y^2 + c5*x*y
+   * Cubic (10 coeffs): + c6*x^3 + c7*y^3 + c8*x^2*y + c9*x*y^2
+   * Quartic (15 coeffs): + c10*x^4 + c11*y^4 + c12*x^3*y + c13*x*y^3 + c14*x^2*y^2
+   */
+  polynomial?: {
+    /** Polynomial degree: 2 (quadratic), 3 (cubic), or 4 (quartic) */
+    degree: 2 | 3 | 4
+    /** Coefficients for X output */
+    coeffsX: number[]
+    /** Coefficients for Y output */
+    coeffsY: number[]
+  }
+  /**
+   * @deprecated Use polynomial with degree=2 instead
+   * Quadratic transform coefficients (if provided, overrides affine transform)
+   * Model: result = c0 + c1*x + c2*y + c3*x^2 + c4*y^2 + c5*x*y
+   */
+  quadratic?: {
+    /** Coefficients for X output: [c0, c1, c2, c3, c4, c5] */
+    coeffsX: number[]
+    /** Coefficients for Y output: [c0, c1, c2, c3, c4, c5] */
+    coeffsY: number[]
+  }
 }
 
 /**

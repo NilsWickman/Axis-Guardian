@@ -85,6 +85,14 @@ export function findTracksInRadius(
 
 /**
  * Merge multiple world positions into a weighted centroid
+ *
+ * Weight = detection confidence (all cameras treated equally)
+ *
+ * Note: We tried camera reliability weighting (camera1: 1.15, camera2: 0.85)
+ * but it didn't improve accuracy since which camera is better varies by case.
+ *
+ * We also tried outlier rejection (down-weighting detections far from centroid)
+ * but it didn't help because with 2 detections, both are equidistant from centroid.
  */
 export function mergeWorldPositions(
   detections: CameraDetection[]

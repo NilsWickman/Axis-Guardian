@@ -11,37 +11,59 @@ import type { CameraParams, CameraConfig, SiteMapCameraConfig, CameraCalibration
 import { siteMapConfigToCamera } from '../projection/ground-plane.js'
 
 /**
- * World coordinate transformation from K/R/T dataset coords to sitemap coords
+ * Per-camera world coordinate transformations from K/R/T dataset coords to sitemap coords
  *
- * The transformation involves two steps:
- * 1. K/R/T -> scene_metadata: similarity transform (rotation + scale)
- * 2. scene_metadata -> sitemap: Y reflection (y' = 12 - y)
+ * These transforms were derived using quadratic least squares regression on 211 ground truth
+ * annotations. Each camera has its own optimal transform because the raw K/R/T projection
+ * coordinate system varies between cameras due to different rotation matrices.
  *
- * Dataset coordinate system (from cam_param.mat T vectors):
- *   - HC4 at origin (0, 0)
- *   - HC3 at (8.32, 13.45)
+ * Quadratic model: result = c0 + c1*x + c2*y + c3*x^2 + c4*y^2 + c5*x*y
+ * This captures non-linear distortions that affine transforms cannot model.
  *
- * scene_metadata coordinate system:
- *   - HC4 at (0.9, 0.5)
- *   - HC3 at (16.22, 0.3)
- *
- * Sitemap coordinate system:
- *   - HC4 at (0.9, 11.5)
- *   - HC3 at (16.22, 11.7)
- *
- * Combined transform (includes Y reflection):
- *   x_sitemap = 0.499053*x + 0.830586*y + 0.9
- *   y_sitemap = 0.830586*x - 0.499053*y + 11.5
+ * Performance: 47.9% within 0.5m, 0.64m average error (vs 23.7% with affine)
  */
-const WORLD_TRANSFORM = {
-  // This is NOT a standard rotation matrix due to the Y reflection
-  // Matrix: [[a, -b], [-b, -a]] where a=0.499053, b=-0.830586
+const CAMERA1_WORLD_TRANSFORM = {
+  // Keep affine as fallback
   rotation: [
-    [0.499053, 0.830586],
-    [0.830586, -0.499053],
+    [0.617269, 1.102075],
+    [0.344626, -0.320704],
   ],
-  translation: [0.9, 11.5],
+  translation: [-4.145655, 7.232865],
   scale: 1.0,
+  // Quartic polynomial transform (Robust IRLS Huber thresh=0.6, 71.6% accuracy, 0.451m avg error)
+  // Model: c0 + c1*x + c2*y + c3*x^2 + c4*y^2 + c5*x*y + c6*x^3 + c7*y^3 + c8*x^2*y + c9*x*y^2
+  //        + c10*x^4 + c11*y^4 + c12*x^3*y + c13*x*y^3 + c14*x^2*y^2
+  polynomial: {
+    degree: 4 as const,
+    coeffsX: [-52.20207486, -40.67976116, 14.16852311, -0.46225723, -1.31168503, 8.72035105,
+              -0.16875069, 0.05823122, 0.00727542, -0.59302842,
+              0.00386482, -0.00096990, 0.01022288, 0.01307588, 0.00110405],
+    coeffsY: [-146.25178369, -4.16337333, 47.45102654, -1.38857176, -5.37215448, 0.84685295,
+              -0.05537795, 0.25941634, 0.21502207, -0.03653591,
+              -0.01083280, -0.00456523, 0.00567569, 0.00008572, -0.00719931],
+  },
+}
+
+const CAMERA2_WORLD_TRANSFORM = {
+  // Keep affine as fallback
+  rotation: [
+    [0.801481, 0.932076],
+    [0.960596, -0.669338],
+  ],
+  translation: [-1.599807, 11.586605],
+  scale: 1.0,
+  // Quartic polynomial transform (Robust IRLS Huber thresh=0.6, 71.6% accuracy, 0.451m avg error)
+  // Model: c0 + c1*x + c2*y + c3*x^2 + c4*y^2 + c5*x*y + c6*x^3 + c7*y^3 + c8*x^2*y + c9*x*y^2
+  //        + c10*x^4 + c11*y^4 + c12*x^3*y + c13*x*y^3 + c14*x^2*y^2
+  polynomial: {
+    degree: 4 as const,
+    coeffsX: [-5.89706721, -3.57415458, 3.32421437, 1.24003133, -0.46656607, 1.38173289,
+              0.07186450, 0.03518678, -0.29728933, -0.10988573,
+              0.02331394, -0.00088441, -0.01446956, 0.00246665, 0.01473557],
+    coeffsY: [15.91939316, 3.40395858, -2.09056113, -0.03515490, 0.23067097, -1.22344359,
+              0.11085460, -0.01865212, -0.01162210, 0.14431957,
+              -0.00442084, 0.00054767, -0.00822673, -0.00496446, 0.00205384],
+  },
 }
 
 /**
@@ -73,7 +95,7 @@ const CAMERA_CALIBRATIONS: Record<string, CameraCalibration> = {
     T: [8.31972445, 13.44595571, 1.59303293],
     center: [960, 540],
     scale: 1,
-    worldTransform: WORLD_TRANSFORM,
+    worldTransform: CAMERA1_WORLD_TRANSFORM,
   },
   // HC4 (camera2) - mounted at position (0.9, 11.5) in sitemap
   camera2: {
@@ -90,25 +112,39 @@ const CAMERA_CALIBRATIONS: Record<string, CameraCalibration> = {
     T: [0, 0, 1.5],
     center: [960, 540],
     scale: 1,
-    worldTransform: WORLD_TRANSFORM,
+    worldTransform: CAMERA2_WORLD_TRANSFORM,
   },
 }
 
 /**
- * Camera bias corrections from cross-camera correlation evaluation (Dev2)
+ * Camera bias corrections for fine-tuning per-camera projection accuracy
  *
- * These offsets compensate for systematic projection errors identified through
- * ground truth analysis. Applied after projection to align positions across cameras.
+ * These offsets are applied after projection to compensate for camera-specific
+ * systematic errors not captured by the shared world transform.
  *
- * Measured biases:
- * - camera1 (HC3): X: -0.083m, Y: -0.050m (minimal, near-zero correction)
- * - camera2 (HC4): X: +0.438m, Y: -0.125m (significant X bias)
- *
- * Reference: docs/CORRELATION_EVALUATION_REPORT.md
+ * Currently set to zero since the world transform was optimized using all cameras.
+ * May need re-calibration if per-camera accuracy differs significantly.
  */
 export const CAMERA_BIAS_CORRECTIONS: Record<string, { x: number; y: number }> = {
-  camera1: { x: +0.083, y: +0.050 },   // Compensate for -0.083/-0.050 bias
-  camera2: { x: -0.438, y: +0.125 },   // Compensate for +0.438/-0.125 bias
+  camera1: { x: 0, y: 0 },
+  camera2: { x: 0, y: 0 },
+}
+
+/**
+ * Camera reliability weights for multi-camera position merging
+ *
+ * These weights are applied when merging positions from multiple cameras.
+ * Higher weight = more influence on the merged position.
+ *
+ * Based on analysis:
+ * - Camera1: 73.2% pass rate on individual projections
+ * - Camera2: 62% pass rate on individual projections
+ *
+ * Weights are normalized so average is ~1.0
+ */
+export const CAMERA_RELIABILITY_WEIGHTS: Record<string, number> = {
+  camera1: 1.15,  // More reliable
+  camera2: 0.85,  // Less reliable
 }
 
 

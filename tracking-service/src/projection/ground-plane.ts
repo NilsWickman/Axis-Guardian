@@ -649,12 +649,54 @@ function solve3x3(A: number[][], b: number[]): number[] | null {
  * Apply 2D world coordinate transformation
  * Transforms point from dataset coordinates to sitemap coordinates
  *
- * Formula: P_sitemap = scale * R * P_dataset + translation
+ * Supports multiple modes (in order of precedence):
+ * 1. Polynomial transform (if transform.polynomial is provided):
+ *    - Degree 2: c0 + c1*x + c2*y + c3*x^2 + c4*y^2 + c5*x*y
+ *    - Degree 3: + c6*x^3 + c7*y^3 + c8*x^2*y + c9*x*y^2
+ *    - Degree 4: + c10*x^4 + c11*y^4 + c12*x^3*y + c13*x*y^3 + c14*x^2*y^2
+ * 2. Quadratic transform (deprecated, if transform.quadratic is provided)
+ * 3. Affine transform (fallback):
+ *    P_sitemap = scale * R * P_dataset + translation
  */
 export function applyWorldTransform(point: Point2D, transform: WorldTransform): Point2D {
-  const { rotation: R, translation: t, scale: s = 1.0 } = transform
+  const { x, y } = point
 
-  // Apply rotation and scale, then translation
+  // Use polynomial transform if available (most accurate)
+  if (transform.polynomial) {
+    const { coeffsX: cx, coeffsY: cy, degree } = transform.polynomial
+
+    // Build feature vector based on degree
+    const features: number[] = [1, x, y, x*x, y*y, x*y]
+
+    if (degree >= 3) {
+      features.push(x*x*x, y*y*y, x*x*y, x*y*y)
+    }
+
+    if (degree >= 4) {
+      features.push(x*x*x*x, y*y*y*y, x*x*x*y, x*y*y*y, x*x*y*y)
+    }
+
+    // Apply polynomial
+    let px = 0, py = 0
+    for (let i = 0; i < features.length && i < cx.length; i++) {
+      px += cx[i] * features[i]
+      py += cy[i] * features[i]
+    }
+
+    return { x: px, y: py }
+  }
+
+  // Use quadratic transform if available (deprecated, for backwards compatibility)
+  if (transform.quadratic) {
+    const { coeffsX: cx, coeffsY: cy } = transform.quadratic
+    return {
+      x: cx[0] + cx[1]*x + cx[2]*y + cx[3]*x*x + cx[4]*y*y + cx[5]*x*y,
+      y: cy[0] + cy[1]*x + cy[2]*y + cy[3]*x*x + cy[4]*y*y + cy[5]*x*y,
+    }
+  }
+
+  // Fallback to affine transform
+  const { rotation: R, translation: t, scale: s = 1.0 } = transform
   return {
     x: s * (R[0][0] * point.x + R[0][1] * point.y) + t[0],
     y: s * (R[1][0] * point.x + R[1][1] * point.y) + t[1],
