@@ -654,6 +654,7 @@ function solve3x3(A: number[][], b: number[]): number[] | null {
  *    - Degree 2: c0 + c1*x + c2*y + c3*x^2 + c4*y^2 + c5*x*y
  *    - Degree 3: + c6*x^3 + c7*y^3 + c8*x^2*y + c9*x*y^2
  *    - Degree 4: + c10*x^4 + c11*y^4 + c12*x^3*y + c13*x*y^3 + c14*x^2*y^2
+ *    - Degree 5: + c15*x^5 + c16*y^5 + c17*x^4*y + c18*x*y^4 + c19*x^3*y^2 + c20*x^2*y^3
  * 2. Quadratic transform (deprecated, if transform.quadratic is provided)
  * 3. Affine transform (fallback):
  *    P_sitemap = scale * R * P_dataset + translation
@@ -674,6 +675,10 @@ export function applyWorldTransform(point: Point2D, transform: WorldTransform): 
 
     if (degree >= 4) {
       features.push(x*x*x*x, y*y*y*y, x*x*x*y, x*y*y*y, x*x*y*y)
+    }
+
+    if (degree >= 5) {
+      features.push(x*x*x*x*x, y*y*y*y*y, x*x*x*x*y, x*y*y*y*y, x*x*x*y*y, x*x*y*y*y)
     }
 
     // Apply polynomial
