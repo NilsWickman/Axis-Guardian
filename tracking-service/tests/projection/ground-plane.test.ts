@@ -228,14 +228,14 @@ describe('isInHorizontalFOV', () => {
 describe('getBBoxBottomCenter', () => {
   it('calculates bottom center for normalized bbox', () => {
     const bbox = { x: 0.4, y: 0.3, width: 0.2, height: 0.4 }
-    const point = getBBoxBottomCenter(bbox, true, 1920, 1080)
+    const point = getBBoxBottomCenter(bbox, null, [], true, 1920, 1080)
     expect(point.x).toBeCloseTo(960, 1) // (0.4 + 0.1) * 1920 = 960
     expect(point.y).toBeCloseTo(756, 1) // (0.3 + 0.4) * 1080 = 756
   })
 
   it('calculates bottom center for pixel bbox', () => {
     const bbox = { x: 100, y: 100, width: 50, height: 100 }
-    const point = getBBoxBottomCenter(bbox, false)
+    const point = getBBoxBottomCenter(bbox, null, [], false)
     expect(point.x).toBe(125) // 100 + 25
     expect(point.y).toBe(200) // 100 + 100
   })
@@ -251,6 +251,7 @@ describe('projectDetectionToGround', () => {
 
   it('projects normalized bbox to world coordinates', () => {
     const bbox = { x: 0.4, y: 0.3, width: 0.2, height: 0.4 }
+    // Parameters: bbox, camera, tables, isNormalized
     const result = projectDetectionToGround(bbox, camera, [], true)
     expect(result.isValid).toBe(true)
     expect(result.worldPoint.x).toBeCloseTo(camera.position.x, 0) // Near center
