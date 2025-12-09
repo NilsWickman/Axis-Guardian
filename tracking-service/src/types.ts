@@ -143,10 +143,11 @@ export interface WorldTransform {
    * Quadratic (6 coeffs): c0 + c1*x + c2*y + c3*x^2 + c4*y^2 + c5*x*y
    * Cubic (10 coeffs): + c6*x^3 + c7*y^3 + c8*x^2*y + c9*x*y^2
    * Quartic (15 coeffs): + c10*x^4 + c11*y^4 + c12*x^3*y + c13*x*y^3 + c14*x^2*y^2
+   * Quintic (21 coeffs): + c15*x^5 + c16*y^5 + c17*x^4*y + c18*x*y^4 + c19*x^3*y^2 + c20*x^2*y^3
    */
   polynomial?: {
-    /** Polynomial degree: 2 (quadratic), 3 (cubic), or 4 (quartic) */
-    degree: 2 | 3 | 4
+    /** Polynomial degree: 2 (quadratic), 3 (cubic), 4 (quartic), or 5 (quintic) */
+    degree: 2 | 3 | 4 | 5
     /** Coefficients for X output */
     coeffsX: number[]
     /** Coefficients for Y output */
