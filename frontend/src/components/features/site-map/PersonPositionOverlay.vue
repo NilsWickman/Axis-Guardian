@@ -337,7 +337,7 @@ function drawUnconfirmedMarker(ctx: CanvasRenderingContext2D, track: GlobalTrack
   ctx.textBaseline = 'top'
   ctx.fillStyle = '#fbbf24'
   ctx.globalAlpha = 0.8
-  ctx.fillText(`${track.detectionCount}/3`, x, y + radius + 4)
+  ctx.fillText(`${track.detectionCount}/1`, x, y + radius + 4)
   ctx.globalAlpha = 1
 }
 
