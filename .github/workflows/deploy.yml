@@ -28,7 +28,7 @@ jobs:
         run: cd frontend && pnpm install --frozen-lockfile
 
       - name: Build frontend (validation)
-        run: cd frontend && pnpm build
+        run: cd frontend && npx vite build --config config/build/vite.config.ts
 
       # Tracking Service
       - name: Install tracking-service dependencies

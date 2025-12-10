@@ -228,12 +228,12 @@
           </div>
 
           <div v-else class="space-y-3">
-            <div
+            <button
               v-for="camera in onlineCameras"
               :key="camera.id"
               @click="toggleCamera(camera.id)"
               :class="[
-                'p-4 border-2 rounded-lg cursor-pointer transition-all',
+                'w-full text-left p-4 border-2 rounded-lg cursor-pointer transition-all',
                 selectedCameras.includes(camera.id) ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
               ]"
             >
