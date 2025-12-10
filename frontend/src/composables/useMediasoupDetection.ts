@@ -51,6 +51,12 @@ const DEFAULT_OPTIONS: MediasoupDetectionOptions = {
   videoSyncOffsetMs: Number(import.meta.env.VITE_VIDEO_SYNC_OFFSET_MS) || -100
 }
 
+// Adaptive sync constants
+const RECALIBRATION_INTERVAL_MS = 15000  // Recalibrate every 15 seconds
+const EMA_ALPHA = 0.3                     // Weight for new measurements (0.3 = 30% new, 70% old)
+const CONFIDENCE_DECAY_RATE = 0.95        // Confidence decay per second
+const MAX_OFFSET_HISTORY = 10             // History size for drift calculation
+
 export function useMediasoupDetection(cameraId: string, options: MediasoupDetectionOptions = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...options }
   const toast = useToast()
@@ -140,6 +146,13 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
   }
   const MAX_CALIBRATION_SAMPLES = 30
 
+  // Adaptive sync state for drift tracking and periodic recalibration
+  let recalibrationTimer: ReturnType<typeof setInterval> | null = null
+  let lastCalibrationTime = 0
+  let lastMeasurementTime = 0
+  let offsetHistory: { time: number; offset: number }[] = []
+  let detectedDriftRate = 0  // ms per second
+
   // Track last detection video_time_ms for loop detection on detection side
   let lastDetectionVideoTimeMs = 0
 
@@ -223,6 +236,77 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
         }
       }, 10000)
     })
+  }
+
+  /**
+   * Update drift rate using linear regression on offset history
+   */
+  function updateDriftRate(newOffset: number): void {
+    const now = Date.now()
+    offsetHistory.push({ time: now, offset: newOffset })
+
+    // Keep only the last MAX_OFFSET_HISTORY entries
+    if (offsetHistory.length > MAX_OFFSET_HISTORY) {
+      offsetHistory.shift()
+    }
+
+    // Need at least 3 samples for meaningful drift calculation
+    if (offsetHistory.length >= 3) {
+      // Linear regression to find drift rate (slope)
+      const n = offsetHistory.length
+      const sumX = offsetHistory.reduce((s, p) => s + p.time, 0)
+      const sumY = offsetHistory.reduce((s, p) => s + p.offset, 0)
+      const sumXY = offsetHistory.reduce((s, p) => s + p.time * p.offset, 0)
+      const sumX2 = offsetHistory.reduce((s, p) => s + p.time * p.time, 0)
+
+      const denominator = n * sumX2 - sumX * sumX
+      if (Math.abs(denominator) > 0.001) {
+        detectedDriftRate = (n * sumXY - sumX * sumY) / denominator
+        // Convert to ms per second (slope is ms per ms)
+        detectedDriftRate *= 1000
+      }
+    }
+  }
+
+  /**
+   * Decay confidence over time if no recent measurements
+   */
+  function decayConfidence(): void {
+    if (lastMeasurementTime === 0) return
+
+    const timeSinceLastMeasurement = Date.now() - lastMeasurementTime
+    const decayFactor = Math.pow(CONFIDENCE_DECAY_RATE, timeSinceLastMeasurement / 1000)
+    syncCalibration.confidenceLevel *= decayFactor
+  }
+
+  /**
+   * Get effective offset including adaptive offset, drift compensation, and manual offset
+   */
+  function getEffectiveOffset(): number {
+    const baseOffset = syncCalibration.confidenceLevel > 0.5
+      ? syncCalibration.adaptiveOffset
+      : 0
+
+    // Compensate for drift since last calibration
+    let driftCompensation = 0
+    if (lastCalibrationTime > 0 && Math.abs(detectedDriftRate) > 0.001) {
+      const timeSinceCalibration = (Date.now() - lastCalibrationTime) / 1000
+      driftCompensation = detectedDriftRate * timeSinceCalibration
+    }
+
+    return baseOffset + driftCompensation + manualSyncOffsetMs.value
+  }
+
+  /**
+   * Force recalibration by resetting calibration state
+   */
+  function forceRecalibration(): void {
+    console.log('[VideoSync] Periodic recalibration triggered')
+    videoSyncCalibrated = false
+    syncCalibration.measuredOffsets = []
+    // Don't reset adaptiveOffset - let EMA smooth it
+    // Don't reset drift history - keep tracking drift
+    lastCalibrationTime = Date.now()
   }
 
   /**
@@ -402,6 +486,13 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
           if (shouldShowToast()) {
             toast.success(`Camera ${cameraId} connected`, 3000)
           }
+          // Start periodic recalibration timer
+          if (recalibrationTimer) clearInterval(recalibrationTimer)
+          recalibrationTimer = setInterval(() => {
+            console.log('[VideoSync] Periodic recalibration triggered')
+            forceRecalibration()
+          }, RECALIBRATION_INTERVAL_MS)
+          lastCalibrationTime = Date.now()
         } else if (state === 'failed') {
           if (shouldShowToast()) {
             toast.error(`Camera ${cameraId} connection failed`, 5000)
@@ -657,13 +748,16 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
         syncCalibration.confidenceLevel = 0
         videoFrameHistory.length = 0
         lastVideoFrameMetadata = null  // Reset frame metadata to force recalibration
+        // Reset drift tracking on video loop
+        offsetHistory = []
+        detectedDriftRate = 0
+        lastCalibrationTime = Date.now()
       }
       lastVideoTime = videoTimeMs
 
-      // Use adaptive offset if calibrated, otherwise fall back to manual offset
-      const effectiveOffset = syncCalibration.confidenceLevel > 0.5
-        ? syncCalibration.adaptiveOffset + manualSyncOffsetMs.value
-        : manualSyncOffsetMs.value
+      // Apply confidence decay and use adaptive offset with drift compensation
+      decayConfidence()
+      const effectiveOffset = getEffectiveOffset()
 
       // Use actual mediaTime from frame callback if available (more accurate than currentTime)
       const actualVideoTimeMs = lastVideoFrameMetadata
@@ -853,19 +947,32 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
             syncCalibration.measuredOffsets.shift()
           }
 
-          // Update adaptive offset (use median for robustness against outliers)
-          if (syncCalibration.measuredOffsets.length >= 10) {
-            const sorted = [...syncCalibration.measuredOffsets].sort((a, b) => a - b)
-            syncCalibration.adaptiveOffset = sorted[Math.floor(sorted.length / 2)]
+          // Update adaptive offset using EMA (Exponential Moving Average)
+          // EMA responds faster to changes than median while still smoothing noise
+          if (syncCalibration.adaptiveOffset === 0) {
+            // First measurement - use directly
+            syncCalibration.adaptiveOffset = measuredOffset
+          } else {
+            // EMA: new = old * (1 - alpha) + sample * alpha
+            syncCalibration.adaptiveOffset =
+              syncCalibration.adaptiveOffset * (1 - EMA_ALPHA) + measuredOffset * EMA_ALPHA
+          }
 
-            // Calculate confidence (inverse of variance - stable offset = high confidence)
-            const variance = sorted.reduce((sum, v) => sum + Math.pow(v - syncCalibration.adaptiveOffset, 2), 0) / sorted.length
+          // Update drift tracking
+          updateDriftRate(measuredOffset)
+          lastMeasurementTime = Date.now()
+
+          // Calculate confidence from recent variance
+          if (syncCalibration.measuredOffsets.length >= 5) {
+            const recentOffsets = syncCalibration.measuredOffsets.slice(-10)
+            const mean = recentOffsets.reduce((s, v) => s + v, 0) / recentOffsets.length
+            const variance = recentOffsets.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / recentOffsets.length
             syncCalibration.confidenceLevel = Math.min(1, 1000 / (variance + 100))
+          }
 
-            // Log calibration status periodically
-            if (syncCalibration.measuredOffsets.length === 10 || syncCalibration.measuredOffsets.length % 30 === 0) {
-              console.log(`[VideoSync] Adaptive offset: ${syncCalibration.adaptiveOffset.toFixed(0)}ms (confidence: ${(syncCalibration.confidenceLevel * 100).toFixed(0)}%, video: ${currentVideoTimeMs.toFixed(0)}ms, detection: ${detectionVideoTimeMs.toFixed(0)}ms)`)
-            }
+          // Log calibration status periodically (every 30 samples or first 10)
+          if (syncCalibration.measuredOffsets.length === 10 || syncCalibration.measuredOffsets.length % 30 === 0) {
+            console.log(`[VideoSync] EMA offset: ${syncCalibration.adaptiveOffset.toFixed(0)}ms (drift: ${(detectedDriftRate * 1000).toFixed(2)}ms/s, confidence: ${(syncCalibration.confidenceLevel * 100).toFixed(0)}%)`)
           }
         }
       }
@@ -885,7 +992,10 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
         // Clear buffers but keep calibration since the relationship should be consistent
         videoSyncBuffer.length = 0
         videoSyncCalibrated = false
-        // Don't reset calibration offsets - they should still be valid relative to the base
+        // Reset drift tracking on detection loop - drift characteristics may change
+        offsetHistory = []
+        detectedDriftRate = 0
+        lastCalibrationTime = Date.now()
       }
       lastDetectionVideoTimeMs = metadata.video_time_ms
 
@@ -971,6 +1081,14 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
 
     stopStatsPolling()
     stopVideoSyncLoop()
+
+    // Clear recalibration timer and reset drift tracking
+    if (recalibrationTimer) {
+      clearInterval(recalibrationTimer)
+      recalibrationTimer = null
+    }
+    offsetHistory = []
+    detectedDriftRate = 0
 
     pendingTimeouts.forEach(id => clearTimeout(id))
     pendingTimeouts.clear()
