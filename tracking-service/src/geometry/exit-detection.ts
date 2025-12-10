@@ -168,6 +168,9 @@ function predictPillarExit(
 /**
  * Classify why a track has stopped being detected
  *
+ * Uses velocity-based prediction to detect when tracks are moving toward
+ * FOV/room boundaries, enabling faster cleanup for edge exits.
+ *
  * @param position - Last known position of the track
  * @param velocity - Current velocity estimate (from Kalman filter)
  * @param cameras - All camera configurations
@@ -211,7 +214,29 @@ export function classifyExitReason(
     return { reason: 'fov_exit' }
   }
 
-  // 4. Default - standard timeout (track just stopped being detected for unknown reason)
+  // 4. Use velocity prediction to detect edge exits
+  // If the track is moving toward an edge, predict where it will be shortly
+  const speed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y)
+  if (speed > 0.3) { // Only predict if moving at reasonable speed (0.3 m/s)
+    // Predict position 300ms into the future
+    const lookaheadMs = 300
+    const predictedPos: Point2D = {
+      x: position.x + velocity.x * (lookaheadMs / 1000),
+      y: position.y + velocity.y * (lookaheadMs / 1000),
+    }
+
+    // If predicted position is outside room bounds, classify as boundary exit
+    if (!isPointInRoom(predictedPos, roomBounds, 0)) {
+      return { reason: 'boundary_exit' }
+    }
+
+    // If predicted position is outside all FOVs, classify as FOV exit
+    if (!isPointInAnyFOV(predictedPos, fovPolygons, 0)) {
+      return { reason: 'fov_exit' }
+    }
+  }
+
+  // 5. Default - standard timeout (track just stopped being detected for unknown reason)
   return { reason: 'timeout' }
 }
 
