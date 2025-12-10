@@ -13,7 +13,7 @@ COPY tracking-service/package.json ./tracking-service/
 
 # Install dependencies
 WORKDIR /app/tracking-service
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 
 # Copy source
 COPY tracking-service/src ./src
@@ -32,7 +32,7 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY tracking-service/package.json ./tracking-service/
 
 WORKDIR /app/tracking-service
-RUN pnpm install --frozen-lockfile
+RUN pnpm install
 
 # Copy source from build stage
 COPY --from=build /app/tracking-service/src ./src
