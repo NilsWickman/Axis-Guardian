@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 User=www-data
 WorkingDirectory=/opt/axis-guardian/tracking-service
-ExecStart=/usr/bin/node dist/index.js
+ExecStart=/opt/axis-guardian/tracking-service/node_modules/.bin/tsx src/index.ts
 Environment=NODE_ENV=production
 Environment=PORT=3010
 Environment=HOST=127.0.0.1
