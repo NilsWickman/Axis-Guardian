@@ -100,7 +100,11 @@ export class FFmpegStreamer extends EventEmitter {
         this.frameCount = newFrame
 
         // Calculate video presentation time (position within current loop)
-        const videoTimeMs = (this.frameCount / this.fps) * 1000
+        // FFmpeg frame counter is cumulative across loops, so we need to wrap it
+        const frameInLoop = this.totalFrames > 0
+          ? this.frameCount % this.totalFrames
+          : this.frameCount
+        const videoTimeMs = (frameInLoop / this.fps) * 1000
         this.emit('frame', this.frameCount, videoTimeMs)
       }
     })
