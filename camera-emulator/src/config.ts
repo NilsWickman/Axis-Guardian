@@ -5,9 +5,13 @@
 import path from 'path'
 import type { CameraConfig } from './types.js'
 
-const BASE_PATH = '/home/nilwi971/projects/Axis-Guardian/shared/cameras/preprocessed/1080p'
+// Allow environment override for Docker deployment
+const BASE_PATH = process.env.VIDEO_PATH || '/home/nilwi971/projects/Axis-Guardian/shared/cameras/preprocessed/1080p'
 
 export const TRACKING_SERVICE_URL = process.env.TRACKING_SERVICE_URL || 'http://localhost:3010'
+
+// Public IP for WebRTC (required for external clients)
+const ANNOUNCED_IP = process.env.ANNOUNCED_IP || '127.0.0.1'
 
 export const cameras: CameraConfig[] = [
   {
@@ -50,7 +54,7 @@ export const mediasoupConfig = {
     ],
   },
   webRtcTransport: {
-    listenIps: [{ ip: '0.0.0.0', announcedIp: '127.0.0.1' }],
+    listenIps: [{ ip: '0.0.0.0', announcedIp: ANNOUNCED_IP }],
     enableUdp: true,
     enableTcp: true,
     preferUdp: true,

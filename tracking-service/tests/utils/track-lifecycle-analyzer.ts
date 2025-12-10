@@ -6,13 +6,13 @@
  */
 
 import {
-  Point2D,
-  ValidationResult,
+  type Point2D,
+  type ValidationResult,
   validateSpawnLocation,
   validateDisappearanceLocation,
-  DoorZone,
+  type DoorZone,
   DOOR_ZONES,
-} from './fov-geometry.js'
+} from '../../src/geometry/fov-geometry.js'
 
 /**
  * Track position history entry

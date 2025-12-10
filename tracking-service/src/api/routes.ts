@@ -13,6 +13,25 @@ import { getSiteMapConfigJson, isDatabaseSeeded } from '../db/repositories.js'
 import { getPipelineLogger } from '../debug/pipeline-logger.js'
 import type { AcapClient } from '../acap/acap-client.js'
 
+// Read-only mode for demo deployment (disables write endpoints except emulator-detections)
+const isReadOnlyMode = process.env.READ_ONLY_MODE === 'true'
+
+// Middleware to block write operations in read-only mode
+function readOnlyGuard(
+  _request: FastifyRequest,
+  reply: FastifyReply,
+  done: () => void
+): void {
+  if (isReadOnlyMode) {
+    reply.status(403).send({
+      error: 'Read-only mode',
+      message: 'This endpoint is disabled in demo mode',
+    })
+    return
+  }
+  done()
+}
+
 // Stats tracking (exported for display)
 export let detectionsReceived = 0
 export let lastDetectionTime = 0
@@ -119,6 +138,11 @@ export function registerRoutes(
   cameraRegistry: CameraRegistry,
   acapClient: AcapClient | null = null
 ): void {
+  // Log read-only mode status
+  if (isReadOnlyMode) {
+    console.log('[API] Running in READ-ONLY mode - write endpoints disabled (except emulator-detections)')
+  }
+
   // Health check
   app.get('/api/health', async () => {
     return {
@@ -172,7 +196,8 @@ export function registerRoutes(
   })
 
   // Inject test detection (projects to world coords)
-  app.post('/api/detections', async (request: FastifyRequest, reply: FastifyReply) => {
+  // Protected by read-only guard
+  app.post('/api/detections', { preHandler: readOnlyGuard }, async (request: FastifyRequest, reply: FastifyReply) => {
     const parseResult = InjectDetectionSchema.safeParse(request.body)
     if (!parseResult.success) {
       return reply.status(400).send({
@@ -279,7 +304,8 @@ export function registerRoutes(
   })
 
   // Inject world position directly (bypasses projection)
-  app.post('/api/world-position', async (request: FastifyRequest, reply: FastifyReply) => {
+  // Protected by read-only guard
+  app.post('/api/world-position', { preHandler: readOnlyGuard }, async (request: FastifyRequest, reply: FastifyReply) => {
     const parseResult = InjectWorldPositionSchema.safeParse(request.body)
     if (!parseResult.success) {
       return reply.status(400).send({
@@ -340,7 +366,8 @@ export function registerRoutes(
   })
 
   // Update tracking config
-  app.patch('/api/config', async (request: FastifyRequest, reply: FastifyReply) => {
+  // Protected by read-only guard
+  app.patch('/api/config', { preHandler: readOnlyGuard }, async (request: FastifyRequest, reply: FastifyReply) => {
     const parseResult = UpdateConfigSchema.safeParse(request.body)
     if (!parseResult.success) {
       return reply.status(400).send({
@@ -357,7 +384,8 @@ export function registerRoutes(
   })
 
   // Reset config to defaults
-  app.post('/api/config/reset', async () => {
+  // Protected by read-only guard
+  app.post('/api/config/reset', { preHandler: readOnlyGuard }, async () => {
     trackManager.resetConfig()
     return {
       message: 'Config reset to defaults',
@@ -366,7 +394,8 @@ export function registerRoutes(
   })
 
   // Clear all tracks
-  app.post('/api/reset', async () => {
+  // Protected by read-only guard
+  app.post('/api/reset', { preHandler: readOnlyGuard }, async () => {
     trackManager.clearAllTracks()
     detectionProcessor.resetFrameTracking()
     return {
@@ -376,7 +405,8 @@ export function registerRoutes(
   })
 
   // Trigger cleanup manually
-  app.post('/api/cleanup', async () => {
+  // Protected by read-only guard
+  app.post('/api/cleanup', { preHandler: readOnlyGuard }, async () => {
     const beforeCount = trackManager.getAllTracks().length
     trackManager.cleanupExpiredTracks()
     const afterCount = trackManager.getAllTracks().length
@@ -409,7 +439,8 @@ export function registerRoutes(
   // ============================================================================
 
   // Start debug session
-  app.post('/api/debug/session/start', async (request: FastifyRequest<{ Body: { name?: string } }>) => {
+  // Protected by read-only guard
+  app.post('/api/debug/session/start', { preHandler: readOnlyGuard }, async (request: FastifyRequest<{ Body: { name?: string } }>) => {
     const logger = getPipelineLogger()
     const name = (request.body as { name?: string })?.name
     const sessionId = await logger.startSession(name)
@@ -421,7 +452,8 @@ export function registerRoutes(
   })
 
   // End debug session
-  app.post('/api/debug/session/end', async (request: FastifyRequest<{ Body: { notes?: string } }>) => {
+  // Protected by read-only guard
+  app.post('/api/debug/session/end', { preHandler: readOnlyGuard }, async (request: FastifyRequest<{ Body: { notes?: string } }>) => {
     const logger = getPipelineLogger()
     const notes = (request.body as { notes?: string })?.notes
     await logger.endSession(notes)
@@ -483,7 +515,8 @@ export function registerRoutes(
   })
 
   // Enable ACAP client (connect)
-  app.post('/api/acap/enable', async (_request: FastifyRequest, reply: FastifyReply) => {
+  // Protected by read-only guard
+  app.post('/api/acap/enable', { preHandler: readOnlyGuard }, async (_request: FastifyRequest, reply: FastifyReply) => {
     if (!acapClient) {
       return reply.status(400).send({
         error: 'ACAP client not initialized',
@@ -515,7 +548,8 @@ export function registerRoutes(
   })
 
   // Disable ACAP client (disconnect)
-  app.post('/api/acap/disable', async (_request: FastifyRequest, reply: FastifyReply) => {
+  // Protected by read-only guard
+  app.post('/api/acap/disable', { preHandler: readOnlyGuard }, async (_request: FastifyRequest, reply: FastifyReply) => {
     if (!acapClient) {
       return reply.status(400).send({
         error: 'ACAP client not initialized',
@@ -537,7 +571,8 @@ export function registerRoutes(
   })
 
   // Reset ACAP client statistics
-  app.post('/api/acap/reset-stats', async (_request: FastifyRequest, reply: FastifyReply) => {
+  // Protected by read-only guard
+  app.post('/api/acap/reset-stats', { preHandler: readOnlyGuard }, async (_request: FastifyRequest, reply: FastifyReply) => {
     if (!acapClient) {
       return reply.status(400).send({
         error: 'ACAP client not initialized',

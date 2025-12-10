@@ -195,6 +195,7 @@ describe('Ground Truth Validation', () => {
       for (const annotation of certainAnnotations) {
         // Process all detections for this annotation
         trackManager.clearAllTracks()
+        detectionProcessor.resetFrameTracking()
         mockTime = Math.floor(annotation.timestamp * 1000) + 1000
 
         const projectedPositions: Point2D[] = []
@@ -316,6 +317,7 @@ describe('Ground Truth Validation', () => {
 
       for (const annotation of certainAnnotations.slice(0, 50)) {
         trackManager.clearAllTracks()
+        detectionProcessor.resetFrameTracking()
         mockTime = Math.floor(annotation.timestamp * 1000) + 1000
 
         for (const det of annotation.linkedDetections) {
@@ -533,6 +535,7 @@ describe('Ground Truth Validation', () => {
 
       for (const annotation of multiCameraAnnotations) {
         trackManager.clearAllTracks()
+        detectionProcessor.resetFrameTracking()
         mockTime = Math.floor(annotation.timestamp * 1000) + 1000
 
         // Process all detections for this annotation as a batch
@@ -567,6 +570,7 @@ describe('Ground Truth Validation', () => {
 
       for (const annotation of multiCameraAnnotations) {
         trackManager.clearAllTracks()
+        detectionProcessor.resetFrameTracking()
         mockTime = Math.floor(annotation.timestamp * 1000) + 1000
 
         const messages = createBatchDetectionMessages(annotation)
@@ -610,6 +614,7 @@ describe('Ground Truth Validation', () => {
 
       for (const annotation of multiCameraAnnotations) {
         trackManager.clearAllTracks()
+        detectionProcessor.resetFrameTracking()
         mockTime = Math.floor(annotation.timestamp * 1000) + 1000
 
         const expectedCameras = new Set(annotation.linkedDetections.map((d) => d.cameraId))
@@ -751,6 +756,7 @@ describe('Ground Truth Validation', () => {
       if (multiPersonTimestamps.length > 0) {
         const [ts, annotations] = multiPersonTimestamps[0]
         trackManager.clearAllTracks()
+        detectionProcessor.resetFrameTracking()
         mockTime = ts + 1000
 
         for (const ann of annotations) {

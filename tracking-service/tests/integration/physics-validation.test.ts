@@ -19,11 +19,11 @@ import type { DetectionMessage } from '../../src/types.js'
 import {
   calculateCameraFOVPolygon,
   calculateCombinedFOVPolygons,
-  CameraConfig,
-  RoomBounds,
+  type CameraConfig,
+  type RoomBounds,
   DOOR_ZONES,
-  Point2D,
-} from '../utils/fov-geometry.js'
+  type Point2D,
+} from '../../src/geometry/fov-geometry.js'
 import { TrackLifecycleAnalyzer, PhysicsValidationSummary } from '../utils/track-lifecycle-analyzer.js'
 
 // ============================================================================

@@ -81,6 +81,12 @@ export interface TrailPosition {
 }
 
 /**
+ * Reason why a track stopped being detected
+ * Used to determine timeout behavior and display mode
+ */
+export type ExitReason = 'fov_exit' | 'boundary_exit' | 'pillar_occlusion' | 'timeout' | null
+
+/**
  * Global track that spans multiple cameras
  */
 export interface GlobalTrack {
@@ -97,6 +103,10 @@ export interface GlobalTrack {
   state: 'unconfirmed' | 'confirmed' | 'occluded' // Track lifecycle state
   // Pending detections for multi-camera merge within time window
   pendingDetections: CameraDetection[]
+  /** Reason why track stopped being detected (for smart timeout behavior) */
+  exitReason?: ExitReason
+  /** Predicted position during pillar occlusion (ghost track) */
+  predictedPosition?: { x: number; y: number }
 }
 
 /**
@@ -172,10 +182,12 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
 
   // Getters
   const activeTracks = computed(() => {
-    // Only return confirmed tracks that are actively being detected (not occluded)
-    // Occluded tracks are maintained internally for re-identification but hidden from display
+    // Return confirmed tracks that are:
+    // 1. Actively being detected (not occluded), OR
+    // 2. Pillar-occluded with a predicted position (ghost tracks)
     return Array.from(tracks.value.values()).filter(
-      track => track.isActive && track.isConfirmed && track.state !== 'occluded'
+      track => track.isActive && track.isConfirmed &&
+        (track.state !== 'occluded' || track.exitReason === 'pillar_occlusion')
     )
   })
 
@@ -595,6 +607,8 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     detectionCount: number
     confidence: number
     state: 'unconfirmed' | 'confirmed' | 'occluded'
+    exitReason?: ExitReason
+    predictedPosition?: { x: number; y: number }
   }
 
   /**

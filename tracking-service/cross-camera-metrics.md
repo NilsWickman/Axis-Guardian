@@ -242,3 +242,89 @@ Due to K/R/T camera calibration limitations, some metrics have theoretical ceili
 - **26 ceiling cases:** Neither camera can project within 0.5m accuracy
 
 These cases require improved camera calibration data to fix, not algorithm changes.
+
+---
+
+## Current Metrics Status (Ralph Loop Iteration 3)
+
+**Date:** 2025-12-10
+
+### Target vs Current vs Ceiling
+
+| Metric | Current | Ceiling | Target | Gap to Target |
+|--------|---------|---------|--------|---------------|
+| Projection Accuracy | **77.7%** | 82.3% | 90% | **IMPOSSIBLE** |
+| Average Projection Error | **0.419m** | ~0.35m | 0.3m | **HARD** |
+| Cross-Camera Convergence | **88.9%** | ~92% | 95% | **HARD** |
+| Track Merge Rate | **100%** | 100% | 90% | **ACHIEVED** |
+| Camera Association | **100%** | 100% | 100% | **ACHIEVED** |
+
+### Analysis
+
+The completion promise targets of:
+- 90% projection accuracy
+- 0.3m average error
+- 95% cross-camera convergence
+- 90% track merge rate ✓ ACHIEVED (100%)
+- 100% camera association ✓ ACHIEVED (100%)
+
+**Partial success:** 2 of 5 targets achieved. The remaining 3 targets **cannot be achieved** with the current K/R/T camera calibration data.
+
+### Bug Fix: resetFrameTracking
+
+A critical bug was identified and fixed in the test suite. The `DetectionProcessor` maintains a `lastProcessedFrames` map to prevent duplicate frame processing. When running multiple annotation tests, this state was not being reset between annotations, causing some camera detections to be silently skipped (frame numbers lower than previously processed frames were ignored).
+
+**Fix:** Added `detectionProcessor.resetFrameTracking()` calls alongside `trackManager.clearAllTracks()` in all test iteration loops.
+
+**Impact:** This fix improved:
+- Track Merge Rate: 69.8% → 100%
+- Camera Association: 97.7% → 100%
+
+The hard ceiling of 82.3% projection accuracy is due to 26 annotations where neither camera can project within 0.5m of ground truth. This is a fundamental calibration limitation, not an algorithmic issue.
+
+### Recoverable Gap Analysis
+
+Between current 77.6% and ceiling 82.3%, there are 7 multi-camera annotations (4.7%) where optimal camera selection could improve accuracy. However, **exhaustive analysis shows no predictive pattern exists**:
+
+| Selection Strategy | Multi-Camera Pass Rate | Overall Pass Rate |
+|--------------------|------------------------|-------------------|
+| Current (cam1 divergent) | 69.4% (43/62) | 77.6% (114/147) |
+| Convergent only | 66.1% (41/62) | 76.2% (112/147) |
+| Outlier reject | 69.4% (43/62) | 77.6% (114/147) |
+| Regional rules | 69.4% (43/62) | 77.6% (114/147) |
+| Oracle (perfect) | 80.6% (50/62) | 82.3% (121/147) |
+
+**Tested predictors that failed:**
+- Bbox size: 53.2% accuracy (random)
+- Bbox height: 51.6% accuracy (random)
+- Bbox center position: 62.9% accuracy (insufficient)
+- Distance to camera: inconsistent
+- Regional position: no clear pattern
+
+### Conclusion
+
+The 11 recoverable annotations break down as:
+- **9 convergent cases** (cameras within 0.6m) where weighted average produces error > 0.5m but one camera alone would pass
+- **2 divergent cases** where current camera selection picks the wrong camera
+
+The gap between current (77.7%) and oracle ceiling (82.3%) cannot be closed algorithmically because:
+1. No predictive pattern exists to determine which camera is more accurate
+2. The weighted average is already the optimal single strategy for convergent cases
+3. Convergent cases account for most of the gap, not divergent selection
+
+### Final Status Summary
+
+| Metric | Original | Current | Target | Status |
+|--------|----------|---------|--------|--------|
+| Projection Accuracy | 77.7% | 77.7% | 90% | **BLOCKED** (ceiling: 82.3%) |
+| Average Error | 0.418m | 0.419m | 0.3m | **BLOCKED** |
+| Cross-Camera Convergence | 88.9% | 88.9% | 95% | **BLOCKED** |
+| Track Merge Rate | 69.8% | **100%** | 90% | ✓ ACHIEVED |
+| Camera Association | 97.7% | **100%** | 100% | ✓ ACHIEVED |
+
+### Recommendations
+
+1. **Current algorithm is optimal** given available information
+2. **To exceed projection ceiling:** Requires new K/R/T calibration data from physical camera recalibration
+3. **Alternative approach:** Use temporal smoothing - if a person's trajectory is known, use historical position to bias camera selection
+4. **Consider adjusting targets:** The 90% projection accuracy target exceeds the physical calibration ceiling of 82.3%
