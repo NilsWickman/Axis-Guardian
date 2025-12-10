@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -23,126 +23,69 @@ jobs:
           node-version: '22'
           cache: 'pnpm'
 
-      # Frontend
-      - name: Install frontend dependencies
-        run: cd frontend && pnpm install --frozen-lockfile
-
-      - name: Build frontend (validation)
-        run: cd frontend && npx vite build --config config/build/vite.config.ts
-
-  build-and-deploy:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # Build Frontend Image
-      - name: Build Frontend Image
+      - name: Install and build frontend
         run: |
-          docker build \
-            --build-arg VITE_TRACKING_WS_URL=wss://${{ secrets.GUARDIAN_DOMAIN }}/ws \
-            --build-arg VITE_TRACKING_API_URL=https://${{ secrets.GUARDIAN_DOMAIN }} \
-            --build-arg VITE_DEMO_MODE=true \
-            -t axis-guardian-frontend:latest \
-            -f frontend/Dockerfile \
-            frontend/
+          cd frontend && pnpm install
+          VITE_TRACKING_WS_URL=wss://${{ secrets.GUARDIAN_DOMAIN }}/ws \
+          VITE_TRACKING_API_URL=https://${{ secrets.GUARDIAN_DOMAIN }} \
+          VITE_DEMO_MODE=true \
+          pnpm run build
 
-      # Build Tracking Service Image
-      - name: Build Tracking Service Image
+      - name: Install and build tracking-service
+        run: cd tracking-service && pnpm install && pnpm build
+
+      - name: Install and build camera-emulator
+        run: cd camera-emulator && pnpm install && pnpm build
+
+      - name: Setup SSH
         run: |
-          docker build \
-            -t axis-guardian-tracking:latest \
-            -f tracking-service/Dockerfile \
-            .
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
-      # Build Camera Emulator Image (needs project root context for shared/ folder)
-      - name: Build Camera Emulator Image
+      - name: Deploy frontend
         run: |
-          docker build \
-            -t axis-guardian-emulator:latest \
-            -f camera-emulator/Dockerfile \
-            .
+          rsync -avz --delete \
+            frontend/dist/ \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/axis-guardian/frontend/
 
-      # Save all images
-      - name: Save Docker images
+      - name: Deploy tracking-service
         run: |
-          docker save axis-guardian-frontend:latest | gzip > frontend.tar.gz
-          docker save axis-guardian-tracking:latest | gzip > tracking.tar.gz
-          docker save axis-guardian-emulator:latest | gzip > emulator.tar.gz
+          rsync -avz --delete \
+            tracking-service/dist/ \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/axis-guardian/tracking-service/dist/
+          rsync -avz --delete \
+            tracking-service/node_modules/ \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/axis-guardian/tracking-service/node_modules/
+          rsync -avz \
+            tracking-service/package.json \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/axis-guardian/tracking-service/
 
-      # Copy images and files to VPS
-      - name: Copy files to VPS
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: 'frontend.tar.gz,tracking.tar.gz,emulator.tar.gz,docker-compose.prod.yml,deploy/nginx-site.conf,shared/config/sitemap-rectangular-room.json'
-          target: '/tmp/axis-guardian'
+      - name: Deploy camera-emulator
+        run: |
+          rsync -avz --delete \
+            camera-emulator/dist/ \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/axis-guardian/camera-emulator/dist/
+          rsync -avz --delete \
+            camera-emulator/node_modules/ \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/axis-guardian/camera-emulator/node_modules/
+          rsync -avz \
+            camera-emulator/package.json \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/axis-guardian/camera-emulator/
 
-      # Deploy on VPS
-      - name: Deploy on VPS
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            cd /tmp/axis-guardian
+      - name: Deploy config
+        run: |
+          rsync -avz \
+            shared/config/ \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/axis-guardian/config/
 
-            # Load Docker images
-            echo "Loading Docker images..."
-            docker load < frontend.tar.gz
-            docker load < tracking.tar.gz
-            docker load < emulator.tar.gz
-
-            # Create deployment directory
-            mkdir -p /opt/axis-guardian/shared/config
-            cp docker-compose.prod.yml /opt/axis-guardian/
-            cp shared/config/sitemap-rectangular-room.json /opt/axis-guardian/shared/config/
-
-            # Setup nginx config (replace domain placeholder)
-            sed "s/GUARDIAN_DOMAIN_PLACEHOLDER/${{ secrets.GUARDIAN_DOMAIN }}/g" deploy/nginx-site.conf > /etc/nginx/sites-available/axis-guardian
-
-            # Enable site if not already
-            if [ ! -L /etc/nginx/sites-enabled/axis-guardian ]; then
-              ln -s /etc/nginx/sites-available/axis-guardian /etc/nginx/sites-enabled/axis-guardian
-            fi
-
-            # Test nginx config
-            nginx -t
-
-            cd /opt/axis-guardian
-
-            # Stop old containers
-            echo "Stopping old containers..."
-            docker compose -f docker-compose.prod.yml down 2>/dev/null || true
-
-            # Get VPS public IP for WebRTC
-            VPS_PUBLIC_IP=$(curl -s ifconfig.me)
-            echo "VPS Public IP: $VPS_PUBLIC_IP"
-
-            # Start services
-            echo "Starting services..."
-            VPS_PUBLIC_IP=$VPS_PUBLIC_IP docker compose -f docker-compose.prod.yml up -d
-
-            # Reload nginx
-            systemctl reload nginx
-
-            # Cleanup temp files
-            rm -rf /tmp/axis-guardian
-            docker image prune -f
-
-            echo ""
-            echo "=========================================="
-            echo "Deployment complete!"
-            echo "Frontend: https://${{ secrets.GUARDIAN_DOMAIN }}"
-            echo "API: https://${{ secrets.GUARDIAN_DOMAIN }}/api/health"
-            echo "=========================================="
+      - name: Restart services
+        run: |
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+            sudo systemctl restart tracking-service camera-emulator
+            sudo systemctl reload nginx
+          EOF
 
       - name: Purge Cloudflare Cache
         uses: jakejarvis/cloudflare-purge-action@master

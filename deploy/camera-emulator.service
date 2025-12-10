@@ -1,0 +1,18 @@
+[Unit]
+Description=Axis Guardian Camera Emulator
+After=network.target tracking-service.service
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/axis-guardian/camera-emulator
+ExecStart=/usr/bin/node dist/index.js
+Environment=NODE_ENV=production
+Environment=TRACKING_SERVICE_URL=http://127.0.0.1:3010
+Environment=VIDEO_PATH=/opt/axis-guardian/videos
+EnvironmentFile=/opt/axis-guardian/emulator.env
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

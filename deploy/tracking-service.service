@@ -1,0 +1,19 @@
+[Unit]
+Description=Axis Guardian Tracking Service
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/axis-guardian/tracking-service
+ExecStart=/usr/bin/node dist/index.js
+Environment=NODE_ENV=production
+Environment=PORT=3010
+Environment=HOST=127.0.0.1
+Environment=READ_ONLY_MODE=true
+Environment=SITEMAP_CONFIG_PATH=/opt/axis-guardian/config/sitemap-rectangular-room.json
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
