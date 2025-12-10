@@ -167,6 +167,15 @@ const routes: RouteRecordRaw[] = [
       title: 'Ground Truth Annotator',
     },
   },
+  // Dev Tools
+  {
+    path: '/dev/track-annotator',
+    name: 'TrackAnnotator',
+    component: () => import('@/views/dev/TrackAnnotator.vue'),
+    meta: {
+      title: 'Track Identity Annotator',
+    },
+  },
 ]
 
 const router = createRouter({

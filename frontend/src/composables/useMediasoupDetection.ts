@@ -549,6 +549,7 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
       }
 
       // Setup data consumer message handler
+      let messageCount = 0
       detectionConsumer.on('message', (data: ArrayBuffer | string) => {
         try {
           let metadata: DetectionMetadata
@@ -560,6 +561,10 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
             metadata = JSON.parse(data as string)
           }
 
+          messageCount++
+          if (messageCount <= 3 || messageCount % 100 === 0) {
+            console.log(`[Mediasoup] ${cameraId}: Received detection #${messageCount}, frame=${metadata.frame_number}, video_time_ms=${metadata.video_time_ms?.toFixed(0)}, detections=${metadata.detection_count}`)
+          }
           processMetadata(metadata)
         } catch (error) {
           console.error(`[Mediasoup] ${cameraId}: Error parsing detection:`, error)
@@ -727,12 +732,28 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
 
       const videoTimeMs = videoElement.value.currentTime * 1000
 
+      // Debug: log sync loop state occasionally
+      if (stats.value.framesReceived % 100 === 0) {
+        console.log(`[VideoSync] ${cameraId}: Loop tick - videoTime=${videoTimeMs.toFixed(0)}ms, buffer=${videoSyncBuffer.length}, calibrated=${videoSyncCalibrated}, confidence=${(syncCalibration.confidenceLevel * 100).toFixed(0)}%`)
+      }
+
       // Calibrate offset on first detection with video_time_ms
       if (!videoSyncCalibrated && videoSyncBuffer.length > 0) {
         const firstDetection = videoSyncBuffer[0]
         if (firstDetection.video_time_ms !== undefined) {
           // Calculate how far ahead detections are from video
-          videoSyncOffset = firstDetection.video_time_ms - videoTimeMs
+          let rawOffset = firstDetection.video_time_ms - videoTimeMs
+
+          // Handle join-time desync: when browser joins mid-stream, video starts at 0
+          // but detection metadata is for the current stream position.
+          // If offset is too large (> 10s), assume join-time desync and release immediately.
+          const MAX_REASONABLE_OFFSET_MS = 10000  // 10 seconds
+          if (Math.abs(rawOffset) > MAX_REASONABLE_OFFSET_MS) {
+            console.log(`[VideoSync] Join-time desync detected (offset ${rawOffset.toFixed(0)}ms > ${MAX_REASONABLE_OFFSET_MS}ms), using immediate release`)
+            rawOffset = 0  // Release detections immediately - they match the displayed frame
+          }
+
+          videoSyncOffset = rawOffset
           videoSyncCalibrated = true
           console.log(`[VideoSync] Calibrated offset: ${videoSyncOffset.toFixed(0)}ms (detection ahead of video)`)
         }
@@ -872,6 +893,7 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
    * Release a detection for processing (called when video catches up)
    */
   function releaseDetection(metadata: DetectionMetadata) {
+    console.log(`[VideoSync] ${cameraId}: Releasing detection frame ${metadata.frame_number} with ${metadata.detection_count} detections`)
     // Emit for person position tracking
     emitWebRTCDetection(metadata)
 
@@ -1004,6 +1026,9 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
 
       // Add to video sync buffer (sorted by video_time_ms)
       videoSyncBuffer.push(metadata)
+      if (videoSyncBuffer.length % 30 === 1) {
+        console.log(`[VideoSync] ${cameraId}: Buffered detection frame ${metadata.frame_number}, video_time_ms=${metadata.video_time_ms?.toFixed(0)}, buffer size=${videoSyncBuffer.length}`)
+      }
 
       // Trim buffer if too large (drop oldest)
       while (videoSyncBuffer.length > maxVideoSyncBufferSize) {
@@ -1040,6 +1065,7 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
 
     if (frameDiff < -maxFrameAge) {
       stats.value.droppedStaleDetections++
+      console.log(`[Mediasoup] ${cameraId}: Dropped stale detection frame ${metadata.frame_number} (current: ${currentFrame}, diff: ${frameDiff})`)
       return
     }
 
@@ -1063,6 +1089,8 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
 
     if (onDetectionUpdate) {
       onDetectionUpdate(metadata)
+    } else {
+      console.warn(`[Mediasoup] ${cameraId}: onDetectionUpdate callback not set, detection not propagated to UI`)
     }
   }
 
