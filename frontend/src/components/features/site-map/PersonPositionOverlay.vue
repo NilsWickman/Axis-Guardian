@@ -43,6 +43,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useGlobalTrackStore, type GlobalTrack } from '../../../stores/globalTracks'
 import type { SiteMap } from '../../../stores/siteMaps'
+import { calculateVelocity } from '../../../utils/trackCorrelation'
 
 export interface PersonPositionOverlayProps {
   siteMap: SiteMap
@@ -82,6 +83,11 @@ interface InterpolationState {
   position: { x: number; y: number }       // Current rendered position
   targetPosition: { x: number; y: number } // Target position to interpolate toward
   lastUpdateTime: number
+  // Ghost track extrapolation fields
+  velocity?: { x: number; y: number }              // Velocity in m/s for ghost extrapolation
+  ghostStartTime?: number                          // When ghost mode started
+  ghostStartPosition?: { x: number; y: number }    // Position when ghost started
+  wasGhost?: boolean                               // Track if previous state was ghost
 }
 const interpolationStates = new Map<string, InterpolationState>()
 
@@ -173,15 +179,77 @@ function getInterpolatedPosition(track: GlobalTrack, now: number): { x: number; 
 }
 
 /**
+ * Get interpolated position for a ghost track using velocity extrapolation
+ * Continues moving at the last known velocity, clamped to room boundaries
+ */
+function getGhostInterpolatedPosition(track: GlobalTrack, now: number): { x: number; y: number } {
+  const state = interpolationStates.get(track.globalTrackId)
+
+  // Fall back to server position if no interpolation state or velocity
+  if (!state?.velocity || !state.ghostStartPosition || !state.ghostStartTime) {
+    return track.predictedPosition ?? track.currentPosition
+  }
+
+  // Calculate time since ghost mode started (in seconds)
+  const elapsed = (now - state.ghostStartTime) / 1000
+
+  // Cap extrapolation time to prevent ghost going too far (max 5 seconds)
+  const cappedElapsed = Math.min(elapsed, 5)
+
+  // Extrapolate position: startPosition + velocity * time
+  let x = state.ghostStartPosition.x + state.velocity.x * cappedElapsed
+  let y = state.ghostStartPosition.y + state.velocity.y * cappedElapsed
+
+  // Clamp to room boundaries
+  const origin = props.siteMap.origin ?? { x: 0, y: 0 }
+  const dimensions = props.siteMap.dimensions
+  if (dimensions) {
+    const minX = origin.x
+    const maxX = origin.x + dimensions.width
+    const minY = origin.y
+    const maxY = origin.y + dimensions.height
+
+    x = Math.max(minX, Math.min(maxX, x))
+    y = Math.max(minY, Math.min(maxY, y))
+  }
+
+  // Update the state's position for trail drawing continuity
+  state.position = { x, y }
+
+  return { x, y }
+}
+
+/**
  * Update interpolation state when track position changes
  * Updates the target position - the animation loop will smoothly lerp toward it
+ * For ghost tracks, calculates velocity for smooth extrapolation
  */
 function updateInterpolationState(track: GlobalTrack, now: number): void {
   const state = interpolationStates.get(track.globalTrackId)
+  const isGhost = isGhostTrack(track)
 
   if (state) {
-    // Update target position - animation loop will lerp toward it
-    state.targetPosition = { ...track.currentPosition }
+    // Check if track just became a ghost (transition from normal to ghost)
+    if (isGhost && !state.wasGhost) {
+      // Track just became a ghost - capture velocity and start position
+      const velocity = calculateVelocity(track.trail)
+      state.velocity = velocity ?? undefined
+      state.ghostStartTime = now
+      state.ghostStartPosition = { ...state.position } // Use current rendered position for smoothness
+      state.wasGhost = true
+    } else if (!isGhost && state.wasGhost) {
+      // Track is no longer a ghost - clear ghost state
+      state.velocity = undefined
+      state.ghostStartTime = undefined
+      state.ghostStartPosition = undefined
+      state.wasGhost = false
+      // Update target to actual position for smooth blend-back
+      state.targetPosition = { ...track.currentPosition }
+    } else if (!isGhost) {
+      // Normal track update
+      state.targetPosition = { ...track.currentPosition }
+    }
+    // For ongoing ghosts, we don't update targetPosition - extrapolation handles it
     state.lastUpdateTime = now
   } else {
     // New track - start at target position immediately
@@ -189,6 +257,13 @@ function updateInterpolationState(track: GlobalTrack, now: number): void {
       position: { ...track.currentPosition },
       targetPosition: { ...track.currentPosition },
       lastUpdateTime: now,
+      wasGhost: isGhost,
+      // If starting as ghost, capture velocity immediately
+      ...(isGhost ? {
+        velocity: calculateVelocity(track.trail) ?? undefined,
+        ghostStartTime: now,
+        ghostStartPosition: { ...track.currentPosition },
+      } : {}),
     })
   }
 }
@@ -471,8 +546,8 @@ function animate() {
   // Separate normal tracks from ghost tracks for different rendering
   for (const track of visibleGlobalTracks.value) {
     if (isGhostTrack(track)) {
-      // Ghost track: use predicted position with ghost styling
-      const ghostPos = getDisplayPosition(track)
+      // Ghost track: use velocity extrapolation for smooth motion
+      const ghostPos = getGhostInterpolatedPosition(track, now)
       drawGhostTrail(ctx, track, ghostPos)
     } else {
       // Normal track: use interpolated position
@@ -483,8 +558,8 @@ function animate() {
 
   for (const track of visibleGlobalTracks.value) {
     if (isGhostTrack(track)) {
-      // Ghost track: render with ghost styling
-      const ghostPos = getDisplayPosition(track)
+      // Ghost track: render with ghost styling using velocity extrapolation
+      const ghostPos = getGhostInterpolatedPosition(track, now)
       drawGhostMarker(ctx, track, ghostPos)
     } else {
       // Normal track: render with standard styling

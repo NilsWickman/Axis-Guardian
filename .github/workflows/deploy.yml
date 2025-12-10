@@ -97,6 +97,26 @@ jobs:
           target: '/opt/axis-guardian/config'
           strip_components: 2
 
+      - name: Restart services
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+            cd /opt/axis-guardian/tracking-service
+            npx pm2 delete axis-tracking 2>/dev/null || true
+            npx pm2 start "npx tsx src/index.ts" --name axis-tracking --cwd /opt/axis-guardian/tracking-service
+
+            cd /opt/axis-guardian/camera-emulator
+            npx pm2 delete axis-emulator 2>/dev/null || true
+            npx pm2 start "npx tsx src/index.ts" --name axis-emulator --cwd /opt/axis-guardian/camera-emulator
+
+            npx pm2 save
+
       - name: Purge Cloudflare Cache
         uses: jakejarvis/cloudflare-purge-action@master
         env:

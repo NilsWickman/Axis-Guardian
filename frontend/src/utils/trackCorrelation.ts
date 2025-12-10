@@ -200,6 +200,29 @@ export function predictPosition(
 }
 
 /**
+ * Calculate velocity from trail history (for ghost track extrapolation)
+ *
+ * @param trail - Position history (most recent first)
+ * @returns Velocity in meters per second, or null if insufficient data
+ */
+export function calculateVelocity(
+  trail: { x: number; y: number; timestamp: number }[]
+): Point2D | null {
+  if (trail.length < 2) return null
+
+  const latest = trail[0]
+  const previous = trail[1]
+
+  const timeDiff = (latest.timestamp - previous.timestamp) / 1000 // Convert ms to seconds
+  if (timeDiff <= 0) return null
+
+  return {
+    x: (latest.x - previous.x) / timeDiff, // m/s
+    y: (latest.y - previous.y) / timeDiff, // m/s
+  }
+}
+
+/**
  * Calculate the correlation score between a new detection and an existing track
  * Higher score = better match
  *
