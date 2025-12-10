@@ -39,6 +39,9 @@ importers:
 
   frontend:
     dependencies:
+      '@internationalized/date':
+        specifier: ^3.10.0
+        version: 3.10.0
       '@tailwindcss/vite':
         specifier: ^4.1.12
         version: 4.1.17(vite@7.2.6(@types/node@24.10.1)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0))
