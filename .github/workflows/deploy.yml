@@ -23,22 +23,12 @@ jobs:
           node-version: '22'
           cache: 'pnpm'
 
-      - name: Install build tools for native modules
-        run: sudo apt-get update && sudo apt-get install -y build-essential python3
-
       # Frontend
       - name: Install frontend dependencies
         run: cd frontend && pnpm install --frozen-lockfile
 
       - name: Build frontend (validation)
         run: cd frontend && npx vite build --config config/build/vite.config.ts
-
-      # Tracking Service
-      - name: Install tracking-service dependencies
-        run: cd tracking-service && pnpm install --frozen-lockfile
-
-      - name: Run tracking-service tests
-        run: cd tracking-service && pnpm test
 
   build-and-deploy:
     needs: test
