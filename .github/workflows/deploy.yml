@@ -31,12 +31,6 @@ jobs:
           VITE_DEMO_MODE=true \
           pnpm vite build --config config/build/vite.config.ts
 
-      - name: Install tracking-service
-        run: cd tracking-service && pnpm install
-
-      - name: Install camera-emulator
-        run: cd camera-emulator && pnpm install
-
       - name: Deploy frontend
         uses: appleboy/scp-action@master
         with:
@@ -57,13 +51,13 @@ jobs:
           target: '/opt/axis-guardian/tracking-service/src'
           strip_components: 2
 
-      - name: Deploy tracking-service deps
+      - name: Deploy tracking-service config
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: 'tracking-service/node_modules/*,tracking-service/package.json,tracking-service/tsconfig.json'
+          source: 'tracking-service/package.json,tracking-service/tsconfig.json'
           target: '/opt/axis-guardian/tracking-service'
           strip_components: 1
 
@@ -77,13 +71,13 @@ jobs:
           target: '/opt/axis-guardian/camera-emulator/src'
           strip_components: 2
 
-      - name: Deploy camera-emulator deps
+      - name: Deploy camera-emulator config
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: 'camera-emulator/node_modules/*,camera-emulator/package.json,camera-emulator/tsconfig.json'
+          source: 'camera-emulator/package.json,camera-emulator/tsconfig.json'
           target: '/opt/axis-guardian/camera-emulator'
           strip_components: 1
 
@@ -97,7 +91,7 @@ jobs:
           target: '/opt/axis-guardian/config'
           strip_components: 2
 
-      - name: Restart services
+      - name: Install and restart services
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -108,10 +102,12 @@ jobs:
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
             cd /opt/axis-guardian/tracking-service
+            npm install
             npx pm2 delete axis-tracking 2>/dev/null || true
             npx pm2 start "npx tsx src/index.ts" --name axis-tracking --cwd /opt/axis-guardian/tracking-service
 
             cd /opt/axis-guardian/camera-emulator
+            npm install
             npx pm2 delete axis-emulator 2>/dev/null || true
             npx pm2 start "npx tsx src/index.ts" --name axis-emulator --cwd /opt/axis-guardian/camera-emulator
 
