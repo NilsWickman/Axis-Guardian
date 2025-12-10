@@ -10,14 +10,11 @@ RUN corepack enable
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
 
-# Install all dependencies (including dev for build)
+# Install all dependencies (including dev for tsx)
 RUN pnpm install --frozen-lockfile
 
 # Copy source
 COPY . .
-
-# Build TypeScript
-RUN pnpm build
 
 # Production stage
 FROM node:22-alpine
@@ -31,11 +28,11 @@ RUN corepack enable
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
 
-# Install production dependencies only
-RUN pnpm install --frozen-lockfile --prod
+# Install all dependencies (tsx needed for runtime)
+RUN pnpm install --frozen-lockfile
 
-# Copy built output from build stage
-COPY --from=build /app/dist ./dist
+# Copy source from build stage
+COPY --from=build /app/src ./src
 
 # Create data directory for SQLite
 RUN mkdir -p data
@@ -48,4 +45,4 @@ ENV READ_ONLY_MODE=false
 
 EXPOSE 3010
 
-CMD ["node", "dist/index.js"]
+CMD ["npx", "tsx", "src/index.ts"]

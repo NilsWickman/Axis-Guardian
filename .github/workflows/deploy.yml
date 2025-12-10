@@ -34,9 +34,6 @@ jobs:
       - name: Install tracking-service dependencies
         run: cd tracking-service && pnpm install --frozen-lockfile
 
-      - name: Build tracking-service
-        run: cd tracking-service && pnpm build
-
       - name: Run tracking-service tests
         run: cd tracking-service && pnpm test
 
