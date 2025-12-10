@@ -12,7 +12,7 @@ import { predictPosition } from '../utils/trackCorrelation'
 // Default configuration constants
 export const DEFAULT_CORRELATION_DISTANCE_M = 1.5 // Max distance (meters) to associate detection with existing track
 export const DEFAULT_MERGE_WINDOW_MS = 200 // Time window for multi-camera merging
-export const DEFAULT_TRACK_EXPIRY_MS = 5000 // Remove tracks not seen for 5 seconds
+export const DEFAULT_TRACK_EXPIRY_MS = 1500 // Remove tracks not seen for 1.5 seconds (visual responsiveness)
 export const DEFAULT_MAX_TRAIL_LENGTH = 20 // Position history for trails
 export const DEFAULT_MIN_DETECTIONS_TO_CONFIRM = 3 // Minimum detections before track is considered confirmed
 export const DEFAULT_MAX_VELOCITY_MS = 10 // Max reasonable walking speed in m/s (reject teleporting tracks)
@@ -182,18 +182,24 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
 
   // Getters
   const activeTracks = computed(() => {
+    const now = Date.now()
     // Return confirmed tracks that are:
     // 1. Actively being detected (not occluded), OR
     // 2. Pillar-occluded with a predicted position (ghost tracks)
+    // Also check expiry inline for immediate visual response without waiting for cleanup
     return Array.from(tracks.value.values()).filter(
       track => track.isActive && track.isConfirmed &&
+        (now - track.lastSeen <= config.value.trackExpiryMs) &&
         (track.state !== 'occluded' || track.exitReason === 'pillar_occlusion')
     )
   })
 
   // Include unconfirmed tracks for debugging
   const allActiveTracks = computed(() => {
-    return Array.from(tracks.value.values()).filter(track => track.isActive)
+    const now = Date.now()
+    return Array.from(tracks.value.values()).filter(
+      track => track.isActive && (now - track.lastSeen <= config.value.trackExpiryMs)
+    )
   })
 
   const activeTrackCount = computed(() => activeTracks.value.length)

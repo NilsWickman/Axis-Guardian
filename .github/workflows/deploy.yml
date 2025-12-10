@@ -29,7 +29,7 @@ jobs:
           VITE_TRACKING_WS_URL=wss://${{ secrets.GUARDIAN_DOMAIN }}/ws \
           VITE_TRACKING_API_URL=https://${{ secrets.GUARDIAN_DOMAIN }} \
           VITE_DEMO_MODE=true \
-          pnpm run build
+          pnpm vite build --config config/build/vite.config.ts
 
       - name: Install and build tracking-service
         run: cd tracking-service && pnpm install && pnpm build
