@@ -31,11 +31,11 @@ jobs:
           VITE_DEMO_MODE=true \
           pnpm vite build --config config/build/vite.config.ts
 
-      - name: Install and build tracking-service
-        run: cd tracking-service && pnpm install && pnpm build
+      - name: Install tracking-service
+        run: cd tracking-service && pnpm install
 
-      - name: Install and build camera-emulator
-        run: cd camera-emulator && pnpm install && pnpm build
+      - name: Install camera-emulator
+        run: cd camera-emulator && pnpm install
 
       - name: Setup SSH
         run: |
@@ -53,25 +53,25 @@ jobs:
       - name: Deploy tracking-service
         run: |
           rsync -avz --delete \
-            tracking-service/dist/ \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/axis-guardian/tracking-service/dist/
+            tracking-service/src/ \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/axis-guardian/tracking-service/src/
           rsync -avz --delete \
             tracking-service/node_modules/ \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/axis-guardian/tracking-service/node_modules/
           rsync -avz \
-            tracking-service/package.json \
+            tracking-service/package.json tracking-service/tsconfig.json \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/axis-guardian/tracking-service/
 
       - name: Deploy camera-emulator
         run: |
           rsync -avz --delete \
-            camera-emulator/dist/ \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/axis-guardian/camera-emulator/dist/
+            camera-emulator/src/ \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/axis-guardian/camera-emulator/src/
           rsync -avz --delete \
             camera-emulator/node_modules/ \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/axis-guardian/camera-emulator/node_modules/
           rsync -avz \
-            camera-emulator/package.json \
+            camera-emulator/package.json camera-emulator/tsconfig.json \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/opt/axis-guardian/camera-emulator/
 
       - name: Deploy config
