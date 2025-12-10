@@ -20,6 +20,7 @@
     Code,
     Film,
     Crosshair,
+    Users,
   } from 'lucide-vue-next'
   import { useTheme } from '@/composables/useTheme'
 
@@ -105,6 +106,11 @@
           name: 'Ground Truth Annotator',
           path: '/calibration/annotator',
           icon: Crosshair,
+        },
+        {
+          name: 'Track Annotator',
+          path: '/dev/track-annotator',
+          icon: Users,
         },
       ],
     },
