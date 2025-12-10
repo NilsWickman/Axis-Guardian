@@ -341,6 +341,7 @@ export function usePersonPositionTracking(options: UsePersonPositionTrackingOpti
     }, updateIntervalMs)
 
     // Set up periodic cleanup of expired positions and tracks
+    // Run frequently (1s) for responsive visual disappearance at FOV/boundary edges
     cleanupInterval = setInterval(() => {
       positionStore.cleanupExpiredPositions()
       globalTrackStore.cleanupExpiredTracks()
@@ -349,7 +350,7 @@ export function usePersonPositionTracking(options: UsePersonPositionTrackingOpti
       if (lastProcessedFrames.value.size > 50) {
         lastProcessedFrames.value.clear()
       }
-    }, 5000) // Cleanup every 5 seconds
+    }, 1000) // Cleanup every 1 second for responsive track expiration
   }
 
   /**
