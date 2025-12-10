@@ -91,15 +91,18 @@ jobs:
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
+            mkdir -p /opt/axis-guardian/frontend/public
+            cp /opt/axis-guardian/frontend/sitemap-rectangular-room.json /opt/axis-guardian/frontend/public/
+
             cd /opt/axis-guardian/tracking-service
             npm install
             npx pm2 delete axis-tracking 2>/dev/null || true
-            SITEMAP_CONFIG_PATH=/opt/axis-guardian/frontend/sitemap-rectangular-room.json \
             npx pm2 start "npx tsx src/index.ts" --name axis-tracking --cwd /opt/axis-guardian/tracking-service
 
             cd /opt/axis-guardian/camera-emulator
             npm install
             npx pm2 delete axis-emulator 2>/dev/null || true
+            VIDEO_PATH=/opt/axis-guardian/videos \
             npx pm2 start "npx tsx src/index.ts" --name axis-emulator --cwd /opt/axis-guardian/camera-emulator
 
             npx pm2 save
