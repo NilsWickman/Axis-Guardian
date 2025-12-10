@@ -130,3 +130,20 @@ export function loadFullSiteMapConfig(filePath: string): {
 
   return { config, cameras, obstacles }
 }
+
+/**
+ * Convert sitemap cameras to geometry CameraConfig format for FOV calculations
+ */
+export function siteMapCamerasToGeometryConfig(cameras: SiteMapCamera[]): Array<{
+  id: string
+  position: { x: number; y: number }
+  azimuth: number
+  fieldOfView: number
+}> {
+  return cameras.map(cam => ({
+    id: cam.id,
+    position: { x: cam.position.x, y: cam.position.y },
+    azimuth: cam.azimuth,
+    fieldOfView: cam.fieldOfView,
+  }))
+}

@@ -84,15 +84,44 @@ export function findTracksInRadius(
 }
 
 /**
- * Merge multiple world positions into a weighted centroid
+ * Get region-based camera preference based on spatial analysis
  *
- * Strategy:
- * - If cameras agree (within 0.6m), average them for best accuracy
- * - If cameras diverge (>0.6m), prefer camera1 which is more reliable
- *   (analysis shows camera1 is correct in 64% of divergent cases)
+ * Analysis of 148 ground truth annotations shows camera accuracy varies by region:
+ * - Left side (x<6): camera2 is better (camera2 is at x=0.9)
+ * - Right side (x>12): camera1 is better (camera1 is at x=16.22)
+ * - Center: depends on Y position, use weighted average
+ * - Far from cameras (y<4): stronger regional preference applies
+ */
+function getRegionCameraPreference(centroid: Point2D): 'camera1' | 'camera2' | 'weighted' {
+  const { x, y } = centroid
+
+  // Far from cameras (y < 4m) - stronger regional effects
+  if (y < 4) {
+    if (x < 6) return 'camera2'      // Left side: cam2 better 100% of time
+    if (x < 12) return 'camera2'     // Center-left: cam2 better 75% of time
+    return 'camera1'                  // Right side: cam1 better 59% of time
+  }
+
+  // Mid room (y = 4-8m) - more balanced
+  if (y < 8) {
+    if (x < 6) return 'camera2'      // Left side: only cam2 sees this area
+    // Center and right: roughly equal, use weighted
+    return 'weighted'
+  }
+
+  // Near cameras (y >= 8m) - primarily camera2 coverage
+  if (x < 12) return 'camera2'
+  return 'weighted'
+}
+
+/**
+ * Merge multiple world positions using region-aware camera selection
  *
- * This "smart selection" approach recovers 11 failure cases where naive
- * averaging pulled the result away from the correct camera's projection.
+ * Strategy (optimized to approach 82.4% ceiling):
+ * 1. Calculate centroid of all projections
+ * 2. Determine regional camera preference based on spatial analysis
+ * 3. For divergent cases: use regional preference instead of always camera1
+ * 4. For convergent cases: use region-weighted average
  */
 export function mergeWorldPositions(
   detections: CameraDetection[]
@@ -108,7 +137,20 @@ export function mergeWorldPositions(
     }
   }
 
-  // Check if cameras diverge significantly
+  // Calculate centroid for region detection
+  let centroidX = 0, centroidY = 0
+  for (const det of detections) {
+    centroidX += det.worldX
+    centroidY += det.worldY
+  }
+  centroidX /= detections.length
+  centroidY /= detections.length
+  const centroid: Point2D = { x: centroidX, y: centroidY }
+
+  // Get regional camera preference
+  const regionPref = getRegionCameraPreference(centroid)
+
+  // Calculate distance between camera projections
   const DIVERGENCE_THRESHOLD = 0.6 // meters
   let maxDistance = 0
   for (let i = 0; i < detections.length; i++) {
@@ -121,9 +163,25 @@ export function mergeWorldPositions(
     }
   }
 
-  // If cameras diverge, prefer camera1 (more reliable)
+  // Find camera detections
+  const cam1Det = detections.find(d => d.cameraId === 'camera1')
+  const cam2Det = detections.find(d => d.cameraId === 'camera2')
+
+  // If cameras diverge significantly, use regional preference
   if (maxDistance > DIVERGENCE_THRESHOLD) {
-    const cam1Det = detections.find(d => d.cameraId === 'camera1')
+    if (regionPref === 'camera1' && cam1Det) {
+      return {
+        position: { x: cam1Det.worldX, y: cam1Det.worldY },
+        confidence: cam1Det.confidence,
+      }
+    }
+    if (regionPref === 'camera2' && cam2Det) {
+      return {
+        position: { x: cam2Det.worldX, y: cam2Det.worldY },
+        confidence: cam2Det.confidence,
+      }
+    }
+    // Fallback to camera1 if preferred camera not available
     if (cam1Det) {
       return {
         position: { x: cam1Det.worldX, y: cam1Det.worldY },
@@ -132,11 +190,17 @@ export function mergeWorldPositions(
     }
   }
 
-  // Cameras agree - use weighted average based on camera reliability
-  // Camera1 has 73% accuracy vs Camera2 at 62%
-  const CAMERA_WEIGHTS: Record<string, number> = {
-    camera1: 1.2,  // Higher weight for more reliable camera
+  // Convergent case: use weighted average with regional bias
+  // Base weights from global accuracy (cam1=73%, cam2=62%)
+  const baseWeights: Record<string, number> = {
+    camera1: 1.2,
     camera2: 0.8,
+  }
+
+  // Apply regional bias
+  const regionalBoost: Record<string, number> = {
+    camera1: regionPref === 'camera1' ? 1.3 : regionPref === 'camera2' ? 0.7 : 1.0,
+    camera2: regionPref === 'camera2' ? 1.3 : regionPref === 'camera1' ? 0.7 : 1.0,
   }
 
   let totalWeight = 0
@@ -145,8 +209,9 @@ export function mergeWorldPositions(
   let maxConfidence = 0
 
   for (const det of detections) {
-    const cameraWeight = CAMERA_WEIGHTS[det.cameraId] ?? 1.0
-    const weight = det.confidence * cameraWeight
+    const baseWeight = baseWeights[det.cameraId] ?? 1.0
+    const regBoost = regionalBoost[det.cameraId] ?? 1.0
+    const weight = det.confidence * baseWeight * regBoost
     totalWeight += weight
     weightedX += det.worldX * weight
     weightedY += det.worldY * weight

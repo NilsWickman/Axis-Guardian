@@ -182,8 +182,22 @@ const router = createRouter({
   },
 })
 
+// Demo mode configuration
+const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true'
+
+// Routes allowed in demo mode (read-only deployment)
+const isRouteAllowedInDemoMode = (path: string): boolean => {
+  return path.startsWith('/cameras/') || path === '/site-tracking'
+}
+
 // Global navigation guards
 router.beforeEach((to, _from, next) => {
+  // Demo mode: restrict to cameras and site-tracking only
+  if (isDemoMode && !isRouteAllowedInDemoMode(to.path)) {
+    console.log(`[Demo Mode] Redirecting ${to.path} to /cameras/focus`)
+    return next('/cameras/focus')
+  }
+
   // Set document title based on route meta
   if (to.meta.title) {
     document.title = `${to.meta.title} | AXIS Surveillance`

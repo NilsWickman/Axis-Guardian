@@ -12,7 +12,7 @@ import { DetectionProcessor } from './detection/detection-processor.js'
 import { registerRoutes } from './api/routes.js'
 import { WebSocketBroadcaster, registerWebSocket } from './api/websocket.js'
 import { loadEnvironment } from './config/environment.js'
-import { loadSiteMapConfig } from './config/sitemap-loader.js'
+import { loadSiteMapConfig, siteMapCamerasToGeometryConfig } from './config/sitemap-loader.js'
 import { AcapClient } from './acap/acap-client.js'
 import type { CameraParams } from './types.js'
 import { dirname, resolve } from 'path'
@@ -57,6 +57,14 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
   const sitemapConfig = loadSiteMapConfig(sitemapPath)
   cameraRegistry.loadFromSiteMapConfig(sitemapConfig.cameras)
 
+  // Set up sitemap geometry for exit detection (FOV, boundaries, pillars)
+  const geometryCameras = siteMapCamerasToGeometryConfig(sitemapConfig.cameras)
+  trackManager.setSiteMapGeometry(
+    geometryCameras,
+    sitemapConfig.obstacles ?? [],
+    { width: sitemapConfig.dimensions.width, height: sitemapConfig.dimensions.height }
+  )
+
   // Register additional cameras if provided
   if (options.cameras) {
     for (const [cameraId, params] of options.cameras) {
@@ -75,10 +83,10 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
     getFrameInfo: () => detectionProcessor.getCameraFrameInfo(),
   })
 
-  // Set up periodic cleanup (1s for responsive track removal)
+  // Set up periodic cleanup (200ms for quick FOV/boundary exit detection)
   const cleanupInterval = setInterval(() => {
     trackManager.cleanupExpiredTracks()
-  }, 1000)
+  }, 200)
 
   // Register routes
   registerRoutes(app, trackManager, detectionProcessor, cameraRegistry)
@@ -134,6 +142,14 @@ export async function createServerWithComponents(options: CreateServerOptions = 
   const sitemapConfig = loadSiteMapConfig(sitemapPath)
   cameraRegistry.loadFromSiteMapConfig(sitemapConfig.cameras)
 
+  // Set up sitemap geometry for exit detection (FOV, boundaries, pillars)
+  const geometryCameras2 = siteMapCamerasToGeometryConfig(sitemapConfig.cameras)
+  trackManager.setSiteMapGeometry(
+    geometryCameras2,
+    sitemapConfig.obstacles ?? [],
+    { width: sitemapConfig.dimensions.width, height: sitemapConfig.dimensions.height }
+  )
+
   // Register additional cameras if provided
   if (options.cameras) {
     for (const [cameraId, params] of options.cameras) {
@@ -152,10 +168,10 @@ export async function createServerWithComponents(options: CreateServerOptions = 
     getFrameInfo: () => detectionProcessor.getCameraFrameInfo(),
   })
 
-  // Set up periodic cleanup (1s for responsive track removal)
+  // Set up periodic cleanup (200ms for quick FOV/boundary exit detection)
   const cleanupInterval = setInterval(() => {
     trackManager.cleanupExpiredTracks()
-  }, 1000)
+  }, 200)
 
   // Initialize ACAP client if enabled
   let acapClient: AcapClient | null = null

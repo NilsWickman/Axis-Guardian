@@ -41,7 +41,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { useGlobalTrackStore, type GlobalTrack, type TrailPosition } from '../../../stores/globalTracks'
+import { useGlobalTrackStore, type GlobalTrack } from '../../../stores/globalTracks'
 import type { SiteMap } from '../../../stores/siteMaps'
 
 export interface PersonPositionOverlayProps {
@@ -132,13 +132,6 @@ function worldToCanvasX(worldX: number): number {
 function worldToCanvasY(worldY: number): number {
   const origin = props.siteMap.origin ?? { x: 0, y: 0 }
   return (worldY - origin.y) * props.siteMap.renderScale
-}
-
-/**
- * Format track ID for display (e.g., "global-5" -> "#5")
- */
-function formatTrackId(trackId: string): string {
-  return trackId.replace('global-', '#')
 }
 
 /**
@@ -349,6 +342,109 @@ function drawUnconfirmedMarker(ctx: CanvasRenderingContext2D, track: GlobalTrack
 }
 
 /**
+ * Check if a track is a ghost track (pillar-occluded with predicted position)
+ */
+function isGhostTrack(track: GlobalTrack): boolean {
+  return track.state === 'occluded' && track.exitReason === 'pillar_occlusion'
+}
+
+/**
+ * Get display position for a track (predicted for ghost tracks, current otherwise)
+ */
+function getDisplayPosition(track: GlobalTrack): { x: number; y: number } {
+  if (isGhostTrack(track) && track.predictedPosition) {
+    return track.predictedPosition
+  }
+  return track.currentPosition
+}
+
+/**
+ * Draw ghost track marker (semi-transparent, dashed)
+ * Used for pillar-occluded tracks showing predicted position
+ */
+function drawGhostMarker(ctx: CanvasRenderingContext2D, track: GlobalTrack, position: { x: number; y: number }) {
+  const x = worldToCanvasX(position.x)
+  const y = worldToCanvasY(position.y)
+  const radius = props.markerRadius
+
+  // Ghost outer glow (fainter)
+  ctx.beginPath()
+  ctx.arc(x, y, radius + 4, 0, Math.PI * 2)
+  ctx.fillStyle = track.color
+  ctx.globalAlpha = 0.1
+  ctx.fill()
+
+  // Ghost main marker (dashed outline, semi-transparent)
+  ctx.beginPath()
+  ctx.arc(x, y, radius, 0, Math.PI * 2)
+  ctx.fillStyle = track.color
+  ctx.globalAlpha = 0.3
+  ctx.fill()
+  ctx.strokeStyle = track.color
+  ctx.lineWidth = 2
+  ctx.setLineDash([4, 4])
+  ctx.globalAlpha = 0.5
+  ctx.stroke()
+  ctx.setLineDash([])
+  ctx.globalAlpha = 1
+
+  // Ghost track label
+  const label = formatTrackLabel(track)
+  ctx.font = '600 11px ui-monospace, SFMono-Regular, Menlo, Monaco, monospace'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'bottom'
+
+  // Text shadow/outline (fainter)
+  ctx.strokeStyle = '#000'
+  ctx.lineWidth = 2
+  ctx.globalAlpha = 0.3
+  ctx.strokeText(label, x, y - radius - 6)
+
+  // Text fill (fainter)
+  ctx.fillStyle = track.color
+  ctx.globalAlpha = 0.5
+  ctx.fillText(label, x, y - radius - 6)
+  ctx.globalAlpha = 1
+}
+
+/**
+ * Draw ghost track trail (dashed, semi-transparent)
+ */
+function drawGhostTrail(ctx: CanvasRenderingContext2D, track: GlobalTrack, ghostPos: { x: number; y: number }) {
+  if (!props.showTrails) return
+
+  const trail = track.trail.slice(0, props.maxTrailLength)
+  if (trail.length < 1) return
+
+  ctx.lineWidth = 2
+  ctx.lineCap = 'round'
+  ctx.strokeStyle = track.color
+  ctx.setLineDash([4, 4])
+
+  // Draw line from ghost position to first trail point
+  if (trail.length >= 1) {
+    ctx.globalAlpha = 0.3
+    ctx.beginPath()
+    ctx.moveTo(worldToCanvasX(ghostPos.x), worldToCanvasY(ghostPos.y))
+    ctx.lineTo(worldToCanvasX(trail[0].x), worldToCanvasY(trail[0].y))
+    ctx.stroke()
+  }
+
+  // Draw remaining trail segments (fading)
+  for (let i = 0; i < trail.length - 1; i++) {
+    const opacity = 0.3 * (1 - (i + 1) / trail.length)
+    ctx.globalAlpha = opacity
+    ctx.beginPath()
+    ctx.moveTo(worldToCanvasX(trail[i].x), worldToCanvasY(trail[i].y))
+    ctx.lineTo(worldToCanvasX(trail[i + 1].x), worldToCanvasY(trail[i + 1].y))
+    ctx.stroke()
+  }
+
+  ctx.setLineDash([])
+  ctx.globalAlpha = 1
+}
+
+/**
  * Main animation loop - runs continuously for smooth interpolation
  */
 function animate() {
@@ -372,14 +468,29 @@ function animate() {
   ctx.clearRect(0, 0, props.canvasWidth, props.canvasHeight)
 
   // Draw trails and markers with interpolated positions
+  // Separate normal tracks from ghost tracks for different rendering
   for (const track of visibleGlobalTracks.value) {
-    const interpolatedPos = getInterpolatedPosition(track, now)
-    drawTrail(ctx, track, interpolatedPos)
+    if (isGhostTrack(track)) {
+      // Ghost track: use predicted position with ghost styling
+      const ghostPos = getDisplayPosition(track)
+      drawGhostTrail(ctx, track, ghostPos)
+    } else {
+      // Normal track: use interpolated position
+      const interpolatedPos = getInterpolatedPosition(track, now)
+      drawTrail(ctx, track, interpolatedPos)
+    }
   }
 
   for (const track of visibleGlobalTracks.value) {
-    const interpolatedPos = getInterpolatedPosition(track, now)
-    drawMarker(ctx, track, interpolatedPos)
+    if (isGhostTrack(track)) {
+      // Ghost track: render with ghost styling
+      const ghostPos = getDisplayPosition(track)
+      drawGhostMarker(ctx, track, ghostPos)
+    } else {
+      // Normal track: render with standard styling
+      const interpolatedPos = getInterpolatedPosition(track, now)
+      drawMarker(ctx, track, interpolatedPos)
+    }
   }
 
   // Draw unconfirmed tracks in debug mode

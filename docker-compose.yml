@@ -1,0 +1,60 @@
+version: '3.8'
+
+# Local development docker-compose
+# Run: docker compose up --build
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_TRACKING_WS_URL: ws://localhost:3010/ws
+        VITE_TRACKING_API_URL: http://localhost:3010
+        VITE_DEMO_MODE: 'true'
+    ports:
+      - "5173:80"
+    depends_on:
+      - tracking-service
+      - camera-emulator
+    networks:
+      - axis-guardian
+
+  tracking-service:
+    build:
+      context: ./tracking-service
+      dockerfile: Dockerfile
+    ports:
+      - "3010:3010"
+    environment:
+      - NODE_ENV=production
+      - READ_ONLY_MODE=true
+      - PORT=3010
+      - HOST=0.0.0.0
+    volumes:
+      # Mount sitemap config (read-only)
+      - ./shared/config/sitemap-rectangular-room.json:/app/config/sitemap.json:ro
+    networks:
+      - axis-guardian
+
+  camera-emulator:
+    build:
+      context: .
+      dockerfile: ./camera-emulator/Dockerfile
+    ports:
+      - "9101:9101"
+      - "9102:9102"
+      - "10000-10100:10000-10100/udp"
+    environment:
+      - NODE_ENV=production
+      - TRACKING_SERVICE_URL=http://tracking-service:3010
+      - VIDEO_PATH=/app/videos
+      - ANNOUNCED_IP=127.0.0.1
+    depends_on:
+      - tracking-service
+    networks:
+      - axis-guardian
+
+networks:
+  axis-guardian:
+    name: axis-guardian-network

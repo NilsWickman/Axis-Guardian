@@ -1,0 +1,162 @@
+name: Deploy Axis-Guardian Demo
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      # Frontend
+      - name: Install frontend dependencies
+        run: cd frontend && pnpm install --frozen-lockfile
+
+      - name: Type check frontend
+        run: cd frontend && pnpm type-check
+
+      - name: Build frontend (validation)
+        run: cd frontend && pnpm build
+
+      # Tracking Service
+      - name: Install tracking-service dependencies
+        run: cd tracking-service && pnpm install --frozen-lockfile
+
+      - name: Build tracking-service
+        run: cd tracking-service && pnpm build
+
+      - name: Run tracking-service tests
+        run: cd tracking-service && pnpm test
+
+  build-and-deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build Frontend Image
+      - name: Build Frontend Image
+        run: |
+          docker build \
+            --build-arg VITE_TRACKING_WS_URL=wss://${{ secrets.GUARDIAN_DOMAIN }}/ws \
+            --build-arg VITE_TRACKING_API_URL=https://${{ secrets.GUARDIAN_DOMAIN }} \
+            --build-arg VITE_DEMO_MODE=true \
+            -t axis-guardian-frontend:latest \
+            -f frontend/Dockerfile \
+            frontend/
+
+      # Build Tracking Service Image
+      - name: Build Tracking Service Image
+        run: |
+          docker build \
+            -t axis-guardian-tracking:latest \
+            -f tracking-service/Dockerfile \
+            tracking-service/
+
+      # Build Camera Emulator Image (needs project root context for shared/ folder)
+      - name: Build Camera Emulator Image
+        run: |
+          docker build \
+            -t axis-guardian-emulator:latest \
+            -f camera-emulator/Dockerfile \
+            .
+
+      # Save all images
+      - name: Save Docker images
+        run: |
+          docker save axis-guardian-frontend:latest | gzip > frontend.tar.gz
+          docker save axis-guardian-tracking:latest | gzip > tracking.tar.gz
+          docker save axis-guardian-emulator:latest | gzip > emulator.tar.gz
+
+      # Copy images and files to VPS
+      - name: Copy files to VPS
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: 'frontend.tar.gz,tracking.tar.gz,emulator.tar.gz,docker-compose.prod.yml,deploy/nginx-site.conf,shared/config/sitemap-rectangular-room.json'
+          target: '/tmp/axis-guardian'
+
+      # Deploy on VPS
+      - name: Deploy on VPS
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /tmp/axis-guardian
+
+            # Load Docker images
+            echo "Loading Docker images..."
+            docker load < frontend.tar.gz
+            docker load < tracking.tar.gz
+            docker load < emulator.tar.gz
+
+            # Create deployment directory
+            mkdir -p /opt/axis-guardian/shared/config
+            cp docker-compose.prod.yml /opt/axis-guardian/
+            cp shared/config/sitemap-rectangular-room.json /opt/axis-guardian/shared/config/
+
+            # Setup nginx config (replace domain placeholder)
+            sed "s/GUARDIAN_DOMAIN_PLACEHOLDER/${{ secrets.GUARDIAN_DOMAIN }}/g" deploy/nginx-site.conf > /etc/nginx/sites-available/axis-guardian
+
+            # Enable site if not already
+            if [ ! -L /etc/nginx/sites-enabled/axis-guardian ]; then
+              ln -s /etc/nginx/sites-available/axis-guardian /etc/nginx/sites-enabled/axis-guardian
+            fi
+
+            # Test nginx config
+            nginx -t
+
+            cd /opt/axis-guardian
+
+            # Stop old containers
+            echo "Stopping old containers..."
+            docker compose -f docker-compose.prod.yml down 2>/dev/null || true
+
+            # Get VPS public IP for WebRTC
+            VPS_PUBLIC_IP=$(curl -s ifconfig.me)
+            echo "VPS Public IP: $VPS_PUBLIC_IP"
+
+            # Start services
+            echo "Starting services..."
+            VPS_PUBLIC_IP=$VPS_PUBLIC_IP docker compose -f docker-compose.prod.yml up -d
+
+            # Reload nginx
+            systemctl reload nginx
+
+            # Cleanup temp files
+            rm -rf /tmp/axis-guardian
+            docker image prune -f
+
+            echo ""
+            echo "=========================================="
+            echo "Deployment complete!"
+            echo "Frontend: https://${{ secrets.GUARDIAN_DOMAIN }}"
+            echo "API: https://${{ secrets.GUARDIAN_DOMAIN }}/api/health"
+            echo "=========================================="
+
+      - name: Purge Cloudflare Cache
+        uses: jakejarvis/cloudflare-purge-action@master
+        env:
+          CLOUDFLARE_ZONE: ${{ secrets.CLOUDFLARE_ZONE }}
+          CLOUDFLARE_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}

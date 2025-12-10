@@ -1,6 +1,6 @@
 /**
- * Analyze the gap between current accuracy (77.7%) and theoretical ceiling (82.4%)
- * These are cases where one camera is accurate but we're not selecting it correctly
+ * Analyze recoverable annotations - cases where optimal camera selection
+ * could improve accuracy beyond current weighted averaging
  */
 import { readFileSync } from 'fs'
 import { join, dirname } from 'path'
@@ -12,24 +12,7 @@ import { getBBoxBottomCenter, projectWithKRT } from '../src/projection/ground-pl
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-interface LinkedDetection {
-  cameraId: string
-  bbox: { left: number; top: number; right: number; bottom: number }
-}
-
-interface Annotation {
-  id: string
-  groundPosition: { x: number; y: number }
-  confidence: string
-  linkedDetections: LinkedDetection[]
-}
-
-interface Point2D {
-  x: number
-  y: number
-}
-
-function distance(p1: Point2D, p2: Point2D): number {
+function distance(p1: { x: number; y: number }, p2: { x: number; y: number }): number {
   return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2))
 }
 
@@ -49,31 +32,23 @@ async function main() {
   const cam1Params = cam1Config ? siteMapCameraToCameraParams(cam1Config as any) : null
   const cam2Params = cam2Config ? siteMapCameraToCameraParams(cam2Config as any) : null
 
-  const certainAnnotations = groundTruth.annotations.filter((a: Annotation) => a.confidence === 'certain')
+  const certainAnnotations = groundTruth.annotations.filter((a: any) => a.confidence === 'certain')
 
-  // Categories:
-  // 1. "Recoverable" - one camera is accurate (<0.5m), but our smart selection picks the wrong one
-  // 2. "Ceiling" - no camera is accurate (>=0.5m)
+  let alreadyPassing = 0
+  let recoverableWithSmartSelect = 0
+  let atCeiling = 0
 
-  const recoverable: Array<{
-    ann: Annotation
-    errors: Record<string, number>
-    projections: Record<string, Point2D>
-    selected: string
-    selectedError: number
-    betterCamera: string
-    betterError: number
-  }> = []
-
-  const ceiling: Array<{
-    ann: Annotation
-    errors: Record<string, number>
-    projections: Record<string, Point2D>
+  const recoverableCases: Array<{
+    id: string
+    gt: { x: number; y: number }
+    cam1Err: number
+    cam2Err: number
+    bestErr: number
+    weightedErr: number
   }> = []
 
   for (const ann of certainAnnotations) {
     const errors: Record<string, number> = {}
-    const projections: Record<string, Point2D> = {}
 
     for (const det of ann.linkedDetections) {
       const bbox = {
@@ -93,135 +68,67 @@ async function main() {
       if (!result.isValid) continue
 
       errors[det.cameraId] = distance(result.worldPoint, ann.groundPosition)
-      projections[det.cameraId] = result.worldPoint
     }
 
-    if (Object.keys(errors).length === 0) continue
+    const cam1Err = errors['camera1']
+    const cam2Err = errors['camera2']
+    const errorValues = Object.values(errors).filter(e => !isNaN(e))
+    if (errorValues.length === 0) continue
 
-    const bestError = Math.min(...Object.values(errors))
-    const bestCamera = Object.entries(errors).find(([_, e]) => e === bestError)![0]
+    const bestError = Math.min(...errorValues)
 
-    // Simulate our smart selection logic
-    let selectedCamera: string
-    let selectedError: number
+    if (bestError >= 0.5) {
+      atCeiling++
+    } else if (cam1Err !== undefined && cam2Err !== undefined) {
+      const w1 = 1.2, w2 = 0.8
+      const divergent = Math.abs(cam1Err - cam2Err) > 0.6
 
-    if (Object.keys(errors).length === 1) {
-      selectedCamera = Object.keys(errors)[0]
-      selectedError = errors[selectedCamera]
-    } else {
-      // Both cameras available
-      const dist = distance(projections['camera1']!, projections['camera2']!)
-      if (dist > 0.6) {
-        // Divergent - pick camera1
-        selectedCamera = 'camera1'
-        selectedError = errors['camera1']
+      let effectiveError: number
+      if (divergent) {
+        effectiveError = cam1Err
       } else {
-        // Convergent - weighted average
-        const w1 = 1.2, w2 = 0.8
-        const avgPos = {
-          x: (projections['camera1']!.x * w1 + projections['camera2']!.x * w2) / (w1 + w2),
-          y: (projections['camera1']!.y * w1 + projections['camera2']!.y * w2) / (w1 + w2),
-        }
-        selectedError = distance(avgPos, ann.groundPosition)
-        selectedCamera = 'weighted_average'
+        effectiveError = (cam1Err * w1 + cam2Err * w2) / (w1 + w2)
+      }
+
+      if (effectiveError < 0.5) {
+        alreadyPassing++
+      } else if (bestError < 0.5) {
+        recoverableWithSmartSelect++
+        recoverableCases.push({
+          id: ann.id,
+          gt: ann.groundPosition,
+          cam1Err,
+          cam2Err,
+          bestErr: bestError,
+          weightedErr: effectiveError,
+        })
+      }
+    } else {
+      if (bestError < 0.5) {
+        alreadyPassing++
       }
     }
+  }
 
-    // Classify
-    if (bestError < 0.5 && selectedError >= 0.5) {
-      // Recoverable - we failed but could have succeeded
-      recoverable.push({
-        ann,
-        errors,
-        projections,
-        selected: selectedCamera,
-        selectedError,
-        betterCamera: bestCamera,
-        betterError: bestError,
-      })
-    } else if (bestError >= 0.5) {
-      // Ceiling - even best camera fails
-      ceiling.push({ ann, errors, projections })
+  console.log('=== RECOVERABLE ANNOTATION ANALYSIS ===\n')
+  console.log('Total certain annotations: ' + certainAnnotations.length)
+  console.log('Already passing: ' + alreadyPassing)
+  console.log('Recoverable with better selection: ' + recoverableWithSmartSelect)
+  console.log('At ceiling (not recoverable): ' + atCeiling)
+  console.log('\nTheoretical ceiling: ' + ((alreadyPassing + recoverableWithSmartSelect) / certainAnnotations.length * 100).toFixed(1) + '%')
+  console.log('Current actual: ' + (alreadyPassing / certainAnnotations.length * 100).toFixed(1) + '%')
+  console.log('Gap to close: ' + recoverableWithSmartSelect + ' annotations (' + (recoverableWithSmartSelect / certainAnnotations.length * 100).toFixed(1) + '%)')
+
+  if (recoverableCases.length > 0) {
+    console.log('\n=== RECOVERABLE CASES ===\n')
+    for (const c of recoverableCases) {
+      console.log(c.id + ':')
+      console.log('  GT: (' + c.gt.x.toFixed(2) + ', ' + c.gt.y.toFixed(2) + ')')
+      console.log('  cam1=' + c.cam1Err.toFixed(3) + 'm, cam2=' + c.cam2Err.toFixed(3) + 'm')
+      console.log('  best=' + c.bestErr.toFixed(3) + 'm, weighted=' + c.weightedErr.toFixed(3) + 'm')
+      console.log('  Recovery: pick ' + (c.cam1Err < c.cam2Err ? 'cam1' : 'cam2'))
     }
   }
-
-  console.log('=== RECOVERABLE CASES ===')
-  console.log(`(Could pass with better camera selection: ${recoverable.length} cases)\n`)
-
-  for (const r of recoverable) {
-    console.log(`${r.ann.id}:`)
-    console.log(`  Ground truth: (${r.ann.groundPosition.x.toFixed(2)}, ${r.ann.groundPosition.y.toFixed(2)})`)
-    console.log(`  Camera errors: cam1=${r.errors['camera1']?.toFixed(3) ?? 'N/A'}m, cam2=${r.errors['camera2']?.toFixed(3) ?? 'N/A'}m`)
-    if (r.projections['camera1'] && r.projections['camera2']) {
-      const dist = distance(r.projections['camera1'], r.projections['camera2'])
-      console.log(`  Camera distance: ${dist.toFixed(3)}m (${dist > 0.6 ? 'DIVERGENT' : 'CONVERGENT'})`)
-    }
-    console.log(`  Selected: ${r.selected} (error=${r.selectedError.toFixed(3)}m)`)
-    console.log(`  Better: ${r.betterCamera} (error=${r.betterError.toFixed(3)}m)`)
-    console.log()
-  }
-
-  // Analyze patterns
-  console.log('\n=== PATTERN ANALYSIS ===\n')
-
-  const byZone: Record<string, typeof recoverable> = {
-    'Left (0-6m)': [],
-    'Center (6-12m)': [],
-    'Right (12-18m)': [],
-  }
-
-  for (const r of recoverable) {
-    const x = r.ann.groundPosition.x
-    if (x < 6) byZone['Left (0-6m)'].push(r)
-    else if (x < 12) byZone['Center (6-12m)'].push(r)
-    else byZone['Right (12-18m)'].push(r)
-  }
-
-  for (const [zone, cases] of Object.entries(byZone)) {
-    if (cases.length === 0) continue
-    console.log(`${zone}: ${cases.length} recoverable cases`)
-    const cam1Better = cases.filter(c => c.betterCamera === 'camera1').length
-    const cam2Better = cases.filter(c => c.betterCamera === 'camera2').length
-    console.log(`  Camera1 better: ${cam1Better}, Camera2 better: ${cam2Better}`)
-  }
-
-  // Convergent vs divergent
-  const divergentRecoverable = recoverable.filter(r => {
-    if (!r.projections['camera1'] || !r.projections['camera2']) return false
-    return distance(r.projections['camera1'], r.projections['camera2']) > 0.6
-  })
-  const convergentRecoverable = recoverable.filter(r => {
-    if (!r.projections['camera1'] || !r.projections['camera2']) return true // single camera
-    return distance(r.projections['camera1'], r.projections['camera2']) <= 0.6
-  })
-
-  console.log(`\nDivergent recoverable: ${divergentRecoverable.length}`)
-  for (const r of divergentRecoverable) {
-    console.log(`  ${r.ann.id}: better=${r.betterCamera}`)
-  }
-
-  console.log(`\nConvergent recoverable: ${convergentRecoverable.length}`)
-  for (const r of convergentRecoverable) {
-    console.log(`  ${r.ann.id}: better=${r.betterCamera}`)
-  }
-
-  console.log(`\n=== CEILING CASES (${ceiling.length}) ===`)
-  console.log('(Neither camera can achieve <0.5m accuracy)\n')
-
-  for (const c of ceiling.slice(0, 5)) {
-    console.log(`${c.ann.id}:`)
-    console.log(`  Ground truth: (${c.ann.groundPosition.x.toFixed(2)}, ${c.ann.groundPosition.y.toFixed(2)})`)
-    console.log(`  Camera errors: cam1=${c.errors['camera1']?.toFixed(3) ?? 'N/A'}m, cam2=${c.errors['camera2']?.toFixed(3) ?? 'N/A'}m`)
-  }
-  if (ceiling.length > 5) {
-    console.log(`  ... and ${ceiling.length - 5} more ceiling cases`)
-  }
-
-  console.log(`\n=== SUMMARY ===`)
-  console.log(`Current accuracy: ${148 - recoverable.length - ceiling.length}/148 = ${((148 - recoverable.length - ceiling.length) / 148 * 100).toFixed(1)}%`)
-  console.log(`Recoverable: ${recoverable.length} cases`)
-  console.log(`Ceiling: ${ceiling.length} cases`)
-  console.log(`Theoretical max: ${148 - ceiling.length}/148 = ${((148 - ceiling.length) / 148 * 100).toFixed(1)}%`)
 }
 
 main().catch(console.error)

@@ -15,12 +15,19 @@ import type {
   TrackingConfig,
   TrailPosition,
   CameraTrackAssociation,
+  Point2D,
 } from '../types.js'
 import { DEFAULT_TRACKING_CONFIG } from '../types.js'
 import { calculateDistance, predictPosition, mergeWorldPositions } from '../correlation/track-matcher.js'
 import { KalmanTrackFilter } from '../filters/kalman-track-filter.js'
 import { assignDetectionsToTracks } from '../correlation/hungarian-assignment.js'
 import { TrackMerger } from './track-merger.js'
+import type { SiteMapObstacle } from '../config/sitemap-loader.js'
+import {
+  classifyExitReason,
+  getTimeoutForExitReason,
+} from '../geometry/exit-detection.js'
+import type { CameraConfig, RoomBounds } from '../geometry/fov-geometry.js'
 
 /**
  * Cluster of detections from different cameras that likely represent same person
@@ -67,6 +74,8 @@ export function trackToJSON(track: GlobalTrack): GlobalTrackJSON {
     detectionCount: track.detectionCount,
     confidence: track.confidence,
     state: track.state,
+    exitReason: track.exitReason,
+    predictedPosition: track.predictedPosition,
   }
 }
 
@@ -99,6 +108,13 @@ export class TrackManager {
   private trackMerger: TrackMerger
   /** Per-camera frame tracking for frame-based missed detection */
   private cameraFrameTrackers: Map<string, CameraFrameTracker> = new Map()
+
+  /** Sitemap geometry for exit detection */
+  private siteMapGeometry?: {
+    cameras: CameraConfig[]
+    obstacles: SiteMapObstacle[]
+    roomBounds: RoomBounds
+  }
 
   // Event callbacks for external integration (e.g., WebSocket broadcasting)
   onTrackCreated?: (track: GlobalTrack) => void
@@ -313,6 +329,24 @@ export class TrackManager {
           track.state = 'occluded'
           track.occludedSince = track.lastSeen
           track.consecutiveDetections = 0  // Reset for hysteresis on recovery
+
+          // Classify WHY the track disappeared (if geometry is available)
+          if (this.siteMapGeometry) {
+            const velocity = this.getTrackVelocity(track)
+            const exitResult = classifyExitReason(
+              track.currentPosition,
+              velocity,
+              this.siteMapGeometry.cameras,
+              this.siteMapGeometry.obstacles,
+              this.siteMapGeometry.roomBounds
+            )
+            track.exitReason = exitResult.reason
+
+            // For pillar occlusions, set initial predicted position
+            if (exitResult.reason === 'pillar_occlusion') {
+              track.predictedPosition = exitResult.predictedExitPoint ?? track.currentPosition
+            }
+          }
         }
       }
 
@@ -320,8 +354,23 @@ export class TrackManager {
       if (track.state === 'occluded') {
         const timeSinceOcclusion = now - (track.occludedSince ?? track.lastSeen)
 
-        if (timeSinceOcclusion > occlusionCoastTimeMs) {
-          // Occlusion coast time exceeded, expire the track
+        // Get the appropriate timeout based on exit reason
+        const effectiveTimeout = this.siteMapGeometry
+          ? getTimeoutForExitReason(track.exitReason ?? 'timeout', this.config)
+          : occlusionCoastTimeMs
+
+        // Update predicted position for pillar-occluded tracks (ghost track)
+        if (track.exitReason === 'pillar_occlusion' && track.isActive) {
+          const predicted = this.getPredictedPosition(track, timeSinceOcclusion)
+          if (predicted) {
+            track.predictedPosition = predicted
+            // Notify listeners so frontend can update ghost track
+            this.onTrackUpdated?.(track)
+          }
+        }
+
+        if (timeSinceOcclusion > effectiveTimeout) {
+          // Occlusion timeout exceeded, expire the track
           if (track.isActive) {
             track.isActive = false
             this.releaseColor(track.color)
@@ -389,6 +438,44 @@ export class TrackManager {
    */
   resetConfig(): void {
     this.config = { ...DEFAULT_TRACKING_CONFIG }
+  }
+
+  /**
+   * Set sitemap geometry for smart exit detection
+   * This enables different timeout behaviors for FOV exits vs pillar occlusions
+   */
+  setSiteMapGeometry(
+    cameras: CameraConfig[],
+    obstacles: SiteMapObstacle[],
+    roomBounds: RoomBounds
+  ): void {
+    this.siteMapGeometry = { cameras, obstacles, roomBounds }
+    console.log(`[TrackManager] Exit detection enabled: ${cameras.length} cameras, ${obstacles.filter(o => o.blocksTracking).length} blocking obstacles, room ${roomBounds.width}x${roomBounds.height}m`)
+  }
+
+  /**
+   * Get velocity from Kalman filter state for a track
+   */
+  private getTrackVelocity(track: GlobalTrack): Point2D {
+    const kalmanState = track.kalmanState
+    if (kalmanState && kalmanState.mean.length >= 4) {
+      return {
+        x: kalmanState.mean[2][0],
+        y: kalmanState.mean[3][0],
+      }
+    }
+    return { x: 0, y: 0 }
+  }
+
+  /**
+   * Get predicted position from Kalman filter
+   */
+  private getPredictedPosition(track: GlobalTrack, deltaMs: number): Point2D | undefined {
+    const kalmanState = track.kalmanState
+    if (!kalmanState) return undefined
+
+    const predicted = this.kalmanFilter.predict(kalmanState, deltaMs)
+    return predicted
   }
 
   // ============================================================================

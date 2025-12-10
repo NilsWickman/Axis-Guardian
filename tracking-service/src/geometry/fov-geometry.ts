@@ -1,8 +1,8 @@
 /**
- * FOV Geometry Utilities for Physics Validation Tests
+ * FOV Geometry Utilities
  *
  * Provides field-of-view polygon calculations and point-in-polygon checks
- * for validating track spawn/disappear locations.
+ * for track exit detection and spawn/disappear validation.
  */
 
 export interface Point2D {
@@ -407,7 +407,7 @@ export function validateSpawnLocation(
  */
 export function validateDisappearanceLocation(
   point: Point2D,
-  isLastFrame: boolean,
+  _isLastFrame: boolean,
   fovPolygons: Point2D[][],
   doorZones: DoorZone[] = DOOR_ZONES,
   fovTolerance: number = 0.5

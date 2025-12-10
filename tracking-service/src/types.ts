@@ -286,6 +286,10 @@ export interface GlobalTrack {
   missedFrames: number
   /** Number of consecutive detections since entering occlusion (for hysteresis) */
   consecutiveDetections: number
+  /** Reason why track stopped being detected (for smart timeout behavior) */
+  exitReason?: ExitReason
+  /** Predicted position during pillar occlusion (ghost track) */
+  predictedPosition?: Point2D
 }
 
 /**
@@ -303,6 +307,10 @@ export interface GlobalTrackJSON {
   detectionCount: number
   confidence: number
   state: TrackState
+  /** Reason why track stopped being detected */
+  exitReason?: ExitReason
+  /** Predicted position during pillar occlusion (ghost track) */
+  predictedPosition?: Point2D
 }
 
 // ============================================================================
@@ -313,6 +321,12 @@ export interface GlobalTrackJSON {
  * Track lifecycle state for occlusion handling
  */
 export type TrackState = 'unconfirmed' | 'confirmed' | 'occluded'
+
+/**
+ * Reason why a track stopped being detected
+ * Used to determine timeout behavior and display mode
+ */
+export type ExitReason = 'fov_exit' | 'boundary_exit' | 'pillar_occlusion' | 'timeout' | null
 
 /**
  * Tracking configuration parameters
@@ -352,6 +366,12 @@ export interface TrackingConfig {
   unconfirmedMergeDistanceM: number
   /** Cost multiplier for cross-camera handoff (0-1, lower = more bonus) */
   crossCameraBonus: number
+  /** Timeout for FOV boundary exits (ms) - tracks exiting camera view */
+  fovExitTimeoutMs: number
+  /** Timeout for room boundary exits (ms) - tracks leaving the monitored area */
+  boundaryExitTimeoutMs: number
+  /** Maximum pillar occlusion duration (ms) - ghost track timeout */
+  maxPillarOcclusionMs: number
 }
 
 export const DEFAULT_TRACKING_CONFIG: TrackingConfig = {
@@ -375,6 +395,9 @@ export const DEFAULT_TRACKING_CONFIG: TrackingConfig = {
   unconfirmedExclusionRadius: 0.7, // Larger exclusion for unconfirmed (prevent duplicates in overlap)
   unconfirmedMergeDistanceM: 0.4,  // Tighter merge distance for unconfirmed tracks
   crossCameraBonus: 0.7,           // 30% cost reduction for cross-camera handoff
+  fovExitTimeoutMs: 500,           // Quick exit for FOV boundary departures
+  boundaryExitTimeoutMs: 500,      // Quick exit for room boundary departures
+  maxPillarOcclusionMs: 5000,      // Max 5s ghost track behind pillar
 }
 
 // ============================================================================
