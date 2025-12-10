@@ -57,7 +57,7 @@ jobs:
           docker build \
             -t axis-guardian-tracking:latest \
             -f tracking-service/Dockerfile \
-            tracking-service/
+            .
 
       # Build Camera Emulator Image (needs project root context for shared/ folder)
       - name: Build Camera Emulator Image

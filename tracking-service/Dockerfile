@@ -7,14 +7,16 @@ RUN apk add --no-cache python3 make g++
 
 RUN corepack enable
 
-# Copy package files
-COPY package.json pnpm-lock.yaml ./
+# Copy workspace files from root context
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY tracking-service/package.json ./tracking-service/
 
-# Install all dependencies (including dev for tsx)
+# Install dependencies
+WORKDIR /app/tracking-service
 RUN pnpm install --frozen-lockfile
 
 # Copy source
-COPY . .
+COPY tracking-service/src ./src
 
 # Production stage
 FROM node:22-alpine
@@ -25,14 +27,15 @@ RUN apk add --no-cache sqlite
 
 RUN corepack enable
 
-# Copy package files
-COPY package.json pnpm-lock.yaml ./
+# Copy workspace files
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY tracking-service/package.json ./tracking-service/
 
-# Install all dependencies (tsx needed for runtime)
+WORKDIR /app/tracking-service
 RUN pnpm install --frozen-lockfile
 
 # Copy source from build stage
-COPY --from=build /app/src ./src
+COPY --from=build /app/tracking-service/src ./src
 
 # Create data directory for SQLite
 RUN mkdir -p data
