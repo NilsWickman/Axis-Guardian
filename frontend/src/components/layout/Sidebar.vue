@@ -21,8 +21,19 @@
     Film,
     Crosshair,
     Users,
+    Menu,
+    X,
   } from 'lucide-vue-next'
   import { useTheme } from '@/composables/useTheme'
+
+  const props = defineProps<{
+    isOpen: boolean
+  }>()
+
+  const emit = defineEmits<{
+    (e: 'toggle'): void
+    (e: 'close'): void
+  }>()
 
   const route = useRoute()
   const { currentTheme, setTheme, themes } = useTheme()
@@ -157,8 +168,29 @@
   }
 </script>
 <template>
+  <!-- Mobile Toggle Button -->
+  <button
+    @click="emit('toggle')"
+    class="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-sidebar border border-sidebar-border text-sidebar-foreground hover:bg-accent/50 transition-colors"
+    :class="{ 'left-[17rem]': isOpen }"
+  >
+    <X v-if="isOpen" class="w-5 h-5" />
+    <Menu v-else class="w-5 h-5" />
+  </button>
+
+  <!-- Overlay for mobile -->
+  <div
+    v-if="isOpen"
+    @click="emit('close')"
+    class="lg:hidden fixed inset-0 bg-black/50 z-30"
+  />
+
   <aside
-    class="w-64 bg-sidebar border-r border-sidebar-border flex flex-col h-screen flex-shrink-0 fixed left-0 top-0"
+    class="w-64 bg-sidebar border-r border-sidebar-border flex flex-col h-screen flex-shrink-0 fixed left-0 top-0 z-40 transition-transform duration-300 ease-in-out"
+    :class="[
+      isOpen ? 'translate-x-0' : '-translate-x-full',
+      'lg:translate-x-0'
+    ]"
   >
     <!-- Header -->
     <div class="p-6 border-b border-sidebar-border flex items-center justify-center">
@@ -198,6 +230,7 @@
               <li v-for="child in item.children" :key="child.name">
                 <router-link
                   :to="child.path!"
+                  @click="emit('close')"
                   class="flex items-center px-3 py-2 text-xs font-medium rounded-lg transition-colors"
                   :class="
                     isActiveRoute(child.path!)
@@ -216,6 +249,7 @@
           <router-link
             v-else
             :to="item.path!"
+            @click="emit('close')"
             class="flex items-center px-3 py-2 text-xs font-medium rounded-lg transition-colors"
             :class="
               isActiveRoute(item.path!)
