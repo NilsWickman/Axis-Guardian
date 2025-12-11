@@ -1,7 +1,7 @@
 <template>
-  <div class="h-full w-full bg-background flex overflow-hidden">
+  <div class="h-full w-full bg-background flex flex-col lg:flex-row overflow-hidden">
     <!-- Site Map Canvas Area -->
-    <div class="flex-1 flex flex-col overflow-hidden">
+    <div class="flex-1 flex flex-col overflow-hidden min-h-[300px] lg:min-h-0">
       <!-- Canvas Container -->
       <div
         class="flex-1 bg-gray-900 relative overflow-hidden"
@@ -76,10 +76,10 @@
       </div>
     </div>
 
-    <!-- Camera Thumbnail Strip -->
-    <div class="w-64 border-l border-border bg-card p-2 overflow-y-auto flex-shrink-0">
+    <!-- Camera Cards Section -->
+    <div class="w-full lg:w-64 border-t lg:border-t-0 lg:border-l border-border bg-card p-2 overflow-y-auto flex-shrink-0 max-h-[40vh] lg:max-h-none">
       <h3 class="text-sm font-semibold mb-2 px-2 text-foreground">All Cameras</h3>
-      <div class="space-y-2">
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-1 gap-2">
         <div
           v-for="camera in cameras"
           :key="camera.id"
@@ -93,10 +93,10 @@
           ]"
         >
           <div class="mb-1.5 flex justify-between items-center">
-            <span class="text-xs font-semibold text-foreground flex-1">{{ camera.name }}</span>
+            <span class="text-xs font-semibold text-foreground flex-1 truncate">{{ camera.name }}</span>
             <div
               :class="[
-                'w-2 h-2 rounded-full flex-shrink-0 transition-all duration-200',
+                'w-2 h-2 rounded-full flex-shrink-0 transition-all duration-200 ml-1',
                 connectionStatuses[camera.id]
                   ? 'bg-green-500'
                   : 'bg-destructive'
