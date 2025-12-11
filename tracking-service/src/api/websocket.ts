@@ -4,8 +4,9 @@
 
 import type { FastifyInstance } from 'fastify'
 import type { WebSocket } from '@fastify/websocket'
-import type { WebSocketMessage, CameraFrameInfo } from '../types.js'
+import type { WebSocketMessage, CameraFrameInfo, ZoneConfig } from '../types.js'
 import { TrackManager, trackToJSON } from '../tracks/track-manager.js'
+import type { ZoneManager } from '../zones/zone-manager.js'
 
 export interface WebSocketBroadcasterOptions {
   getFrameInfo?: () => CameraFrameInfo[]
@@ -14,6 +15,7 @@ export interface WebSocketBroadcasterOptions {
 export class WebSocketBroadcaster {
   private clients: Set<WebSocket> = new Set()
   private getFrameInfo?: () => CameraFrameInfo[]
+  private zoneManager?: ZoneManager
 
   constructor(private trackManager: TrackManager, options?: WebSocketBroadcasterOptions) {
     this.getFrameInfo = options?.getFrameInfo
@@ -39,16 +41,32 @@ export class WebSocketBroadcaster {
   }
 
   /**
+   * Set zone manager and hook up violation events
+   */
+  setZoneManager(zoneManager: ZoneManager): void {
+    this.zoneManager = zoneManager
+
+    // Hook into zone violation events
+    zoneManager.onViolation = (violation) => {
+      this.broadcast({
+        type: 'zone_violation',
+        violation,
+      })
+    }
+  }
+
+  /**
    * Add a new client connection
    */
   addClient(socket: WebSocket): void {
     this.clients.add(socket)
 
-    // Send current state snapshot
+    // Send current state snapshot (including zones if available)
     const snapshot: WebSocketMessage = {
       type: 'snapshot',
       tracks: this.trackManager.getActiveTracks().map(trackToJSON),
       frames: this.getFrameInfo?.(),
+      zones: this.zoneManager?.getZones(),
     }
     this.send(socket, snapshot)
 

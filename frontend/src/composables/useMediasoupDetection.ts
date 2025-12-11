@@ -138,6 +138,9 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
   let lastVideoRtpTimestamp: number | null = null
   let rtpTimestampAvailable = false
 
+  // Fallback animation frame ID for iOS/browsers without requestVideoFrameCallback
+  let fallbackAnimationId: number | null = null
+
   // Adaptive sync calibration - measures actual offset and adjusts automatically
   const syncCalibration = {
     measuredOffsets: [] as number[],
@@ -657,18 +660,68 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
   }
 
   /**
+   * Fallback video frame tracking for iOS Safari and other browsers
+   * without requestVideoFrameCallback support.
+   * Uses requestAnimationFrame + currentTime polling.
+   */
+  function startVideoFrameTrackingFallback(): boolean {
+    if (!videoElement.value || fallbackAnimationId !== null) return false
+
+    const video = videoElement.value
+    let lastTime = -1
+
+    const pollFrame = () => {
+      if (!videoElement.value) {
+        fallbackAnimationId = null
+        return
+      }
+
+      const currentTime = video.currentTime
+      // Only update when video time has changed (new frame displayed)
+      if (currentTime !== lastTime) {
+        lastTime = currentTime
+        const now = performance.now()
+
+        // Simulate frame metadata (RTP timestamp not available in fallback)
+        lastVideoFrameMetadata = {
+          mediaTime: currentTime,
+          presentationTime: now,
+          rtpTimestamp: undefined
+        }
+
+        videoFrameHistory.push({
+          mediaTimeMs: currentTime * 1000,
+          wallTimeMs: now,
+          rtpTimestamp: undefined
+        })
+
+        while (videoFrameHistory.length > MAX_FRAME_HISTORY) {
+          videoFrameHistory.shift()
+        }
+      }
+
+      fallbackAnimationId = requestAnimationFrame(pollFrame)
+    }
+
+    fallbackAnimationId = requestAnimationFrame(pollFrame)
+    console.log('[VideoSync] Started fallback sync (requestAnimationFrame + currentTime) for iOS/Safari compatibility')
+    return true
+  }
+
+  /**
    * Start tracking actual video frame timing using requestVideoFrameCallback
    * This provides the actual mediaTime of displayed frames for accurate sync
+   * Falls back to requestAnimationFrame polling on iOS Safari and other unsupported browsers
    */
   function startVideoFrameTracking(): boolean {
-    if (!videoElement.value || videoFrameCallbackId !== null) return false
+    if (!videoElement.value || videoFrameCallbackId !== null || fallbackAnimationId !== null) return false
 
     const video = videoElement.value
 
     // Check if requestVideoFrameCallback is supported
     if (!('requestVideoFrameCallback' in video)) {
       console.warn('[VideoSync] requestVideoFrameCallback not supported, using fallback sync')
-      return false
+      return startVideoFrameTrackingFallback()
     }
 
     const frameCallback = (now: DOMHighResTimeStamp, metadata: VideoFrameCallbackMetadata) => {
@@ -712,14 +765,22 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
   }
 
   /**
-   * Stop video frame tracking
+   * Stop video frame tracking (both native and fallback methods)
    */
   function stopVideoFrameTracking(): void {
+    // Cancel native requestVideoFrameCallback
     if (videoFrameCallbackId !== null && videoElement.value) {
       const video = videoElement.value as HTMLVideoElement & { cancelVideoFrameCallback?: (id: number) => void }
       video.cancelVideoFrameCallback?.(videoFrameCallbackId)
       videoFrameCallbackId = null
     }
+
+    // Cancel fallback requestAnimationFrame
+    if (fallbackAnimationId !== null) {
+      cancelAnimationFrame(fallbackAnimationId)
+      fallbackAnimationId = null
+    }
+
     videoFrameHistory.length = 0
     lastVideoFrameMetadata = null
   }

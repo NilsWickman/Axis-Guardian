@@ -5,13 +5,23 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { z } from 'zod'
 import { appendFileSync } from 'fs'
-import type { TrackingConfig } from '../types.js'
+import type { TrackingConfig, ZoneConfig } from '../types.js'
 import { TrackManager, trackToJSON } from '../tracks/track-manager.js'
 import { DetectionProcessor } from '../detection/detection-processor.js'
 import { CameraRegistry } from '../detection/camera-registry.js'
-import { getSiteMapConfigJson, isDatabaseSeeded } from '../db/repositories.js'
+import {
+  getSiteMapConfigJson,
+  isDatabaseSeeded,
+  getZones,
+  getZoneById,
+  createZone as createZoneDb,
+  updateZone as updateZoneDb,
+  deleteZone as deleteZoneDb,
+} from '../db/repositories.js'
 import { getPipelineLogger } from '../debug/pipeline-logger.js'
 import type { AcapClient } from '../acap/acap-client.js'
+import type { ZoneManager } from '../zones/zone-manager.js'
+import type { WebSocketBroadcaster } from './websocket.js'
 
 // Read-only mode for demo deployment (disables write endpoints except emulator-detections)
 const isReadOnlyMode = process.env.READ_ONLY_MODE === 'true'
@@ -136,7 +146,9 @@ export function registerRoutes(
   trackManager: TrackManager,
   detectionProcessor: DetectionProcessor,
   cameraRegistry: CameraRegistry,
-  acapClient: AcapClient | null = null
+  acapClient: AcapClient | null = null,
+  zoneManager: ZoneManager | null = null,
+  broadcaster: WebSocketBroadcaster | null = null
 ): void {
   // Log read-only mode status
   if (isReadOnlyMode) {
@@ -585,5 +597,140 @@ export function registerRoutes(
       message: 'ACAP statistics reset',
       status: acapClient.getStatus(),
     }
+  })
+
+  // ============================================================================
+  // Zone Routes
+  // ============================================================================
+
+  const ZoneVertexSchema = z.object({
+    x: z.number(),
+    y: z.number(),
+  })
+
+  const CreateZoneSchema = z.object({
+    id: z.string().optional(),
+    name: z.string().min(1),
+    type: z.enum(['restricted', 'entry', 'exit', 'monitored']),
+    vertices: z.array(ZoneVertexSchema).min(3),
+    enabled: z.boolean().default(true),
+    severity: z.enum(['low', 'medium', 'high', 'critical']).default('high'),
+    color: z.string().default('#ef4444'),
+    cooldownMs: z.number().min(0).default(30000),
+  })
+
+  const UpdateZoneSchema = z.object({
+    name: z.string().min(1).optional(),
+    type: z.enum(['restricted', 'entry', 'exit', 'monitored']).optional(),
+    vertices: z.array(ZoneVertexSchema).min(3).optional(),
+    enabled: z.boolean().optional(),
+    severity: z.enum(['low', 'medium', 'high', 'critical']).optional(),
+    color: z.string().optional(),
+    cooldownMs: z.number().min(0).optional(),
+  })
+
+  // GET /api/zones - List all zones
+  app.get('/api/zones', async () => {
+    const zones = getZones()
+    return { zones }
+  })
+
+  // GET /api/zones/:id - Get a specific zone
+  app.get('/api/zones/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const zone = getZoneById(request.params.id)
+    if (!zone) {
+      return reply.status(404).send({ error: 'Zone not found' })
+    }
+    return zone
+  })
+
+  // POST /api/zones - Create a new zone
+  // Protected by read-only guard
+  app.post('/api/zones', { preHandler: readOnlyGuard }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const parseResult = CreateZoneSchema.safeParse(request.body)
+    if (!parseResult.success) {
+      return reply.status(400).send({
+        error: 'Invalid request body',
+        details: parseResult.error.issues,
+      })
+    }
+
+    const data = parseResult.data
+    const zoneId = data.id || `zone-${Date.now()}`
+
+    const zone = createZoneDb({
+      id: zoneId,
+      siteConfigId: 'default',
+      name: data.name,
+      type: data.type,
+      vertices: data.vertices,
+      enabled: data.enabled,
+      severity: data.severity,
+      color: data.color,
+      cooldownMs: data.cooldownMs,
+    })
+
+    // Notify ZoneManager
+    zoneManager?.setZone(zone)
+
+    // Broadcast update to all clients
+    if (broadcaster && zoneManager) {
+      broadcaster.broadcast({ type: 'zones_updated', zones: zoneManager.getZones() })
+    }
+
+    return { zone }
+  })
+
+  // PUT /api/zones/:id - Update a zone
+  // Protected by read-only guard
+  app.put('/api/zones/:id', { preHandler: readOnlyGuard }, async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const parseResult = UpdateZoneSchema.safeParse(request.body)
+    if (!parseResult.success) {
+      return reply.status(400).send({
+        error: 'Invalid request body',
+        details: parseResult.error.issues,
+      })
+    }
+
+    const zone = updateZoneDb(request.params.id, parseResult.data)
+    if (!zone) {
+      return reply.status(404).send({ error: 'Zone not found' })
+    }
+
+    // Notify ZoneManager
+    zoneManager?.setZone(zone)
+
+    // Broadcast update to all clients
+    if (broadcaster && zoneManager) {
+      broadcaster.broadcast({ type: 'zones_updated', zones: zoneManager.getZones() })
+    }
+
+    return { zone }
+  })
+
+  // DELETE /api/zones/:id - Delete a zone
+  // Protected by read-only guard
+  app.delete('/api/zones/:id', { preHandler: readOnlyGuard }, async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const success = deleteZoneDb(request.params.id)
+    if (!success) {
+      return reply.status(404).send({ error: 'Zone not found' })
+    }
+
+    // Notify ZoneManager
+    zoneManager?.removeZone(request.params.id)
+
+    // Broadcast update to all clients
+    if (broadcaster && zoneManager) {
+      broadcaster.broadcast({ type: 'zones_updated', zones: zoneManager.getZones() })
+    }
+
+    return { success: true }
+  })
+
+  // POST /api/zones/reset - Reset all zone alarm states (for camera restart)
+  // Protected by read-only guard
+  app.post('/api/zones/reset', { preHandler: readOnlyGuard }, async () => {
+    zoneManager?.resetAllStates()
+    return { success: true, message: 'Zone alarm states reset' }
   })
 }

@@ -2,6 +2,13 @@
 export const config = {
   // API endpoints
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
+
+  // WebRTC ICE servers for NAT traversal (required for mobile/external clients)
+  // Can be overridden via VITE_ICE_SERVERS env var as JSON array
+  // e.g., VITE_ICE_SERVERS='[{"urls":"stun:stun.example.com:19302"},{"urls":"turn:turn.example.com","username":"user","credential":"pass"}]'
+  iceServers: import.meta.env.VITE_ICE_SERVERS
+    ? JSON.parse(import.meta.env.VITE_ICE_SERVERS)
+    : [{ urls: 'stun:stun.l.google.com:19302' }],
   wsUrl: import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws',
   rtspProxyUrl: import.meta.env.VITE_RTSP_PROXY_URL || 'http://localhost:8081',
 
