@@ -99,11 +99,13 @@
       name: 'Frame Annotation',
       path: '/cameras/frame-review',
       icon: Film,
+      demo: true, // Demo feature, hidden in production
     },
     {
       name: 'Track Annotation',
       path: '/dev/track-annotator',
       icon: Users,
+      demo: true, // Demo feature, hidden in production
     },
     {
       name: 'Dev',
