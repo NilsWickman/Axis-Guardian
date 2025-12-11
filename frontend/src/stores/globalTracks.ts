@@ -34,6 +34,20 @@ export interface CameraFrameInfo {
   timestamp: number
 }
 
+/**
+ * Video timing information for track-to-video synchronization
+ */
+export interface VideoTimingInfo {
+  /** Video time in milliseconds (position within video) */
+  videoTimeMs: number
+  /** RTP timestamp (90kHz clock) for frame-perfect sync */
+  rtpTimestamp?: number
+  /** Frame number from source camera */
+  frameNumber: number
+  /** Camera ID that provided this timing */
+  cameraId: string
+}
+
 // Color palette for global tracks (12 distinct colors)
 const TRACK_COLORS = [
   '#10b981', // emerald
@@ -107,6 +121,8 @@ export interface GlobalTrack {
   exitReason?: ExitReason
   /** Predicted position during pillar occlusion (ghost track) */
   predictedPosition?: { x: number; y: number }
+  /** Video timing from the most recent detection (for frontend sync) */
+  videoTiming?: VideoTimingInfo
 }
 
 /**
@@ -615,6 +631,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     state: 'unconfirmed' | 'confirmed' | 'occluded'
     exitReason?: ExitReason
     predictedPosition?: { x: number; y: number }
+    videoTiming?: VideoTimingInfo
   }
 
   /**
@@ -625,6 +642,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
       ...json,
       cameraAssociations: new Map(Object.entries(json.cameraAssociations)),
       pendingDetections: [], // Server handles merging, no pending needed
+      videoTiming: json.videoTiming,
     }
   }
 
@@ -672,6 +690,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
       existing.confidence = converted.confidence
       existing.cameraAssociations = converted.cameraAssociations
       existing.state = converted.state
+      existing.videoTiming = converted.videoTiming
     } else {
       // Insert new track
       tracks.value.set(converted.globalTrackId, converted)

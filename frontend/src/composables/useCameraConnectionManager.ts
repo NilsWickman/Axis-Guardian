@@ -73,7 +73,26 @@ const fallbackWebRTCUrls: Record<string, string> = {
  * Uses URL from config if available, otherwise falls back to environment config
  */
 function getWebRTCUrl(camera: Camera): string | undefined {
-  return camera.webrtcUrl || fallbackWebRTCUrls[camera.id]
+  const rawUrl = camera.webrtcUrl || fallbackWebRTCUrls[camera.id]
+  if (!rawUrl) return undefined
+
+  // In production, ignore localhost/loopback URLs coming from static configs
+  // so external/mobile clients use the public signaling endpoints.
+  if (!config.isDevelopment && typeof window !== 'undefined') {
+    try {
+      const parsed = new URL(rawUrl, window.location.origin)
+      const host = parsed.hostname
+      if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') {
+        return fallbackWebRTCUrls[camera.id] || rawUrl
+      }
+    } catch {
+      if (/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(rawUrl)) {
+        return fallbackWebRTCUrls[camera.id] || rawUrl
+      }
+    }
+  }
+
+  return rawUrl
 }
 
 // Video synchronization state

@@ -74,13 +74,13 @@ export const config = {
   // In production: wss://domain/cam1 and wss://domain/cam2 (proxied via nginx)
   // In development: ws://localhost:9101 and ws://localhost:9102 (direct)
   camera1WebRTCUrl: import.meta.env.VITE_CAMERA1_WEBRTC_URL
-    || (isDev || !runtimeWsOrigin ? 'ws://localhost:9101' : `${stripTrailingSlash(runtimeWsOrigin)}/cam1/`),
+    || (isDev || !runtimeWsOrigin ? 'ws://localhost:9101' : `${stripTrailingSlash(runtimeWsOrigin)}/cam1`),
   camera2WebRTCUrl: import.meta.env.VITE_CAMERA2_WEBRTC_URL
-    || (isDev || !runtimeWsOrigin ? 'ws://localhost:9102' : `${stripTrailingSlash(runtimeWsOrigin)}/cam2/`),
+    || (isDev || !runtimeWsOrigin ? 'ws://localhost:9102' : `${stripTrailingSlash(runtimeWsOrigin)}/cam2`),
 
   // MediaMTX WebSocket signaling (if needed for other cameras)
   mediaMTXSignalingUrl: import.meta.env.VITE_WEBRTC_URL
-    || (isDev || !runtimeWsOrigin ? 'ws://localhost:8080' : `${stripTrailingSlash(runtimeWsOrigin)}/webrtc/`),
+    || (isDev || !runtimeWsOrigin ? 'ws://localhost:8080' : `${stripTrailingSlash(runtimeWsOrigin)}/webrtc`),
 
   // Site map generation
   siteMapGenerationUrl: import.meta.env.VITE_SITEMAP_URL
@@ -98,8 +98,11 @@ export const config = {
   isDevelopment: import.meta.env.DEV,
   isProduction: import.meta.env.PROD,
 
-  // Mock mode - when true, use mock data instead of real API calls
-  useMockData: import.meta.env.VITE_USE_MOCK_DATA !== 'false', // Default to true in development
+  // Mock mode - when true, use mock data instead of real API calls.
+  // Default to true in development, false in production.
+  useMockData: isDev
+    ? import.meta.env.VITE_USE_MOCK_DATA !== 'false'
+    : import.meta.env.VITE_USE_MOCK_DATA === 'true',
 
   // API timeout
   apiTimeout: parseInt(import.meta.env.VITE_API_TIMEOUT || '30000', 10),

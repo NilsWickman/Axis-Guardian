@@ -5,22 +5,42 @@
 
 import type { Detection, DetectionFrame } from '../types.js'
 
+// RTP clock rate for video (H.264 standard)
+const RTP_CLOCK_RATE = 90000
+
+export interface TrackingClientOptions {
+  /** Video FPS for calculating video timing */
+  fps?: number
+}
+
 export class TrackingClient {
   private errorCount = 0
   private maxErrorLog = 3
+  private fps: number
+  private rtpTicksPerFrame: number
 
   constructor(
     private trackingServiceUrl: string,
-    private trackingCameraId: string
-  ) {}
+    private trackingCameraId: string,
+    options: TrackingClientOptions = {}
+  ) {
+    this.fps = options.fps ?? 30
+    this.rtpTicksPerFrame = Math.round(RTP_CLOCK_RATE / this.fps)
+  }
 
   /**
    * POST detections to tracking service
+   * Includes video timing info for frontend sync
    */
   async postDetections(frame: DetectionFrame): Promise<void> {
     if (frame.detections.length === 0) {
       return
     }
+
+    // Calculate video timing for sync
+    const videoTimeMs = (frame.frame_number / this.fps) * 1000
+    const rtpTimestamp = frame.frame_number * this.rtpTicksPerFrame
+    const dispatchTime = Date.now()
 
     try {
       const response = await fetch(`${this.trackingServiceUrl}/api/emulator-detections`, {
@@ -32,6 +52,9 @@ export class TrackingClient {
           camera_id: this.trackingCameraId,
           frame_number: frame.frame_number,
           timestamp: frame.timestamp,
+          video_time_ms: videoTimeMs,
+          rtp_timestamp: rtpTimestamp,
+          dispatch_time: dispatchTime,
           detections: frame.detections,
         }),
         signal: AbortSignal.timeout(2000),  // 2 second timeout

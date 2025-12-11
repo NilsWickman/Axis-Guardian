@@ -30,6 +30,8 @@ jobs:
           VITE_TRACKING_API_URL=https://${{ secrets.GUARDIAN_DOMAIN }} \
           VITE_CAMERA1_WEBRTC_URL=wss://${{ secrets.GUARDIAN_DOMAIN }}/cam1 \
           VITE_CAMERA2_WEBRTC_URL=wss://${{ secrets.GUARDIAN_DOMAIN }}/cam2 \
+          VITE_HLS_BASE_URL=https://${{ secrets.GUARDIAN_DOMAIN }}/hls \
+          VITE_USE_MOCK_DATA=false \
           VITE_DEMO_MODE=true \
           pnpm vite build --config config/build/vite.config.ts
 
