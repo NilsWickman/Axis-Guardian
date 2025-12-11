@@ -175,6 +175,7 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useDetections } from '@/composables/useDetections'
 import { useVideoSync } from '@/composables/useVideoSync'
 import Hls from 'hls.js'
+import { config } from '@/config/environment'
 
 interface Camera {
   id: string
@@ -208,21 +209,22 @@ interface CameraDetectionData {
 }
 
 // Cameras configuration
+const hlsBaseUrl = config.hlsBaseUrl
 const cameras: Camera[] = [
   {
     id: 'camera1',
     name: 'Camera 1 - People Detection',
-    streamUrl: 'http://localhost:8888/camera1/index.m3u8'
+    streamUrl: `${hlsBaseUrl}/camera1/index.m3u8`
   },
   {
     id: 'camera2',
     name: 'Camera 2 - Car Detection',
-    streamUrl: 'http://localhost:8888/camera2/index.m3u8'
+    streamUrl: `${hlsBaseUrl}/camera2/index.m3u8`
   },
   {
     id: 'camera3',
     name: 'Camera 3 - Mixed Detection',
-    streamUrl: 'http://localhost:8888/camera3/index.m3u8'
+    streamUrl: `${hlsBaseUrl}/camera3/index.m3u8`
   }
 ]
 

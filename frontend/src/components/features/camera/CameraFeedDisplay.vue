@@ -34,6 +34,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { config } from '@/config/environment'
 
 // Declare HLS.js global type
 declare const Hls: any
@@ -72,15 +73,15 @@ const setupVideoStream = async () => {
 
   try {
     // Convert RTSP URL to HLS URL for browser compatibility
-    // MediaMTX serves HLS at http://localhost:8888/<stream_name>/index.m3u8
+    // MediaMTX serves HLS at <hlsBaseUrl>/<stream_name>/index.m3u8
     let videoSrc = props.camera.rtspUrl
 
     // If it's an RTSP URL, convert to HLS
     if (videoSrc.startsWith('rtsp://')) {
       // Extract stream name from RTSP URL
-      // Format: rtsp://localhost:8554/camera1 -> http://localhost:8888/camera1/index.m3u8
+      // Format: rtsp://host:8554/camera1 -> <hlsBaseUrl>/camera1/index.m3u8
       const streamName = videoSrc.split('/').pop()
-      videoSrc = `http://localhost:8888/${streamName}/index.m3u8`
+      videoSrc = `${config.hlsBaseUrl}/${streamName}/index.m3u8`
       console.log(`Converted RTSP to HLS: ${props.camera.rtspUrl} -> ${videoSrc}`)
     }
 

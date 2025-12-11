@@ -52,6 +52,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { config } from '@/config/environment'
 
 interface CameraSnapshot {
   id: string
@@ -63,7 +64,7 @@ interface CameraSnapshot {
   bandwidth: number
 }
 
-const WEBRTC_DETECTION_URL = import.meta.env.VITE_RTSP_PROXY_URL || 'http://localhost:8080'
+const WEBRTC_DETECTION_URL = config.rtspProxyUrl
 
 const cameras = ref<CameraSnapshot[]>([
   { id: 'camera1', name: 'Camera 1 (HC3)', snapshotUrl: null, lastUpdate: '-', loading: false, error: null, bandwidth: 0 },
