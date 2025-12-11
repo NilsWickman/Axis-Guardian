@@ -398,13 +398,15 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
 
       videoElement.value = videoEl
 
-      // Convert HTTP URL to WebSocket URL if needed
+      // Build WebSocket URL - append /ws/webrtc path if not already present
       let wsUrl = opts.signalingUrl!
       if (wsUrl.startsWith('http://')) {
-        wsUrl = wsUrl.replace('http://', 'ws://') + '/ws/webrtc'
+        wsUrl = wsUrl.replace('http://', 'ws://')
       } else if (wsUrl.startsWith('https://')) {
-        wsUrl = wsUrl.replace('https://', 'wss://') + '/ws/webrtc'
-      } else if (!wsUrl.includes('/ws/')) {
+        wsUrl = wsUrl.replace('https://', 'wss://')
+      }
+      // Append WebSocket path if not already present
+      if (!wsUrl.includes('/ws/webrtc')) {
         wsUrl = wsUrl + '/ws/webrtc'
       }
 

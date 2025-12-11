@@ -17,10 +17,11 @@ export const config = {
   wsDetectionUrl: import.meta.env.VITE_WS_DETECTION_URL || 'ws://localhost:3002/ws/detections',
   wsCameraStatusUrl: import.meta.env.VITE_WS_CAMERA_URL || 'ws://localhost:3007/ws/camera-status',
 
-  // WebRTC signaling endpoints
-  // Camera emulators use HTTP WHEP protocol (not WebSocket)
-  camera1WebRTCUrl: import.meta.env.VITE_CAMERA1_WEBRTC_URL || 'http://localhost:9101',
-  camera2WebRTCUrl: import.meta.env.VITE_CAMERA2_WEBRTC_URL || 'http://localhost:9102',
+  // WebRTC signaling endpoints for camera emulators
+  // In production: wss://domain/cam1 and wss://domain/cam2 (proxied via nginx)
+  // In development: ws://localhost:9101 and ws://localhost:9102 (direct)
+  camera1WebRTCUrl: import.meta.env.VITE_CAMERA1_WEBRTC_URL || 'ws://localhost:9101',
+  camera2WebRTCUrl: import.meta.env.VITE_CAMERA2_WEBRTC_URL || 'ws://localhost:9102',
 
   // MediaMTX WebSocket signaling (if needed for other cameras)
   mediaMTXSignalingUrl: import.meta.env.VITE_WEBRTC_URL || 'ws://localhost:8080',
