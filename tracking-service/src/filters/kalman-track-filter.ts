@@ -297,6 +297,52 @@ export class KalmanTrackFilter {
   }
 
   /**
+   * Calculate Mahalanobis distance between a measurement and predicted state.
+   * This is the statistically principled way to measure association likelihood.
+   * Returns the number of standard deviations the measurement is from the prediction.
+   *
+   * @param state - Current Kalman state (after prediction)
+   * @param measurement - Observed position {x, y}
+   * @returns Mahalanobis distance (unitless, in standard deviations)
+   */
+  getMahalanobisDistance(state: KalmanState, measurement: Point2D): number {
+    // Innovation (residual): difference between measurement and predicted position
+    const dx = measurement.x - state.mean[0][0]
+    const dy = measurement.y - state.mean[1][0]
+
+    // Extract position covariance (2x2 submatrix)
+    const S00 = state.covariance[0][0]
+    const S01 = state.covariance[0][1]
+    const S10 = state.covariance[1][0]
+    const S11 = state.covariance[1][1]
+
+    // Determinant of 2x2 covariance matrix
+    const det = S00 * S11 - S01 * S10
+
+    // Guard against singular matrix
+    if (Math.abs(det) < 1e-10) {
+      // Fall back to Euclidean distance normalized by average variance
+      const avgVar = (S00 + S11) / 2
+      if (avgVar < 1e-10) return Math.sqrt(dx * dx + dy * dy)
+      return Math.sqrt((dx * dx + dy * dy) / avgVar)
+    }
+
+    // Inverse of 2x2 covariance matrix
+    const invS00 = S11 / det
+    const invS01 = -S01 / det
+    const invS10 = -S10 / det
+    const invS11 = S00 / det
+
+    // Mahalanobis distance: sqrt(d^T * S^-1 * d)
+    const mahal = Math.sqrt(
+      dx * (invS00 * dx + invS01 * dy) +
+      dy * (invS10 * dx + invS11 * dy)
+    )
+
+    return mahal
+  }
+
+  /**
    * Get gating distance for data association
    * Returns adaptive threshold based on position uncertainty
    */
