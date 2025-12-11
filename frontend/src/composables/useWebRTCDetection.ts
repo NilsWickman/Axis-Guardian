@@ -11,6 +11,7 @@ import msgpack from 'msgpack-lite'
 import type { Detection } from '@/types/detection.types'
 import { useToast } from '@/composables/useToast'
 import { emitWebRTCDetection } from './usePersonPositionTracking'
+import { config } from '@/config/environment'
 
 export interface DetectionMetadata {
   camera_id: string
@@ -34,9 +35,8 @@ export interface WebRTCDetectionOptions {
 
 const DEFAULT_OPTIONS: WebRTCDetectionOptions = {
   signalingUrl: import.meta.env.VITE_RTSP_PROXY_URL || 'http://localhost:9001',
-  // Empty iceServers array for localhost-only connections (no STUN/TURN)
-  // This forces both peers to only use host candidates (127.0.0.1)
-  iceServers: [],
+  // Use centralized ICE server config for NAT traversal (required for mobile/external clients)
+  iceServers: config.iceServers,
   autoReconnect: true,
   reconnectDelay: 3000,
   loopDuration: null,

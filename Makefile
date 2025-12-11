@@ -60,8 +60,11 @@ db-reset: ## Reset and re-seed the tracking-service database
 	@cd tracking-service && pnpm db:reset
 	@echo "$(GREEN)✓ Database reset and re-seeded$(NC)"
 
-kill-ports: ## Kill any processes using development ports (5173, 9101, 3010)
+kill-ports: ## Kill any processes using development ports (5173, 9101, 3010) - USE WITH CAUTION
 	@echo "$(CYAN)Checking for processes on development ports...$(NC)"
+	@echo "$(RED)WARNING: This will kill ALL processes on ports $(DEV_PORTS)$(NC)"
+	@echo "$(RED)This may include IDE dev servers or other tools!$(NC)"
+	@read -p "Continue? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
 	@for port in $(DEV_PORTS); do \
 		pid=$$(lsof -t -i:$$port 2>/dev/null); \
 		if [ -n "$$pid" ]; then \
@@ -71,9 +74,16 @@ kill-ports: ## Kill any processes using development ports (5173, 9101, 3010)
 	done
 	@echo "$(GREEN)✓ Ports cleared$(NC)"
 
-dev: kill-ports ## Start all development servers (frontend + camera-emulator + tracking-service)
+dev: ## Start all development servers (frontend + camera-emulator + tracking-service)
 	@echo "$(CYAN)Starting development servers...$(NC)"
 	@echo ""
+	@# Check if any ports are in use and warn (but don't kill - might be IDE)
+	@for port in $(DEV_PORTS); do \
+		pid=$$(lsof -t -i:$$port 2>/dev/null); \
+		if [ -n "$$pid" ]; then \
+			echo "$(YELLOW)Warning: Port $$port is in use by PID $$pid - server may fail to start$(NC)"; \
+		fi; \
+	done
 	@echo "$(YELLOW)Starting frontend dev server (port 5173)...$(NC)"
 	@echo "$(YELLOW)Starting camera-emulator (port 9101)...$(NC)"
 	@echo "$(YELLOW)Starting tracking-service (port 3010)...$(NC)"
@@ -177,12 +187,11 @@ https-setup: ## One-time HTTPS setup (mkcert + certs)
 dev-https: ## Start all services with HTTPS (requires https-setup first)
 	@echo "$(CYAN)Starting HTTPS development environment...$(NC)"
 	@echo ""
-	@echo "$(YELLOW)Killing any existing processes on ports $(HTTPS_PORTS)...$(NC)"
+	@# Check if any ports are in use and warn (but don't kill - might be IDE)
 	@for port in $(HTTPS_PORTS); do \
 		pid=$$(lsof -t -i:$$port 2>/dev/null); \
 		if [ -n "$$pid" ]; then \
-			echo "$(YELLOW)Killing process $$pid on port $$port$(NC)"; \
-			kill -9 $$pid 2>/dev/null || true; \
+			echo "$(YELLOW)Warning: Port $$port is in use by PID $$pid$(NC)"; \
 		fi; \
 	done
 	@-docker stop axis-https-proxy 2>/dev/null || true

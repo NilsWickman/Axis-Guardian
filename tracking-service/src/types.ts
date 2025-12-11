@@ -436,11 +436,52 @@ export interface CameraFrameInfo {
   timestamp: number
 }
 
+// ============================================================================
+// Zone Types
+// ============================================================================
+
+export type ZoneType = 'restricted' | 'entry' | 'exit' | 'monitored'
+export type ZoneSeverity = 'low' | 'medium' | 'high' | 'critical'
+
+export interface ZoneVertex {
+  x: number
+  y: number
+}
+
+export interface ZoneConfig {
+  id: string
+  siteConfigId: string
+  name: string
+  type: ZoneType
+  vertices: ZoneVertex[]
+  enabled: boolean
+  severity: ZoneSeverity
+  color: string
+  cooldownMs: number
+  createdAt?: Date
+  updatedAt?: Date
+}
+
+export interface ZoneViolation {
+  id: string
+  zoneId: string
+  zoneName: string
+  zoneType: ZoneType
+  trackId: string
+  violationType: 'entry' | 'exit' | 'present'
+  position: Point2D
+  timestamp: number
+  severity: ZoneSeverity
+  cameraIds: string[]
+}
+
 /**
  * WebSocket message types
  */
 export type WebSocketMessage =
-  | { type: 'snapshot'; tracks: GlobalTrackJSON[]; frames?: CameraFrameInfo[] }
+  | { type: 'snapshot'; tracks: GlobalTrackJSON[]; frames?: CameraFrameInfo[]; zones?: ZoneConfig[] }
   | { type: 'track_created'; track: GlobalTrackJSON; frames?: CameraFrameInfo[] }
   | { type: 'track_updated'; track: GlobalTrackJSON; frames?: CameraFrameInfo[] }
   | { type: 'track_expired'; trackId: string; frames?: CameraFrameInfo[] }
+  | { type: 'zone_violation'; violation: ZoneViolation }
+  | { type: 'zones_updated'; zones: ZoneConfig[] }
