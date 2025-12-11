@@ -353,6 +353,145 @@ export class DetectionProcessor {
   }
 
   /**
+   * Process multiple detection messages from different cameras TOGETHER
+   * This is the key for cross-camera correlation - by processing all cameras'
+   * detections in a single batch, we can properly cluster same-person detections
+   * from different cameras before Hungarian assignment.
+   *
+   * Use this when you have synchronized or near-synchronized frames from multiple cameras.
+   */
+  processMultiCameraMessages(messages: DetectionMessage[]): GlobalTrack[] {
+    if (messages.length === 0) return []
+
+    const allProjectedDetections: CameraDetection[] = []
+    const logger = getPipelineLogger()
+
+    for (const message of messages) {
+      const cameraId = this.cameraRegistry.normalizeCameraId(message.camera_id)
+
+      // Skip if we've already processed this frame
+      const lastFrame = this.lastProcessedFrames.get(cameraId) ?? -1
+      if (message.frame_number <= lastFrame) {
+        continue
+      }
+      this.lastProcessedFrames.set(cameraId, message.frame_number)
+      this.lastFrameTimestamps.set(cameraId, Date.now())
+
+      // Get camera parameters
+      const camera = this.cameraRegistry.getCamera(cameraId)
+      if (!camera) {
+        console.warn(`Unknown camera: ${cameraId}`)
+        continue
+      }
+
+      // Convert timestamp from seconds to ms
+      const timestampMs = message.timestamp * 1000
+
+      // Project all detections to world coordinates
+      for (const detection of message.detections) {
+        // Filter for person detections with sufficient confidence
+        if (detection.class_name !== 'person' || detection.confidence < MIN_CONFIDENCE) {
+          continue
+        }
+
+        // Convert bbox array to object format
+        const bbox = this.parseBBox(detection)
+        if (!bbox) continue
+
+        // Log raw detection
+        const rawDetectionKey = logger.logRawDetection(cameraId, detection, message.frame_number)
+
+        // Project to world coordinates
+        const calibration = this.cameraRegistry.getCalibration(cameraId)
+        let worldPoint: { x: number; y: number }
+        let isValid: boolean
+        let projectionMethod: 'krt' | 'legacy'
+        let projectionReason: string | undefined
+
+        if (calibration) {
+          const krtResult = projectDetectionWithKRT(
+            bbox,
+            calibration,
+            camera,
+            this.viewBlockingObstacles,
+            true,
+            IMAGE_WIDTH,
+            IMAGE_HEIGHT
+          )
+          worldPoint = krtResult.worldPoint
+          isValid = krtResult.isValid
+          projectionMethod = 'krt'
+          projectionReason = krtResult.reason
+        } else {
+          const legacyResult = projectDetectionToGround(
+            bbox,
+            camera,
+            this.viewBlockingObstacles,
+            true,
+            IMAGE_WIDTH,
+            IMAGE_HEIGHT
+          )
+          worldPoint = legacyResult.worldPoint
+          isValid = legacyResult.isValid
+          projectionMethod = 'legacy'
+          projectionReason = legacyResult.reason
+        }
+
+        // Apply camera-specific bias correction
+        const biasCorrection = this.cameraRegistry.getBiasCorrection(cameraId)
+        worldPoint = {
+          x: worldPoint.x + biasCorrection.x,
+          y: worldPoint.y + biasCorrection.y,
+        }
+
+        // Log projected position
+        logger.logProjectedPosition(
+          cameraId,
+          detection.track_id,
+          worldPoint.x,
+          worldPoint.y,
+          isValid,
+          projectionMethod,
+          projectionReason,
+          rawDetectionKey ?? undefined
+        )
+
+        if (!isValid) {
+          continue
+        }
+
+        // Filter detections that project inside obstacles
+        if (this.isInsideObstacle(worldPoint.x, worldPoint.y)) {
+          this.obstacleFilterCount++
+          continue
+        }
+
+        // Add to combined batch for all cameras
+        allProjectedDetections.push({
+          cameraId,
+          trackId: detection.track_id ?? 0,
+          worldX: worldPoint.x,
+          worldY: worldPoint.y,
+          confidence: detection.confidence,
+          timestamp: timestampMs,
+          frameNumber: message.frame_number,
+        })
+      }
+    }
+
+    // Periodic cleanup
+    this.periodicCleanup()
+
+    // Process ALL cameras' detections together in a single batch
+    // This allows proper cross-camera clustering before Hungarian assignment
+    if (allProjectedDetections.length > 0) {
+      return this.trackManager.processBatchDetections(allProjectedDetections)
+    }
+
+    return []
+  }
+
+  /**
    * Reset frame tracking (useful for testing)
    */
   resetFrameTracking(): void {
