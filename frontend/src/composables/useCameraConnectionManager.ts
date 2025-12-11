@@ -435,6 +435,7 @@ function stopHealthMonitoring() {
 function checkConnectionHealth() {
   for (const [id, conn] of Object.entries(cameraConnections)) {
     const connectionState = conn.connection.connectionState.value
+    const isConnected = conn.connection.isConnected.value
     const videoElement = conn.videoElement
 
     // Check for failed or disconnected connections
@@ -442,6 +443,23 @@ function checkConnectionHealth() {
       console.warn(`[ConnectionManager] Connection to ${id} is ${connectionState}, attempting recovery...`)
       attemptReconnection(id)
       continue
+    }
+
+    // Check for connections stuck in 'new' or 'closed' state (never fully established or closed without proper handling)
+    // This catches cases where the WebRTC transport was never created or was closed unexpectedly
+    if ((connectionState === 'new' || connectionState === 'closed') && !isConnected) {
+      // Track how long the connection has been stuck
+      conn.connection.stuckStateCount = (conn.connection.stuckStateCount || 0) + 1
+
+      // If stuck for 3 consecutive checks (30 seconds), attempt reconnection
+      if (conn.connection.stuckStateCount >= 3) {
+        console.warn(`[ConnectionManager] Connection to ${id} stuck in '${connectionState}' state, attempting recovery...`)
+        attemptReconnection(id)
+        conn.connection.stuckStateCount = 0
+      }
+    } else if (isConnected) {
+      // Connection is healthy, reset stuck counter
+      conn.connection.stuckStateCount = 0
     }
 
     // Check for frozen video streams
@@ -513,6 +531,9 @@ async function attemptReconnection(cameraId: string) {
     // This will be handled by the views automatically via their attachment logic
   } catch (error) {
     console.error(`[ConnectionManager] Failed to reconnect ${cameraId}:`, error)
+    // Reset the external reconnecting flag so auto-reconnect can take over
+    // This prevents the connection from being permanently stuck
+    conn.connection.resetExternalReconnecting()
   }
 }
 
