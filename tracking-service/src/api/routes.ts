@@ -108,6 +108,8 @@ const EmulatorDetectionSchema = z.object({
   timestamp: z.number().optional(),
   frame_number: z.number().optional(),
   dispatch_time: z.number().optional(),  // High-res ms timestamp for timing measurement
+  video_time_ms: z.number().optional(),  // Video position in ms (for frontend sync)
+  rtp_timestamp: z.number().optional(),  // RTP timestamp (90kHz clock) for frame-perfect sync
   detections: z.array(z.object({
     class_name: z.string().optional().default('person'),
     confidence: z.number().min(0).max(1),
@@ -243,6 +245,7 @@ export function registerRoutes(
   })
 
   // Inject detection from camera emulator (left/top/right/bottom format)
+  // Uses batch processing with Hungarian algorithm for optimal track assignment
   app.post('/api/emulator-detections', async (request: FastifyRequest, reply: FastifyReply) => {
     detectionsReceived++
     lastDetectionTime = Date.now()
@@ -262,55 +265,48 @@ export function registerRoutes(
       recordHttpLatency(data.dispatch_time)
     }
 
-    // Update frame info for this camera (for timing diagnostics)
-    if (data.frame_number !== undefined) {
-      detectionProcessor.updateFrameInfo(data.camera_id, data.frame_number)
+    // Convert to DetectionMessage format for batch processing
+    // This enables Hungarian algorithm assignment and video timing propagation
+    const detectionMessage = {
+      camera_id: data.camera_id,
+      frame_number: data.frame_number ?? 0,
+      timestamp: data.timestamp ?? Date.now() / 1000,
+      detection_count: data.detections.length,
+      video_time_ms: data.video_time_ms,
+      rtp_timestamp: data.rtp_timestamp,
+      detections: data.detections.map((det, i) => {
+        // Convert bbox to array format [x, y, w, h]
+        let bbox: [number, number, number, number]
+        if (Array.isArray(det.bbox)) {
+          bbox = det.bbox
+        } else {
+          bbox = [
+            det.bbox.left,
+            det.bbox.top,
+            det.bbox.right - det.bbox.left,
+            det.bbox.bottom - det.bbox.top,
+          ]
+        }
+        return {
+          class_name: det.class_name,
+          confidence: det.confidence,
+          bbox,
+          track_id: det.track_id ?? i,
+        }
+      }),
     }
 
-    const results: Array<{ detection: number; track: ReturnType<typeof trackToJSON> | null; worldPoint?: { x: number; y: number }; error?: string }> = []
-
-    for (let i = 0; i < data.detections.length; i++) {
-      const det = data.detections[i]
-      // Convert bbox to x/y/width/height format
-      // Handle both array [x, y, w, h] and object {left, top, right, bottom}
-      let bbox: { x: number; y: number; width: number; height: number }
-      if (Array.isArray(det.bbox)) {
-        // Array format [x, y, width, height]
-        bbox = {
-          x: det.bbox[0],
-          y: det.bbox[1],
-          width: det.bbox[2],
-          height: det.bbox[3],
-        }
-      } else {
-        // Object format {left, top, right, bottom}
-        bbox = {
-          x: det.bbox.left,
-          y: det.bbox.top,
-          width: det.bbox.right - det.bbox.left,
-          height: det.bbox.bottom - det.bbox.top,
-        }
-      }
-
-      const track = detectionProcessor.processInjection(
-        data.camera_id,
-        bbox,
-        det.confidence,
-        det.track_id ?? i
-      )
-
-      results.push({
-        detection: i,
-        track: track ? trackToJSON(track) : null,
-        worldPoint: track ? { x: track.currentPosition.x, y: track.currentPosition.y } : undefined,
-        error: track ? undefined : 'Projection failed or invalid',
-      })
-    }
+    // Use batch processing path (Hungarian algorithm + video timing)
+    const tracks = detectionProcessor.processMessage(detectionMessage)
 
     return {
-      processed: results.length,
+      processed: detectionMessage.detections.length,
       cameraId: data.camera_id,
-      results,
+      tracksUpdated: tracks.length,
+      results: tracks.map(track => ({
+        track: trackToJSON(track),
+        worldPoint: { x: track.currentPosition.x, y: track.currentPosition.y },
+      })),
     }
   })
 

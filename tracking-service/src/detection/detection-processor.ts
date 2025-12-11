@@ -216,6 +216,8 @@ export class DetectionProcessor {
         confidence: detection.confidence,
         timestamp: timestampMs,
         frameNumber: message.frame_number,
+        videoTimeMs: message.video_time_ms,
+        rtpTimestamp: message.rtp_timestamp,
       })
     }
 
@@ -495,6 +497,8 @@ export class DetectionProcessor {
           confidence: detection.confidence,
           timestamp: timestampMs,
           frameNumber: message.frame_number,
+          videoTimeMs: message.video_time_ms,
+          rtpTimestamp: message.rtp_timestamp,
         })
       }
     }

@@ -30,6 +30,12 @@ export interface DetectionMessage {
   timestamp: number // seconds
   detection_count: number
   detections: RawDetection[]
+  /** Video time in milliseconds (position within video, for sync) */
+  video_time_ms?: number
+  /** RTP timestamp (90kHz clock) for frame-perfect sync */
+  rtp_timestamp?: number
+  /** High-resolution dispatch time in ms (for latency measurement) */
+  dispatch_time?: number
 }
 
 /**
@@ -227,6 +233,10 @@ export interface CameraDetection {
   timestamp: number // Unix timestamp in ms
   /** Frame number from source camera (for frame-based missed detection) */
   frameNumber?: number
+  /** Video time in milliseconds (position within video, for sync) */
+  videoTimeMs?: number
+  /** RTP timestamp (90kHz clock) for frame-perfect sync */
+  rtpTimestamp?: number
 }
 
 /**
@@ -262,6 +272,20 @@ export interface KalmanState {
 }
 
 /**
+ * Video timing information for track synchronization
+ */
+export interface VideoTimingInfo {
+  /** Video time in milliseconds (position within video) */
+  videoTimeMs: number
+  /** RTP timestamp (90kHz clock) for frame-perfect sync */
+  rtpTimestamp?: number
+  /** Frame number from source camera */
+  frameNumber: number
+  /** Camera ID that provided this timing */
+  cameraId: string
+}
+
+/**
  * Global track that spans multiple cameras
  */
 export interface GlobalTrack {
@@ -290,6 +314,8 @@ export interface GlobalTrack {
   exitReason?: ExitReason
   /** Predicted position during pillar occlusion (ghost track) */
   predictedPosition?: Point2D
+  /** Video timing from the most recent detection (for frontend sync) */
+  videoTiming?: VideoTimingInfo
 }
 
 /**
@@ -311,6 +337,8 @@ export interface GlobalTrackJSON {
   exitReason?: ExitReason
   /** Predicted position during pillar occlusion (ghost track) */
   predictedPosition?: Point2D
+  /** Video timing from the most recent detection (for frontend sync) */
+  videoTiming?: VideoTimingInfo
 }
 
 // ============================================================================

@@ -16,6 +16,7 @@ import type {
   TrailPosition,
   CameraTrackAssociation,
   Point2D,
+  VideoTimingInfo,
 } from '../types.js'
 import type { ZoneManager } from '../zones/zone-manager.js'
 import { DEFAULT_TRACKING_CONFIG } from '../types.js'
@@ -77,6 +78,7 @@ export function trackToJSON(track: GlobalTrack): GlobalTrackJSON {
     state: track.state,
     exitReason: track.exitReason,
     predictedPosition: track.predictedPosition,
+    videoTiming: track.videoTiming,
   }
 }
 
@@ -819,6 +821,13 @@ export class TrackManager {
       primaryDetection.timestamp
     )
 
+    // Extract video timing from the first detection with valid timing
+    let videoTiming: VideoTimingInfo | undefined
+    for (const det of cluster.detections) {
+      videoTiming = this.extractVideoTiming(det)
+      if (videoTiming) break
+    }
+
     const track: GlobalTrack = {
       globalTrackId,
       cameraAssociations: new Map(),
@@ -835,6 +844,7 @@ export class TrackManager {
       state: 'unconfirmed',
       missedFrames: 0,
       consecutiveDetections: 0,
+      videoTiming,
     }
 
     // Associate with ALL cameras in the cluster
@@ -879,6 +889,9 @@ export class TrackManager {
       detection.timestamp
     )
 
+    // Extract video timing if available
+    const videoTiming = this.extractVideoTiming(detection)
+
     const track: GlobalTrack = {
       globalTrackId,
       cameraAssociations: new Map(),
@@ -895,6 +908,7 @@ export class TrackManager {
       state: 'unconfirmed',
       missedFrames: 0,
       consecutiveDetections: 0,
+      videoTiming,
     }
 
     track.cameraAssociations.set(detection.cameraId, {
@@ -911,6 +925,21 @@ export class TrackManager {
 
     this.tracks.set(globalTrackId, track)
     return track
+  }
+
+  /**
+   * Extract video timing info from a detection (if available)
+   */
+  private extractVideoTiming(detection: CameraDetection): VideoTimingInfo | undefined {
+    if (detection.videoTimeMs === undefined || detection.frameNumber === undefined) {
+      return undefined
+    }
+    return {
+      videoTimeMs: detection.videoTimeMs,
+      rtpTimestamp: detection.rtpTimestamp,
+      frameNumber: detection.frameNumber,
+      cameraId: detection.cameraId,
+    }
   }
 
   private associateWithTrack(track: GlobalTrack, detection: CameraDetection): boolean {
@@ -949,6 +978,12 @@ export class TrackManager {
     // Update camera frame tracker
     if (detection.frameNumber !== undefined) {
       this.updateCameraFrameTracker(detection.cameraId, detection.frameNumber, detection.timestamp)
+    }
+
+    // Update video timing for frontend sync
+    const videoTiming = this.extractVideoTiming(detection)
+    if (videoTiming) {
+      track.videoTiming = videoTiming
     }
 
     track.detectionCount++

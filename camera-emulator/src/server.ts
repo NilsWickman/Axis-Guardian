@@ -31,8 +31,12 @@ export async function createCameraEmulator(config: CameraConfig): Promise<Camera
   const detectionData = await loadDetections(config.detectionsPath)
   const detectionSync = new DetectionSync(config.cameraId, detectionData)
 
-  // Create tracking client
-  const trackingClient = new TrackingClient(config.trackingServiceUrl, config.trackingCameraId)
+  // Create tracking client with video FPS for accurate timing sync
+  const trackingClient = new TrackingClient(
+    config.trackingServiceUrl,
+    config.trackingCameraId,
+    { fps: detectionData.video_info.fps || 30 }
+  )
 
   // Create mediasoup infrastructure
   const worker = await createWorker()
