@@ -437,6 +437,10 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
         handleDisconnect()
       }
 
+      // Reset reconnect attempts on successful WebSocket connection
+      // This matches tracking service behavior and prevents permanent failure after transient issues
+      reconnectAttempts.value = 0
+
       // Step 1: Get router RTP capabilities
       const rtpCapabilities = await sendRequest<mediasoupTypes.RtpCapabilities>('getRouterRtpCapabilities')
       console.log(`[Mediasoup] ${cameraId}: Got router RTP capabilities`)
@@ -1303,6 +1307,15 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
     console.log(`[VideoSync] Manual offset set to ${offsetMs}ms`)
   }
 
+  /**
+   * Reset the external reconnecting flag
+   * Called by ConnectionManager after a failed reconnection attempt
+   * to allow future auto-reconnects
+   */
+  function resetExternalReconnecting() {
+    isExternalReconnecting.value = false
+  }
+
   return {
     // State
     isConnected,
@@ -1333,6 +1346,7 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
     retryConnection,
     setLoopDuration,
     getVideoTime,
-    setVideoSyncOffset
+    setVideoSyncOffset,
+    resetExternalReconnecting
   }
 }
