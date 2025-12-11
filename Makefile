@@ -1,4 +1,4 @@
-.PHONY: setup dev help clean check-pnpm kill-ports dev-frontend dev-camera dev-tracking db-seed db-reset debug-tracking debug-tracking-stop
+.PHONY: setup dev help clean check-pnpm kill-ports dev-frontend dev-camera dev-tracking db-seed db-reset debug-tracking debug-tracking-stop https-setup dev-https https-stop
 
 # Colors for output
 CYAN := \033[0;36m
@@ -9,6 +9,9 @@ NC := \033[0m # No Color
 
 # Ports used by development servers
 DEV_PORTS := 5173 9101 3010
+
+# Ports used by HTTPS development (includes proxy ports)
+HTTPS_PORTS := 5173 9101 3010 80 443
 
 help: ## Show this help message
 	@echo "$(CYAN)Axis-Guardian Development Makefile$(NC)"
@@ -165,3 +168,71 @@ debug-tracking-stop: ## Stop the current debug recording session
 	@echo "$(CYAN)Example queries:$(NC)"
 	@echo "  SELECT * FROM debug_sessions ORDER BY started_at DESC LIMIT 1;"
 	@echo "  SELECT camera_id, world_x, world_y FROM debug_projected_positions LIMIT 20;"
+
+# HTTPS Development Environment
+https-setup: ## One-time HTTPS setup (mkcert + certs)
+	@echo "$(CYAN)Setting up HTTPS development environment...$(NC)"
+	@cd dev-https && ./setup.sh
+
+dev-https: ## Start all services with HTTPS (requires https-setup first)
+	@echo "$(CYAN)Starting HTTPS development environment...$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Killing any existing processes on ports $(HTTPS_PORTS)...$(NC)"
+	@for port in $(HTTPS_PORTS); do \
+		pid=$$(lsof -t -i:$$port 2>/dev/null); \
+		if [ -n "$$pid" ]; then \
+			echo "$(YELLOW)Killing process $$pid on port $$port$(NC)"; \
+			kill -9 $$pid 2>/dev/null || true; \
+		fi; \
+	done
+	@-docker stop axis-https-proxy 2>/dev/null || true
+	@echo ""
+	@echo "$(GREEN)Starting nginx HTTPS proxy...$(NC)"
+	@cd dev-https && docker-compose up -d
+	@echo ""
+	@echo "$(YELLOW)Starting tracking-service (port 3010)...$(NC)"
+	@echo "$(YELLOW)Starting camera-emulator (port 9101)...$(NC)"
+	@echo "$(YELLOW)Starting frontend dev server (port 5173)...$(NC)"
+	@echo ""
+	@echo "$(GREEN)Access the app at:$(NC)"
+	@echo "  Frontend:         https://axis.local"
+	@echo "  Tracking API:     https://api.axis.local"
+	@echo "  Camera 1:         https://camera1.axis.local"
+	@echo "  Camera 2:         https://camera2.axis.local"
+	@echo ""
+	@FRONTEND_PID=0; \
+	CAMERA_PID=0; \
+	TRACKING_PID=0; \
+	cleanup() { \
+		echo ""; \
+		echo "$(CYAN)Shutting down HTTPS development servers...$(NC)"; \
+		[ $$FRONTEND_PID -ne 0 ] && kill $$FRONTEND_PID 2>/dev/null; \
+		[ $$CAMERA_PID -ne 0 ] && kill $$CAMERA_PID 2>/dev/null; \
+		[ $$TRACKING_PID -ne 0 ] && kill $$TRACKING_PID 2>/dev/null; \
+		docker stop axis-https-proxy 2>/dev/null || true; \
+		wait 2>/dev/null; \
+		echo "$(GREEN)✓ All servers stopped$(NC)"; \
+		exit 0; \
+	}; \
+	trap cleanup INT TERM; \
+	(cd tracking-service && CORS_ORIGIN="https://axis.local,https://localhost:5173" exec pnpm run dev) & \
+	TRACKING_PID=$$!; \
+	sleep 1; \
+	(cd camera-emulator && exec pnpm run dev) & \
+	CAMERA_PID=$$!; \
+	sleep 1; \
+	(cd frontend && VITE_TRACKING_WS_URL="wss://api.axis.local/ws" VITE_TRACKING_API_URL="https://api.axis.local" VITE_CAMERA1_WEBRTC_URL="https://camera1.axis.local" VITE_CAMERA2_WEBRTC_URL="https://camera2.axis.local" __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=axis.local exec pnpm exec vite --host) & \
+	FRONTEND_PID=$$!; \
+	wait
+
+https-stop: ## Stop HTTPS development environment
+	@echo "$(CYAN)Stopping HTTPS development environment...$(NC)"
+	@cd dev-https && docker-compose down
+	@for port in $(HTTPS_PORTS); do \
+		pid=$$(lsof -t -i:$$port 2>/dev/null); \
+		if [ -n "$$pid" ]; then \
+			echo "$(YELLOW)Killing process $$pid on port $$port$(NC)"; \
+			kill -9 $$pid 2>/dev/null || true; \
+		fi; \
+	done
+	@echo "$(GREEN)✓ HTTPS environment stopped$(NC)"

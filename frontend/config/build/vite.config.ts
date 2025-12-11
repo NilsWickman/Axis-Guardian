@@ -42,5 +42,7 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    // Allow custom hostnames for HTTPS dev proxy (axis.local)
+    allowedHosts: true,
   },
 })

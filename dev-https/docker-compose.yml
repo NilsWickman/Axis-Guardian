@@ -1,0 +1,30 @@
+version: '3.8'
+
+# Local HTTPS development environment
+# Provides nginx reverse proxy with SSL termination for cross-domain testing
+
+services:
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: axis-https-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    extra_hosts:
+      # Allow container to reach host machine services
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - axis-dev
+
+networks:
+  axis-dev:
+    driver: bridge
