@@ -5,7 +5,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { z } from 'zod'
 import { appendFileSync } from 'fs'
-import type { TrackingConfig, ZoneConfig } from '../types.js'
 import { TrackManager, trackToJSON } from '../tracks/track-manager.js'
 import { DetectionProcessor } from '../detection/detection-processor.js'
 import { CameraRegistry } from '../detection/camera-registry.js'
@@ -683,7 +682,8 @@ export function registerRoutes(
 
   // PUT /api/zones/:id - Update a zone
   // Protected by read-only guard
-  app.put('/api/zones/:id', { preHandler: readOnlyGuard }, async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  app.put('/api/zones/:id', { preHandler: readOnlyGuard }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string }
     const parseResult = UpdateZoneSchema.safeParse(request.body)
     if (!parseResult.success) {
       return reply.status(400).send({
@@ -692,7 +692,7 @@ export function registerRoutes(
       })
     }
 
-    const zone = updateZoneDb(request.params.id, parseResult.data)
+    const zone = updateZoneDb(id, parseResult.data)
     if (!zone) {
       return reply.status(404).send({ error: 'Zone not found' })
     }
@@ -710,14 +710,15 @@ export function registerRoutes(
 
   // DELETE /api/zones/:id - Delete a zone
   // Protected by read-only guard
-  app.delete('/api/zones/:id', { preHandler: readOnlyGuard }, async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-    const success = deleteZoneDb(request.params.id)
+  app.delete('/api/zones/:id', { preHandler: readOnlyGuard }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string }
+    const success = deleteZoneDb(id)
     if (!success) {
       return reply.status(404).send({ error: 'Zone not found' })
     }
 
     // Notify ZoneManager
-    zoneManager?.removeZone(request.params.id)
+    zoneManager?.removeZone(id)
 
     // Broadcast update to all clients
     if (broadcaster && zoneManager) {

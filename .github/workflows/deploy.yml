@@ -103,6 +103,7 @@ jobs:
             npm install
             npx pm2 delete axis-emulator 2>/dev/null || true
             VIDEO_PATH=/opt/axis-guardian/videos \
+            ANNOUNCED_IP=${{ secrets.VPS_HOST }} \
             npx pm2 start "npx tsx src/index.ts" --name axis-emulator --cwd /opt/axis-guardian/camera-emulator
 
             npx pm2 save

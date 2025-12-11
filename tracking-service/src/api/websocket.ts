@@ -4,7 +4,7 @@
 
 import type { FastifyInstance } from 'fastify'
 import type { WebSocket } from '@fastify/websocket'
-import type { WebSocketMessage, CameraFrameInfo, ZoneConfig } from '../types.js'
+import type { WebSocketMessage, CameraFrameInfo } from '../types.js'
 import { TrackManager, trackToJSON } from '../tracks/track-manager.js'
 import type { ZoneManager } from '../zones/zone-manager.js'
 
