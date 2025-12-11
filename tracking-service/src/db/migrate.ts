@@ -50,9 +50,25 @@ const migrations = [
     type TEXT NOT NULL DEFAULT 'external'
   )`,
 
+  // Zones table - for restricted area monitoring
+  `CREATE TABLE IF NOT EXISTS zones (
+    id TEXT PRIMARY KEY,
+    site_config_id TEXT NOT NULL REFERENCES site_configs(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'restricted',
+    vertices TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    severity TEXT NOT NULL DEFAULT 'high',
+    color TEXT DEFAULT '#ef4444',
+    cooldown_ms INTEGER NOT NULL DEFAULT 30000,
+    created_at INTEGER,
+    updated_at INTEGER
+  )`,
+
   // Indexes for faster lookups
   `CREATE INDEX IF NOT EXISTS idx_cameras_site ON cameras(site_config_id)`,
   `CREATE INDEX IF NOT EXISTS idx_walls_site ON walls(site_config_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_zones_site ON zones(site_config_id)`,
 
   // ============================================================================
   // Debug Logging Tables (for pipeline troubleshooting)
