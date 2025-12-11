@@ -389,7 +389,7 @@ export const DEFAULT_TRACKING_CONFIG: TrackingConfig = {
   reidentificationGateMultiplier: 4.0, // 4x expanded gate for re-ID after occlusion
   missedFramesBeforeOcclusion: 5,  // Require 5 missed frames before transitioning to occluded
   detectionsToExitOcclusion: 2,    // Require 2 detections to exit occlusion state
-  clusteringDistanceM: 0.6,        // Cluster detections within 0.6m from different cameras
+  clusteringDistanceM: 0.7,        // Cluster detections within 0.7m from different cameras (balance: 0.5m = no clustering, 0.9m = wrong merges)
   mergeDistanceM: 0.6,             // Consider merging tracks within 0.6m
   mergeConfidenceThreshold: 0.7,   // Require 70% confidence to merge tracks
   unconfirmedExclusionRadius: 0.7, // Larger exclusion for unconfirmed (prevent duplicates in overlap)

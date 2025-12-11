@@ -714,6 +714,79 @@ export class TrackManager {
   }
 
   /**
+   * Pre-cluster cross-camera detections BEFORE Hungarian assignment.
+   * This is the key to cross-camera correlation in overlap zones.
+   *
+   * When two cameras see the same person at the same timestamp, their
+   * world-projected positions should be close. By clustering them first
+   * and using the centroid for Hungarian assignment, we ensure BOTH
+   * cameras' detections get assigned to the SAME track.
+   *
+   * Without this: camera1's detection matches track-A, camera2's matches track-B
+   * With this: cluster centroid matches track-A, both cameras associate with track-A
+   */
+  private preClusterCrossCameraDetections(detections: CameraDetection[]): DetectionCluster[] {
+    if (detections.length === 0) return []
+    if (detections.length === 1) {
+      return [{
+        detections: [detections[0]],
+        centroid: { x: detections[0].worldX, y: detections[0].worldY },
+      }]
+    }
+
+    // Use moderate clustering distance for pre-clustering
+    // Analysis: 0.5m = no clustering (same person can be 0.3-0.5m apart across cameras)
+    //           0.9m = too aggressive (different people can be 0.51m apart)
+    //           0.7m = compromise
+    const clusteringDistance = this.config.clusteringDistanceM ?? 0.7
+    const clusters: DetectionCluster[] = []
+    const used = new Set<number>()
+
+    // Sort by camera then by position for deterministic clustering
+    const sortedIndices = detections.map((_, i) => i)
+      .sort((a, b) => {
+        const camCompare = detections[a].cameraId.localeCompare(detections[b].cameraId)
+        if (camCompare !== 0) return camCompare
+        return detections[a].worldX - detections[b].worldX
+      })
+
+    for (const i of sortedIndices) {
+      if (used.has(i)) continue
+
+      const cluster: CameraDetection[] = [detections[i]]
+      used.add(i)
+
+      // Find spatially close detections from DIFFERENT cameras
+      for (const j of sortedIndices) {
+        if (used.has(j)) continue
+
+        // Only cluster detections from different cameras
+        // Same camera seeing multiple people = different people (can't merge)
+        if (detections[j].cameraId === detections[i].cameraId) continue
+
+        const dist = calculateDistance(
+          { x: detections[i].worldX, y: detections[i].worldY },
+          { x: detections[j].worldX, y: detections[j].worldY }
+        )
+
+        if (dist < clusteringDistance) {
+          cluster.push(detections[j])
+          used.add(j)
+        }
+      }
+
+      // Calculate centroid (confidence-weighted)
+      const merged = mergeWorldPositions(cluster)
+      clusters.push({
+        detections: cluster,
+        centroid: merged.position,
+      })
+    }
+
+    return clusters
+  }
+
+  /**
    * Create a global track from a cluster of detections (potentially from multiple cameras)
    */
   private createGlobalTrackFromCluster(cluster: DetectionCluster): GlobalTrack {
@@ -948,6 +1021,11 @@ export class TrackManager {
   /**
    * Process a batch of detections using Hungarian algorithm for optimal assignment
    * This is more efficient for multi-detection frames
+   *
+   * Key architecture for cross-camera correlation:
+   * 1. Pre-cluster detections from different cameras that are spatially close
+   * 2. Use cluster centroid as a single "virtual detection" for Hungarian assignment
+   * 3. This ensures same-person detections from multiple cameras match to ONE track
    */
   processBatchDetections(detections: CameraDetection[]): GlobalTrack[] {
     if (detections.length === 0) return []
@@ -955,9 +1033,38 @@ export class TrackManager {
     const now = this.clock()
     const activeTracks = this.getAllActiveTracks()
 
-    // Use Hungarian algorithm for optimal assignment
+    // === PRE-HUNGARIAN CLUSTERING ===
+    // Cluster detections from different cameras that likely represent the same person.
+    // Use cluster centroid for Hungarian assignment to ensure both cameras' detections
+    // match to the SAME track instead of competing for different tracks.
+    const preClusters = this.preClusterCrossCameraDetections(detections)
+
+    // Create virtual detections from clusters (use centroid position)
+    // Track mapping from virtual detection back to original cluster
+    const virtualDetections: CameraDetection[] = []
+    const clusterMap = new Map<number, DetectionCluster>()  // virtual index -> cluster
+
+    for (let i = 0; i < preClusters.length; i++) {
+      const cluster = preClusters[i]
+      // Use the highest-confidence detection's metadata, but centroid position
+      const primary = cluster.detections.reduce((a, b) =>
+        a.confidence > b.confidence ? a : b
+      )
+      virtualDetections.push({
+        cameraId: primary.cameraId,
+        trackId: primary.trackId,
+        worldX: cluster.centroid.x,
+        worldY: cluster.centroid.y,
+        confidence: Math.max(...cluster.detections.map(d => d.confidence)),
+        timestamp: primary.timestamp,
+        frameNumber: primary.frameNumber,
+      })
+      clusterMap.set(i, cluster)
+    }
+
+    // Use Hungarian algorithm for optimal assignment with virtual detections
     const { matches, unmatchedDetections } = assignDetectionsToTracks(
-      detections,
+      virtualDetections,
       activeTracks,
       {
         maxCost: this.config.correlationDistanceM * 2,
@@ -969,68 +1076,110 @@ export class TrackManager {
 
     const results: GlobalTrack[] = []
 
-    // Process matched pairs
-    for (const { detection, track } of matches) {
-      if (this.associateWithTrack(track, detection)) {
+    // Process matched pairs - associate ALL detections in cluster with matched track
+    for (let i = 0; i < matches.length; i++) {
+      const { detection: virtualDet, track } = matches[i]
+
+      // Find original cluster index by matching virtual detection
+      const clusterIdx = virtualDetections.findIndex(vd =>
+        vd.worldX === virtualDet.worldX &&
+        vd.worldY === virtualDet.worldY &&
+        vd.cameraId === virtualDet.cameraId
+      )
+      const cluster = clusterIdx >= 0 ? clusterMap.get(clusterIdx) : null
+
+      // Associate ALL detections in cluster with the track (not just virtual)
+      const detectionsToAssociate = cluster ? cluster.detections : [virtualDet]
+      let associationSuccess = false
+
+      for (const det of detectionsToAssociate) {
+        if (this.associateWithTrack(track, det)) {
+          associationSuccess = true
+        }
+      }
+
+      if (associationSuccess) {
         this.processPendingMerge(track, now)
         this.onTrackUpdated?.(track)
-        results.push(track)
+        if (!results.includes(track)) {
+          results.push(track)
+        }
       }
     }
 
-    // Try re-identification for unmatched detections with occluded tracks
+    // Try re-identification for unmatched virtual detections with occluded tracks
     const occludedTracks = this.getAllTracks().filter(
       t => t.state === 'occluded' && t.isConfirmed
     )
 
-    const finalUnmatched: CameraDetection[] = []
-    for (const detection of unmatchedDetections) {
-      const reidentified = this.attemptReidentification(detection, occludedTracks)
+    const finalUnmatchedClusters: DetectionCluster[] = []
+    for (let i = 0; i < unmatchedDetections.length; i++) {
+      const virtualDet = unmatchedDetections[i]
+      // Find cluster index
+      const clusterIdx = virtualDetections.findIndex(vd =>
+        vd.worldX === virtualDet.worldX &&
+        vd.worldY === virtualDet.worldY &&
+        vd.cameraId === virtualDet.cameraId
+      )
+      const cluster = clusterIdx >= 0 ? clusterMap.get(clusterIdx) : null
+
+      // Try re-id with the virtual detection first
+      const reidentified = this.attemptReidentification(virtualDet, occludedTracks)
       if (reidentified) {
         // Restore track from occlusion
         reidentified.state = 'confirmed'
         reidentified.missedFrames = 0
         reidentified.occludedSince = undefined
-        if (this.associateWithTrack(reidentified, detection)) {
-          this.processPendingMerge(reidentified, now)
-          this.onTrackUpdated?.(reidentified)
+
+        // Associate ALL detections in cluster
+        const detectionsToAssociate = cluster ? cluster.detections : [virtualDet]
+        for (const det of detectionsToAssociate) {
+          this.associateWithTrack(reidentified, det)
+        }
+        this.processPendingMerge(reidentified, now)
+        this.onTrackUpdated?.(reidentified)
+        if (!results.includes(reidentified)) {
           results.push(reidentified)
         }
       } else {
-        finalUnmatched.push(detection)
+        // Couldn't re-id - add to unmatched
+        if (cluster) {
+          finalUnmatchedClusters.push(cluster)
+        } else {
+          finalUnmatchedClusters.push({
+            detections: [virtualDet],
+            centroid: { x: virtualDet.worldX, y: virtualDet.worldY },
+          })
+        }
       }
     }
 
-    // Create new tracks for truly unmatched detections
-    // IMPORTANT: Cluster detections from different cameras to prevent duplicates
-    // when same person is seen by multiple cameras simultaneously
-    const validUnmatched = finalUnmatched.filter(det => {
-      // Skip if within exclusion zone (pass cameraId to allow same-camera detections)
-      if (this.isInExclusionZone(det.worldX, det.worldY, det.cameraId)) {
-        return false
-      }
-      // Skip if confidence is too low
-      if (!this.meetsCreationConfidence(det)) {
-        return false
-      }
-      return true
-    })
+    // Create new tracks for truly unmatched clusters
+    // (already pre-clustered, so no need to re-cluster)
+    for (const cluster of finalUnmatchedClusters) {
+      // Filter cluster detections by confidence
+      const validDetections = cluster.detections.filter(det =>
+        this.meetsCreationConfidence(det)
+      )
+      if (validDetections.length === 0) continue
 
-    // Cluster detections from different cameras that are spatially close
-    const clusters = this.clusterUnmatchedDetections(validUnmatched)
+      // Recalculate centroid with valid detections
+      const merged = mergeWorldPositions(validDetections)
+      const validCluster: DetectionCluster = {
+        detections: validDetections,
+        centroid: merged.position,
+      }
 
-    // Create one track per cluster (not per detection)
-    for (const cluster of clusters) {
       // Use centroid for exclusion zone check
       // For multi-camera clusters, don't pass cameraId (all cameras in cluster are relevant)
-      const clusterCameraId = cluster.detections.length === 1
-        ? cluster.detections[0].cameraId
+      const clusterCameraId = validCluster.detections.length === 1
+        ? validCluster.detections[0].cameraId
         : undefined
-      if (this.isInExclusionZone(cluster.centroid.x, cluster.centroid.y, clusterCameraId)) {
+      if (this.isInExclusionZone(validCluster.centroid.x, validCluster.centroid.y, clusterCameraId)) {
         continue
       }
 
-      const newTrack = this.createGlobalTrackFromCluster(cluster)
+      const newTrack = this.createGlobalTrackFromCluster(validCluster)
       this.onTrackCreated?.(newTrack)
       results.push(newTrack)
     }

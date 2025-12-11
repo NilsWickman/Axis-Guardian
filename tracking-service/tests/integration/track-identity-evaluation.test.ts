@@ -221,12 +221,30 @@ function simulateTracking(
     return a.cameraId.localeCompare(b.cameraId)
   })
 
-  // Process frames
-  for (const { cameraId, frame } of allFrames) {
-    if (frame.detections.length === 0) continue
+  // Group frames by timestamp for multi-camera batch processing
+  // This is critical for proper cross-camera correlation in overlap zones
+  const framesByTimestamp = new Map<number, FrameEvent[]>()
+  for (const frameEvent of allFrames) {
+    const ts = frameEvent.frame.timestamp
+    if (!framesByTimestamp.has(ts)) {
+      framesByTimestamp.set(ts, [])
+    }
+    framesByTimestamp.get(ts)!.push(frameEvent)
+  }
 
-    // Create detection message
-    const msg: DetectionMessage = {
+  // Sort timestamps for deterministic processing
+  const sortedTimestamps = Array.from(framesByTimestamp.keys()).sort((a, b) => a - b)
+
+  // Process frames grouped by timestamp (multi-camera batch processing)
+  for (const timestamp of sortedTimestamps) {
+    const framesAtTimestamp = framesByTimestamp.get(timestamp)!
+
+    // Filter out frames with no detections
+    const framesWithDetections = framesAtTimestamp.filter(f => f.frame.detections.length > 0)
+    if (framesWithDetections.length === 0) continue
+
+    // Create detection messages for all cameras at this timestamp
+    const messages: DetectionMessage[] = framesWithDetections.map(({ cameraId, frame }) => ({
       camera_id: cameraId,
       frame_number: frame.frame_number,
       timestamp: frame.timestamp * 1000, // Convert to ms
@@ -242,32 +260,35 @@ function simulateTracking(
         ],
         track_id: det.track_id,
       })),
-    }
+    }))
 
-    // Process
-    detectionProcessor.processMessage(msg)
+    // Process ALL cameras' detections at this timestamp TOGETHER
+    // This enables proper cross-camera clustering before Hungarian assignment
+    detectionProcessor.processMultiCameraMessages(messages)
 
-    // Update mappings for annotated tracks
+    // Update mappings for annotated tracks (iterate all frames at this timestamp)
     const activeTracks = trackManager.getActiveTracks()
 
-    for (const det of frame.detections) {
-      const cameraTrackId = `${cameraId}-${det.track_id}`
+    for (const { cameraId, frame } of framesWithDetections) {
+      for (const det of frame.detections) {
+        const cameraTrackId = `${cameraId}-${det.track_id}`
 
-      // Only track annotated camera tracks
-      if (!annotatedCameraTracks.has(cameraTrackId)) continue
+        // Only track annotated camera tracks
+        if (!annotatedCameraTracks.has(cameraTrackId)) continue
 
-      // Find which global track this camera track is associated with
-      for (const globalTrack of activeTracks) {
-        const cameraAssoc = globalTrack.cameraAssociations.get(cameraId)
-        if (cameraAssoc && cameraAssoc.trackIds.includes(det.track_id)) {
-          // Record the mapping
-          cameraTrackToGlobal.set(cameraTrackId, globalTrack.globalTrackId)
+        // Find which global track this camera track is associated with
+        for (const globalTrack of activeTracks) {
+          const cameraAssoc = globalTrack.cameraAssociations.get(cameraId)
+          if (cameraAssoc && cameraAssoc.trackIds.includes(det.track_id)) {
+            // Record the mapping
+            cameraTrackToGlobal.set(cameraTrackId, globalTrack.globalTrackId)
 
-          if (!globalToCameraTracks.has(globalTrack.globalTrackId)) {
-            globalToCameraTracks.set(globalTrack.globalTrackId, new Set())
+            if (!globalToCameraTracks.has(globalTrack.globalTrackId)) {
+              globalToCameraTracks.set(globalTrack.globalTrackId, new Set())
+            }
+            globalToCameraTracks.get(globalTrack.globalTrackId)!.add(cameraTrackId)
+            break
           }
-          globalToCameraTracks.get(globalTrack.globalTrackId)!.add(cameraTrackId)
-          break
         }
       }
     }
