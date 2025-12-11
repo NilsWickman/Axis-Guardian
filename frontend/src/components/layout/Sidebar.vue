@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { ref } from 'vue'
+  import { ref, computed } from 'vue'
   import { useRoute } from 'vue-router'
   import {
     Sun,
@@ -34,6 +34,7 @@
     path?: string
     icon: any
     children?: NavigationItem[]
+    demo?: boolean // Demo-only features, hidden in production
   }
 
   const navigationItems: NavigationItem[] = [
@@ -51,6 +52,7 @@
       name: 'Timeline',
       path: '/cameras/timeline',
       icon: Clock,
+      demo: true, // Demo feature, hidden in production
     },
     {
       name: 'Manage Cameras',
@@ -94,27 +96,35 @@
       icon: Settings,
     },
     {
+      name: 'Frame Annotation',
+      path: '/cameras/frame-review',
+      icon: Film,
+    },
+    {
+      name: 'Track Annotation',
+      path: '/dev/track-annotator',
+      icon: Users,
+    },
+    {
       name: 'Dev',
       icon: Code,
       children: [
-        {
-          name: 'Frame Review',
-          path: '/cameras/frame-review',
-          icon: Film,
-        },
         {
           name: 'Ground Truth Annotator',
           path: '/calibration/annotator',
           icon: Crosshair,
         },
-        {
-          name: 'Track Annotator',
-          path: '/dev/track-annotator',
-          icon: Users,
-        },
       ],
     },
   ]
+
+  // Filter out demo items in production mode
+  const filteredNavigationItems = computed(() => {
+    if (import.meta.env.PROD) {
+      return navigationItems.filter(item => !item.demo)
+    }
+    return navigationItems
+  })
 
   const toggleMenu = (itemName: string) => {
     if (expandedMenus.value.has(itemName)) {
@@ -168,7 +178,7 @@
     <!-- Navigation Items -->
     <nav class="flex-1 p-4 overflow-y-auto">
       <ul class="space-y-2">
-        <li v-for="item in navigationItems" :key="item.name">
+        <li v-for="item in filteredNavigationItems" :key="item.name">
           <!-- Item with children (expandable) -->
           <template v-if="item.children">
             <button
