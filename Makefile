@@ -226,10 +226,12 @@ dev-https: ## Start all services with HTTPS (requires https-setup first)
 	trap cleanup INT TERM; \
 	(cd tracking-service && CORS_ORIGIN="https://axis.local,https://localhost:5173" exec pnpm run dev) & \
 	TRACKING_PID=$$!; \
-	sleep 1; \
+	echo "Waiting for tracking service to be ready..."; \
+	until curl -s http://localhost:3010/api/health > /dev/null 2>&1; do sleep 0.5; done; \
+	echo "Tracking service ready!"; \
 	(cd camera-emulator && exec pnpm run dev) & \
 	CAMERA_PID=$$!; \
-	sleep 1; \
+	sleep 2; \
 	(cd frontend && VITE_TRACKING_WS_URL="wss://api.axis.local/ws" VITE_TRACKING_API_URL="https://api.axis.local" VITE_CAMERA1_WEBRTC_URL="https://camera1.axis.local" VITE_CAMERA2_WEBRTC_URL="https://camera2.axis.local" __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=axis.local exec pnpm exec vite --host) & \
 	FRONTEND_PID=$$!; \
 	wait

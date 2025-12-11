@@ -8,8 +8,6 @@
 import type {
   ZoneConfig,
   ZoneViolation,
-  ZoneType,
-  ZoneSeverity,
   ZoneVertex,
   Point2D,
 } from '../types.js'

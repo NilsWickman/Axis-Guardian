@@ -7,6 +7,7 @@
 
 import { ref, onUnmounted } from 'vue'
 import { useGlobalTrackStore } from '@/stores/globalTracks'
+import { useZoneStore } from '@/stores/zones'
 import { config } from '@/config/environment'
 
 export interface TrackingServiceOptions {
@@ -25,6 +26,7 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
   const opts = { ...DEFAULT_OPTIONS, ...options }
 
   const globalTrackStore = useGlobalTrackStore()
+  const zoneStore = useZoneStore()
 
   const socket = ref<WebSocket | null>(null)
   const isConnected = ref(false)
@@ -120,7 +122,15 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
   /**
    * Handle incoming WebSocket messages
    */
-  function handleMessage(message: { type: string; track?: unknown; tracks?: unknown[]; trackId?: string; frames?: unknown[] }): void {
+  function handleMessage(message: {
+    type: string
+    track?: unknown
+    tracks?: unknown[]
+    trackId?: string
+    frames?: unknown[]
+    zones?: unknown[]
+    violation?: unknown
+  }): void {
     // Update frame info if present
     if (message.frames) {
       globalTrackStore.updateFrameInfo(message.frames as { cameraId: string; frameNumber: number; timestamp: number }[])
@@ -130,6 +140,10 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
       case 'snapshot':
         if (Array.isArray(message.tracks)) {
           globalTrackStore.setTracksFromServer(message.tracks)
+        }
+        // Handle zones in snapshot
+        if (message.zones) {
+          zoneStore.handleSnapshot(message.zones as import('@/stores/zones').ZoneConfig[])
         }
         break
 
@@ -148,6 +162,18 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
       case 'track_expired':
         if (message.trackId) {
           globalTrackStore.removeTrack(message.trackId)
+        }
+        break
+
+      case 'zone_violation':
+        if (message.violation) {
+          zoneStore.handleZoneViolation(message.violation as import('@/stores/zones').ZoneViolation)
+        }
+        break
+
+      case 'zones_updated':
+        if (message.zones) {
+          zoneStore.handleZonesUpdated(message.zones as import('@/stores/zones').ZoneConfig[])
         }
         break
 

@@ -13,10 +13,13 @@ import { logProjectionFailure } from '../api/routes.js'
 import { getPipelineLogger } from '../debug/pipeline-logger.js'
 import type { SiteMapObstacle } from '../config/sitemap-loader.js'
 import { isPointInsideAnyObstacle } from '../geometry/obstacles.js'
+import type { ZoneManager } from '../zones/zone-manager.js'
 
 const MIN_CONFIDENCE = 0.7
 const IMAGE_WIDTH = 1920
 const IMAGE_HEIGHT = 1080
+// Threshold to detect camera restart (frame number reset)
+const FRAME_JUMP_BACKWARD_THRESHOLD = 10
 
 export class DetectionProcessor {
   private lastProcessedFrames: Map<string, number> = new Map()
@@ -29,11 +32,20 @@ export class DetectionProcessor {
   /** Tables/furniture that block view (used for occlusion-based position adjustment) */
   private viewBlockingObstacles: SiteMapObstacle[] = []
   private obstacleFilterCount: number = 0
+  /** Zone manager for clearing zone states on camera restart */
+  private zoneManager?: ZoneManager
 
   constructor(
     private trackManager: TrackManager,
     private cameraRegistry: CameraRegistry
   ) {}
+
+  /**
+   * Set zone manager for camera restart detection
+   */
+  setZoneManager(zoneManager: ZoneManager): void {
+    this.zoneManager = zoneManager
+  }
 
   /**
    * Set obstacles for detection filtering and occlusion detection
@@ -76,9 +88,17 @@ export class DetectionProcessor {
   processMessage(message: DetectionMessage): GlobalTrack[] {
     const cameraId = this.cameraRegistry.normalizeCameraId(message.camera_id)
 
-    // Skip if we've already processed this frame
+    // Check for frame number changes
     const lastFrame = this.lastProcessedFrames.get(cameraId) ?? -1
-    if (message.frame_number <= lastFrame) {
+
+    // Detect camera restart: frame number jumped backward significantly
+    if (lastFrame > 0 && message.frame_number < lastFrame - FRAME_JUMP_BACKWARD_THRESHOLD) {
+      console.log(`[DetectionProcessor] Camera ${cameraId} appears to have restarted (frame ${message.frame_number} < ${lastFrame}). Resetting zone states.`)
+      this.zoneManager?.resetAllStates()
+    }
+
+    // Skip if we've already processed this frame (unless camera restarted)
+    if (message.frame_number <= lastFrame && message.frame_number >= lastFrame - FRAME_JUMP_BACKWARD_THRESHOLD) {
       return []
     }
     this.lastProcessedFrames.set(cameraId, message.frame_number)
