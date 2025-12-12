@@ -111,6 +111,8 @@ export class TrackManager {
   private trackMerger: TrackMerger
   /** Per-camera frame tracking for frame-based missed detection */
   private cameraFrameTrackers: Map<string, CameraFrameTracker> = new Map()
+  /** Last detection timestamp processed (used to keep a consistent time base) */
+  private lastDetectionTimestamp: number | null = null
 
   /** Sitemap geometry for exit detection */
   private siteMapGeometry?: {
@@ -211,7 +213,7 @@ export class TrackManager {
     const track = this.tracks.get(globalTrackId)
     if (!track) return []
 
-    const now = this.clock()
+    const now = this.lastDetectionTimestamp ?? this.clock()
     const activeCameras: string[] = []
 
     track.cameraAssociations.forEach((assoc, cameraId) => {
@@ -237,7 +239,8 @@ export class TrackManager {
     worldY: number,
     confidence: number
   ): GlobalTrack {
-    const now = this.clock()
+    const now = this.lastDetectionTimestamp ?? this.clock()
+    this.lastDetectionTimestamp = now
     const detection: CameraDetection = {
       cameraId,
       trackId,
@@ -287,7 +290,7 @@ export class TrackManager {
    * Cleanup expired tracks with occlusion state handling
    */
   cleanupExpiredTracks(): void {
-    const now = this.clock()
+    const now = this.lastDetectionTimestamp ?? this.clock()
     const maxTracks = 200
     const unconfirmedExpiryMs = this.config.unconfirmedTrackExpiryMs ?? 2000
     const occlusionCoastTimeMs = this.config.occlusionCoastTimeMs ?? 2000
@@ -311,21 +314,24 @@ export class TrackManager {
       if (track.state === 'confirmed') {
         const missedFrameThreshold = this.config.missedFramesBeforeOcclusion ?? 5
 
-        // Calculate missed frames based on actual camera frame numbers
-        let totalMissedFrames = 0
+        // Calculate missed frames based on actual camera frame numbers.
+        // Use the *minimum* missed frames across cameras so a multi-camera track
+        // does not become occluded while at least one camera still sees it.
+        const perCameraMissed: number[] = []
         for (const [cameraId, assoc] of track.cameraAssociations) {
           const cameraTracker = this.cameraFrameTrackers.get(cameraId)
           if (cameraTracker && assoc.lastFrameNumber !== undefined) {
-            // Count frames missed since last detection from this camera
             const framesMissed = cameraTracker.lastFrameNumber - assoc.lastFrameNumber
-            if (framesMissed > 0) {
-              totalMissedFrames = Math.max(totalMissedFrames, framesMissed)
-            }
+            perCameraMissed.push(Math.max(0, framesMissed))
           }
         }
 
+        let totalMissedFrames = perCameraMissed.length > 0
+          ? Math.min(...perCameraMissed)
+          : 0
+
         // Fall back to time-based detection if no frame info available
-        if (totalMissedFrames === 0 && timeSinceLastSeen > 100) {
+        if (perCameraMissed.length === 0 && timeSinceLastSeen > 100) {
           totalMissedFrames = Math.floor(timeSinceLastSeen / 100)  // Assume ~10fps
         }
 
@@ -366,11 +372,12 @@ export class TrackManager {
           ? getTimeoutForExitReason(track.exitReason ?? 'timeout', this.config)
           : occlusionCoastTimeMs
 
-        // Update predicted position for pillar-occluded tracks (ghost track)
-        if (track.exitReason === 'pillar_occlusion' && track.isActive) {
+        // Update predicted position for all occluded tracks (ghost track)
+        if (track.isActive) {
           const predicted = this.getPredictedPosition(track, timeSinceOcclusion)
           if (predicted) {
             track.predictedPosition = predicted
+            track.currentPosition = predicted
             // Notify listeners so frontend can update ghost track
             this.onTrackUpdated?.(track)
           }
@@ -434,6 +441,7 @@ export class TrackManager {
     this.nextTrackId = 1
     this.kalmanFilter.clearCache()
     this.zoneManager?.resetAllStates()
+    this.lastDetectionTimestamp = null
   }
 
   /**
@@ -552,7 +560,7 @@ export class TrackManager {
   ): GlobalTrack | null {
     let bestMatch: GlobalTrack | null = null
     let bestDistance = this.config.correlationDistanceM
-    const now = this.clock()
+    const now = this.lastDetectionTimestamp ?? this.clock()
 
     for (const track of this.tracks.values()) {
       if (!track.isActive) continue
@@ -1016,12 +1024,26 @@ export class TrackManager {
     // Velocity sanity check
     const timeDelta = (detection.timestamp - track.lastSeen) / 1000
     if (timeDelta > 0.01) {
-      const distance = calculateDistance(
-        { x: detection.worldX, y: detection.worldY },
-        track.currentPosition
-      )
+      const detPos = { x: detection.worldX, y: detection.worldY }
+
+      let distance = calculateDistance(detPos, track.currentPosition)
+
+      // Use predicted position for a fairer velocity estimate when possible.
+      if (track.kalmanState) {
+        const predictedPos = this.kalmanFilter.predict(
+          track.kalmanState,
+          detection.timestamp - track.lastSeen
+        )
+        const predictedDistance = calculateDistance(detPos, predictedPos)
+        distance = Math.min(distance, predictedDistance)
+      }
+
       const velocity = distance / timeDelta
-      if (velocity > this.config.maxVelocityMs) {
+      const baseMaxVelocity = this.config.maxVelocityMs
+      const effectiveMaxVelocity = track.state === 'occluded'
+        ? baseMaxVelocity * 1.5
+        : baseMaxVelocity
+      if (velocity > effectiveMaxVelocity) {
         return false
       }
     }
@@ -1090,6 +1112,9 @@ export class TrackManager {
   }
 
   private processPendingMerge(track: GlobalTrack, now: number): void {
+    const previousPosition = track.currentPosition
+    const previousKalmanTimestamp = track.kalmanState?.lastTimestamp ?? track.lastSeen
+
     const recentDetections = track.pendingDetections.filter(
       det => now - det.timestamp < this.config.mergeWindowMs
     )
@@ -1112,6 +1137,20 @@ export class TrackManager {
       // Use Kalman-filtered position for smoother tracking
       const filteredPosition = this.kalmanFilter.getPosition(track.kalmanState)
       merged.position = filteredPosition
+    }
+
+    // Clamp unrealistically large position jumps to reduce visible teleporting.
+    const dtSec = (now - previousKalmanTimestamp) / 1000
+    if (dtSec > 0) {
+      const movedDistance = calculateDistance(merged.position, previousPosition)
+      const maxStep = (this.config.maxVelocityMs * dtSec * 1.5) + 0.3
+      if (movedDistance > maxStep) {
+        const scale = maxStep / movedDistance
+        merged.position = {
+          x: previousPosition.x + (merged.position.x - previousPosition.x) * scale,
+          y: previousPosition.y + (merged.position.y - previousPosition.y) * scale,
+        }
+      }
     }
 
     const lastTrailPos = track.trail[0]
@@ -1162,7 +1201,15 @@ export class TrackManager {
   processBatchDetections(detections: CameraDetection[]): GlobalTrack[] {
     if (detections.length === 0) return []
 
-    const now = this.clock()
+    // Use detection timestamps as the primary time base for filtering and Kalman updates.
+    // This keeps behavior consistent for both live (epoch) and replay (relative) streams.
+    const nowFromDetections = detections.reduce((max, d) =>
+      d.timestamp > max ? d.timestamp : max
+    , -Infinity)
+    const now = Number.isFinite(nowFromDetections)
+      ? nowFromDetections
+      : (this.lastDetectionTimestamp ?? this.clock())
+    this.lastDetectionTimestamp = now
     const activeTracks = this.getAllActiveTracks()
 
     // === PRE-HUNGARIAN CLUSTERING ===
@@ -1195,7 +1242,7 @@ export class TrackManager {
     }
 
     // Use Hungarian algorithm for optimal assignment with virtual detections
-    const { matches, unmatchedDetections } = assignDetectionsToTracks(
+    const { matches, unmatchedDetections, unmatchedTracks } = assignDetectionsToTracks(
       virtualDetections,
       activeTracks,
       {
@@ -1317,11 +1364,63 @@ export class TrackManager {
       results.push(newTrack)
     }
 
+    // Coast unmatched confirmed tracks using Kalman prediction to avoid brief disappearances
+    this.coastUnmatchedTracks(unmatchedTracks, now)
+
     // Post-batch merge detection: Find and merge duplicate tracks
     // This catches duplicates that slipped through initial clustering
     this.detectAndMergeDuplicates()
 
     return results
+  }
+
+  /**
+   * Coast unmatched confirmed tracks forward using Kalman prediction.
+   * This keeps tracks from freezing/disappearing during brief dropouts and
+   * reduces visible teleporting when detections resume.
+   */
+  private coastUnmatchedTracks(unmatchedTracks: GlobalTrack[], now: number): void {
+    if (!unmatchedTracks || unmatchedTracks.length === 0) return
+
+    const maxCoastMs = this.config.occlusionCoastTimeMs ?? 7000
+
+    for (const track of unmatchedTracks) {
+      if (!track.isActive || !track.isConfirmed) continue
+
+      const dtMs = now - track.lastSeen
+      if (dtMs <= 50 || dtMs > maxCoastMs) continue
+
+      let predictedPos: Point2D | null = null
+      if (track.kalmanState) {
+        predictedPos = this.kalmanFilter.predict(track.kalmanState, dtMs)
+      } else if (track.trail.length >= 2) {
+        predictedPos = predictPosition(track.trail, dtMs)
+      }
+
+      if (!predictedPos) continue
+
+      track.predictedPosition = predictedPos
+      // Advance position for occluded tracks, and for very short gaps on confirmed tracks
+      // to avoid flicker/teleport on the next detection.
+      const shortGapMs = 500
+      if (track.state === 'occluded' || (track.state === 'confirmed' && dtMs <= shortGapMs)) {
+        track.currentPosition = predictedPos
+
+        const lastTrailPos = track.trail[0]
+        const movedDistance = lastTrailPos
+          ? calculateDistance(predictedPos, lastTrailPos)
+          : Infinity
+
+        if (movedDistance > 0.1 || track.trail.length === 0) {
+          track.trail.unshift({ x: predictedPos.x, y: predictedPos.y, timestamp: now })
+          if (track.trail.length > this.config.maxTrailLength) {
+            track.trail = track.trail.slice(0, this.config.maxTrailLength)
+          }
+        }
+
+        this.onTrackUpdated?.(track)
+      }
+    }
   }
 
   /**
@@ -1397,7 +1496,7 @@ export class TrackManager {
       if (assoc && !hasExactSameCameraId) {
         effectiveMultiplier = Math.min(gateMultiplier, 2.0)
       } else if (!assoc) {
-        effectiveMultiplier = Math.min(gateMultiplier, 2.5)
+        effectiveMultiplier = Math.min(gateMultiplier, 3.0)
       }
 
       const maxDistance = this.config.correlationDistanceM * effectiveMultiplier

@@ -253,7 +253,7 @@ function simulateTracking(
     const messages: DetectionMessage[] = framesWithDetections.map(({ cameraId, frame }) => ({
       camera_id: cameraId,
       frame_number: frame.frame_number,
-      timestamp: frame.timestamp * 1000, // Convert to ms
+      timestamp: frame.timestamp, // DetectionProcessor converts seconds -> ms
       detection_count: frame.detections.length,
       detections: frame.detections.map(det => ({
         class_name: det.class_name,
@@ -636,9 +636,9 @@ describe('Track Identity Evaluation', () => {
     })
   })
 
-  describe('Track Retention Ratio', () => {
+  describe('Track Persistence Ratio', () => {
     it('measures how much of each person stays in one global ID', () => {
-      console.log('\n--- Track Retention Ratio ---')
+      console.log('\n--- Track Persistence Ratio ---')
       console.log(`  Avg retention: ${(metrics.avgRetentionRatio * 100).toFixed(1)}%`)
       console.log(`  (longest global fragment duration / total duration)`)
 
@@ -806,7 +806,7 @@ describe('Track Identity Evaluation', () => {
           lowerIsBetter: false,
         },
         {
-          name: 'Track Retention Ratio',
+          name: 'Track Persistence Ratio',
           value: metrics.avgRetentionRatio,
           target: 0.70,
           format: (v: number) => `${(v * 100).toFixed(1)}%`,

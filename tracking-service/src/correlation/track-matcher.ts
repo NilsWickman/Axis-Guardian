@@ -151,7 +151,7 @@ export function mergeWorldPositions(
   const regionPref = getRegionCameraPreference(centroid)
 
   // Calculate distance between camera projections
-  const DIVERGENCE_THRESHOLD = 0.6 // meters
+  const DIVERGENCE_THRESHOLD = 0.8 // meters (avoid flip-flopping between cameras)
   let maxDistance = 0
   for (let i = 0; i < detections.length; i++) {
     for (let j = i + 1; j < detections.length; j++) {

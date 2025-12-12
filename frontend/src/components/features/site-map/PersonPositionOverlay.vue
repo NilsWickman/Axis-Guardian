@@ -93,7 +93,7 @@ const interpolationStates = new Map<string, InterpolationState>()
 
 // Time-based smoothing constant (seconds to reach ~63% of target)
 // Lower = snappier, higher = smoother
-const SMOOTH_TIME = 0.12
+const SMOOTH_TIME = 0.2
 let lastFrameTime = 0
 
 // Computed data from global track store
