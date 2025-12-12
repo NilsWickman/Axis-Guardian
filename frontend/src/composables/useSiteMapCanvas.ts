@@ -15,6 +15,30 @@ export interface CanvasRenderOptions {
   pixelsPerMeter: number // Note: This is used for display but internal is always RENDER_SCALE
 }
 
+// Helper to get CSS variable value as a color string
+const getCssColor = (varName: string, fallback: string): string => {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(varName).trim()
+  return value || fallback
+}
+
+// Canvas theme colors - reads from CSS variables
+const getCanvasColors = () => ({
+  gridMajor: getCssColor('--canvas-grid-major', '#4a4a5e'),
+  gridMinor: getCssColor('--canvas-grid-minor', '#3a3a4e'),
+  gridSubtle: getCssColor('--canvas-grid-subtle', '#2a2a3e'),
+  text: getCssColor('--canvas-text', '#ffffff'),
+  textMuted: getCssColor('--canvas-text-muted', '#9a9aae'),
+  wallExternal: getCssColor('--canvas-wall-external', '#ffffff'),
+  wallInternal: getCssColor('--canvas-wall-internal', '#cccccc'),
+  wallDoor: getCssColor('--canvas-wall-door', '#60a5fa'),
+  legendBg: getCssColor('--canvas-legend-bg', 'rgba(0, 0, 0, 0.9)'),
+  legendText: getCssColor('--canvas-legend-text', '#ffffff'),
+  scaleLine: getCssColor('--canvas-scale-line', '#ffffff'),
+  highlight: getCssColor('--canvas-highlight', '#06b6d4'),
+  hover: getCssColor('--canvas-hover', '#f59e0b'),
+  selected: getCssColor('--canvas-selected', '#06b6d4'),
+})
+
 // Tailwind color map for canvas rendering
 const TAILWIND_COLORS: Record<string, string> = {
   'red-400': '#f87171',
@@ -160,6 +184,7 @@ export function useSiteMapCanvas(
     // Always use RENDER_SCALE for grid rendering
     const pixelsPerMeter = RENDER_SCALE
     const context = ctx.value
+    const colors = getCanvasColors()
 
     context.save()
 
@@ -176,13 +201,13 @@ export function useSiteMapCanvas(
       const isMinorMajorLine = meters % 5 === 0  // Minor major every 5m
 
       if (isMajorLine) {
-        context.strokeStyle = '#4a4a5e'
+        context.strokeStyle = colors.gridMajor
         context.lineWidth = 3
       } else if (isMinorMajorLine) {
-        context.strokeStyle = '#3a3a4e'
+        context.strokeStyle = colors.gridMinor
         context.lineWidth = 2
       } else {
-        context.strokeStyle = '#2a2a3e'
+        context.strokeStyle = colors.gridSubtle
         context.lineWidth = 1
       }
 
@@ -193,7 +218,7 @@ export function useSiteMapCanvas(
 
       // Draw labels on major lines
       if (isMajorLine && meters > 0) {
-        context.fillStyle = '#9a9aae'
+        context.fillStyle = colors.textMuted
         context.font = 'bold 14px monospace'
         context.textAlign = 'center'
         context.fillText(`${meters}m`, x, 20)
@@ -207,13 +232,13 @@ export function useSiteMapCanvas(
       const isMinorMajorLine = meters % 5 === 0
 
       if (isMajorLine) {
-        context.strokeStyle = '#4a4a5e'
+        context.strokeStyle = colors.gridMajor
         context.lineWidth = 3
       } else if (isMinorMajorLine) {
-        context.strokeStyle = '#3a3a4e'
+        context.strokeStyle = colors.gridMinor
         context.lineWidth = 2
       } else {
-        context.strokeStyle = '#2a2a3e'
+        context.strokeStyle = colors.gridSubtle
         context.lineWidth = 1
       }
 
@@ -224,7 +249,7 @@ export function useSiteMapCanvas(
 
       // Draw labels on major lines
       if (isMajorLine && meters > 0) {
-        context.fillStyle = '#9a9aae'
+        context.fillStyle = colors.textMuted
         context.font = 'bold 14px monospace'
         context.textAlign = 'left'
         context.fillText(`${meters}m`, 8, y - 5)
@@ -237,11 +262,11 @@ export function useSiteMapCanvas(
     const legendSize = pixelsPerMeter
 
     // Draw background for legend
-    context.fillStyle = 'rgba(0, 0, 0, 0.9)'
+    context.fillStyle = colors.legendBg
     context.fillRect(legendX - 5, legendY - 30, legendSize + 80, 60)
 
     // Draw 1-meter reference line
-    context.strokeStyle = '#ffffff'
+    context.strokeStyle = colors.scaleLine
     context.lineWidth = 3
     context.beginPath()
     context.moveTo(legendX, legendY)
@@ -257,13 +282,13 @@ export function useSiteMapCanvas(
     context.stroke()
 
     // Draw label
-    context.fillStyle = '#ffffff'
+    context.fillStyle = colors.legendText
     context.font = 'bold 14px monospace'
     context.textAlign = 'center'
     context.fillText('1 METER', legendX + legendSize / 2, legendY + 20)
 
     // Add canvas dimensions info
-    context.fillStyle = '#aaaaaa'
+    context.fillStyle = colors.textMuted
     context.font = '11px monospace'
     context.fillText(`${widthInMeters}m × ${heightInMeters}m`, legendX + legendSize / 2, legendY + 35)
 
@@ -276,6 +301,7 @@ export function useSiteMapCanvas(
 
     const context = ctx.value
     const { pixelsPerMeter } = options.value
+    const colors = getCanvasColors()
 
     context.save()
 
@@ -284,8 +310,8 @@ export function useSiteMapCanvas(
     const barHeight = 40
     const barY = canvas.height - barHeight
 
-    // Top border - white
-    context.strokeStyle = '#ffffff'
+    // Top border
+    context.strokeStyle = colors.scaleLine
     context.lineWidth = 2
     context.beginPath()
     context.moveTo(0, barY)
@@ -301,9 +327,9 @@ export function useSiteMapCanvas(
     else if (numTicks > 20) meterInterval = 2
     else if (numTicks < 5) meterInterval = 0.5
 
-    // Draw ticks and labels - white
-    context.strokeStyle = '#ffffff'
-    context.fillStyle = '#ffffff'
+    // Draw ticks and labels
+    context.strokeStyle = colors.scaleLine
+    context.fillStyle = colors.scaleLine
     context.font = '11px monospace'
     context.textAlign = 'center'
     context.lineWidth = 1.5
@@ -340,6 +366,7 @@ export function useSiteMapCanvas(
     if (!ctx.value || !walls || walls.length === 0) return
 
     const context = ctx.value
+    const colors = getCanvasColors()
 
     context.save()
 
@@ -356,19 +383,19 @@ export function useSiteMapCanvas(
 
       // Wall styling based on type (fixed line widths)
       const wallStyles = {
-        external: { color: '#ffffff', width: 6 },
-        internal: { color: '#cccccc', width: 4 },
-        door: { color: '#60a5fa', width: 3 },
+        external: { color: colors.wallExternal, width: 6 },
+        internal: { color: colors.wallInternal, width: 4 },
+        door: { color: colors.wallDoor, width: 3 },
       }
 
       const style = wallStyles[type] || wallStyles.internal
 
       // Highlight selected or hovered wall
       if (isSelected) {
-        context.strokeStyle = '#06b6d4' // cyan-500
+        context.strokeStyle = colors.selected
         context.lineWidth = style.width + 4
       } else if (isHovered) {
-        context.strokeStyle = '#f59e0b' // amber-500 for hover
+        context.strokeStyle = colors.hover
         context.lineWidth = style.width + 3
       } else {
         context.strokeStyle = style.color
@@ -382,7 +409,7 @@ export function useSiteMapCanvas(
         // Draw door as a dashed line
         context.setLineDash([8, 6])
         if (!isSelected && !isHovered) {
-          context.strokeStyle = '#60a5fa'
+          context.strokeStyle = colors.wallDoor
         }
       } else {
         context.setLineDash([])
@@ -400,7 +427,7 @@ export function useSiteMapCanvas(
         // Draw larger endpoint handles
         context.strokeStyle = '#1e293b' // slate-800
         context.lineWidth = 2
-        context.fillStyle = '#06b6d4' // cyan-500
+        context.fillStyle = colors.selected
 
         // Start endpoint
         context.beginPath()
@@ -417,7 +444,7 @@ export function useSiteMapCanvas(
 
       // Draw hover feedback for endpoints when in edit mode
       if (isHovered && hoveredPart) {
-        context.fillStyle = 'rgba(245, 158, 11, 0.5)' // Semi-transparent amber-500
+        context.fillStyle = `${colors.hover}80` // Semi-transparent hover color
 
         if (hoveredPart === 'start') {
           // Highlight start endpoint
@@ -426,7 +453,7 @@ export function useSiteMapCanvas(
           context.fill()
 
           // Draw label
-          context.fillStyle = '#ffffff'
+          context.fillStyle = colors.text
           context.font = 'bold 11px sans-serif'
           context.textAlign = 'center'
           context.textBaseline = 'middle'
@@ -438,7 +465,7 @@ export function useSiteMapCanvas(
           context.fill()
 
           // Draw label
-          context.fillStyle = '#ffffff'
+          context.fillStyle = colors.text
           context.font = 'bold 11px sans-serif'
           context.textAlign = 'center'
           context.textBaseline = 'middle'
@@ -462,6 +489,7 @@ export function useSiteMapCanvas(
     if (!ctx.value) return
 
     const context = ctx.value
+    const colors = getCanvasColors()
 
     context.save()
 
@@ -472,9 +500,9 @@ export function useSiteMapCanvas(
     const endY = metersToPixels(end.y)
 
     const wallStyles = {
-      external: { color: '#ffffff', width: 6 },
-      internal: { color: '#cccccc', width: 4 },
-      door: { color: '#60a5fa', width: 3 },
+      external: { color: colors.wallExternal, width: 6 },
+      internal: { color: colors.wallInternal, width: 4 },
+      door: { color: colors.wallDoor, width: 3 },
     }
 
     const style = wallStyles[wallType] || wallStyles.internal
