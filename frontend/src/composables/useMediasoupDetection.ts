@@ -74,9 +74,7 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
       'LiveDetectionView',
       'WebRTCDetectionView',
       'SnapshotView',
-      'FocusView',
-      'TimelineView',
-      'CameraManagement'
+      'FocusView'
     ]
     return router.currentRoute.value.name && cameraRoutes.includes(router.currentRoute.value.name as string)
   }

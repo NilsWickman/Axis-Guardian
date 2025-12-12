@@ -379,11 +379,10 @@ onMounted(async () => {
   await loadSiteMap()
 
   if (currentMap.value) {
+    // Calculate fit-to-view scale FIRST to avoid layout shift
+    fitToView()
     resizeCanvas()
     drawMap()
-    setTimeout(() => {
-      fitToView()
-    }, 100)
   }
 
   window.addEventListener('resize', handleResize)

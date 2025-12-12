@@ -36,6 +36,7 @@ import {
   type CameraConfig,
   type RoomBounds,
 } from '../geometry/fov-geometry.js'
+import { getMetrics } from '../metrics/index.js'
 
 /**
  * Cluster of detections from different cameras that likely represent same person
@@ -304,9 +305,40 @@ export class TrackManager {
     for (const [trackId, track] of this.tracks.entries()) {
       const timeSinceLastSeen = now - track.lastSeen
 
-      // Handle unconfirmed tracks - expire faster
+      // Handle unconfirmed tracks - check for pillar occlusion before expiring
       if (track.state === 'unconfirmed') {
         if (timeSinceLastSeen > unconfirmedExpiryMs) {
+          // Before deleting, check if track might be behind a pillar
+          // This prevents losing tracks of people who enter and quickly go behind obstacles
+          if (this.siteMapGeometry && track.detectionCount >= 1) {
+            const velocity = this.getTrackVelocity(track)
+            const exitResult = classifyExitReason(
+              track.currentPosition,
+              velocity,
+              this.siteMapGeometry.cameras,
+              this.siteMapGeometry.obstacles,
+              this.siteMapGeometry.roomBounds
+            )
+
+            // If track disappeared near a pillar, transition to occluded instead of deleting
+            // Also handle 'timeout' reason which may occur in sparse detection areas
+            if (exitResult.reason === 'pillar_occlusion' || exitResult.reason === 'timeout') {
+              track.state = 'occluded'
+              track.occludedSince = track.lastSeen
+              track.exitReason = exitResult.reason
+
+              // Set predicted position for pillar occlusions
+              if (exitResult.reason === 'pillar_occlusion' && exitResult.predictedExitPoint) {
+                track.predictedPosition = exitResult.predictedExitPoint
+              }
+
+              getMetrics().recordOcclusionStart()
+              // Don't delete - let it coast and potentially be re-identified
+              continue
+            }
+          }
+
+          // Not near a pillar or no geometry - expire normally
           track.isActive = false
           this.releaseColor(track.color)
           this.tracks.delete(trackId)
@@ -348,6 +380,7 @@ export class TrackManager {
           track.state = 'occluded'
           track.occludedSince = track.lastSeen
           track.consecutiveDetections = 0  // Reset for hysteresis on recovery
+          getMetrics().recordOcclusionStart()
 
           // Classify WHY the track disappeared (if geometry is available)
           if (this.siteMapGeometry) {
@@ -396,6 +429,10 @@ export class TrackManager {
           if (track.isActive) {
             track.isActive = false
             this.releaseColor(track.color)
+            // Record expiry metrics
+            const creationTime = track.trail[0]?.timestamp ?? track.lastSeen
+            getMetrics().recordTrackExpired(now - creationTime, track.isConfirmed)
+            getMetrics().recordOcclusionEnd(timeSinceOcclusion, false)
             this.onTrackExpired?.(track)
           }
         }
@@ -406,6 +443,9 @@ export class TrackManager {
         if (track.isActive) {
           track.isActive = false
           this.releaseColor(track.color)
+          // Record expiry metrics
+          const creationTime = track.trail[0]?.timestamp ?? track.lastSeen
+          getMetrics().recordTrackExpired(now - creationTime, track.isConfirmed)
           this.onTrackExpired?.(track)
         }
 
@@ -669,6 +709,7 @@ export class TrackManager {
       // For confirmed tracks, use standard exclusion radius
       if (track.isConfirmed) {
         if (distance < confirmedExclusionRadius) {
+          getMetrics().recordExclusionZoneBlock()
           return true
         }
         continue
@@ -692,12 +733,14 @@ export class TrackManager {
         const timeSinceUpdate = timestamp - track.lastSeen
         if (timeSinceUpdate < crossCameraExclusionTimeMs && distance < crossCameraExclusionRadius) {
           // Very recent track from different camera, very close - likely duplicate
+          getMetrics().recordCrossCameraExclusionBlock()
           return true
         }
       }
 
       // Standard unconfirmed exclusion radius for different cameras
       if (distance < unconfirmedExclusionRadius) {
+        getMetrics().recordExclusionZoneBlock()
         return true
       }
     }
@@ -905,6 +948,24 @@ export class TrackManager {
       return { detections: cluster.detections, centroid: merged.position }
     })
 
+    // Record clustering metrics
+    for (const cluster of finalized) {
+      // Calculate max internal distance for multi-detection clusters
+      let maxInternalDistance = 0
+      if (cluster.detections.length > 1) {
+        for (let i = 0; i < cluster.detections.length; i++) {
+          for (let j = i + 1; j < cluster.detections.length; j++) {
+            const dist = calculateDistance(
+              { x: cluster.detections[i].worldX, y: cluster.detections[i].worldY },
+              { x: cluster.detections[j].worldX, y: cluster.detections[j].worldY }
+            )
+            maxInternalDistance = Math.max(maxInternalDistance, dist)
+          }
+        }
+      }
+      getMetrics().recordCluster(cluster.detections.length, maxInternalDistance)
+    }
+
     return finalized
   }
 
@@ -1028,6 +1089,10 @@ export class TrackManager {
     }
 
     this.tracks.set(globalTrackId, track)
+
+    // Record metrics
+    getMetrics().recordTrackCreated()
+
     return track
   }
 
@@ -1085,12 +1150,22 @@ export class TrackManager {
         assoc.lastFrameNumber = detection.frameNumber
       }
     } else {
+      // This is a cross-camera handoff - track is being seen by a new camera
       track.cameraAssociations.set(detection.cameraId, {
         cameraId: detection.cameraId,
         trackIds: [detection.trackId],
         lastSeen: detection.timestamp,
         lastFrameNumber: detection.frameNumber,
       })
+
+      // Record successful handoff metrics
+      const handoffLatency = detection.timestamp - track.lastSeen
+      const handoffDistance = calculateDistance(
+        { x: detection.worldX, y: detection.worldY },
+        track.currentPosition
+      )
+      getMetrics().recordHandoffAttempt()
+      getMetrics().recordSuccessfulHandoff(handoffLatency, handoffDistance)
     }
 
     // Update camera frame tracker
@@ -1111,6 +1186,9 @@ export class TrackManager {
     if (!track.isConfirmed && track.detectionCount >= this.config.minDetectionsToConfirm) {
       track.isConfirmed = true
       track.state = 'confirmed'
+      // Record confirmation metrics - time since track creation
+      const creationTime = track.trail[0]?.timestamp ?? track.lastSeen
+      getMetrics().recordTrackConfirmed(detection.timestamp - creationTime)
     }
 
     // Recover from occlusion with hysteresis (require multiple detections)
@@ -1121,6 +1199,9 @@ export class TrackManager {
       // Only exit occlusion after multiple consecutive detections
       if (track.consecutiveDetections >= detectionsRequired) {
         track.state = 'confirmed'
+        // Record occlusion recovery metrics
+        const occlusionDuration = track.occludedSince ? detection.timestamp - track.occludedSince : 0
+        getMetrics().recordOcclusionEnd(occlusionDuration, true)
         track.occludedSince = undefined
         track.consecutiveDetections = 0
       }
@@ -1225,6 +1306,8 @@ export class TrackManager {
    * 3. This ensures same-person detections from multiple cameras match to ONE track
    */
   processBatchDetections(detections: CameraDetection[]): GlobalTrack[] {
+    const batchStartTime = performance.now()
+
     if (detections.length === 0) return []
 
     // Use detection timestamps as the primary time base for filtering and Kalman updates.
@@ -1314,8 +1397,10 @@ export class TrackManager {
     }
 
     // Try re-identification for unmatched virtual detections with occluded tracks
+    // Include both confirmed and unconfirmed occluded tracks - unconfirmed tracks
+    // may have transitioned to occluded when disappearing near pillars
     const occludedTracks = this.getAllTracks().filter(
-      t => t.state === 'occluded' && t.isConfirmed
+      t => t.state === 'occluded' && t.isActive
     )
 
     const finalUnmatchedClusters: DetectionCluster[] = []
@@ -1332,8 +1417,8 @@ export class TrackManager {
       // Try re-id with the virtual detection first
       const reidentified = this.attemptReidentification(virtualDet, occludedTracks)
       if (reidentified) {
-        // Restore track from occlusion
-        reidentified.state = 'confirmed'
+        // Restore track from occlusion - preserve confirmation status
+        reidentified.state = reidentified.isConfirmed ? 'confirmed' : 'unconfirmed'
         reidentified.missedFrames = 0
         reidentified.occludedSince = undefined
 
@@ -1398,6 +1483,19 @@ export class TrackManager {
     // Post-batch merge detection: Find and merge duplicate tracks
     // This catches duplicates that slipped through initial clustering
     this.detectAndMergeDuplicates()
+
+    // Record batch processing metrics
+    const batchEndTime = performance.now()
+    getMetrics().recordBatchProcessing(batchEndTime - batchStartTime, detections.length)
+
+    // Update tracks per camera metric
+    const tracksPerCamera: Record<string, number> = {}
+    for (const track of this.getAllActiveTracks()) {
+      for (const cameraId of track.cameraAssociations.keys()) {
+        tracksPerCamera[cameraId] = (tracksPerCamera[cameraId] ?? 0) + 1
+      }
+    }
+    getMetrics().updateTracksPerCamera(tracksPerCamera)
 
     return results
   }
