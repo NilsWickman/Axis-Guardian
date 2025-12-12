@@ -2,7 +2,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, reactive } from 'vue'
 import { useMultiCameraAnnotation } from '@/composables/useMultiCameraAnnotation'
 import { useSiteMapCanvas, type CanvasRenderOptions } from '@/composables/useSiteMapCanvas'
-import { useSiteMapStore } from '@/stores/siteMaps'
+import { useSiteMapConfig } from '@/composables/useSiteMapConfig'
 import { AVAILABLE_VIDEOS } from '@/types/frame-review'
 import { extractValue, metersToPixels, RENDER_SCALE } from '@/utils/siteMapConversion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,9 +12,8 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 // Multi-camera annotation composable
 const annotation = useMultiCameraAnnotation()
 
-// Site map store for floor plan
-const siteMapStore = useSiteMapStore()
-const activeSiteMap = computed(() => siteMapStore.activeSiteMap)
+// Site map config for floor plan
+const { siteMap: activeSiteMap, loadSiteMap } = useSiteMapConfig()
 
 // Camera sources - map AVAILABLE_VIDEOS to camera IDs
 const cameraSources = [
@@ -495,6 +494,9 @@ function stopAnimationLoop(): void {
 onMounted(async () => {
   window.addEventListener('keydown', handleKeydown)
   startAnimationLoop()
+
+  // Load site map configuration
+  await loadSiteMap()
 
   // Initialize cameras when site map is ready
   if (activeSiteMap.value) {

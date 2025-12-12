@@ -9,14 +9,10 @@
     Clock,
     Palette,
     Cctv,
-    Map,
-    MapPin,
     MapPinned,
     Bell,
     Settings,
     Archive,
-    Layers,
-    Box,
     Code,
     Film,
     Crosshair,
@@ -67,27 +63,6 @@
       name: 'Manage Cameras',
       path: '/cameras/manage',
       icon: Cctv,
-    },
-    {
-      name: 'Site Maps',
-      icon: Map,
-      children: [
-        {
-          name: '2D Viewer',
-          path: '/site-maps/map-auditorium/view-2d',
-          icon: Layers,
-        },
-        {
-          name: '3D Viewer',
-          path: '/site-maps/map-auditorium/view-3d',
-          icon: Box,
-        },
-        {
-          name: 'Editor',
-          path: '/site-config',
-          icon: MapPin,
-        },
-      ],
     },
     {
       name: 'Alarms',
@@ -194,7 +169,7 @@
   >
     <!-- Header -->
     <div class="p-6 border-b border-sidebar-border flex items-center justify-center">
-      <!-- <img src="/axis.png" alt="AXIS" class="h-8" /> -->
+      <img src="/Logo.png" alt="Site Sentinel" class="h-16" />
     </div>
 
     <!-- Navigation Items -->

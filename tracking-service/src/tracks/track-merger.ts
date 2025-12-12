@@ -88,9 +88,30 @@ export class TrackMerger {
         // Determine if this is an unconfirmed merge (at least one track unconfirmed)
         const isUnconfirmedMerge = !track1.isConfirmed || !track2.isConfirmed
 
-        // Use tighter distance for unconfirmed tracks
+        const cameras1 = Array.from(track1.cameraAssociations.keys())
+        const cameras2 = Array.from(track2.cameraAssociations.keys())
+        const sharedCameras = cameras1.filter(c => cameras2.includes(c))
+
+        // Allow same-camera merges only for local fragmentation recovery:
+        // one confirmed + one unconfirmed, and the confirmed track is at least 2 frames behind.
+        let allowSameCameraFragmentMerge = false
+        if (sharedCameras.length > 0) {
+          const oneConfirmedOneUnconfirmed = track1.isConfirmed !== track2.isConfirmed
+          if (oneConfirmedOneUnconfirmed && sharedCameras.length === 1) {
+            const camId = sharedCameras[0]
+            const assoc1 = track1.cameraAssociations.get(camId)
+            const assoc2 = track2.cameraAssociations.get(camId)
+            const f1 = assoc1?.lastFrameNumber
+            const f2 = assoc2?.lastFrameNumber
+            if (f1 !== undefined && f2 !== undefined && Math.abs(f1 - f2) >= 2) {
+              allowSameCameraFragmentMerge = true
+            }
+          }
+        }
+
+        // Use tighter distance for unconfirmed merges, except for same-camera fragmentation recovery.
         const effectiveMergeDistance = isUnconfirmedMerge
-          ? this.config.unconfirmedMergeDistanceM
+          ? (allowSameCameraFragmentMerge ? this.config.mergeDistanceM : this.config.unconfirmedMergeDistanceM)
           : this.config.mergeDistanceM
 
         const distance = calculateDistance(
@@ -101,12 +122,9 @@ export class TrackMerger {
         // Quick reject if too far apart
         if (distance > effectiveMergeDistance) continue
 
-        // For unconfirmed tracks, require different cameras (same camera = different people)
-        if (isUnconfirmedMerge) {
-          const cameras1 = Array.from(track1.cameraAssociations.keys())
-          const cameras2 = Array.from(track2.cameraAssociations.keys())
-          const hasOverlap = cameras1.some(c => cameras2.includes(c))
-          if (hasOverlap) continue  // Same camera sees both - different people
+        // For unconfirmed tracks, require different cameras unless this is a fragmentation recovery case.
+        if (isUnconfirmedMerge && sharedCameras.length > 0 && !allowSameCameraFragmentMerge) {
+          continue
         }
 
         const confidence = this.calculateMergeConfidence(track1, track2, distance)
@@ -196,19 +214,30 @@ export class TrackMerger {
     // 4. Camera exclusivity check (CRITICAL)
     const sharedCameras = this.getSharedCameras(track1, track2)
     if (sharedCameras.length > 0) {
-      // Same camera sees both tracks at similar times
-      // This means they CANNOT be the same person
-      // Check if the camera saw them both recently
-      for (const cameraId of sharedCameras) {
-        const assoc1 = track1.cameraAssociations.get(cameraId)
-        const assoc2 = track2.cameraAssociations.get(cameraId)
+      const oneConfirmedOneUnconfirmed = track1.isConfirmed !== track2.isConfirmed
 
-        if (assoc1 && assoc2) {
-          // If both were seen by same camera within 1 second, definitely different people
-          const cameraTimeDiff = Math.abs(assoc1.lastSeen - assoc2.lastSeen)
-          if (cameraTimeDiff < 1000) {
-            return 0 // REJECT merge - same camera sees both
+      if (!oneConfirmedOneUnconfirmed) {
+        // Two confirmed tracks seen by same camera within 1s are different people.
+        for (const cameraId of sharedCameras) {
+          const assoc1 = track1.cameraAssociations.get(cameraId)
+          const assoc2 = track2.cameraAssociations.get(cameraId)
+          if (assoc1 && assoc2) {
+            const cameraTimeDiff = Math.abs(assoc1.lastSeen - assoc2.lastSeen)
+            if (cameraTimeDiff < 1000) {
+              return 0
+            }
           }
+        }
+      } else {
+        // Local fragmentation recovery: allow same-camera merge only if frame gap >= 2.
+        if (sharedCameras.length !== 1) return 0
+        const camId = sharedCameras[0]
+        const assoc1 = track1.cameraAssociations.get(camId)
+        const assoc2 = track2.cameraAssociations.get(camId)
+        const f1 = assoc1?.lastFrameNumber
+        const f2 = assoc2?.lastFrameNumber
+        if (f1 === undefined || f2 === undefined || Math.abs(f1 - f2) < 2) {
+          return 0
         }
       }
     }

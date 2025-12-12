@@ -1,5 +1,5 @@
 import { ref, type Ref } from 'vue'
-import type { CameraPlacement, Wall, Obstacle } from '../stores/siteMaps'
+import type { CameraPlacement, Wall, Obstacle } from '../types/site-map-types'
 import type { ZoneConfig } from '../stores/zones'
 import { calculateVisibleFOV, drawPolygon, type Point, type LineSegment, type CircleObstacle, type RectangleObstacle, type HeightAwareOptions } from './useGeometry'
 import {

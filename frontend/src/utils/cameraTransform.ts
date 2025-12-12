@@ -6,7 +6,7 @@
  */
 
 import type { BoundingBox, Detection } from '../types/generated'
-import type { CameraPlacement } from '../stores/siteMaps'
+import type { CameraPlacement } from '../types/site-map-types'
 import { extractValue } from './siteMapConversion'
 
 export interface Point2D {

@@ -12,7 +12,8 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useDetectionStore } from '../stores/detections'
 import { usePersonPositionStore, type PersonPosition } from '../stores/personPositions'
 import { useGlobalTrackStore } from '../stores/globalTracks'
-import { useSiteMapStore } from '../stores/siteMaps'
+import { loadSiteMapConfig, type SiteMapConfig, type SiteMapConfigCamera } from '../utils/siteMapConfigLoader'
+import type { CameraPlacement } from '../types/site-map-types'
 import type { Detection } from '../types/generated'
 import type { DetectionMetadata } from './useWebRTCDetection'
 import { projectDetectionToWorld } from '../utils/projectionBridge'
@@ -66,6 +67,24 @@ function normalizeCameraId(cameraId: string): string {
   return CAMERA_ID_MAP[cameraId] || cameraId
 }
 
+/**
+ * Convert SiteMapConfigCamera to CameraPlacement format
+ */
+function configCameraToCameraPlacement(camera: SiteMapConfigCamera): CameraPlacement {
+  return {
+    cameraId: camera.id,
+    position: {
+      x: { value: camera.position.x, unit: 'm' },
+      y: { value: camera.position.y, unit: 'm' },
+    },
+    azimuth: { value: camera.azimuth, unit: 'deg' },
+    elevation: { value: camera.elevation ?? 45, unit: 'deg' },
+    height: { value: camera.height, unit: 'm' },
+    fov: { value: camera.fieldOfView, unit: 'deg' },
+    color: camera.color ?? '#3b82f6',
+  }
+}
+
 export function usePersonPositionTracking(options: UsePersonPositionTrackingOptions = {}) {
   const {
     enabled = true,
@@ -77,12 +96,12 @@ export function usePersonPositionTracking(options: UsePersonPositionTrackingOpti
   const detectionStore = useDetectionStore()
   const positionStore = usePersonPositionStore()
   const globalTrackStore = useGlobalTrackStore()
-  const siteMapStore = useSiteMapStore()
 
   const isTracking = ref(enabled)
   const lastProcessedDetectionIds = ref(new Set<string>())
   const lastProcessedFrames = ref(new Map<string, number>()) // Track last processed frame per camera
   const processingError = ref<string | null>(null)
+  const siteMapConfig = ref<SiteMapConfig | null>(null)
 
   let updateInterval: ReturnType<typeof setInterval> | null = null
   let cleanupInterval: ReturnType<typeof setInterval> | null = null
@@ -108,17 +127,17 @@ export function usePersonPositionTracking(options: UsePersonPositionTrackingOpti
       }
       lastProcessedFrames.value.set(normalizedCameraId, metadata.frame_number)
 
-      // Get current site map
-      const siteMap = siteMapStore.activeSiteMap
-      if (!siteMap) {
+      // Get current site map config
+      if (!siteMapConfig.value) {
         return
       }
 
-      // Find camera placement on site map using normalized camera ID
-      const cameraPlacement = siteMap.cameras.find(c => c.cameraId === normalizedCameraId)
-      if (!cameraPlacement) {
+      // Find camera in config using normalized camera ID
+      const configCamera = siteMapConfig.value.cameras.find(c => c.id === normalizedCameraId)
+      if (!configCamera) {
         return
       }
+      const cameraPlacement = configCameraToCameraPlacement(configCamera)
 
       // Filter for person detections only
       const personDetections = metadata.detections.filter(
@@ -208,9 +227,8 @@ export function usePersonPositionTracking(options: UsePersonPositionTrackingOpti
     try {
       processingError.value = null
 
-      // Get current site map
-      const siteMap = siteMapStore.activeSiteMap
-      if (!siteMap) {
+      // Get current site map config
+      if (!siteMapConfig.value) {
         return
       }
 
@@ -241,12 +259,13 @@ export function usePersonPositionTracking(options: UsePersonPositionTrackingOpti
       const newPositions: PersonPosition[] = []
 
       detectionsByCamera.forEach((detections, cameraId) => {
-        // Find camera placement on site map
-        const cameraPlacement = siteMap.cameras.find(c => c.cameraId === cameraId)
-        if (!cameraPlacement) {
-          // Camera not placed on site map, skip
+        // Find camera in config
+        const configCamera = siteMapConfig.value!.cameras.find(c => c.id === cameraId)
+        if (!configCamera) {
+          // Camera not in config, skip
           return
         }
+        const cameraPlacement = configCameraToCameraPlacement(configCamera)
 
         // Transform each detection
         detections.forEach((detection, idx) => {
@@ -320,10 +339,21 @@ export function usePersonPositionTracking(options: UsePersonPositionTrackingOpti
   /**
    * Start tracking person positions
    */
-  function startTracking() {
+  async function startTracking() {
     if (updateInterval) return
 
     isTracking.value = true
+
+    // Load site map config if not already loaded
+    if (!siteMapConfig.value) {
+      try {
+        siteMapConfig.value = await loadSiteMapConfig()
+      } catch (err) {
+        console.error('[PersonPositionTracking] Failed to load site map config:', err)
+        processingError.value = 'Failed to load site map config'
+        return
+      }
+    }
 
     // Process immediately (for detection store mode)
     processDetections()

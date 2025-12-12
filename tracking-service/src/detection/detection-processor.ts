@@ -6,7 +6,11 @@
  */
 
 import type { DetectionMessage, RawDetection, GlobalTrack, CameraDetection, CameraFrameInfo } from '../types.js'
-import { projectDetectionToGround, projectDetectionWithKRT } from '../projection/ground-plane.js'
+import {
+  projectDetectionWithKRT,
+  radToDeg,
+  angleDifference,
+} from '../projection/ground-plane.js'
 import { TrackManager } from '../tracks/track-manager.js'
 import { CameraRegistry } from './camera-registry.js'
 import { logProjectionFailure } from '../api/routes.js'
@@ -135,15 +139,23 @@ export class DetectionProcessor {
       const rawDetectionKey = logger.logRawDetection(cameraId, detection, message.frame_number)
 
       // Project to world coordinates
-      // Try K/R/T projection first (more accurate), fall back to legacy
-      // Pass camera and view-blocking obstacles for table occlusion detection
+      // Project to world coordinates using K/R/T calibration.
+      // Pass camera and view-blocking obstacles for table occlusion detection.
       const calibration = this.cameraRegistry.getCalibration(cameraId)
       let worldPoint: { x: number; y: number }
+      let rawWorldPoint: { x: number; y: number }
       let isValid: boolean
-      let projectionMethod: 'krt' | 'legacy'
+      let projectionMethod: 'krt'
       let projectionReason: string | undefined
 
-      if (calibration) {
+      if (!calibration) {
+        // KRT-only pipeline: without calibration we cannot project.
+        // Log as invalid and skip this detection.
+        rawWorldPoint = { x: NaN, y: NaN }
+        isValid = false
+        projectionMethod = 'krt'
+        projectionReason = 'no_calibration'
+      } else {
         const krtResult = projectDetectionWithKRT(
           bbox,
           calibration,
@@ -153,31 +165,31 @@ export class DetectionProcessor {
           IMAGE_WIDTH,
           IMAGE_HEIGHT
         )
-        worldPoint = krtResult.worldPoint
+        rawWorldPoint = krtResult.worldPoint
         isValid = krtResult.isValid
         projectionMethod = 'krt'
         projectionReason = krtResult.reason
-      } else {
-        const legacyResult = projectDetectionToGround(
-          bbox,
-          camera,
-          this.viewBlockingObstacles,
-          true,
-          IMAGE_WIDTH,
-          IMAGE_HEIGHT
-        )
-        worldPoint = legacyResult.worldPoint
-        isValid = legacyResult.isValid
-        projectionMethod = 'legacy'
-        projectionReason = legacyResult.reason
+
+        // Sanity check against camera azimuth/FOV; if outside, drop rather than falling back.
+        if (isValid) {
+          const dx = rawWorldPoint.x - camera.position.x
+          const dy = rawWorldPoint.y - camera.position.y
+          const angleToPoint = radToDeg(Math.atan2(dx, dy))
+          const diffDeg = Math.abs(angleDifference(angleToPoint, camera.azimuth))
+          const fovMarginDeg = 15
+          if (diffDeg > (camera.fov / 2 + fovMarginDeg)) {
+            isValid = false
+            projectionReason = 'krt_outside_fov'
+          }
+        }
       }
 
       // Apply camera-specific bias correction (from cross-camera evaluation)
       // This compensates for systematic projection errors identified in ground truth analysis
       const biasCorrection = this.cameraRegistry.getBiasCorrection(cameraId)
       worldPoint = {
-        x: worldPoint.x + biasCorrection.x,
-        y: worldPoint.y + biasCorrection.y,
+        x: rawWorldPoint.x + biasCorrection.x,
+        y: rawWorldPoint.y + biasCorrection.y,
       }
 
       // Log projected position (key available for linking in future)
@@ -246,48 +258,17 @@ export class DetectionProcessor {
     // Get camera for occlusion detection
     const camera = this.cameraRegistry.getCamera(normalizedCameraId)
 
-    // Try K/R/T projection first (more accurate)
+    // KRT-only injection: without calibration we cannot project.
     const calibration = this.cameraRegistry.getCalibration(normalizedCameraId)
-    if (calibration) {
-      const result = projectDetectionWithKRT(
-        bbox,
-        calibration,
-        camera,
-        this.viewBlockingObstacles,
-        true,
-        IMAGE_WIDTH,
-        IMAGE_HEIGHT
-      )
-
-      if (!result.isValid) {
-        logProjectionFailure(`track=${trackId}: ${result.reason}`)
-        return null
-      }
-
-      // Apply camera-specific bias correction
-      const biasCorrection = this.cameraRegistry.getBiasCorrection(normalizedCameraId)
-      const correctedX = result.worldPoint.x + biasCorrection.x
-      const correctedY = result.worldPoint.y + biasCorrection.y
-
-      const track = this.trackManager.processDetection(
-        normalizedCameraId,
-        trackId,
-        correctedX,
-        correctedY,
-        confidence
-      )
-
-      return track
-    }
-
-    // Fall back to legacy projection if no K/R/T calibration
-    if (!camera) {
-      if (this.debugCount < 3) console.warn(`Unknown camera: ${cameraId}`)
+    if (!camera || !calibration) {
+      if (this.debugCount < 3) console.warn(`No calibration for camera: ${cameraId}`)
+      logProjectionFailure(`track=${trackId}: no_calibration`)
       return null
     }
 
-    const result = projectDetectionToGround(
+    const result = projectDetectionWithKRT(
       bbox,
+      calibration,
       camera,
       this.viewBlockingObstacles,
       true,
@@ -296,7 +277,7 @@ export class DetectionProcessor {
     )
 
     if (!result.isValid) {
-      logProjectionFailure(`track=${trackId}: ${result.reason}, dist=${result.distance?.toFixed(1)}m`)
+      logProjectionFailure(`track=${trackId}: ${result.reason}`)
       return null
     }
 
@@ -305,15 +286,13 @@ export class DetectionProcessor {
     const correctedX = result.worldPoint.x + biasCorrection.x
     const correctedY = result.worldPoint.y + biasCorrection.y
 
-    const track = this.trackManager.processDetection(
+    return this.trackManager.processDetection(
       normalizedCameraId,
       trackId,
       correctedX,
       correctedY,
       confidence
     )
-
-    return track
   }
 
   /**
@@ -426,11 +405,17 @@ export class DetectionProcessor {
         // Project to world coordinates
         const calibration = this.cameraRegistry.getCalibration(cameraId)
         let worldPoint: { x: number; y: number }
+        let rawWorldPoint: { x: number; y: number }
         let isValid: boolean
-        let projectionMethod: 'krt' | 'legacy'
+        let projectionMethod: 'krt'
         let projectionReason: string | undefined
 
-        if (calibration) {
+        if (!calibration) {
+          rawWorldPoint = { x: NaN, y: NaN }
+          isValid = false
+          projectionMethod = 'krt'
+          projectionReason = 'no_calibration'
+        } else {
           const krtResult = projectDetectionWithKRT(
             bbox,
             calibration,
@@ -440,30 +425,29 @@ export class DetectionProcessor {
             IMAGE_WIDTH,
             IMAGE_HEIGHT
           )
-          worldPoint = krtResult.worldPoint
+          rawWorldPoint = krtResult.worldPoint
           isValid = krtResult.isValid
           projectionMethod = 'krt'
           projectionReason = krtResult.reason
-        } else {
-          const legacyResult = projectDetectionToGround(
-            bbox,
-            camera,
-            this.viewBlockingObstacles,
-            true,
-            IMAGE_WIDTH,
-            IMAGE_HEIGHT
-          )
-          worldPoint = legacyResult.worldPoint
-          isValid = legacyResult.isValid
-          projectionMethod = 'legacy'
-          projectionReason = legacyResult.reason
+
+          if (isValid) {
+            const dx = rawWorldPoint.x - camera.position.x
+            const dy = rawWorldPoint.y - camera.position.y
+            const angleToPoint = radToDeg(Math.atan2(dx, dy))
+            const diffDeg = Math.abs(angleDifference(angleToPoint, camera.azimuth))
+            const fovMarginDeg = 15
+            if (diffDeg > (camera.fov / 2 + fovMarginDeg)) {
+              isValid = false
+              projectionReason = 'krt_outside_fov'
+            }
+          }
         }
 
         // Apply camera-specific bias correction
         const biasCorrection = this.cameraRegistry.getBiasCorrection(cameraId)
         worldPoint = {
-          x: worldPoint.x + biasCorrection.x,
-          y: worldPoint.y + biasCorrection.y,
+          x: rawWorldPoint.x + biasCorrection.x,
+          y: rawWorldPoint.y + biasCorrection.y,
         }
 
         // Log projected position

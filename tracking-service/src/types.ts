@@ -407,7 +407,7 @@ export const DEFAULT_TRACKING_CONFIG: TrackingConfig = {
   mergeWindowMs: 200,
   trackExpiryMs: 10000,            // Tracks expire after 10 seconds without detections
   maxTrailLength: 20,
-  minDetectionsToConfirm: 1,       // Confirm immediately on first detection
+  minDetectionsToConfirm: 3,       // Require 3 detections to confirm (gives merger time to absorb local ID splits)
   maxVelocityMs: 8,               // Human max sprint ~7-8 m/s; prevents teleporting
   unconfirmedTrackExpiryMs: 2000,  // Ghost tracks expire faster
   minCreationConfidence: 0.7,      // Require higher confidence for new tracks

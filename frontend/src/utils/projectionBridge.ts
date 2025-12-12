@@ -6,7 +6,7 @@
  */
 
 import type { Detection, BoundingBox } from '../types/generated'
-import type { CameraPlacement } from '../stores/siteMaps'
+import type { CameraPlacement } from '../types/site-map-types'
 import { extractValue } from './siteMapConversion'
 import {
   projectDetectionToGround as projectBboxToGround,

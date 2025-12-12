@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue'
-import type { CameraPlacement } from '../stores/siteMaps'
+import type { CameraPlacement } from '../types/site-map-types'
 import {
   extractValue,
   createMeterUnit,

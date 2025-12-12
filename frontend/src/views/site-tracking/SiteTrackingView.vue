@@ -126,11 +126,11 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { useSiteMapStore } from '@/stores/siteMaps'
 import { useCameraStore } from '@/stores/cameras'
 import { useGlobalTrackStore } from '@/stores/globalTracks'
 import { useCameraConnectionManager } from '@/composables/useCameraConnectionManager'
 import { useSiteMapCanvas, type CanvasRenderOptions } from '@/composables/useSiteMapCanvas'
+import { useSiteMapConfig } from '@/composables/useSiteMapConfig'
 import { useTrackingServiceWebSocket } from '@/composables/useTrackingServiceWebSocket'
 // Global track store is used by PersonPositionOverlay component
 import { extractValue, metersToPixels, RENDER_SCALE } from '@/utils/siteMapConversion'
@@ -142,31 +142,14 @@ interface Camera {
   name: string
 }
 
-// Stores
-const siteMapStore = useSiteMapStore()
+// Stores and composables
 const cameraStore = useCameraStore()
 const globalTrackStore = useGlobalTrackStore()
+const { siteMap: currentMap, loadSiteMap } = useSiteMapConfig()
 
 // HC3 camera configuration (single camera tracking mode)
 const TRACKED_CAMERA_ID = 'camera1'
 const LOOP_DURATION_SECONDS = 10
-
-const siteMaps = computed(() => siteMapStore.siteMaps)
-
-// Use the active site map from the store, or fall back to the first available
-const currentMap = computed(() => {
-  // First check if there's already an active site map
-  if (siteMapStore.activeSiteMap) {
-    return siteMapStore.activeSiteMap
-  }
-  // Otherwise use the first available site map
-  return siteMaps.value.length > 0 ? siteMaps.value[0] : null
-})
-
-// Set the active site map if not already set
-if (!siteMapStore.activeSiteMapId && siteMaps.value.length > 0) {
-  siteMapStore.setActiveSiteMap(siteMaps.value[0].id)
-}
 
 // Canvas refs
 const mapCanvas = ref<HTMLCanvasElement | null>(null)
@@ -391,6 +374,9 @@ const handleResize = () => {
 
 onMounted(async () => {
   if (!canvas.initCanvas()) return
+
+  // Load site map configuration
+  await loadSiteMap()
 
   if (currentMap.value) {
     resizeCanvas()
