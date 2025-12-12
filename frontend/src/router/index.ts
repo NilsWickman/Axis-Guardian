@@ -31,14 +31,6 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
-    path: '/cameras/frame-review',
-    name: 'FrameReviewView',
-    component: () => import('@/views/camera-views/FrameReviewView.vue'),
-    meta: {
-      title: 'Frame Review',
-    },
-  },
-  {
     path: '/site-tracking',
     name: 'SiteTracking',
     component: () => import('@/views/site-tracking/SiteTrackingView.vue'),
@@ -62,6 +54,14 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/dev/TrackAnnotator.vue'),
     meta: {
       title: 'Track Identity Annotator',
+    },
+  },
+  {
+    path: '/dev/architecture',
+    name: 'Architecture',
+    component: () => import('@/views/dev/ArchitectureView.vue'),
+    meta: {
+      title: 'Architecture',
     },
   },
 ]

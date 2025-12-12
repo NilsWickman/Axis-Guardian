@@ -1,23 +1,23 @@
 <script setup lang="ts">
-  import { ref } from 'vue'
+  import { ref, computed } from 'vue'
   import { useRoute } from 'vue-router'
   import {
     Sun,
     Moon,
     ChevronDown,
     Focus,
-    Palette,
     MapPinned,
     Code,
-    Film,
     Crosshair,
     Users,
     Menu,
     X,
+    GitGraph,
   } from 'lucide-vue-next'
   import { useTheme } from '@/composables/useTheme'
+  import { Switch } from '@/components/ui/switch'
 
-  const props = defineProps<{
+  defineProps<{
     isOpen: boolean
   }>()
 
@@ -27,9 +27,10 @@
   }>()
 
   const route = useRoute()
-  const { currentTheme, setTheme, themes } = useTheme()
-  const isThemeMenuOpen = ref(false)
+  const { currentTheme, toggleTheme } = useTheme()
   const expandedMenus = ref<Set<string>>(new Set())
+
+  const isDarkMode = computed(() => currentTheme.value === 'dark')
 
   interface NavigationItem {
     name: string
@@ -54,11 +55,6 @@
       icon: Code,
       children: [
         {
-          name: 'Frame Review',
-          path: '/cameras/frame-review',
-          icon: Film,
-        },
-        {
           name: 'Ground Truth Annotator',
           path: '/calibration/annotator',
           icon: Crosshair,
@@ -67,6 +63,11 @@
           name: 'Track Annotator',
           path: '/dev/track-annotator',
           icon: Users,
+        },
+        {
+          name: 'Architecture',
+          path: '/dev/architecture',
+          icon: GitGraph,
         },
       ],
     },
@@ -96,21 +97,6 @@
     return false
   }
 
-  const formatThemeName = (theme: string): string => {
-    return theme
-      .split('-')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ')
-  }
-
-  const toggleThemeMenu = () => {
-    isThemeMenuOpen.value = !isThemeMenuOpen.value
-  }
-
-  const selectTheme = (theme: typeof currentTheme.value) => {
-    setTheme(theme)
-    isThemeMenuOpen.value = false
-  }
 </script>
 <template>
   <!-- Mobile Toggle Button -->
@@ -210,44 +196,11 @@
     </nav>
 
     <!-- Theme Switcher -->
-    <div class="px-4 pb-4 relative">
-      <button
-        @click="toggleThemeMenu"
-        class="w-full flex items-center justify-between px-3 py-2 text-xs font-medium rounded-lg transition-colors text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
-        :title="`Select Theme (Current: ${formatThemeName(currentTheme)})`"
-      >
-        <div class="flex items-center">
-          <Palette class="w-4 h-4 mr-2" />
-          {{ formatThemeName(currentTheme) }}
-        </div>
-        <ChevronDown
-          class="w-4 h-4 transition-transform"
-          :class="{ 'rotate-180': isThemeMenuOpen }"
-        />
-      </button>
-
-      <!-- Theme Dropdown -->
-      <div
-        v-show="isThemeMenuOpen"
-        class="absolute bottom-full left-4 right-4 mb-2 bg-popover border border-border rounded-lg shadow-lg overflow-hidden"
-      >
-        <div class="py-1">
-          <button
-            v-for="theme in themes"
-            :key="theme"
-            @click="selectTheme(theme)"
-            class="w-full px-3 py-2 text-xs font-medium text-left transition-colors flex items-center justify-between"
-            :class="
-              currentTheme === theme
-                ? 'bg-accent text-accent-foreground'
-                : 'text-popover-foreground hover:bg-accent/50 hover:text-accent-foreground'
-            "
-          >
-            <span>{{ formatThemeName(theme) }}</span>
-            <Sun v-if="theme === 'light'" class="w-3 h-3" />
-            <Moon v-else-if="theme === 'dark'" class="w-3 h-3" />
-          </button>
-        </div>
+    <div class="px-4 pb-4">
+      <div class="flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground">
+        <Sun class="w-3 h-3" />
+        <Switch :model-value="isDarkMode" @update:model-value="toggleTheme" />
+        <Moon class="w-3 h-3" />
       </div>
     </div>
 
