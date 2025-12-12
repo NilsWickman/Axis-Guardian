@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useWallEditor } from '../useWallEditor';
-import type { Wall } from '../../stores/siteMaps';
+import type { Wall } from '../../types/site-map-types';
 
 describe('useWallEditor', () => {
   let wallEditor: ReturnType<typeof useWallEditor>;

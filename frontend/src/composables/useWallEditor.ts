@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue'
-import type { Wall } from '../stores/siteMaps'
+import type { Wall } from '../types/site-map-types'
 import {
   RENDER_SCALE,
   pixelsToMeters,

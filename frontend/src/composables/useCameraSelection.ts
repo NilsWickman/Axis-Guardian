@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import type { CameraPlacement } from '../stores/siteMaps'
+import type { CameraPlacement } from '../types/site-map-types'
 
 export function useCameraSelection() {
   const selectedCameraIds = ref<Set<string>>(new Set())

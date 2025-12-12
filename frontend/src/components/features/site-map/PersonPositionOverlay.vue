@@ -42,8 +42,9 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useGlobalTrackStore, type GlobalTrack } from '../../../stores/globalTracks'
-import type { SiteMap } from '../../../stores/siteMaps'
+import type { SiteMap } from '../../../composables/useSiteMapConfig'
 import { calculateVelocity } from '../../../utils/trackCorrelation'
+import { extractValue } from '../../../utils/siteMapConversion'
 
 export interface PersonPositionOverlayProps {
   siteMap: SiteMap
@@ -202,12 +203,13 @@ function getGhostInterpolatedPosition(track: GlobalTrack, now: number): { x: num
 
   // Clamp to room boundaries
   const origin = props.siteMap.origin ?? { x: 0, y: 0 }
-  const dimensions = props.siteMap.dimensions
-  if (dimensions) {
+  const mapWidth = extractValue(props.siteMap.width)
+  const mapHeight = extractValue(props.siteMap.height)
+  if (mapWidth && mapHeight) {
     const minX = origin.x
-    const maxX = origin.x + dimensions.width
+    const maxX = origin.x + mapWidth
     const minY = origin.y
-    const maxY = origin.y + dimensions.height
+    const maxY = origin.y + mapHeight
 
     x = Math.max(minX, Math.min(maxX, x))
     y = Math.max(minY, Math.min(maxY, y))

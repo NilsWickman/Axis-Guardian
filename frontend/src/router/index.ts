@@ -62,68 +62,6 @@ const routes: RouteRecordRaw[] = [
       title: 'Site Tracking',
     },
   },
-  // Site Maps - New unified approach
-  {
-    path: '/site-maps',
-    name: 'SiteMapIndex',
-    component: () => import('@/views/site-maps/SiteMapIndex.vue'),
-    meta: {
-      title: 'Site Maps',
-    },
-  },
-  {
-    path: '/site-maps/viewer',
-    redirect: '/site-maps',
-  },
-  {
-    path: '/site-maps/generate',
-    name: 'SiteMapGenerator',
-    component: () => import('@/views/site-maps/SiteMapGenerator.vue'),
-    meta: {
-      title: 'Generate Site Map',
-    },
-  },
-  {
-    path: '/site-maps/:id/view-2d',
-    name: 'SiteMap2DViewer',
-    component: () => import('@/views/site-maps/viewers/SiteMap2DViewer.vue'),
-    meta: {
-      title: '2D Site Map',
-    },
-  },
-  {
-    path: '/site-maps/:id/view-3d',
-    name: 'SiteMap3DViewer',
-    component: () => import('@/views/site-maps/viewers/SiteMap3DViewer.vue'),
-    meta: {
-      title: '3D Site Map',
-    },
-  },
-  {
-    path: '/site-maps/3d-reconstruction',
-    name: 'SiteMap3DReconstruction',
-    component: () => import('@/views/SiteMap3D.vue'),
-    meta: {
-      title: '3D Site Map Reconstruction',
-    },
-  },
-  {
-    path: '/site-maps/:id/edit',
-    name: 'SiteMapEditor',
-    component: () => import('@/views/SiteMapEditor.vue'),
-    meta: {
-      title: 'Edit Site Map',
-    },
-  },
-  // Legacy routes (deprecated, redirect to new)
-  {
-    path: '/site-config',
-    redirect: '/site-maps',
-  },
-  {
-    path: '/generated-site-map',
-    redirect: '/site-maps',
-  },
   // Alarms
   {
     path: '/alarms',

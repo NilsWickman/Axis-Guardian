@@ -1,4 +1,4 @@
-import type { CameraPlacement, Wall } from '../stores/siteMaps'
+import type { CameraPlacement, Wall } from '../types/site-map-types'
 
 export interface ValidationWarning {
   type: 'blocked' | 'too-close' | 'no-coverage'

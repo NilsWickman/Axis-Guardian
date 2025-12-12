@@ -687,7 +687,6 @@ export function applyWorldTransform(point: Point2D, transform: WorldTransform): 
       px += cx[i] * features[i]
       py += cy[i] * features[i]
     }
-
     return { x: px, y: py }
   }
 

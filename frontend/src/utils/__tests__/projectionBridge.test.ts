@@ -11,7 +11,7 @@ import {
   siteMapPixelsToWorld,
   projectDetectionsFromCamera,
 } from '../projectionBridge'
-import type { CameraPlacement } from '../../stores/siteMaps'
+import type { CameraPlacement } from '../../types/site-map-types'
 import type { Detection, BoundingBox } from '../../types/generated'
 import { createMeterUnit, createDegreeUnit } from '../siteMapConversion'
 

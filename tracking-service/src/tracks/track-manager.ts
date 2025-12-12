@@ -29,7 +29,13 @@ import {
   classifyExitReason,
   getTimeoutForExitReason,
 } from '../geometry/exit-detection.js'
-import type { CameraConfig, RoomBounds } from '../geometry/fov-geometry.js'
+import {
+  calculateCombinedFOVPolygons,
+  isPointInAnyFOV,
+  isPointInRoom,
+  type CameraConfig,
+  type RoomBounds,
+} from '../geometry/fov-geometry.js'
 
 /**
  * Cluster of detections from different cameras that likely represent same person
@@ -372,8 +378,10 @@ export class TrackManager {
           ? getTimeoutForExitReason(track.exitReason ?? 'timeout', this.config)
           : occlusionCoastTimeMs
 
-        // Update predicted position for all occluded tracks (ghost track)
-        if (track.isActive) {
+        // Update predicted position ONLY for pillar occlusions (ghost tracks).
+        // For FOV/boundary exits, don't update position - track should freeze at last known location.
+        // This prevents "bouncing" at edges when Kalman prediction drifts beyond boundaries.
+        if (track.isActive && track.exitReason === 'pillar_occlusion') {
           const predicted = this.getPredictedPosition(track, timeSinceOcclusion)
           if (predicted) {
             track.predictedPosition = predicted
@@ -1246,7 +1254,7 @@ export class TrackManager {
       virtualDetections,
       activeTracks,
       {
-        // Use tighter gating; cross-camera re-id handles longer handoffs.
+        // Use tighter gating; re-id handles longer handoffs and local fragmentation.
         maxCost: this.config.correlationDistanceM * 1.2,
         useKalmanPrediction: true,
         associationBonus: 0.2,  // Stronger identity binding
@@ -1383,12 +1391,30 @@ export class TrackManager {
     if (!unmatchedTracks || unmatchedTracks.length === 0) return
 
     const maxCoastMs = this.config.occlusionCoastTimeMs ?? 7000
+    const shortGapMs = 500
+
+    const geometry = this.siteMapGeometry
+    const roomBounds = geometry?.roomBounds
+    const fovPolygons = geometry
+      ? calculateCombinedFOVPolygons(geometry.cameras, geometry.roomBounds)
+      : null
 
     for (const track of unmatchedTracks) {
       if (!track.isActive || !track.isConfirmed) continue
 
       const dtMs = now - track.lastSeen
       if (dtMs <= 50 || dtMs > maxCoastMs) continue
+
+      const isPillarGhost = track.state === 'occluded' && track.exitReason === 'pillar_occlusion'
+
+      // Do not coast non-pillar occlusions (FOV/boundary exits or unknown).
+      // Keeping them moving causes "bouncing" at edges and wrong-direction ghost drift.
+      if (track.state === 'occluded' && !isPillarGhost) {
+        if (track.predictedPosition) {
+          track.predictedPosition = undefined
+        }
+        continue
+      }
 
       let predictedPos: Point2D | null = null
       if (track.kalmanState) {
@@ -1399,11 +1425,27 @@ export class TrackManager {
 
       if (!predictedPos) continue
 
+      // If prediction exits the room or all FOVs, stop ghosting and expire quickly.
+      if (roomBounds && !isPointInRoom(predictedPos, roomBounds, 0)) {
+        if (track.state === 'occluded') {
+          track.exitReason = 'boundary_exit'
+        }
+        track.predictedPosition = undefined
+        continue
+      }
+
+      if (fovPolygons && !isPointInAnyFOV(predictedPos, fovPolygons, 0)) {
+        if (track.state === 'occluded') {
+          track.exitReason = 'fov_exit'
+        }
+        track.predictedPosition = undefined
+        continue
+      }
+
       track.predictedPosition = predictedPos
       // Advance position for occluded tracks, and for very short gaps on confirmed tracks
       // to avoid flicker/teleport on the next detection.
-      const shortGapMs = 500
-      if (track.state === 'occluded' || (track.state === 'confirmed' && dtMs <= shortGapMs)) {
+      if (isPillarGhost || (track.state === 'confirmed' && dtMs <= shortGapMs)) {
         track.currentPosition = predictedPos
 
         const lastTrailPos = track.trail[0]
@@ -1494,7 +1536,16 @@ export class TrackManager {
       // - Cross-camera re-id: medium gate (handoff case)
       let effectiveMultiplier = gateMultiplier
       if (assoc && !hasExactSameCameraId) {
-        effectiveMultiplier = Math.min(gateMultiplier, 2.0)
+        const exitReason = track.exitReason
+        const safeForSameCameraReid =
+          exitReason === undefined ||
+          exitReason === null ||
+          exitReason === 'timeout' ||
+          exitReason === 'pillar_occlusion'
+
+        // Allow a wider gate for same-camera re-ID when the track likely dropped out
+        // rather than exited the FOV/room.
+        effectiveMultiplier = Math.min(gateMultiplier, safeForSameCameraReid ? 3.0 : 2.0)
       } else if (!assoc) {
         effectiveMultiplier = Math.min(gateMultiplier, 3.0)
       }

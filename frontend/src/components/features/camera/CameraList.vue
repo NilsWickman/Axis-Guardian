@@ -27,7 +27,7 @@
 </template>
 
 <script setup lang="ts">
-import type { CameraPlacement } from '@/stores/siteMaps'
+import type { CameraPlacement } from '@/types/site-map-types'
 
 const props = withDefaults(defineProps<{
   cameras: CameraPlacement[]
