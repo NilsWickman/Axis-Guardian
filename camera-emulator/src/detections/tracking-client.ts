@@ -41,6 +41,7 @@ export class TrackingClient {
     const videoTimeMs = (frame.frame_number / this.fps) * 1000
     const rtpTimestamp = frame.frame_number * this.rtpTicksPerFrame
     const dispatchTime = Date.now()
+    const wallTimestampSec = dispatchTime / 1000
 
     try {
       const response = await fetch(`${this.trackingServiceUrl}/api/emulator-detections`, {
@@ -51,7 +52,9 @@ export class TrackingClient {
         body: JSON.stringify({
           camera_id: this.trackingCameraId,
           frame_number: frame.frame_number,
-          timestamp: frame.timestamp,
+          // Use wall-clock timestamp so tracking service expiry works.
+          // Relative video timing is provided separately via video_time_ms/rtp_timestamp.
+          timestamp: wallTimestampSec,
           video_time_ms: videoTimeMs,
           rtp_timestamp: rtpTimestamp,
           dispatch_time: dispatchTime,
