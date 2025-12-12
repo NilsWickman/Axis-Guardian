@@ -652,34 +652,52 @@ export class TrackManager {
    * @param worldY - Y coordinate to check
    * @param cameraId - Optional camera ID of the detection (for same-camera check)
    */
-  private isInExclusionZone(worldX: number, worldY: number, cameraId?: string): boolean {
+  private isInExclusionZone(worldX: number, worldY: number, cameraId?: string, timestamp?: number): boolean {
     const confirmedExclusionRadius = this.config.exclusionRadius ?? 0.5
     const unconfirmedExclusionRadius = this.config.unconfirmedExclusionRadius ?? 0.7
+    const crossCameraExclusionRadius = this.config.crossCameraExclusionRadius ?? 0.5
+    const crossCameraExclusionTimeMs = this.config.crossCameraExclusionTimeMs ?? 200
 
     for (const track of this.tracks.values()) {
       if (!track.isActive) continue
-
-      // For unconfirmed tracks, only apply exclusion for DIFFERENT cameras
-      // Same camera seeing two things close together = two different people
-      if (!track.isConfirmed && cameraId) {
-        const trackCameras = Array.from(track.cameraAssociations.keys())
-        const sameCamera = trackCameras.includes(cameraId)
-        if (sameCamera) {
-          // Same camera - don't block (they're different people)
-          continue
-        }
-      }
-
-      // Use appropriate radius based on track confirmation status
-      const effectiveRadius = track.isConfirmed
-        ? confirmedExclusionRadius
-        : unconfirmedExclusionRadius
 
       const distance = calculateDistance(
         { x: worldX, y: worldY },
         track.currentPosition
       )
-      if (distance < effectiveRadius) {
+
+      // For confirmed tracks, use standard exclusion radius
+      if (track.isConfirmed) {
+        if (distance < confirmedExclusionRadius) {
+          return true
+        }
+        continue
+      }
+
+      // For unconfirmed tracks, apply different logic based on camera relationship
+      const trackCameras = Array.from(track.cameraAssociations.keys())
+      const sameCamera = cameraId ? trackCameras.includes(cameraId) : false
+
+      if (sameCamera) {
+        // Same camera seeing two things close together = two different people
+        // Don't block (they're different people)
+        continue
+      }
+
+      // Cross-camera exclusion: Block duplicate creation when there's a very recent
+      // unconfirmed track from a DIFFERENT camera within a tighter radius.
+      // This catches the case where camera A just created an unconfirmed track
+      // and camera B is about to create a duplicate for the same person.
+      if (timestamp && cameraId) {
+        const timeSinceUpdate = timestamp - track.lastSeen
+        if (timeSinceUpdate < crossCameraExclusionTimeMs && distance < crossCameraExclusionRadius) {
+          // Very recent track from different camera, very close - likely duplicate
+          return true
+        }
+      }
+
+      // Standard unconfirmed exclusion radius for different cameras
+      if (distance < unconfirmedExclusionRadius) {
         return true
       }
     }
@@ -1363,7 +1381,9 @@ export class TrackManager {
       const clusterCameraId = validCluster.detections.length === 1
         ? validCluster.detections[0].cameraId
         : undefined
-      if (this.isInExclusionZone(validCluster.centroid.x, validCluster.centroid.y, clusterCameraId)) {
+      // Get latest timestamp from cluster detections for cross-camera exclusion check
+      const clusterTimestamp = Math.max(...validCluster.detections.map(d => d.timestamp))
+      if (this.isInExclusionZone(validCluster.centroid.x, validCluster.centroid.y, clusterCameraId, clusterTimestamp)) {
         continue
       }
 

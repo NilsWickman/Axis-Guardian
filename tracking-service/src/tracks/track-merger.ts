@@ -34,6 +34,14 @@ export interface TrackMergerConfig {
   unconfirmedMergeDistanceM: number
   /** Min confidence for unconfirmed track merges (lower threshold) */
   unconfirmedMergeConfidenceThreshold: number
+  /** Max distance for cross-camera unconfirmed track merges (expanded for projection variance) */
+  crossCameraMergeDistanceM: number
+  /** Minimum detections for reliable velocity estimate in merge scoring */
+  minDetectionsForVelocity: number
+  /** Bonus for simultaneous detections from different cameras */
+  simultaneousDetectionBonus: number
+  /** Time window (ms) to consider detections simultaneous */
+  simultaneousWindowMs: number
 }
 
 const DEFAULT_MERGER_CONFIG: TrackMergerConfig = {
@@ -42,6 +50,10 @@ const DEFAULT_MERGER_CONFIG: TrackMergerConfig = {
   mergeVelocityThreshold: 2.0,
   unconfirmedMergeDistanceM: 0.4,
   unconfirmedMergeConfidenceThreshold: 0.5,
+  crossCameraMergeDistanceM: 0.9,
+  minDetectionsForVelocity: 3,
+  simultaneousDetectionBonus: 0.15,
+  simultaneousWindowMs: 150,
 }
 
 /**
@@ -92,6 +104,9 @@ export class TrackMerger {
         const cameras2 = Array.from(track2.cameraAssociations.keys())
         const sharedCameras = cameras1.filter(c => cameras2.includes(c))
 
+        // Detect cross-camera merge candidate (tracks from different cameras)
+        const isCrossCameraMerge = sharedCameras.length === 0
+
         // Allow same-camera merges only for local fragmentation recovery:
         // one confirmed + one unconfirmed, and the confirmed track is at least 2 frames behind.
         let allowSameCameraFragmentMerge = false
@@ -109,10 +124,18 @@ export class TrackMerger {
           }
         }
 
-        // Use tighter distance for unconfirmed merges, except for same-camera fragmentation recovery.
-        const effectiveMergeDistance = isUnconfirmedMerge
-          ? (allowSameCameraFragmentMerge ? this.config.mergeDistanceM : this.config.unconfirmedMergeDistanceM)
-          : this.config.mergeDistanceM
+        // Use expanded distance for cross-camera unconfirmed merges (projection variance)
+        // Use tighter distance for same-camera unconfirmed merges
+        let effectiveMergeDistance: number
+        if (isUnconfirmedMerge && isCrossCameraMerge) {
+          effectiveMergeDistance = this.config.crossCameraMergeDistanceM  // 0.9m for cross-camera
+        } else if (isUnconfirmedMerge) {
+          effectiveMergeDistance = allowSameCameraFragmentMerge
+            ? this.config.mergeDistanceM
+            : this.config.unconfirmedMergeDistanceM
+        } else {
+          effectiveMergeDistance = this.config.mergeDistanceM
+        }
 
         const distance = calculateDistance(
           track1.currentPosition,
@@ -129,10 +152,18 @@ export class TrackMerger {
 
         const confidence = this.calculateMergeConfidence(track1, track2, distance)
 
-        // Use lower threshold for unconfirmed tracks
-        const effectiveThreshold = isUnconfirmedMerge
-          ? this.config.unconfirmedMergeConfidenceThreshold
-          : this.config.mergeConfidenceThreshold
+        // Use tiered threshold based on merge type:
+        // - Cross-camera unconfirmed: lowest threshold (0.4) - projection variance expected
+        // - Same-camera unconfirmed: medium threshold (0.5)
+        // - Confirmed tracks: highest threshold (0.7)
+        let effectiveThreshold: number
+        if (isUnconfirmedMerge && isCrossCameraMerge) {
+          effectiveThreshold = 0.4  // Lower threshold for cross-camera unconfirmed
+        } else if (isUnconfirmedMerge) {
+          effectiveThreshold = this.config.unconfirmedMergeConfidenceThreshold
+        } else {
+          effectiveThreshold = this.config.mergeConfidenceThreshold
+        }
 
         if (confidence > effectiveThreshold) {
           candidates.push({
@@ -175,6 +206,8 @@ export class TrackMerger {
     }
 
     // 2. Velocity alignment (0-0.3 points)
+    // Only penalize velocity difference if both tracks have enough detections
+    // for reliable Kalman velocity estimates
     if (track1.kalmanState && track2.kalmanState) {
       const v1 = this.kalmanFilter.getVelocity(track1.kalmanState)
       const v2 = this.kalmanFilter.getVelocity(track2.kalmanState)
@@ -187,11 +220,19 @@ export class TrackMerger {
         Math.pow(v1.x - v2.x, 2) + Math.pow(v1.y - v2.y, 2)
       )
 
-      if (velocityDiff > this.config.mergeVelocityThreshold) {
-        // Velocities too different - penalize but don't reject
+      // Check if velocity estimates are reliable (need minDetectionsForVelocity)
+      const velocityReliable =
+        track1.detectionCount >= this.config.minDetectionsForVelocity &&
+        track2.detectionCount >= this.config.minDetectionsForVelocity
+
+      if (velocityReliable && velocityDiff > this.config.mergeVelocityThreshold) {
+        // Velocities too different and reliable - penalize but don't reject
         confidence -= 0.1
+      } else if (!velocityReliable) {
+        // Velocity not reliable yet - give neutral score (don't penalize early tracks)
+        confidence += 0.15
       } else if (speed1 > 0.2 && speed2 > 0.2) {
-        // Both moving - check direction alignment
+        // Both moving with reliable velocity - check direction alignment
         const cosineSim = (v1.x * v2.x + v1.y * v2.y) / (speed1 * speed2)
         // Map [-1, 1] to [0, 0.3]
         confidence += 0.3 * (cosineSim + 1) / 2
@@ -211,7 +252,12 @@ export class TrackMerger {
       confidence += 0.2 * (1 - timeDiff / 500)
     }
 
-    // 4. Camera exclusivity check (CRITICAL)
+    // 4. Simultaneous detection bonus (0-0.15 points)
+    // Strong merge signal when tracks have detections from same frame batch
+    const simultaneousBonus = this.calculateSimultaneousBonus(track1, track2)
+    confidence += simultaneousBonus
+
+    // 5. Camera exclusivity check (CRITICAL)
     const sharedCameras = this.getSharedCameras(track1, track2)
     if (sharedCameras.length > 0) {
       const oneConfirmedOneUnconfirmed = track1.isConfirmed !== track2.isConfirmed
@@ -242,7 +288,7 @@ export class TrackMerger {
       }
     }
 
-    // Bonus for being tracked by different cameras (supports hypothesis of same person)
+    // 6. Bonus for being tracked by different cameras (supports hypothesis of same person)
     const cameras1 = Array.from(track1.cameraAssociations.keys())
     const cameras2 = Array.from(track2.cameraAssociations.keys())
     const hasOverlap = cameras1.some(c => cameras2.includes(c))
@@ -261,6 +307,37 @@ export class TrackMerger {
     const cameras1 = Array.from(track1.cameraAssociations.keys())
     const cameras2 = Array.from(track2.cameraAssociations.keys())
     return cameras1.filter(c => cameras2.includes(c))
+  }
+
+  /**
+   * Calculate bonus for tracks with simultaneous detections from different cameras.
+   * This is strong evidence that they represent the same person.
+   */
+  private calculateSimultaneousBonus(track1: GlobalTrack, track2: GlobalTrack): number {
+    const windowMs = this.config.simultaneousWindowMs
+
+    // Check camera associations for recent simultaneous activity
+    for (const [cam1, assoc1] of track1.cameraAssociations) {
+      for (const [cam2, assoc2] of track2.cameraAssociations) {
+        // Must be from different cameras
+        if (cam1 === cam2) continue
+
+        const timeDiff = Math.abs(assoc1.lastSeen - assoc2.lastSeen)
+        if (timeDiff < windowMs) {
+          // Frame-based check for stronger signal
+          if (assoc1.lastFrameNumber !== undefined && assoc2.lastFrameNumber !== undefined) {
+            // Same or adjacent frame numbers = very strong signal
+            if (Math.abs(assoc1.lastFrameNumber - assoc2.lastFrameNumber) <= 1) {
+              return this.config.simultaneousDetectionBonus
+            }
+          }
+          // Timestamp-only match - partial bonus
+          return this.config.simultaneousDetectionBonus * 0.5
+        }
+      }
+    }
+
+    return 0
   }
 
   /**
