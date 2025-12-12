@@ -9,6 +9,7 @@
 import type { GlobalTrack } from '../types.js'
 import { calculateDistance } from '../correlation/track-matcher.js'
 import { KalmanTrackFilter } from '../filters/kalman-track-filter.js'
+import { getMetrics } from '../metrics/index.js'
 
 /**
  * Candidate pair for merging
@@ -150,7 +151,7 @@ export class TrackMerger {
           continue
         }
 
-        const confidence = this.calculateMergeConfidence(track1, track2, distance)
+        const confidence = this.calculateMergeConfidence(track1, track2, distance, effectiveMergeDistance)
 
         // Use tiered threshold based on merge type:
         // - Cross-camera unconfirmed: lowest threshold (0.4) - projection variance expected
@@ -172,6 +173,11 @@ export class TrackMerger {
             distance,
             confidence,
           })
+          // Record merge candidate metrics
+          getMetrics().recordMergeCandidate(confidence)
+        } else {
+          // Record rejected merge (below threshold)
+          getMetrics().recordMergeRejected()
         }
       }
     }
@@ -194,13 +200,17 @@ export class TrackMerger {
   private calculateMergeConfidence(
     track1: GlobalTrack,
     track2: GlobalTrack,
-    distance: number
+    distance: number,
+    effectiveMergeDistance?: number
   ): number {
     let confidence = 0
 
     // 1. Spatial proximity (0-0.4 points)
-    if (distance < this.config.mergeDistanceM) {
-      confidence += 0.4 * (1 - distance / this.config.mergeDistanceM)
+    // Use effectiveMergeDistance when provided (e.g., 0.9m for cross-camera merges)
+    // to properly score tracks that are within the allowed merge range
+    const distanceThreshold = effectiveMergeDistance ?? this.config.mergeDistanceM
+    if (distance < distanceThreshold) {
+      confidence += 0.4 * (1 - distance / distanceThreshold)
     } else {
       return 0 // Too far apart
     }
@@ -412,6 +422,16 @@ export class TrackMerger {
 
     // Mark secondary as inactive
     secondary.isActive = false
+
+    // Record merge metrics
+    const cameras1 = Array.from(track1.cameraAssociations.keys())
+    const cameras2 = Array.from(track2.cameraAssociations.keys())
+    const isCrossCameraMerge = !cameras1.some(c => cameras2.includes(c))
+    // Time to merge is approximated as the difference between track creation times
+    const track1Creation = track1.trail[0]?.timestamp ?? track1.lastSeen
+    const track2Creation = track2.trail[0]?.timestamp ?? track2.lastSeen
+    const timeToMerge = Math.abs(track1Creation - track2Creation)
+    getMetrics().recordMergeExecuted(isCrossCameraMerge, timeToMerge)
 
     return { primary, merged: secondary }
   }

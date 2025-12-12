@@ -8,8 +8,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { config } from '../config/environment'
-import { useAlarmStore } from './alarms'
-import type { Alarm, AlarmSeverity, AlarmSource } from '../types/generated'
 
 // ============================================================================
 // Types
@@ -264,42 +262,6 @@ export const useZoneStore = defineStore('zones', () => {
   }
 
   /**
-   * Convert zone violation to alarm format
-   */
-  function violationToAlarm(violation: ZoneViolation): Alarm {
-    // Map zone severity to alarm severity
-    const severityMap: Record<ZoneSeverity, AlarmSeverity> = {
-      low: 'low',
-      medium: 'medium',
-      high: 'high',
-      critical: 'critical',
-    }
-
-    const source: AlarmSource = {
-      cameraId: violation.cameraIds[0] || 'unknown',
-      zoneId: violation.zoneId,
-      trackId: violation.trackId,
-      coordinates: violation.position,
-    }
-
-    return {
-      id: violation.id,
-      timestamp: new Date(violation.timestamp).toISOString(),
-      type: 'zone_violation',
-      severity: severityMap[violation.severity],
-      source,
-      acknowledged: false,
-      status: 'pending',
-      tags: [
-        `zone:${violation.zoneName}`,
-        `track:${violation.trackId}`,
-        violation.zoneType,
-        `violation:${violation.violationType}`,
-      ],
-    }
-  }
-
-  /**
    * Handle incoming zone violation from WebSocket
    */
   function handleZoneViolation(violation: ZoneViolation): void {
@@ -309,17 +271,6 @@ export const useZoneStore = defineStore('zones', () => {
     // Trim to prevent unbounded growth
     if (violations.value.length > MAX_VIOLATIONS) {
       violations.value = violations.value.slice(0, MAX_VIOLATIONS)
-    }
-
-    // Also add to alarm store for unified alarm management
-    try {
-      const alarmStore = useAlarmStore()
-      const alarm = violationToAlarm(violation)
-      // Directly add to alarms array (simulating what WebSocket would do)
-      alarmStore.alarms.unshift(alarm)
-    } catch (err) {
-      // Alarm store may not be initialized yet
-      console.warn('[ZoneStore] Could not add violation to alarm store:', err)
     }
   }
 

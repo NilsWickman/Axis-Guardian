@@ -31,14 +31,6 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
-    path: '/cameras/timeline',
-    name: 'TimelineView',
-    component: () => import('@/views/camera-views/TimelineView.vue'),
-    meta: {
-      title: 'Timeline',
-    },
-  },
-  {
     path: '/cameras/frame-review',
     name: 'FrameReviewView',
     component: () => import('@/views/camera-views/FrameReviewView.vue'),
@@ -47,53 +39,11 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
-    path: '/cameras/manage',
-    name: 'CameraManagement',
-    component: () => import('@/views/camera-views/CameraManagement.vue'),
-    meta: {
-      title: 'Manage Cameras',
-    },
-  },
-  {
     path: '/site-tracking',
     name: 'SiteTracking',
     component: () => import('@/views/site-tracking/SiteTrackingView.vue'),
     meta: {
       title: 'Site Tracking',
-    },
-  },
-  // Alarms
-  {
-    path: '/alarms',
-    name: 'Alarms',
-    component: () => import('@/views/alarms/AlarmKanbanBySiteMap.vue'),
-    meta: {
-      title: 'Alarms',
-    },
-  },
-  {
-    path: '/alarms/:alarmId',
-    name: 'AlarmDetail',
-    component: () => import('@/views/alarms/AlarmDetail.vue'),
-    meta: {
-      title: 'Alarm Details',
-    },
-  },
-  {
-    path: '/archive',
-    name: 'Archive',
-    component: () => import('@/views/alarms/AlarmArchive.vue'),
-    meta: {
-      title: 'Alarm Archive',
-    },
-  },
-  // Settings
-  {
-    path: '/settings',
-    name: 'Settings',
-    component: () => import('@/views/Settings.vue'),
-    meta: {
-      title: 'System Settings',
     },
   },
   // Calibration

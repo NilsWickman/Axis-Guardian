@@ -21,6 +21,7 @@ import { getPipelineLogger } from '../debug/pipeline-logger.js'
 import type { AcapClient } from '../acap/acap-client.js'
 import type { ZoneManager } from '../zones/zone-manager.js'
 import type { WebSocketBroadcaster } from './websocket.js'
+import { getMetrics } from '../metrics/index.js'
 
 // Read-only mode for demo deployment (disables write endpoints except emulator-detections)
 const isReadOnlyMode = process.env.READ_ONLY_MODE === 'true'
@@ -443,6 +444,46 @@ export function registerRoutes(
       cameras: cameraRegistry.getCameraIds().length,
       config: trackManager.getConfig(),
     }
+  })
+
+  // ============================================================================
+  // Metrics API
+  // ============================================================================
+
+  // Get comprehensive tracking metrics
+  app.get('/api/metrics', async () => {
+    return getMetrics().getMetrics()
+  })
+
+  // Get specific metric categories
+  app.get('/api/metrics/handoff', async () => {
+    return getMetrics().getHandoffMetrics()
+  })
+
+  app.get('/api/metrics/merger', async () => {
+    return getMetrics().getMergerMetrics()
+  })
+
+  app.get('/api/metrics/clustering', async () => {
+    return getMetrics().getClusteringMetrics()
+  })
+
+  app.get('/api/metrics/lifecycle', async () => {
+    return getMetrics().getLifecycleMetrics()
+  })
+
+  app.get('/api/metrics/performance', async () => {
+    return getMetrics().getPerformanceMetrics()
+  })
+
+  app.get('/api/metrics/diagnostic', async () => {
+    return getMetrics().getDiagnosticMetrics()
+  })
+
+  // Reset metrics (protected by read-only guard)
+  app.post('/api/metrics/reset', { preHandler: readOnlyGuard }, async () => {
+    getMetrics().reset()
+    return { success: true, message: 'Metrics reset' }
   })
 
   // ============================================================================
