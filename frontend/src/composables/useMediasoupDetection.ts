@@ -120,6 +120,13 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
   let videoSyncCalibrated = false
   const VIDEO_SYNC_TOLERANCE_MS = 50  // Release detection if within 50ms of video time
 
+  // If the (hidden) video element doesn't advance time (common on some browsers),
+  // video-sync buffering would never release detections. Detect this and fall back.
+  let videoSyncDisabled = false
+  let lastObservedVideoTimeMs = 0
+  let lastVideoProgressAt = Date.now()
+  let firstMetadataAt: number | null = null
+
   // Manual sync offset (negative = release detections earlier, positive = delay detections)
   const manualSyncOffsetMs = ref(opts.videoSyncOffsetMs ?? 0)
 
@@ -1067,8 +1074,32 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
       }
     }
 
-    // If video_time_ms is available, use video-sync buffer
-    if (metadata.video_time_ms !== undefined && videoElement.value) {
+    // If video_time_ms is available, use video-sync buffer (unless disabled)
+    if (metadata.video_time_ms !== undefined && videoElement.value && !videoSyncDisabled) {
+      // Track whether the video element time is progressing.
+      const currentVideoTimeMs = videoElement.value.currentTime * 1000
+      if (firstMetadataAt === null) firstMetadataAt = now
+      if (currentVideoTimeMs > lastObservedVideoTimeMs + 50) {
+        lastObservedVideoTimeMs = currentVideoTimeMs
+        lastVideoProgressAt = now
+      }
+      // If we have been receiving detections for a while but video time is still ~0,
+      // disable video sync so detections are released immediately.
+      if (
+        now - lastVideoProgressAt > 2000 &&
+        currentVideoTimeMs < 200 &&
+        metadata.video_time_ms > 500
+      ) {
+        console.warn(`[VideoSync] ${cameraId}: Video time not progressing, disabling video-sync buffering`)
+        videoSyncDisabled = true
+        // Stop the sync loop to avoid buffering/CPU churn
+        stopVideoSyncLoop()
+      }
+
+      // If disabled, drop into fallback path below on next metadata.
+      if (videoSyncDisabled) {
+        // continue to fallback
+      } else {
       // Detect loop on detection side: video_time_ms drops significantly
       // This happens when the camera emulator loops the video
       if (lastDetectionVideoTimeMs > 0 && metadata.video_time_ms < lastDetectionVideoTimeMs - 1000) {
@@ -1104,7 +1135,12 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
           stats.value.droppedStaleDetections++
         }
       }
-    } else {
+      return
+      }
+    }
+
+    // Fallback: no usable video time (or video-sync disabled), use old RTT-based delay
+    {
       // Fallback: no video_time_ms, use old RTT-based delay
       // Buffer management
       detectionBuffer.push(metadata)
@@ -1285,6 +1321,10 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
     detectionBuffer.length = 0
     videoSyncBuffer.length = 0
     latencySamples.length = 0
+    videoSyncDisabled = false
+    lastObservedVideoTimeMs = 0
+    lastVideoProgressAt = Date.now()
+    firstMetadataAt = null
   }
 
   /**

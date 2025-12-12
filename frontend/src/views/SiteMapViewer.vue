@@ -211,9 +211,9 @@
             </div>
           </CanvasOverlay>
 
-          <!-- Wall Toolbar (Editor Mode Only) -->
+          <!-- Wall Toolbar (Editor Mode Only, when not editing zones) -->
           <WallToolbar
-            v-if="isEditingMode"
+            v-if="isEditingMode && zoneEditor.mode.value === 'none'"
             :is-active="wallEditor.isActive.value"
             :mode="wallEditor.mode.value"
             :wall-type="wallEditor.drawState.value.wallType"
@@ -226,6 +226,21 @@
             @redo="redo"
             @zoom-in="zoomIn"
             @zoom-out="zoomOut"
+          />
+
+          <!-- Zone Toolbar (Editor Mode Only, when editing zones) -->
+          <ZoneToolbar
+            v-if="isEditingMode && zoneEditor.mode.value !== 'none'"
+            :mode="zoneEditor.mode.value"
+            :zone-type="zoneEditor.zoneType.value"
+            :color="zoneEditor.color.value"
+            :drawing-vertex-count="zoneEditor.drawingVertices.value.length"
+            @set-mode="zoneEditor.setMode($event)"
+            @set-zone-type="zoneEditor.setZoneType($event)"
+            @set-color="zoneEditor.setColor($event)"
+            @cancel-drawing="zoneEditor.cancelDrawing()"
+            @finish-drawing="finishZoneDrawing()"
+            @exit="zoneEditor.setMode('none')"
           />
 
           <!-- Camera Configuration Popup -->
@@ -307,6 +322,42 @@
               All cameras are placed on the map
             </p>
           </div>
+
+          <!-- Zone Editor Button -->
+          <div class="mt-4 pt-4 border-t">
+            <button
+              @click="zoneEditor.setMode('draw')"
+              class="w-full px-3 py-2 text-sm font-medium rounded-lg transition-colors"
+              :class="zoneEditor.mode.value !== 'none'
+                ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                : 'bg-primary text-primary-foreground hover:bg-primary/90'"
+            >
+              {{ zoneEditor.mode.value !== 'none' ? 'Editing Zones...' : 'Edit Zones' }}
+            </button>
+          </div>
+
+          <!-- Zone Editor Panel (shown when in zone edit mode) -->
+          <ZoneEditorPanel
+            v-if="zoneEditor.mode.value !== 'none'"
+            :mode="zoneEditor.mode.value"
+            :zones="zoneStore.zones"
+            :selected-zone-id="zoneEditor.selectedZoneId.value"
+            :selected-zone="zoneEditor.selectedZoneId.value ? zoneStore.getZoneById(zoneEditor.selectedZoneId.value) ?? null : null"
+            :zone-type="zoneEditor.zoneType.value"
+            :severity="zoneEditor.severity.value"
+            :color="zoneEditor.color.value"
+            :drawing-vertices="zoneEditor.drawingVertices.value"
+            :violation-count="zoneStore.violationCount"
+            @set-mode="handleZoneEditorSetMode"
+            @set-zone-type="zoneEditor.setZoneType($event)"
+            @set-severity="zoneEditor.setSeverity($event)"
+            @set-color="zoneEditor.setColor($event)"
+            @select-zone="zoneEditor.selectZone($event)"
+            @toggle-zone="zoneStore.toggleZone($event)"
+            @delete-zone="handleDeleteZone"
+            @update-zone="handleUpdateZone"
+            @clear-violations="zoneStore.clearViolations()"
+          />
         </template>
       </div>
     </div>
@@ -346,7 +397,9 @@ import { useSiteMapCanvas, type CanvasRenderOptions } from '../composables/useSi
 import { extractValue, metersToPixels, pixelsToMeters, RENDER_SCALE } from '../utils/siteMapConversion'
 import { useCanvasInteraction } from '../composables/useCanvasInteraction'
 import { useWallEditor } from '../composables/useWallEditor'
+import { useZoneEditor } from '../composables/useZoneEditor'
 import { usePersonPositionTracking } from '../composables/usePersonPositionTracking'
+import { useZoneStore } from '../stores/zones'
 import type { CameraPlacement, Wall } from '../stores/siteMaps'
 import type { Camera } from '../types/generated'
 import MapControls from '../components/features/site-map/MapControls.vue'
@@ -363,6 +416,8 @@ withDefaults(defineProps<{
 })
 import CanvasOverlay from '../components/layout/CanvasOverlay.vue'
 import WallToolbar from '../components/features/site-map/WallToolbar.vue'
+import ZoneToolbar from '../components/features/site-map/ZoneToolbar.vue'
+import ZoneEditorPanel from '../components/features/site-map/ZoneEditorPanel.vue'
 import CameraConfigPopup from '../components/features/site-map/CameraConfigPopup.vue'
 import {
   Dialog,
@@ -450,6 +505,8 @@ const activePeerConnection = ref<RTCPeerConnection | null>(null)
 const canvas = useSiteMapCanvas(mapCanvas, ref(canvasOptions))
 const interaction = useCanvasInteraction(mapCanvas, canvas.findCameraAtPoint)
 const wallEditor = useWallEditor()
+const zoneEditor = useZoneEditor()
+const zoneStore = useZoneStore()
 
 // Person position tracking
 const showPersonPositions = ref(true)
@@ -838,10 +895,47 @@ const handleMouseDown = (event: MouseEvent) => {
     return
   }
 
-  // Editor mode: wall drawing/editing
+  // Editor mode: calculate canvas coordinates
   const canvasX = (event.clientX - canvasContainer.value!.getBoundingClientRect().left - offsetX.value) / scale.value
   const canvasY = (event.clientY - canvasContainer.value!.getBoundingClientRect().top - offsetY.value) / scale.value
 
+  // Zone editing mode
+  if (zoneEditor.mode.value !== 'none') {
+    if (zoneEditor.mode.value === 'draw') {
+      // Check if clicking near first vertex to close the polygon
+      const vertices = zoneEditor.drawingVertices.value
+      if (vertices.length >= 3) {
+        const firstVertex = vertices[0]
+        const distance = Math.sqrt(
+          Math.pow(canvasX - firstVertex.x, 2) + Math.pow(canvasY - firstVertex.y, 2)
+        )
+        if (distance < 15) {
+          // Close polygon
+          finishZoneDrawing()
+          return
+        }
+      }
+      // Add vertex
+      zoneEditor.addVertex({ x: canvasX, y: canvasY })
+      drawMap()
+    } else if (zoneEditor.mode.value === 'edit') {
+      // Find zone at point using meters (zones are stored in meters)
+      const pointMeters = { x: pixelsToMeters(canvasX), y: pixelsToMeters(canvasY) }
+      const zone = canvas.findZoneAtPoint(pointMeters.x, pointMeters.y, zoneStore.zones)
+      zoneEditor.selectZone(zone?.id || null)
+      drawMap()
+    } else if (zoneEditor.mode.value === 'delete') {
+      // Find and delete zone at point
+      const pointMeters = { x: pixelsToMeters(canvasX), y: pixelsToMeters(canvasY) }
+      const zone = canvas.findZoneAtPoint(pointMeters.x, pointMeters.y, zoneStore.zones)
+      if (zone) {
+        handleDeleteZone(zone.id)
+      }
+    }
+    return
+  }
+
+  // Wall drawing/editing
   if (wallEditor.mode.value === 'draw') {
     const snapped = wallEditor.snapPoint(canvasX, canvasY, localWalls.value)
     wallEditor.startDrawing(snapped.x, snapped.y)
@@ -891,10 +985,27 @@ const handleMouseMove = (event: MouseEvent) => {
     return
   }
 
-  // Editor mode: wall drawing/editing
+  // Editor mode: calculate canvas coordinates
   const canvasX = (event.clientX - canvasContainer.value!.getBoundingClientRect().left - offsetX.value) / scale.value
   const canvasY = (event.clientY - canvasContainer.value!.getBoundingClientRect().top - offsetY.value) / scale.value
 
+  // Zone editing mode
+  if (zoneEditor.mode.value !== 'none') {
+    // Update current mouse position for preview line
+    zoneEditor.updateMousePosition({ x: canvasX, y: canvasY })
+
+    // Update zone hover state for edit/delete modes
+    if (zoneEditor.mode.value === 'edit' || zoneEditor.mode.value === 'delete') {
+      const pointMeters = { x: pixelsToMeters(canvasX), y: pixelsToMeters(canvasY) }
+      const hoveredZone = canvas.findZoneAtPoint(pointMeters.x, pointMeters.y, zoneStore.zones)
+      zoneEditor.setHoveredZone(hoveredZone?.id || null)
+    }
+
+    drawMap()
+    return
+  }
+
+  // Wall drawing/editing
   if (wallEditor.drawState.value.isDrawing) {
     const snapped = wallEditor.snapPoint(canvasX, canvasY, localWalls.value)
     wallEditor.updateDrawing(snapped.x, snapped.y)
@@ -953,6 +1064,64 @@ const handleMouseLeave = () => {
 const handleKeyDown = (event: KeyboardEvent) => {
   if (!isEditingMode.value) return
 
+  // Zone editor keyboard shortcuts
+  if (zoneEditor.mode.value !== 'none') {
+    // Escape - cancel drawing or exit zone mode
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      if (zoneEditor.drawingVertices.value.length > 0) {
+        zoneEditor.cancelDrawing()
+      } else {
+        zoneEditor.setMode('none')
+      }
+      drawMap()
+      return
+    }
+
+    // Enter - finish drawing zone
+    if (event.key === 'Enter' && zoneEditor.mode.value === 'draw') {
+      event.preventDefault()
+      if (zoneEditor.drawingVertices.value.length >= 3) {
+        finishZoneDrawing()
+      }
+      return
+    }
+
+    // Delete - delete selected zone
+    if ((event.key === 'Delete' || event.key === 'Backspace') && zoneEditor.selectedZoneId.value) {
+      event.preventDefault()
+      handleDeleteZone(zoneEditor.selectedZoneId.value)
+      return
+    }
+
+    // D - switch to draw mode
+    if (event.key === 'd' || event.key === 'D') {
+      event.preventDefault()
+      zoneEditor.setMode('draw')
+      drawMap()
+      return
+    }
+
+    // E - switch to edit mode
+    if (event.key === 'e' || event.key === 'E') {
+      event.preventDefault()
+      zoneEditor.setMode('edit')
+      drawMap()
+      return
+    }
+
+    // X - switch to delete mode
+    if (event.key === 'x' || event.key === 'X') {
+      event.preventDefault()
+      zoneEditor.setMode('delete')
+      drawMap()
+      return
+    }
+
+    return
+  }
+
+  // Wall editor keyboard shortcuts
   // Delete key - delete selected wall
   if (event.key === 'Delete' || event.key === 'Backspace') {
     if (wallEditor.selectedWall.value) {
@@ -1067,6 +1236,78 @@ const handleCameraConfigConfirm = (config: { height: number; angle: number; rota
 const handleCameraConfigCancel = () => {
   showConfigPopup.value = false
   pendingCameraPlacement.value = null
+}
+
+// ============================================================================
+// Zone Editor Handlers
+// ============================================================================
+
+const handleZoneEditorSetMode = (mode: typeof zoneEditor.mode.value) => {
+  zoneEditor.setMode(mode)
+  // When entering zone edit mode, disable wall editing
+  if (mode !== 'none') {
+    wallEditor.setMode('none')
+  }
+  drawMap()
+}
+
+const handleDeleteZone = async (zoneId: string) => {
+  const confirmed = window.confirm('Are you sure you want to delete this zone?')
+  if (!confirmed) return
+
+  const success = await zoneStore.deleteZone(zoneId)
+  if (success) {
+    zoneEditor.selectZone(null)
+    showSuccessToast('Zone deleted successfully')
+    drawMap()
+  } else {
+    showErrorToast('Failed to delete zone')
+  }
+}
+
+const handleUpdateZone = async (zoneId: string, updates: Record<string, unknown>) => {
+  const success = await zoneStore.updateZone(zoneId, updates)
+  if (success) {
+    drawMap()
+  } else {
+    showErrorToast('Failed to update zone')
+  }
+}
+
+const finishZoneDrawing = async () => {
+  if (!currentMap.value) return
+
+  const vertices = zoneEditor.drawingVertices.value
+  if (vertices.length < 3) {
+    showErrorToast('Zone requires at least 3 vertices')
+    return
+  }
+
+  // Convert pixel coordinates to meters
+  const verticesMeters = vertices.map(v => ({
+    x: pixelsToMeters(v.x),
+    y: pixelsToMeters(v.y)
+  }))
+
+  // Create zone via API
+  const newZone = await zoneStore.createZone({
+    siteConfigId: currentMap.value.id,
+    name: `Zone ${zoneStore.zones.length + 1}`,
+    type: zoneEditor.zoneType.value,
+    vertices: verticesMeters,
+    enabled: true,
+    severity: zoneEditor.severity.value,
+    color: zoneEditor.color.value,
+    cooldownMs: 30000
+  })
+
+  if (newZone) {
+    zoneEditor.cancelDrawing()
+    showSuccessToast('Zone created successfully')
+    drawMap()
+  } else {
+    showErrorToast('Failed to create zone')
+  }
 }
 
 const handleWheel = (event: WheelEvent) => {
@@ -1184,6 +1425,23 @@ const drawMap = () => {
         ctx.restore()
       }
     }
+  }
+
+  // Draw zones (below cameras but above walls)
+  canvas.drawZones(
+    zoneStore.zones,
+    zoneEditor.selectedZoneId.value,
+    zoneEditor.hoveredZoneId.value
+  )
+
+  // Draw zone preview when drawing
+  if (isEditingMode.value && zoneEditor.mode.value === 'draw' && zoneEditor.drawingVertices.value.length > 0) {
+    canvas.drawZonePreview(
+      zoneEditor.drawingVertices.value,
+      zoneEditor.currentMousePos.value,
+      zoneEditor.zoneType.value,
+      zoneEditor.color.value
+    )
   }
 
   workingCameras.value.forEach(camera => {
@@ -1445,6 +1703,9 @@ onMounted(() => {
   console.log(`[SiteMapViewer] onMounted: selectedMapId=${selectedMapId.value}, currentMap=${currentMap.value?.id}, activeSiteMapId=${siteMapStore.activeSiteMapId}`)
 
   if (!canvas.initCanvas()) return
+
+  // Fetch zones from the API
+  zoneStore.fetchZones()
 
   // Auto-select first site map if none is currently selected or valid
   if ((!selectedMapId.value || !currentMap.value) && siteMaps.value.length > 0) {

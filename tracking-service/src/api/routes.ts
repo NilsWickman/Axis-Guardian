@@ -266,11 +266,15 @@ export function registerRoutes(
     }
 
     // Convert to DetectionMessage format for batch processing
-    // This enables Hungarian algorithm assignment and video timing propagation
+    // This enables Hungarian algorithm assignment and video timing propagation.
+    // Camera emulator detection files often use relative timestamps (0..duration seconds).
+    // Normalize to wall-clock seconds so track expiry/cleanup works correctly.
+    const rawTimestampSec = data.timestamp ?? Date.now() / 1000
+    const timestampSec = rawTimestampSec > 1e9 ? rawTimestampSec : Date.now() / 1000
     const detectionMessage = {
       camera_id: data.camera_id,
       frame_number: data.frame_number ?? 0,
-      timestamp: data.timestamp ?? Date.now() / 1000,
+      timestamp: timestampSec,
       detection_count: data.detections.length,
       video_time_ms: data.video_time_ms,
       rtp_timestamp: data.rtp_timestamp,

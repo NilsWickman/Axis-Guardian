@@ -178,7 +178,7 @@
             <label class="block text-[10px] font-medium mb-1">Type</label>
             <select
               :value="selectedZone.type"
-              @change="$emit('update-zone', selectedZone.id, { type: ($event.target as HTMLSelectElement).value })"
+              @change="$emit('update-zone', selectedZone.id, { type: ($event.target as HTMLSelectElement).value as ZoneType })"
               class="w-full px-2 py-1 text-xs border rounded bg-background"
             >
               <option value="restricted">Restricted</option>
@@ -191,7 +191,7 @@
             <label class="block text-[10px] font-medium mb-1">Severity</label>
             <select
               :value="selectedZone.severity"
-              @change="$emit('update-zone', selectedZone.id, { severity: ($event.target as HTMLSelectElement).value })"
+              @change="$emit('update-zone', selectedZone.id, { severity: ($event.target as HTMLSelectElement).value as ZoneSeverity })"
               class="w-full px-2 py-1 text-xs border rounded bg-background"
             >
               <option value="critical">Critical</option>
