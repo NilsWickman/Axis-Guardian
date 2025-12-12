@@ -757,51 +757,121 @@ export class TrackManager {
     //           0.9m = too aggressive (different people can be 0.51m apart)
     //           0.7m = compromise
     const clusteringDistance = this.config.clusteringDistanceM ?? 0.7
-    const clusters: DetectionCluster[] = []
-    const used = new Set<number>()
 
-    // Sort by camera then by position for deterministic clustering
-    const sortedIndices = detections.map((_, i) => i)
-      .sort((a, b) => {
-        const camCompare = detections[a].cameraId.localeCompare(detections[b].cameraId)
-        if (camCompare !== 0) return camCompare
-        return detections[a].worldX - detections[b].worldX
-      })
-
-    for (const i of sortedIndices) {
-      if (used.has(i)) continue
-
-      const cluster: CameraDetection[] = [detections[i]]
-      used.add(i)
-
-      // Find spatially close detections from DIFFERENT cameras
-      for (const j of sortedIndices) {
-        if (used.has(j)) continue
-
-        // Only cluster detections from different cameras
-        // Same camera seeing multiple people = different people (can't merge)
-        if (detections[j].cameraId === detections[i].cameraId) continue
-
+    // Build candidate cross-camera pairs under distance threshold
+    const pairs: Array<{ i: number; j: number; dist: number }> = []
+    for (let i = 0; i < detections.length; i++) {
+      for (let j = i + 1; j < detections.length; j++) {
+        if (detections[i].cameraId === detections[j].cameraId) continue
         const dist = calculateDistance(
           { x: detections[i].worldX, y: detections[i].worldY },
           { x: detections[j].worldX, y: detections[j].worldY }
         )
-
         if (dist < clusteringDistance) {
-          cluster.push(detections[j])
-          used.add(j)
+          pairs.push({ i, j, dist })
         }
       }
-
-      // Calculate centroid (confidence-weighted)
-      const merged = mergeWorldPositions(cluster)
-      clusters.push({
-        detections: cluster,
-        centroid: merged.position,
-      })
     }
 
-    return clusters
+    // Greedy matching on closest pairs, enforcing at most one detection per camera per cluster
+    pairs.sort((a, b) => a.dist - b.dist || a.i - b.i || a.j - b.j)
+
+    const clusters: DetectionCluster[] = []
+    const detToCluster = new Map<number, number>() // detection index -> cluster index
+
+    const clusterHasCamera = (cluster: DetectionCluster, cameraId: string): boolean =>
+      cluster.detections.some(d => d.cameraId === cameraId)
+
+    for (const { i, j } of pairs) {
+      const ci = detToCluster.get(i)
+      const cj = detToCluster.get(j)
+
+      if (ci === undefined && cj === undefined) {
+        const newClusterIdx = clusters.length
+        clusters.push({
+          detections: [detections[i], detections[j]],
+          centroid: { x: 0, y: 0 },
+        })
+        detToCluster.set(i, newClusterIdx)
+        detToCluster.set(j, newClusterIdx)
+        continue
+      }
+
+      // Add unassigned detection to existing cluster if camera isn't already represented
+      if (ci !== undefined && cj === undefined) {
+        const cluster = clusters[ci]
+        if (!clusterHasCamera(cluster, detections[j].cameraId)) {
+          const centroid = mergeWorldPositions(cluster.detections).position
+          const distToCentroid = calculateDistance(
+            { x: detections[j].worldX, y: detections[j].worldY },
+            centroid
+          )
+          if (distToCentroid < clusteringDistance) {
+            cluster.detections.push(detections[j])
+            detToCluster.set(j, ci)
+          }
+        }
+        continue
+      }
+
+      if (ci === undefined && cj !== undefined) {
+        const cluster = clusters[cj]
+        if (!clusterHasCamera(cluster, detections[i].cameraId)) {
+          const centroid = mergeWorldPositions(cluster.detections).position
+          const distToCentroid = calculateDistance(
+            { x: detections[i].worldX, y: detections[i].worldY },
+            centroid
+          )
+          if (distToCentroid < clusteringDistance) {
+            cluster.detections.push(detections[i])
+            detToCluster.set(i, cj)
+          }
+        }
+        continue
+      }
+
+      // Merge two clusters if they are disjoint in cameras and close
+      if (ci !== undefined && cj !== undefined && ci !== cj) {
+        const clusterA = clusters[ci]
+        const clusterB = clusters[cj]
+        if (clusterA.detections.length === 0 || clusterB.detections.length === 0) continue
+
+        const camerasA = new Set(clusterA.detections.map(d => d.cameraId))
+        const camerasB = new Set(clusterB.detections.map(d => d.cameraId))
+        const hasDuplicateCamera = Array.from(camerasA).some(c => camerasB.has(c))
+        if (hasDuplicateCamera) continue
+
+        const centroidA = mergeWorldPositions(clusterA.detections).position
+        const centroidB = mergeWorldPositions(clusterB.detections).position
+        const centroidDist = calculateDistance(centroidA, centroidB)
+        if (centroidDist < clusteringDistance) {
+          clusterA.detections.push(...clusterB.detections)
+          clusterB.detections = []
+          // Re-point mappings
+          for (const [detIdx, cIdx] of detToCluster) {
+            if (cIdx === cj) detToCluster.set(detIdx, ci)
+          }
+        }
+      }
+    }
+
+    // Add any detections that never paired as solo clusters
+    for (let i = 0; i < detections.length; i++) {
+      if (!detToCluster.has(i)) {
+        clusters.push({
+          detections: [detections[i]],
+          centroid: { x: detections[i].worldX, y: detections[i].worldY },
+        })
+      }
+    }
+
+    // Finalize centroids
+    const finalized = clusters.filter(c => c.detections.length > 0).map(cluster => {
+      const merged = mergeWorldPositions(cluster.detections)
+      return { detections: cluster.detections, centroid: merged.position }
+    })
+
+    return finalized
   }
 
   /**
@@ -1129,9 +1199,10 @@ export class TrackManager {
       virtualDetections,
       activeTracks,
       {
-        maxCost: this.config.correlationDistanceM * 2,
+        // Use tighter gating; cross-camera re-id handles longer handoffs.
+        maxCost: this.config.correlationDistanceM * 1.2,
         useKalmanPrediction: true,
-        associationBonus: 0.3,  // Use tighter association bonus
+        associationBonus: 0.2,  // Stronger identity binding
         kalmanFilter: this.kalmanFilter,
       }
     )
@@ -1298,30 +1369,44 @@ export class TrackManager {
     occludedTracks: GlobalTrack[]
   ): GlobalTrack | null {
     const gateMultiplier = this.config.reidentificationGateMultiplier ?? 3.0
+    const maxReidAgeMs = this.config.occlusionCoastTimeMs ?? 7000
+
+    let bestTrack: GlobalTrack | null = null
+    let bestDistance = Infinity
 
     for (const track of occludedTracks) {
+      if (!track.kalmanState) continue
+
+      const timeSinceOcclusion = detection.timestamp - (track.occludedSince ?? track.lastSeen)
+      if (timeSinceOcclusion < 0 || timeSinceOcclusion > maxReidAgeMs) continue
+
+      const predicted = this.kalmanFilter.predict(track.kalmanState, timeSinceOcclusion)
+      const distance = calculateDistance(
+        { x: detection.worldX, y: detection.worldY },
+        predicted
+      )
+
       const assoc = track.cameraAssociations.get(detection.cameraId)
+      const hasExactSameCameraId = assoc?.trackIds.includes(detection.trackId) ?? false
 
-      // Check if camera trackId matches
-      if (assoc?.trackIds.includes(detection.trackId)) {
-        // Verify spatial plausibility using Kalman prediction
-        if (track.kalmanState) {
-          const timeSinceOcclusion = detection.timestamp - (track.occludedSince ?? track.lastSeen)
-          const predicted = this.kalmanFilter.predict(track.kalmanState, timeSinceOcclusion)
-          const distance = calculateDistance(
-            { x: detection.worldX, y: detection.worldY },
-            predicted
-          )
+      // Tighten gate for weaker evidence:
+      // - Exact same-camera trackId match: full gateMultiplier
+      // - Same camera but different local trackId: smaller gate (local fragmentation case)
+      // - Cross-camera re-id: medium gate (handoff case)
+      let effectiveMultiplier = gateMultiplier
+      if (assoc && !hasExactSameCameraId) {
+        effectiveMultiplier = Math.min(gateMultiplier, 2.0)
+      } else if (!assoc) {
+        effectiveMultiplier = Math.min(gateMultiplier, 2.5)
+      }
 
-          // Use expanded gate for re-identification
-          const maxDistance = this.config.correlationDistanceM * gateMultiplier
-          if (distance < maxDistance) {
-            return track
-          }
-        }
+      const maxDistance = this.config.correlationDistanceM * effectiveMultiplier
+      if (distance < maxDistance && distance < bestDistance) {
+        bestDistance = distance
+        bestTrack = track
       }
     }
 
-    return null
+    return bestTrack
   }
 }

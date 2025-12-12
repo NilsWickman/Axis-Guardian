@@ -81,10 +81,16 @@ interface IdentityMetrics {
   identityRecall: number         // Higher is better (1.0 = all tracked)
 
   // Cross-camera metrics
-  crossCameraIdPersistence: number  // Higher is better (1.0 = perfect)
+  crossCameraIdPersistence: number  // Transition-level persistence (1.0 = perfect)
+  handoffOpportunities: number
+  handoffSuccesses: number
+  handoffUnmapped: number
 
   // Aggregate metrics
   motaIdentity: number           // MOTA-style identity accuracy
+
+  // Retention metrics
+  avgRetentionRatio: number      // Longest global segment / total person duration
 
   // Counts for debugging
   totalPersons: number
@@ -307,7 +313,8 @@ function simulateTracking(
 
 function calculateIdentityMetrics(
   trackTruths: TrackTruthsDataset,
-  trackingResult: TrackingResult
+  trackingResult: TrackingResult,
+  cameraDetections: Map<string, CameraDetectionData>
 ): IdentityMetrics {
   const { cameraTrackToGlobal, globalToCameraTracks } = trackingResult
 
@@ -405,33 +412,101 @@ function calculateIdentityMetrics(
 
   const identityRecall = totalPersons > 0 ? personsCorrectlyTracked / totalPersons : 0
 
-  // 5. Cross-camera ID persistence
-  // For persons seen in both cameras, check if same global track ID is used
-  let crossCameraTotal = 0
-  let crossCameraSuccess = 0
-
-  for (const [personId, cameraTracks] of personToCameraTracks) {
-    const cameras = new Set<string>()
-    for (const cameraTrack of cameraTracks) {
-      const camera = cameraTrack.split('-')[0]
-      cameras.add(camera)
+  // 5. Cross-camera transition persistence + retention ratio
+  // Build camera-track time intervals from detection files
+  const intervalCache = new Map<string, { cameraId: string; start: number; end: number }>()
+  const getInterval = (cameraTrackId: string) => {
+    if (intervalCache.has(cameraTrackId)) return intervalCache.get(cameraTrackId)!
+    const [cameraId, localIdStr] = cameraTrackId.split('-')
+    const localId = Number(localIdStr)
+    const data = cameraDetections.get(cameraId)
+    const frames = data?.trackFrameIndex.get(localId) || []
+    if (frames.length === 0) return null
+    let start = Infinity
+    let end = -Infinity
+    for (const f of frames) {
+      start = Math.min(start, f.timestamp)
+      end = Math.max(end, f.timestamp)
     }
-
-    if (cameras.size > 1) {
-      // This person is seen in multiple cameras
-      crossCameraTotal++
-
-      // Check if all their camera tracks map to the same global track
-      const globalTracks = personToGlobalTracks.get(personId)
-      if (globalTracks && globalTracks.size === 1) {
-        crossCameraSuccess++
-      }
-    }
+    const interval = { cameraId, start, end }
+    intervalCache.set(cameraTrackId, interval)
+    return interval
   }
 
-  const crossCameraIdPersistence = crossCameraTotal > 0
-    ? crossCameraSuccess / crossCameraTotal
+  const maxHandoffGapSec = 5
+  let handoffOpportunities = 0
+  let handoffSuccesses = 0
+  let handoffUnmapped = 0
+  const retentionRatios: number[] = []
+
+  for (const [personId, cameraTracks] of personToCameraTracks) {
+    const segments: Array<{
+      cameraTrackId: string
+      cameraId: string
+      start: number
+      end: number
+      globalId?: string
+    }> = []
+
+    for (const cameraTrackId of cameraTracks) {
+      const interval = getInterval(cameraTrackId)
+      if (!interval) continue
+      segments.push({
+        cameraTrackId,
+        cameraId: interval.cameraId,
+        start: interval.start,
+        end: interval.end,
+        globalId: cameraTrackToGlobal.get(cameraTrackId),
+      })
+    }
+
+    if (segments.length === 0) continue
+    segments.sort((a, b) => a.start - b.start)
+
+    // Transition-level persistence
+    for (let i = 1; i < segments.length; i++) {
+      const prev = segments[i - 1]
+      const curr = segments[i]
+      if (prev.cameraId === curr.cameraId) continue
+
+      const gap = curr.start - prev.end
+      if (Math.abs(gap) > maxHandoffGapSec) continue
+
+      if (prev.globalId && curr.globalId) {
+        handoffOpportunities++
+        if (prev.globalId === curr.globalId) {
+          handoffSuccesses++
+        }
+      } else {
+        handoffUnmapped++
+      }
+    }
+
+    // Retention ratio: longest global segment / total observed duration
+    let totalDuration = 0
+    const globalDurations = new Map<string, number>()
+    for (const seg of segments) {
+      const dur = Math.max(0, seg.end - seg.start)
+      totalDuration += dur
+      if (seg.globalId) {
+        globalDurations.set(seg.globalId, (globalDurations.get(seg.globalId) || 0) + dur)
+      }
+    }
+
+    const longestGlobalDuration = globalDurations.size > 0
+      ? Math.max(...globalDurations.values())
+      : 0
+    const ratio = totalDuration > 0 ? longestGlobalDuration / totalDuration : 0
+    retentionRatios.push(ratio)
+  }
+
+  const crossCameraIdPersistence = handoffOpportunities > 0
+    ? handoffSuccesses / handoffOpportunities
     : 1.0
+
+  const avgRetentionRatio = retentionRatios.length > 0
+    ? retentionRatios.reduce((a, b) => a + b, 0) / retentionRatios.length
+    : 0
 
   // 6. MOTA-style identity accuracy
   // MOTA = 1 - (FN + FP + IDSW) / GT
@@ -445,7 +520,11 @@ function calculateIdentityMetrics(
     identityPrecision,
     identityRecall,
     crossCameraIdPersistence,
+    handoffOpportunities,
+    handoffSuccesses,
+    handoffUnmapped,
     motaIdentity,
+    avgRetentionRatio,
     totalPersons,
     totalCameraTrackIds,
     totalGlobalTracks: globalToCameraTracks.size,
@@ -488,7 +567,7 @@ describe('Track Identity Evaluation', () => {
     console.log(`Global tracks created: ${trackingResult.globalToCameraTracks.size}`)
 
     // Calculate metrics
-    metrics = calculateIdentityMetrics(trackTruths, trackingResult)
+    metrics = calculateIdentityMetrics(trackTruths, trackingResult, cameraDetections)
   })
 
   describe('ID Switch Rate (IDSW)', () => {
@@ -546,12 +625,25 @@ describe('Track Identity Evaluation', () => {
   describe('Cross-Camera Identity Persistence', () => {
     it('measures same track ID across camera transitions', () => {
       console.log('\n--- Cross-Camera Identity Persistence ---')
-      console.log(`  Persons in multiple cameras: counted in metric`)
+      console.log(`  Handoff opportunities: ${metrics.handoffOpportunities}`)
+      console.log(`  Successful handoffs: ${metrics.handoffSuccesses}`)
+      console.log(`  Unmapped opportunities: ${metrics.handoffUnmapped}`)
       console.log(`  Persistence Rate: ${(metrics.crossCameraIdPersistence * 100).toFixed(1)}%`)
       console.log(`  Target: > 70%`)
 
       // Higher is better
       expect(metrics.crossCameraIdPersistence).toBeGreaterThanOrEqual(0) // Relaxed threshold
+    })
+  })
+
+  describe('Track Retention Ratio', () => {
+    it('measures how much of each person stays in one global ID', () => {
+      console.log('\n--- Track Retention Ratio ---')
+      console.log(`  Avg retention: ${(metrics.avgRetentionRatio * 100).toFixed(1)}%`)
+      console.log(`  (longest global fragment duration / total duration)`)
+
+      expect(metrics.avgRetentionRatio).toBeGreaterThanOrEqual(0)
+      expect(metrics.avgRetentionRatio).toBeLessThanOrEqual(1)
     })
   })
 
@@ -714,6 +806,13 @@ describe('Track Identity Evaluation', () => {
           lowerIsBetter: false,
         },
         {
+          name: 'Track Retention Ratio',
+          value: metrics.avgRetentionRatio,
+          target: 0.70,
+          format: (v: number) => `${(v * 100).toFixed(1)}%`,
+          lowerIsBetter: false,
+        },
+        {
           name: 'MOTA Identity',
           value: metrics.motaIdentity,
           target: 0.60,
@@ -752,6 +851,8 @@ describe('Track Identity Evaluation', () => {
       console.log(`  Total Camera Track IDs: ${metrics.totalCameraTrackIds}`)
       console.log(`  Total Global Tracks: ${metrics.totalGlobalTracks}`)
       console.log(`  ID Switches: ${metrics.idSwitches}`)
+      console.log(`  Handoff Opportunities: ${metrics.handoffOpportunities}`)
+      console.log(`  Handoff Successes: ${metrics.handoffSuccesses}`)
       console.log(`  Correct Assignments: ${metrics.correctAssignments}/${metrics.totalAssignments}`)
 
       console.log('\n' + '='.repeat(70))
