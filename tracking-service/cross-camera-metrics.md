@@ -25,12 +25,13 @@ This document defines the metrics used to evaluate the multi-camera person track
 
 **Formula:**
 ```
-TCI = min(1.0, unique_persons / total_tracks_created)
+TCI = min(unique_persons, total_tracks_created)
+      / max(unique_persons, total_tracks_created)
 ```
 
 **Interpretation:**
-- 1.0 (100%) = Perfect: exactly one track per person for entire scene
-- < 0.85 = Track fragmentation: same person getting multiple track IDs
+- 1.0 (100%) = Perfect: one track per person across scene
+- < 0.85 = Either fragmentation (too many tracks) **or** over‑merging (too few tracks)
 
 **Why it matters:** Users expect a person to maintain the same ID throughout their journey. Fragmentation causes confusion in the UI and breaks tracking history.
 

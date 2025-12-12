@@ -57,8 +57,8 @@ export interface AssignmentConfig {
 const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
   maxCost: 1.0,             // Reduced from 2.0 for tighter gating
   useKalmanPrediction: true,
-  associationBonus: 0.3,    // Reduced from 0.5 for stronger identity binding (70% reduction)
-  sameCameraPenalty: 1.5,   // 50% penalty for stealing tracks from same camera
+  associationBonus: 0.2,    // Stronger identity binding for same local trackId
+  sameCameraPenalty: 2.5,   // Heavier penalty for stealing within same camera
   velocityConsistencyWeight: 0.1,  // Weight for velocity consistency term
   crossingProximityThreshold: 1.5, // Detect crossing when tracks within 1.5m
   crossingMaxCostMultiplier: 0.5,  // Use 50% of maxCost for crossing tracks
@@ -115,6 +115,7 @@ export function buildCostMatrix(
 
       // Calculate base distance cost
       let cost = calculateDistance(detPos, targetPos)
+      const baseDistance = cost
 
       // Apply association bonus for existing camera+trackId match
       const assoc = track.cameraAssociations.get(det.cameraId)
@@ -122,8 +123,15 @@ export function buildCostMatrix(
         cost *= config.associationBonus
       } else if (assoc && assoc.trackIds.length > 0) {
         // Same-camera penalty: if track already has different trackId from same camera
-        // This prevents "stealing" tracks from the same camera
-        cost *= config.sameCameraPenalty
+        // This prevents "stealing" tracks from the same camera, but relaxes
+        // when a local tracker fragments and the new ID is extremely close.
+        const timeSinceSameCam = det.timestamp - assoc.lastSeen
+        const nearSameCam = baseDistance < config.maxCost * 0.5 &&
+          timeSinceSameCam < config.crossCameraBonusWindowMs
+        const penalty = nearSameCam
+          ? Math.sqrt(config.sameCameraPenalty)
+          : config.sameCameraPenalty
+        cost *= penalty
       } else if (!assoc) {
         // Cross-camera bonus: if track is seen by OTHER cameras but not this one yet
         // This encourages cross-camera handoff in overlap zones
