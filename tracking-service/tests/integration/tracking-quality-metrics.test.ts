@@ -68,6 +68,7 @@ interface MetricsResult {
   crossCameraHandoffRate: number
   trackMergeSuccessRate: number
   averageProjectionError: number
+  shortLivedTrackRate: number
 }
 
 // ============================================================================
@@ -238,6 +239,32 @@ function calculateTrackMergeRate(
 ): number {
   if (totalMultiCamera === 0) return 1.0
   return mergedCount / totalMultiCamera
+}
+
+/**
+ * Short-Lived Track Rate (SLTR)
+ * Proxy for flicker: percentage of tracks that exist for < thresholdMs.
+ */
+function calculateShortLivedTrackRate(
+  tracks: GlobalTrack[],
+  thresholdMs: number = 2000
+): { rate: number; shortLived: number; total: number } {
+  if (tracks.length === 0) return { rate: 0, shortLived: 0, total: 0 }
+
+  let shortLived = 0
+  for (const t of tracks) {
+    const firstSeen = t.trail.length > 0
+      ? t.trail[t.trail.length - 1].timestamp
+      : t.lastSeen
+    const lifetime = t.lastSeen - firstSeen
+    if (lifetime < thresholdMs) shortLived++
+  }
+
+  return {
+    rate: shortLived / tracks.length,
+    shortLived,
+    total: tracks.length,
+  }
 }
 
 // ============================================================================
@@ -491,6 +518,21 @@ describe('Tracking Quality Metrics', () => {
       expect(mergeRate).toBeGreaterThan(0.5) // Relaxed threshold
     })
 
+    it('calculates Short-Lived Track Rate (SLTR)', () => {
+      const allTracks = trackManager.getAllTracks()
+      const sltr = calculateShortLivedTrackRate(allTracks)
+
+      console.log('\n--- Short-Lived Track Rate (SLTR) ---')
+      console.log(`  Short-lived tracks (<2s): ${sltr.shortLived}/${sltr.total}`)
+      console.log(`  SLTR: ${(sltr.rate * 100).toFixed(1)}%`)
+      console.log(`  Target: < 30%`)
+
+      metrics.shortLivedTrackRate = sltr.rate
+
+      // Relaxed gate: should only fail on extreme flicker regressions.
+      expect(sltr.rate).toBeLessThan(0.8)
+    })
+
     it('calculates Average Projection Error', () => {
       const avgError = projectionErrors.length > 0
         ? projectionErrors.reduce((a, b) => a + b, 0) / projectionErrors.length
@@ -553,6 +595,13 @@ describe('Tracking Quality Metrics', () => {
           value: metrics?.averageProjectionError ?? 0,
           target: 0.50,
           format: (v: number) => `${v.toFixed(3)}m`,
+          lowerIsBetter: true,
+        },
+        {
+          name: 'Short-Lived Track Rate (SLTR)',
+          value: metrics?.shortLivedTrackRate ?? 0,
+          target: 0.30,
+          format: (v: number) => `${(v * 100).toFixed(1)}%`,
           lowerIsBetter: true,
         },
       ]

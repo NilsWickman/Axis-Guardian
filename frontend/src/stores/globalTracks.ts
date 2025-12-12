@@ -12,7 +12,7 @@ import { predictPosition } from '../utils/trackCorrelation'
 // Default configuration constants
 export const DEFAULT_CORRELATION_DISTANCE_M = 1.5 // Max distance (meters) to associate detection with existing track
 export const DEFAULT_MERGE_WINDOW_MS = 200 // Time window for multi-camera merging
-export const DEFAULT_TRACK_EXPIRY_MS = 1500 // Remove tracks not seen for 1.5 seconds (visual responsiveness)
+export const DEFAULT_TRACK_EXPIRY_MS = 3000 // Remove tracks not seen for 3 seconds (reduces UI flicker)
 export const DEFAULT_MAX_TRAIL_LENGTH = 20 // Position history for trails
 export const DEFAULT_MIN_DETECTIONS_TO_CONFIRM = 3 // Minimum detections before track is considered confirmed
 export const DEFAULT_MAX_VELOCITY_MS = 10 // Max reasonable walking speed in m/s (reject teleporting tracks)
@@ -199,15 +199,28 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
   // Getters
   const activeTracks = computed(() => {
     const now = Date.now()
+    const occlusionGraceMs = 2000
     // Return confirmed tracks that are:
-    // 1. Actively being detected (not occluded), OR
-    // 2. Pillar-occluded with a predicted position (ghost tracks)
-    // Also check expiry inline for immediate visual response without waiting for cleanup
-    return Array.from(tracks.value.values()).filter(
-      track => track.isActive && track.isConfirmed &&
-        (now - track.lastSeen <= config.value.trackExpiryMs) &&
-        (track.state !== 'occluded' || track.exitReason === 'pillar_occlusion')
-    )
+    // 1. Within normal expiry (brief dropouts stay visible), OR
+    // 2. In ghost/occluded mode with a predicted position (server coasting), OR
+    // 3. Recently occluded (short grace window).
+    // For server-synced ghost tracks, lastSeen may not advance during coasting,
+    // so predicted tracks bypass the normal expiry and rely on server expiry events.
+    return Array.from(tracks.value.values()).filter(track => {
+      if (!track.isActive || !track.isConfirmed) return false
+
+      const timeSinceLastSeen = now - track.lastSeen
+      const withinNormalExpiry = timeSinceLastSeen <= config.value.trackExpiryMs
+      const hasPrediction = track.predictedPosition !== undefined
+      const isPillarGhost = track.state === 'occluded' && track.exitReason === 'pillar_occlusion'
+      const withinOcclusionGrace = timeSinceLastSeen <= occlusionGraceMs
+
+      if (track.state !== 'occluded') {
+        return withinNormalExpiry
+      }
+
+      return isPillarGhost || hasPrediction || withinOcclusionGrace || withinNormalExpiry
+    })
   })
 
   // Include unconfirmed tracks for debugging
@@ -690,6 +703,8 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
       existing.confidence = converted.confidence
       existing.cameraAssociations = converted.cameraAssociations
       existing.state = converted.state
+      existing.exitReason = converted.exitReason
+      existing.predictedPosition = converted.predictedPosition
       existing.videoTiming = converted.videoTiming
     } else {
       // Insert new track

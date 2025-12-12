@@ -408,14 +408,14 @@ export const DEFAULT_TRACKING_CONFIG: TrackingConfig = {
   trackExpiryMs: 10000,            // Tracks expire after 10 seconds without detections
   maxTrailLength: 20,
   minDetectionsToConfirm: 1,       // Confirm immediately on first detection
-  maxVelocityMs: 50,
+  maxVelocityMs: 8,               // Human max sprint ~7-8 m/s; prevents teleporting
   unconfirmedTrackExpiryMs: 2000,  // Ghost tracks expire faster
   minCreationConfidence: 0.7,      // Require higher confidence for new tracks
   exclusionRadius: 0.5,            // Exclusion radius for confirmed tracks
   crossingProximityThreshold: 1.5, // Detect crossing when tracks within 1.5m
   occlusionCoastTimeMs: 7000,      // Coast for 7 seconds during occlusion (allows walking behind pillars)
   reidentificationGateMultiplier: 4.0, // 4x expanded gate for re-ID after occlusion
-  missedFramesBeforeOcclusion: 5,  // Require 5 missed frames before transitioning to occluded
+  missedFramesBeforeOcclusion: 8,  // Allow brief dropouts before occlusion
   detectionsToExitOcclusion: 2,    // Require 2 detections to exit occlusion state
   clusteringDistanceM: 0.7,        // Cluster detections within 0.7m from different cameras (balance: 0.5m = no clustering, 0.9m = wrong merges)
   mergeDistanceM: 0.6,             // Consider merging tracks within 0.6m

@@ -65,7 +65,7 @@ const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
   directionConsistencyWeight: 0.3, // Penalize direction reversals during crossings
   minSpeedForDirection: 0.3,       // 0.3 m/s minimum to consider direction
   crossCameraBonus: 0.7,           // 30% cost reduction for cross-camera handoff
-  crossCameraBonusWindowMs: 1000,  // Track must be seen by other camera within 1 second
+  crossCameraBonusWindowMs: 2000,  // Allow 2s window for handoff gaps
 }
 
 /**
@@ -126,7 +126,7 @@ export function buildCostMatrix(
         // This prevents "stealing" tracks from the same camera, but relaxes
         // when a local tracker fragments and the new ID is extremely close.
         const timeSinceSameCam = det.timestamp - assoc.lastSeen
-        const nearSameCam = baseDistance < config.maxCost * 0.5 &&
+        const nearSameCam = baseDistance < config.maxCost * 0.3 &&
           timeSinceSameCam < config.crossCameraBonusWindowMs
         const penalty = nearSameCam
           ? Math.sqrt(config.sameCameraPenalty)
