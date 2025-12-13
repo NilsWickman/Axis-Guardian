@@ -18,6 +18,7 @@ import { DetectionProcessor } from '../../src/detection/detection-processor.js'
 import { CameraRegistry } from '../../src/detection/camera-registry.js'
 import { loadSiteMapConfig } from '../../src/config/sitemap-loader.js'
 import type { Point2D, GlobalTrack } from '../../src/types.js'
+import { stitchTracks } from '../helpers/track-stitcher.js'
 
 // ============================================================================
 // Types
@@ -79,13 +80,23 @@ function loadTrackTruths(): TrackTruthsDataset | null {
   }
 }
 
-function loadDetectionFile(filePath: string): DetectionFile | null {
+function loadDetectionFile(filePath: string, applyStitching = false): DetectionFile | null {
   try {
     const content = readFileSync(filePath)
+    let data: DetectionFile
     if (filePath.endsWith('.gz')) {
-      return JSON.parse(gunzipSync(content).toString('utf-8'))
+      data = JSON.parse(gunzipSync(content).toString('utf-8'))
+    } else {
+      data = JSON.parse(content.toString('utf-8'))
     }
-    return JSON.parse(content.toString('utf-8'))
+
+    // Apply track stitching to reduce fragmentation from YOLOv8
+    if (applyStitching && data.frames) {
+      const result = stitchTracks(data as any)
+      console.log(`  Track stitching: ${result.originalTrackCount} -> ${result.stitchedTrackCount} tracks`)
+    }
+
+    return data
   } catch {
     return null
   }

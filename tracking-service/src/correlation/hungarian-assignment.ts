@@ -52,20 +52,26 @@ export interface AssignmentConfig {
   crossCameraBonus: number
   /** Time window for cross-camera bonus (ms) - track must be seen by other camera within this time */
   crossCameraBonusWindowMs: number
+  /** Maximum plausible acceleration (m/s²) before penalty */
+  maxAccelerationMs2: number
+  /** Weight for acceleration consistency cost component */
+  accelerationConsistencyWeight: number
 }
 
 const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
-  maxCost: 1.0,             // Reduced from 2.0 for tighter gating
+  maxCost: 1.0,             // Relaxed to allow better same-camera re-id
   useKalmanPrediction: true,
-  associationBonus: 0.2,    // Stronger identity binding for same local trackId
-  sameCameraPenalty: 2.5,   // Heavier penalty for stealing within same camera
-  velocityConsistencyWeight: 0.1,  // Weight for velocity consistency term
+  associationBonus: 0.1,    // Strong binding for same local trackId (90% cost reduction)
+  sameCameraPenalty: 1.5,   // Reduced penalty - allow same-camera re-id
+  velocityConsistencyWeight: 0.15, // Reduced - don't over-penalize velocity changes
   crossingProximityThreshold: 1.5, // Detect crossing when tracks within 1.5m
   crossingMaxCostMultiplier: 0.5,  // Use 50% of maxCost for crossing tracks
-  directionConsistencyWeight: 0.3, // Penalize direction reversals during crossings
-  minSpeedForDirection: 0.3,       // 0.3 m/s minimum to consider direction
-  crossCameraBonus: 0.7,           // 30% cost reduction for cross-camera handoff
+  directionConsistencyWeight: 0.2, // Reduced - allow direction changes
+  minSpeedForDirection: 0.2,       // Moderate threshold
+  crossCameraBonus: 0.6,           // 40% cost reduction for cross-camera handoff
   crossCameraBonusWindowMs: 2000,  // Allow 2s window for handoff gaps
+  maxAccelerationMs2: 3.0,         // Relaxed - walking acceleration can vary
+  accelerationConsistencyWeight: 0.1,  // Reduced penalty weight
 }
 
 /**
@@ -122,16 +128,20 @@ export function buildCostMatrix(
       if (assoc?.trackIds.includes(det.trackId)) {
         cost *= config.associationBonus
       } else if (assoc && assoc.trackIds.length > 0) {
-        // Same-camera penalty: if track already has different trackId from same camera
-        // This prevents "stealing" tracks from the same camera, but relaxes
-        // when a local tracker fragments and the new ID is extremely close.
+        // Same-camera with different trackId: could be fragmentation or different person
         const timeSinceSameCam = det.timestamp - assoc.lastSeen
-        const nearSameCam = baseDistance < config.maxCost * 0.3 &&
-          timeSinceSameCam < config.crossCameraBonusWindowMs
-        const penalty = nearSameCam
-          ? Math.sqrt(config.sameCameraPenalty)
-          : config.sameCameraPenalty
-        cost *= penalty
+        const isRecentAndClose = baseDistance < config.maxCost * 0.5 &&
+          timeSinceSameCam < 500  // Very recent (500ms) and reasonably close
+        const isVeryClose = baseDistance < config.maxCost * 0.25  // Within ~0.175m
+
+        if (isRecentAndClose || isVeryClose) {
+          // Likely local tracker fragmentation - give BONUS instead of penalty
+          // Strong bonus (50% cost reduction) for probable re-identification
+          cost *= 0.5
+        } else {
+          // Older or farther - probably different person, apply penalty
+          cost *= config.sameCameraPenalty
+        }
       } else if (!assoc) {
         // Cross-camera bonus: if track is seen by OTHER cameras but not this one yet
         // This encourages cross-camera handoff in overlap zones
@@ -191,6 +201,22 @@ export function buildCostMatrix(
               cost += Math.min(0.5, directionPenalty * config.directionConsistencyWeight)
             }
           }
+
+          // Add acceleration consistency penalty
+          // Penalize assignments that require unrealistic acceleration
+          if (config.accelerationConsistencyWeight > 0 && dt > 0.05) {
+            // Calculate acceleration (change in velocity per second)
+            const accelerationX = (impliedVelocity.x - predictedVelocity.x) / dt
+            const accelerationY = (impliedVelocity.y - predictedVelocity.y) / dt
+            const acceleration = Math.sqrt(accelerationX * accelerationX + accelerationY * accelerationY)
+
+            // Penalty increases for acceleration above max threshold
+            if (acceleration > config.maxAccelerationMs2) {
+              const excessAccel = acceleration - config.maxAccelerationMs2
+              const accelPenalty = Math.min(0.4, excessAccel * config.accelerationConsistencyWeight)
+              cost += accelPenalty
+            }
+          }
         }
       }
 
@@ -221,6 +247,51 @@ export function detectCrossingTracks(
       if (dist < proximityThreshold) {
         crossingTrackIds.add(tracks[i].globalTrackId)
         crossingTrackIds.add(tracks[j].globalTrackId)
+      }
+    }
+  }
+
+  return crossingTrackIds
+}
+
+/**
+ * Predict future positions of tracks to detect imminent crossings
+ * Returns set of track IDs that will cross within the prediction window
+ */
+export function predictTrajectoryIntersections(
+  tracks: GlobalTrack[],
+  kalmanFilter: KalmanTrackFilter,
+  predictionWindowMs: number = 1000,
+  intersectionThresholdM: number = 0.8
+): Set<string> {
+  const crossingTrackIds = new Set<string>()
+
+  for (let i = 0; i < tracks.length; i++) {
+    for (let j = i + 1; j < tracks.length; j++) {
+      const track1 = tracks[i]
+      const track2 = tracks[j]
+
+      if (!track1.kalmanState || !track2.kalmanState) continue
+
+      // Predict positions at multiple time steps to detect intersection
+      const timeSteps = [200, 500, 800, 1000]  // ms
+
+      for (const dt of timeSteps) {
+        if (dt > predictionWindowMs) break
+
+        const pos1 = kalmanFilter.predict(track1.kalmanState, dt)
+        const pos2 = kalmanFilter.predict(track2.kalmanState, dt)
+
+        const futureDistance = Math.sqrt(
+          Math.pow(pos1.x - pos2.x, 2) + Math.pow(pos1.y - pos2.y, 2)
+        )
+
+        if (futureDistance < intersectionThresholdM) {
+          // Mark both tracks as having imminent crossing
+          crossingTrackIds.add(track1.globalTrackId)
+          crossingTrackIds.add(track2.globalTrackId)
+          break  // Found crossing, no need to check further time steps
+        }
       }
     }
   }
@@ -263,10 +334,23 @@ export function assignDetectionsToTracks(
   }
 
   // Detect crossing tracks for tighter matching
-  const crossingTracks = detectCrossingTracks(
+  // Includes both current crossings and predicted future crossings
+  const currentCrossings = detectCrossingTracks(
     tracks,
     fullConfig.crossingProximityThreshold
   )
+
+  // Predict imminent crossings using trajectory extrapolation
+  const kalmanFilter = fullConfig.kalmanFilter ?? new KalmanTrackFilter()
+  const predictedCrossings = predictTrajectoryIntersections(
+    tracks,
+    kalmanFilter,
+    1000,  // 1 second prediction window
+    fullConfig.crossingProximityThreshold * 0.6  // Tighter threshold for predictions
+  )
+
+  // Combine current and predicted crossings
+  const crossingTracks = new Set([...currentCrossings, ...predictedCrossings])
 
   // Build cost matrix with adaptive gates
   const { matrix: costMatrix, adaptiveGates } = buildCostMatrix(detections, tracks, fullConfig)
