@@ -7,14 +7,19 @@
     ChevronDown,
     Focus,
     MapPinned,
+    ShieldAlert,
     Code,
     Crosshair,
     Users,
     Menu,
     X,
     GitGraph,
+    MapPin,
+    Fingerprint,
   } from 'lucide-vue-next'
   import { useTheme } from '@/composables/useTheme'
+  import { useDemoMode } from '@/composables/useDemoMode'
+  import { useTrackingMode } from '@/composables/useTrackingMode'
   import { Switch } from '@/components/ui/switch'
 
   defineProps<{
@@ -28,6 +33,8 @@
 
   const route = useRoute()
   const { currentTheme, toggleTheme } = useTheme()
+  const { isDemoMode, toggleDemoMode } = useDemoMode()
+  const { isSpatialMode, isReIDMode, toggleMode, dualModeEnabled, spatialTrackCount, reidTrackCount, activeTrackCount } = useTrackingMode()
   const expandedMenus = ref<Set<string>>(new Set())
 
   const isDarkMode = computed(() => currentTheme.value === 'dark')
@@ -51,6 +58,11 @@
       icon: MapPinned,
     },
     {
+      name: 'Zones',
+      path: '/zones',
+      icon: ShieldAlert,
+    },
+    {
       name: 'Dev',
       icon: Code,
       children: [
@@ -72,6 +84,14 @@
       ],
     },
   ]
+
+  // Filter out Dev menu when in demo mode
+  const filteredNavigationItems = computed(() => {
+    if (isDemoMode.value) {
+      return navigationItems.filter(item => item.name !== 'Dev')
+    }
+    return navigationItems
+  })
 
   const toggleMenu = (itemName: string) => {
     if (expandedMenus.value.has(itemName)) {
@@ -131,7 +151,7 @@
     <!-- Navigation Items -->
     <nav class="flex-1 p-4 overflow-y-auto">
       <ul class="space-y-2">
-        <li v-for="item in navigationItems" :key="item.name">
+        <li v-for="item in filteredNavigationItems" :key="item.name">
           <!-- Item with children (expandable) -->
           <template v-if="item.children">
             <button
@@ -195,12 +215,52 @@
       </ul>
     </nav>
 
-    <!-- Theme Switcher -->
-    <div class="px-4 pb-4">
-      <div class="flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground">
-        <Sun class="w-3 h-3" />
-        <Switch :model-value="isDarkMode" @update:model-value="toggleTheme" />
-        <Moon class="w-3 h-3" />
+    <!-- Settings -->
+    <div class="px-4 pb-4 space-y-3">
+      <!-- Tracking Mode Toggle (only shown when dual mode enabled) -->
+      <div v-if="dualModeEnabled" class="px-3 py-2 rounded-lg bg-accent/30 border border-accent/50">
+        <div class="flex items-center justify-between">
+          <span class="text-xs text-muted-foreground">Tracking Mode</span>
+          <div class="flex items-center gap-1.5">
+            <MapPin class="w-3 h-3" :class="isSpatialMode ? 'text-primary' : 'text-muted-foreground'" />
+            <Switch :model-value="isReIDMode" @update:model-value="toggleMode" />
+            <Fingerprint class="w-3 h-3" :class="isReIDMode ? 'text-primary' : 'text-muted-foreground'" />
+          </div>
+        </div>
+        <div class="flex items-center justify-between mt-1">
+          <p class="text-[10px] text-muted-foreground">
+            {{ isReIDMode ? 'Spatial + Re-ID' : 'Spatial Only' }}
+          </p>
+          <!-- Active track count for current mode -->
+          <p class="text-[10px] font-medium" :class="isSpatialMode ? 'text-primary' : 'text-purple-500'">
+            {{ activeTrackCount }} tracks
+          </p>
+        </div>
+        <!-- Side-by-side comparison of both modes -->
+        <div class="flex items-center gap-2 mt-1 text-[9px] text-muted-foreground">
+          <span :class="isSpatialMode ? 'font-medium text-primary' : ''">
+            Spatial: {{ spatialTrackCount }}
+          </span>
+          <span class="opacity-50">|</span>
+          <span :class="isReIDMode ? 'font-medium text-purple-500' : ''">
+            Re-ID: {{ reidTrackCount }}
+          </span>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-center gap-4 px-3 py-2 text-xs font-medium text-muted-foreground">
+        <!-- Theme Switcher -->
+        <div class="flex items-center gap-1.5">
+          <Sun class="w-3 h-3" />
+          <Switch :model-value="isDarkMode" @update:model-value="toggleTheme" />
+          <Moon class="w-3 h-3" />
+        </div>
+        <!-- Demo/Debug Mode Switcher -->
+        <div class="flex items-center gap-1.5">
+          <span>Debug</span>
+          <Switch :model-value="isDemoMode" @update:model-value="toggleDemoMode" />
+          <span>Demo</span>
+        </div>
       </div>
     </div>
 

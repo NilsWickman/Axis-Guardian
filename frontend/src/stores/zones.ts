@@ -8,6 +8,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { config } from '../config/environment'
+import { useToast } from '../composables/useToast'
 
 // ============================================================================
 // Types
@@ -69,6 +70,13 @@ export interface UpdateZoneRequest {
   cooldownMs?: number
 }
 
+export interface ZoneMetricsData {
+  zoneId: string
+  currentCount: number
+  totalEntered: number
+  crossedCount: number
+}
+
 // Resource limits
 const MAX_VIOLATIONS = 100
 
@@ -80,8 +88,13 @@ export const useZoneStore = defineStore('zones', () => {
   // State
   const zones = ref<ZoneConfig[]>([])
   const violations = ref<ZoneViolation[]>([])
+  const zoneMetrics = ref<Map<string, ZoneMetricsData>>(new Map())
   const loading = ref(false)
   const error = ref<string | null>(null)
+
+  // Toast cooldown tracking
+  const lastToastTime = ref<Map<string, number>>(new Map())
+  const toast = useToast()
 
   // Getters
   const enabledZones = computed(() => zones.value.filter(z => z.enabled))
@@ -268,9 +281,40 @@ export const useZoneStore = defineStore('zones', () => {
     // Add to beginning for most recent first
     violations.value.unshift(violation)
 
+    // Trigger toast notification with cooldown
+    triggerViolationToast(violation)
+
     // Trim to prevent unbounded growth
     if (violations.value.length > MAX_VIOLATIONS) {
       violations.value = violations.value.slice(0, MAX_VIOLATIONS)
+    }
+  }
+
+  /**
+   * Trigger toast notification for violation with cooldown
+   */
+  function triggerViolationToast(violation: ZoneViolation): void {
+    const zone = zones.value.find(z => z.id === violation.zoneId)
+    const cooldown = Math.max(zone?.cooldownMs ?? 3000, 3000)
+    const lastTime = lastToastTime.value.get(violation.zoneId) ?? 0
+
+    if (Date.now() - lastTime < cooldown) return
+
+    lastToastTime.value.set(violation.zoneId, Date.now())
+
+    const actionWord = violation.violationType === 'entry' ? 'entered' :
+                       violation.violationType === 'exit' ? 'exited' : 'in'
+    const message = `Alert: Person ${actionWord} ${violation.zoneName}`
+
+    switch (violation.severity) {
+      case 'critical':
+        toast.error(message, 5000)
+        break
+      case 'high':
+        toast.warning(message)
+        break
+      default:
+        toast.info(message)
     }
   }
 
@@ -284,10 +328,39 @@ export const useZoneStore = defineStore('zones', () => {
   /**
    * Handle snapshot message with zones
    */
-  function handleSnapshot(snapshotZones: ZoneConfig[] | undefined): void {
+  function handleSnapshot(snapshotZones: ZoneConfig[] | undefined, snapshotMetrics?: ZoneMetricsData[]): void {
     if (snapshotZones) {
       zones.value = snapshotZones
     }
+    if (snapshotMetrics) {
+      zoneMetrics.value.clear()
+      for (const metrics of snapshotMetrics) {
+        zoneMetrics.value.set(metrics.zoneId, metrics)
+      }
+    }
+  }
+
+  /**
+   * Handle zone metrics update from WebSocket
+   */
+  function handleZoneMetrics(metrics: ZoneMetricsData): void {
+    zoneMetrics.value.set(metrics.zoneId, metrics)
+  }
+
+  /**
+   * Handle zones reset from WebSocket (video restart)
+   */
+  function handleZonesReset(): void {
+    violations.value = []
+    zoneMetrics.value.clear()
+    lastToastTime.value.clear()
+  }
+
+  /**
+   * Get metrics for a specific zone
+   */
+  function getMetrics(zoneId: string): ZoneMetricsData | undefined {
+    return zoneMetrics.value.get(zoneId)
   }
 
   /**
@@ -322,6 +395,7 @@ export const useZoneStore = defineStore('zones', () => {
     // State
     zones,
     violations,
+    zoneMetrics,
     loading,
     error,
 
@@ -345,8 +419,11 @@ export const useZoneStore = defineStore('zones', () => {
     handleZoneViolation,
     handleZonesUpdated,
     handleSnapshot,
+    handleZoneMetrics,
+    handleZonesReset,
     clearViolations,
     getZoneById,
+    getMetrics,
     getViolationsForZone,
     getViolationsForTrack,
   }

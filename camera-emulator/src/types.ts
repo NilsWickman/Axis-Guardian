@@ -11,6 +11,53 @@ export interface CameraConfig {
   trackingServiceUrl: string
 }
 
+// ============================================================================
+// Detection Attributes (from YOLOv8 + Re-ID preprocessing)
+// ============================================================================
+
+/**
+ * Color with confidence score
+ */
+export interface ColorScore {
+  name: string
+  score: number
+}
+
+/**
+ * Clothing type with confidence score
+ */
+export interface ClothingTypeScore {
+  name: string  // e.g., 'jacket', 'shirt', 'dress', 'jeans', 'shorts'
+  score: number
+}
+
+/**
+ * Clothing attributes (colors and type)
+ */
+export interface ClothingAttributes {
+  colors: ColorScore[]
+  type?: ClothingTypeScore
+}
+
+/**
+ * Person detection attributes from re-ID preprocessing
+ * All fields optional for backwards compatibility with old detection files
+ */
+export interface DetectionAttributes {
+  /** Upper body clothing (shirt, jacket, etc.) */
+  upper_clothing?: ClothingAttributes
+  /** Lower body clothing (pants, shorts, skirt, etc.) */
+  lower_clothing?: ClothingAttributes
+  /** Re-ID embedding vector (typically 512-dim from OSNet) */
+  embedding?: number[]
+  /** Quality/confidence of the embedding (0-1) */
+  embedding_quality?: number
+}
+
+// ============================================================================
+// Detection Types
+// ============================================================================
+
 export interface Detection {
   bbox: [number, number, number, number]  // [x, y, width, height] in pixels
   confidence: number
@@ -18,6 +65,8 @@ export interface Detection {
   class_name: string
   track_id?: number
   track_state?: 'new' | 'active' | 'lost'
+  /** Person attributes from re-ID preprocessing (optional for backwards compat) */
+  attributes?: DetectionAttributes
 }
 
 export interface DetectionFrame {

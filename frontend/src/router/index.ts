@@ -38,6 +38,14 @@ const routes: RouteRecordRaw[] = [
       title: 'Site Tracking',
     },
   },
+  {
+    path: '/zones',
+    name: 'Zones',
+    component: () => import('@/views/zones/ZonesView.vue'),
+    meta: {
+      title: 'Zone Management',
+    },
+  },
   // Calibration
   {
     path: '/calibration/annotator',
@@ -84,7 +92,7 @@ const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true'
 
 // Routes allowed in demo mode (read-only deployment)
 const isRouteAllowedInDemoMode = (path: string): boolean => {
-  return path.startsWith('/cameras/') || path === '/site-tracking'
+  return path.startsWith('/cameras/') || path === '/site-tracking' || path === '/zones'
 }
 
 // Global navigation guards

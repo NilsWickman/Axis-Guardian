@@ -47,10 +47,10 @@
             @click="selectCamera(camera)"
             :class="[
               'p-2 rounded-lg cursor-pointer transition-all duration-200 border-2',
-              'bg-muted/30',
+              'bg-muted/70 shadow-md dark:shadow-sm dark:shadow-black/20',
               selectedCamera?.id === camera.id
-                ? 'bg-background border-primary/30'
-                : 'border-transparent hover:bg-accent hover:border-primary/30'
+                ? 'bg-background border-primary/70 shadow-lg dark:shadow-md'
+                : 'border hover:bg-accent hover:border-primary/30 hover:shadow-lg dark:hover:shadow-md'
             ]"
           >
             <div class="mb-1.5 flex justify-between items-center">

@@ -254,7 +254,14 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
     trackId?: string
     frames?: unknown[]
     zones?: unknown[]
+    zoneMetrics?: unknown[]
     violation?: unknown
+    metrics?: unknown
+    // Dual mode fields
+    spatialTracks?: unknown[]
+    reidTracks?: unknown[]
+    spatial?: unknown
+    reid?: unknown
   }): void {
     // Update frame info if present
     if (message.frames) {
@@ -262,15 +269,37 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
     }
 
     switch (message.type) {
+      // ============================================
+      // Dual Tracking Mode Messages (new)
+      // ============================================
+      case 'dual_snapshot':
+        // Server is sending dual track sets - use dual mode handlers
+        globalTrackStore.handleDualSnapshot(message as Parameters<typeof globalTrackStore.handleDualSnapshot>[0])
+        // Handle zones and metrics in snapshot
+        zoneStore.handleSnapshot(
+          message.zones as import('@/stores/zones').ZoneConfig[] | undefined,
+          message.zoneMetrics as import('@/stores/zones').ZoneMetricsData[] | undefined
+        )
+        break
+
+      case 'dual_track_update':
+        // Server is sending incremental dual track updates
+        globalTrackStore.handleDualUpdate(message as Parameters<typeof globalTrackStore.handleDualUpdate>[0])
+        break
+
+      // ============================================
+      // Legacy Single Mode Messages
+      // ============================================
       case 'snapshot':
         // Snapshots apply immediately (initial state)
         if (Array.isArray(message.tracks)) {
           globalTrackStore.setTracksFromServer(message.tracks)
         }
-        // Handle zones in snapshot
-        if (message.zones) {
-          zoneStore.handleSnapshot(message.zones as import('@/stores/zones').ZoneConfig[])
-        }
+        // Handle zones and metrics in snapshot
+        zoneStore.handleSnapshot(
+          message.zones as import('@/stores/zones').ZoneConfig[] | undefined,
+          message.zoneMetrics as import('@/stores/zones').ZoneMetricsData[] | undefined
+        )
         break
 
       case 'track_created':
@@ -319,6 +348,16 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
         if (message.zones) {
           zoneStore.handleZonesUpdated(message.zones as import('@/stores/zones').ZoneConfig[])
         }
+        break
+
+      case 'zone_metrics':
+        if (message.metrics) {
+          zoneStore.handleZoneMetrics(message.metrics as import('@/stores/zones').ZoneMetricsData)
+        }
+        break
+
+      case 'zones_reset':
+        zoneStore.handleZonesReset()
         break
 
       default:

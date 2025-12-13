@@ -17,7 +17,8 @@ export const cameras: CameraConfig[] = [
   {
     cameraId: 'camera-HC3',
     videoPath: path.join(BASE_PATH, 'view-HC3-preprocessed.mp4'),
-    detectionsPath: path.join(BASE_PATH, 'view-HC3-preprocessed.detections.json.gz'),
+    // Use re-ID detection file with embeddings and clothing colors
+    detectionsPath: path.join(BASE_PATH, 'view-HC3-reid.detections.json.gz'),
     port: 9101,
     trackingCameraId: 'camera1',
     trackingServiceUrl: TRACKING_SERVICE_URL,
@@ -25,7 +26,8 @@ export const cameras: CameraConfig[] = [
   {
     cameraId: 'camera-HC4',
     videoPath: path.join(BASE_PATH, 'view-HC4-preprocessed.mp4'),
-    detectionsPath: path.join(BASE_PATH, 'view-HC4-preprocessed.detections.json.gz'),
+    // Use re-ID detection file with embeddings and clothing colors
+    detectionsPath: path.join(BASE_PATH, 'view-HC4-reid.detections.json.gz'),
     port: 9102,
     trackingCameraId: 'camera2',
     trackingServiceUrl: TRACKING_SERVICE_URL,

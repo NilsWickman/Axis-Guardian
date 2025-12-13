@@ -21,6 +21,53 @@ export interface Point3D {
 // Detection Types (from camera emulators)
 // ============================================================================
 
+// ----------------------------------------------------------------------------
+// Detection Attributes (from YOLOv8 + Re-ID preprocessing)
+// ----------------------------------------------------------------------------
+
+/**
+ * Color with confidence score
+ */
+export interface ColorScore {
+  name: string
+  score: number
+}
+
+/**
+ * Clothing type with confidence score
+ */
+export interface ClothingTypeScore {
+  name: string // e.g., 'jacket', 'shirt', 'dress', 'jeans', 'shorts'
+  score: number
+}
+
+/**
+ * Clothing attributes (colors and type)
+ */
+export interface ClothingAttributes {
+  colors: ColorScore[]
+  type?: ClothingTypeScore
+}
+
+/**
+ * Person detection attributes from re-ID preprocessing
+ * All fields optional for backwards compatibility with old detection files
+ */
+export interface DetectionAttributes {
+  /** Upper body clothing (shirt, jacket, etc.) */
+  upper_clothing?: ClothingAttributes
+  /** Lower body clothing (pants, shorts, skirt, etc.) */
+  lower_clothing?: ClothingAttributes
+  /** Re-ID embedding vector (typically 512-dim from OSNet) */
+  embedding?: number[]
+  /** Quality/confidence of the embedding (0-1) */
+  embedding_quality?: number
+}
+
+// ----------------------------------------------------------------------------
+// Detection Messages
+// ----------------------------------------------------------------------------
+
 /**
  * Detection message from camera emulator (msgpack format)
  */
@@ -46,6 +93,8 @@ export interface RawDetection {
   bbox: [number, number, number, number] // [x, y, w, h] normalized 0-1
   confidence: number
   track_id?: number
+  /** Person attributes from re-ID preprocessing (optional for backwards compat) */
+  attributes?: DetectionAttributes
 }
 
 /**
@@ -237,6 +286,8 @@ export interface CameraDetection {
   videoTimeMs?: number
   /** RTP timestamp (90kHz clock) for frame-perfect sync */
   rtpTimestamp?: number
+  /** Person attributes from re-ID preprocessing (optional) */
+  attributes?: DetectionAttributes
 }
 
 /**
@@ -285,6 +336,42 @@ export interface VideoTimingInfo {
   cameraId: string
 }
 
+// ----------------------------------------------------------------------------
+// Track-Level Aggregated Attributes
+// ----------------------------------------------------------------------------
+
+/**
+ * Aggregated clothing attributes for a track
+ * Dominant colors/type determined by weighted voting across detections
+ */
+export interface AggregatedClothingAttributes {
+  /** Top colors by vote count (max 3) */
+  dominant_colors: ColorScore[]
+  /** Most common clothing type */
+  type?: ClothingTypeScore
+}
+
+/**
+ * Track-level aggregated attributes from multiple detections
+ * Used for person re-identification and display
+ */
+export interface TrackAttributes {
+  /** Upper body clothing aggregate */
+  upper_clothing: AggregatedClothingAttributes
+  /** Lower body clothing aggregate */
+  lower_clothing: AggregatedClothingAttributes
+  /** Averaged re-ID embedding (quality-weighted) */
+  embedding?: number[]
+  /** Confidence in the aggregated embedding (0-1) */
+  embedding_quality: number
+  /** Number of detection samples used for aggregation */
+  sample_count: number
+}
+
+// ----------------------------------------------------------------------------
+// Global Track
+// ----------------------------------------------------------------------------
+
 /**
  * Global track that spans multiple cameras
  */
@@ -316,6 +403,8 @@ export interface GlobalTrack {
   predictedPosition?: Point2D
   /** Video timing from the most recent detection (for frontend sync) */
   videoTiming?: VideoTimingInfo
+  /** Aggregated person attributes for re-ID and display (optional) */
+  attributes?: TrackAttributes
 }
 
 /**
@@ -339,6 +428,8 @@ export interface GlobalTrackJSON {
   predictedPosition?: Point2D
   /** Video timing from the most recent detection (for frontend sync) */
   videoTiming?: VideoTimingInfo
+  /** Aggregated person attributes for re-ID and display (optional) */
+  attributes?: TrackAttributes
 }
 
 // ============================================================================
@@ -521,13 +612,60 @@ export interface ZoneViolation {
   cameraIds: string[]
 }
 
+export interface ZoneMetricsData {
+  zoneId: string
+  currentCount: number
+  totalEntered: number
+  crossedCount: number
+}
+
+// ============================================================================
+// Dual Tracking Mode Types
+// ============================================================================
+
+/**
+ * Track changes for batched updates (used in dual mode)
+ */
+export interface TrackChanges {
+  created?: GlobalTrackJSON[]
+  updated?: GlobalTrackJSON[]
+  expired?: string[]
+}
+
+/**
+ * Dual snapshot with both spatial-only and re-ID track sets
+ */
+export interface DualTrackSnapshot {
+  type: 'dual_snapshot'
+  spatialTracks: GlobalTrackJSON[]
+  reidTracks: GlobalTrackJSON[]
+  frames?: CameraFrameInfo[]
+  zones?: ZoneConfig[]
+  zoneMetrics?: ZoneMetricsData[]
+}
+
+/**
+ * Dual track update with changes from both algorithms
+ */
+export interface DualTrackUpdate {
+  type: 'dual_track_update'
+  spatial?: TrackChanges
+  reid?: TrackChanges
+  frames?: CameraFrameInfo[]
+}
+
 /**
  * WebSocket message types
  */
 export type WebSocketMessage =
-  | { type: 'snapshot'; tracks: GlobalTrackJSON[]; frames?: CameraFrameInfo[]; zones?: ZoneConfig[] }
+  | { type: 'snapshot'; tracks: GlobalTrackJSON[]; frames?: CameraFrameInfo[]; zones?: ZoneConfig[]; zoneMetrics?: ZoneMetricsData[] }
   | { type: 'track_created'; track: GlobalTrackJSON; frames?: CameraFrameInfo[] }
   | { type: 'track_updated'; track: GlobalTrackJSON; frames?: CameraFrameInfo[] }
   | { type: 'track_expired'; trackId: string; frames?: CameraFrameInfo[] }
   | { type: 'zone_violation'; violation: ZoneViolation }
   | { type: 'zones_updated'; zones: ZoneConfig[] }
+  | { type: 'zone_metrics'; metrics: ZoneMetricsData }
+  | { type: 'zones_reset' }
+  // Dual tracking mode messages
+  | DualTrackSnapshot
+  | DualTrackUpdate

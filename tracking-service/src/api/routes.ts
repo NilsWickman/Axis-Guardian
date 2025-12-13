@@ -6,7 +6,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { z } from 'zod'
 import { appendFileSync } from 'fs'
 import { TrackManager, trackToJSON } from '../tracks/track-manager.js'
-import { DetectionProcessor } from '../detection/detection-processor.js'
+import type { IDetectionProcessor } from '../detection/detection-processor.js'
 import { CameraRegistry } from '../detection/camera-registry.js'
 import {
   getSiteMapConfigJson,
@@ -104,6 +104,29 @@ const BboxObjectSchema = z.object({
   bottom: z.number().min(0).max(1),
 })
 
+// Detection attributes schema (from YOLOv8 + Re-ID preprocessing)
+const ColorScoreSchema = z.object({
+  name: z.string(),
+  score: z.number().min(0).max(1),
+})
+
+const ClothingTypeScoreSchema = z.object({
+  name: z.string(),
+  score: z.number().min(0).max(1),
+})
+
+const ClothingAttributesSchema = z.object({
+  colors: z.array(ColorScoreSchema),
+  type: ClothingTypeScoreSchema.optional(),
+})
+
+const DetectionAttributesSchema = z.object({
+  upper_clothing: ClothingAttributesSchema.optional(),
+  lower_clothing: ClothingAttributesSchema.optional(),
+  embedding: z.array(z.number()).optional(),
+  embedding_quality: z.number().min(0).max(1).optional(),
+}).optional()
+
 const EmulatorDetectionSchema = z.object({
   camera_id: z.string(),
   timestamp: z.number().optional(),
@@ -116,6 +139,7 @@ const EmulatorDetectionSchema = z.object({
     confidence: z.number().min(0).max(1),
     bbox: z.union([BboxArraySchema, BboxObjectSchema]),
     track_id: z.number().optional(),
+    attributes: DetectionAttributesSchema,
   })),
 })
 
@@ -143,14 +167,20 @@ function recordHttpLatency(dispatchTime: number): void {
   }
 }
 
+export interface DualTrackManagers {
+  spatialTrackManager?: TrackManager
+  reidTrackManager?: TrackManager
+}
+
 export function registerRoutes(
   app: FastifyInstance,
   trackManager: TrackManager,
-  detectionProcessor: DetectionProcessor,
+  detectionProcessor: IDetectionProcessor,
   cameraRegistry: CameraRegistry,
   acapClient: AcapClient | null = null,
   zoneManager: ZoneManager | null = null,
-  broadcaster: WebSocketBroadcaster | null = null
+  broadcaster: WebSocketBroadcaster | null = null,
+  dualManagers: DualTrackManagers = {}
 ): void {
   // Log read-only mode status
   if (isReadOnlyMode) {
@@ -185,6 +215,45 @@ export function registerRoutes(
       confirmedCount: trackManager.getActiveTrackCount(),
       pendingCount: trackManager.getPendingTrackCount(),
       tracks: tracks.map(trackToJSON),
+    }
+  })
+
+  // DEBUG: Compare dual tracking modes
+  app.get('/api/dual-tracks', async () => {
+    const { spatialTrackManager, reidTrackManager } = dualManagers
+
+    if (!spatialTrackManager || !reidTrackManager) {
+      return {
+        error: 'Dual mode not enabled',
+        dualModeEnabled: false,
+      }
+    }
+
+    const spatialTracks = spatialTrackManager.getActiveTracks()
+    const reidTracks = reidTrackManager.getActiveTracks()
+
+    // Get max track ID to see total tracks created
+    const getMaxId = (tracks: typeof spatialTracks) => {
+      if (tracks.length === 0) return 0
+      return Math.max(...tracks.map(t => parseInt(t.globalTrackId.split('-')[1]) || 0))
+    }
+
+    return {
+      dualModeEnabled: true,
+      spatial: {
+        activeCount: spatialTracks.length,
+        totalCreated: getMaxId(spatialTracks),
+        trackIds: spatialTracks.map(t => t.globalTrackId),
+      },
+      reid: {
+        activeCount: reidTracks.length,
+        totalCreated: getMaxId(reidTracks),
+        trackIds: reidTracks.map(t => t.globalTrackId),
+      },
+      comparison: {
+        sameActiveCount: spatialTracks.length === reidTracks.length,
+        sameTotalCreated: getMaxId(spatialTracks) === getMaxId(reidTracks),
+      },
     }
   })
 
@@ -297,6 +366,7 @@ export function registerRoutes(
           confidence: det.confidence,
           bbox,
           track_id: det.track_id ?? i,
+          attributes: det.attributes,  // Pass through re-ID attributes
         }
       }),
     }

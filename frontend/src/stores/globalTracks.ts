@@ -100,6 +100,53 @@ export interface TrailPosition {
  */
 export type ExitReason = 'fov_exit' | 'boundary_exit' | 'pillar_occlusion' | 'timeout' | null
 
+// ============================================
+// Track Attributes (from re-ID preprocessing)
+// ============================================
+
+/**
+ * Color with confidence score
+ */
+export interface ColorScore {
+  name: string
+  score: number
+}
+
+/**
+ * Clothing type with confidence score
+ */
+export interface ClothingTypeScore {
+  name: string
+  score: number
+}
+
+/**
+ * Aggregated clothing attributes for a track
+ */
+export interface AggregatedClothingAttributes {
+  /** Top colors by vote count (max 3) */
+  dominant_colors: ColorScore[]
+  /** Most common clothing type */
+  type?: ClothingTypeScore
+}
+
+/**
+ * Track-level aggregated attributes from multiple detections
+ * Used for person re-identification and display
+ */
+export interface TrackAttributes {
+  /** Upper body clothing aggregate */
+  upper_clothing: AggregatedClothingAttributes
+  /** Lower body clothing aggregate */
+  lower_clothing: AggregatedClothingAttributes
+  /** Averaged re-ID embedding (quality-weighted) */
+  embedding?: number[]
+  /** Confidence in the aggregated embedding (0-1) */
+  embedding_quality: number
+  /** Number of detection samples used for aggregation */
+  sample_count: number
+}
+
 /**
  * Global track that spans multiple cameras
  */
@@ -123,6 +170,8 @@ export interface GlobalTrack {
   predictedPosition?: { x: number; y: number }
   /** Video timing from the most recent detection (for frontend sync) */
   videoTiming?: VideoTimingInfo
+  /** Aggregated person attributes for re-ID and display (optional) */
+  attributes?: TrackAttributes
 }
 
 /**
@@ -174,11 +223,25 @@ function mergePositions(detections: CameraDetection[]): { x: number; y: number; 
   }
 }
 
+/**
+ * Tracking mode selection for dual tracking
+ */
+export type TrackingMode = 'spatial' | 'reid'
+
 export const useGlobalTrackStore = defineStore('globalTracks', () => {
   // State
   const tracks = ref<Map<string, GlobalTrack>>(new Map())
   const nextTrackId = ref(1)
   const usedColors = ref<Set<string>>(new Set())
+
+  // Dual tracking mode state
+  const spatialTracks = ref<Map<string, GlobalTrack>>(new Map())
+  const reidTracks = ref<Map<string, GlobalTrack>>(new Map())
+  const trackingMode = ref<TrackingMode>(
+    (localStorage.getItem('tracking-mode') as TrackingMode) || 'spatial'
+  )
+  /** Whether the server is sending dual track sets */
+  const dualModeEnabled = ref(false)
 
   // Tracking frame info for timing diagnostics (per camera)
   const trackingFrameInfo = ref<Map<string, CameraFrameInfo>>(new Map())
@@ -196,6 +259,17 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
   // UI settings
   const showTrails = ref(true)
 
+  /**
+   * Get the active track source based on tracking mode
+   * In dual mode, uses mode-specific maps; otherwise uses legacy tracks map
+   */
+  const activeTrackSource = computed(() => {
+    if (dualModeEnabled.value) {
+      return trackingMode.value === 'spatial' ? spatialTracks.value : reidTracks.value
+    }
+    return tracks.value
+  })
+
   // Getters
   const activeTracks = computed(() => {
     const now = Date.now()
@@ -206,7 +280,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     // 3. Recently occluded (short grace window).
     // For server-synced ghost tracks, lastSeen may not advance during coasting,
     // so predicted tracks bypass the normal expiry and rely on server expiry events.
-    return Array.from(tracks.value.values()).filter(track => {
+    return Array.from(activeTrackSource.value.values()).filter(track => {
       if (!track.isActive || !track.isConfirmed) return false
 
       const timeSinceLastSeen = now - track.lastSeen
@@ -226,7 +300,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
   // Include unconfirmed tracks for debugging
   const allActiveTracks = computed(() => {
     const now = Date.now()
-    return Array.from(tracks.value.values()).filter(
+    return Array.from(activeTrackSource.value.values()).filter(
       track => track.isActive && (now - track.lastSeen <= config.value.trackExpiryMs)
     )
   })
@@ -234,7 +308,19 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
   const activeTrackCount = computed(() => activeTracks.value.length)
   const pendingTrackCount = computed(() => allActiveTracks.value.length - activeTracks.value.length)
 
-  const allTracks = computed(() => Array.from(tracks.value.values()))
+  const allTracks = computed(() => Array.from(activeTrackSource.value.values()))
+
+  // Track counts for both modes (for UI display)
+  const spatialTrackCount = computed(() => {
+    return Array.from(spatialTracks.value.values()).filter(
+      t => t.isActive && t.isConfirmed
+    ).length
+  })
+  const reidTrackCount = computed(() => {
+    return Array.from(reidTracks.value.values()).filter(
+      t => t.isActive && t.isConfirmed
+    ).length
+  })
 
   // Actions
 
@@ -645,6 +731,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     exitReason?: ExitReason
     predictedPosition?: { x: number; y: number }
     videoTiming?: VideoTimingInfo
+    attributes?: TrackAttributes
   }
 
   /**
@@ -706,6 +793,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
       existing.exitReason = converted.exitReason
       existing.predictedPosition = converted.predictedPosition
       existing.videoTiming = converted.videoTiming
+      existing.attributes = converted.attributes
     } else {
       // Insert new track
       tracks.value.set(converted.globalTrackId, converted)
@@ -748,18 +836,154 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     return Array.from(trackingFrameInfo.value.values())
   }
 
+  // ============================================
+  // Dual Tracking Mode Methods
+  // ============================================
+
+  /**
+   * Set tracking mode (spatial or reid)
+   */
+  function setTrackingMode(mode: TrackingMode): void {
+    trackingMode.value = mode
+    localStorage.setItem('tracking-mode', mode)
+  }
+
+  /**
+   * Toggle between spatial and re-ID modes
+   */
+  function toggleTrackingMode(): void {
+    setTrackingMode(trackingMode.value === 'spatial' ? 'reid' : 'spatial')
+  }
+
+  /**
+   * Handle dual snapshot from server (contains both track sets)
+   */
+  interface DualTrackSnapshot {
+    type: 'dual_snapshot'
+    spatialTracks: GlobalTrackJSON[]
+    reidTracks: GlobalTrackJSON[]
+    frames?: CameraFrameInfo[]
+  }
+
+  function handleDualSnapshot(msg: DualTrackSnapshot): void {
+    dualModeEnabled.value = true
+
+    // Populate spatial tracks
+    spatialTracks.value.clear()
+    for (const track of msg.spatialTracks) {
+      const converted = convertServerTrack(track)
+      spatialTracks.value.set(converted.globalTrackId, converted)
+    }
+
+    // Populate re-ID tracks
+    reidTracks.value.clear()
+    for (const track of msg.reidTracks) {
+      const converted = convertServerTrack(track)
+      reidTracks.value.set(converted.globalTrackId, converted)
+    }
+
+    // Update frame info
+    updateFrameInfo(msg.frames)
+  }
+
+  /**
+   * Handle dual track update from server (incremental changes)
+   */
+  interface TrackChanges {
+    created?: GlobalTrackJSON[]
+    updated?: GlobalTrackJSON[]
+    expired?: string[]
+  }
+
+  interface DualTrackUpdate {
+    type: 'dual_track_update'
+    spatial?: TrackChanges
+    reid?: TrackChanges
+    frames?: CameraFrameInfo[]
+  }
+
+  function handleDualUpdate(msg: DualTrackUpdate): void {
+    dualModeEnabled.value = true
+
+    // Apply spatial changes
+    if (msg.spatial) {
+      applyTrackChanges(spatialTracks.value, msg.spatial)
+    }
+
+    // Apply re-ID changes
+    if (msg.reid) {
+      applyTrackChanges(reidTracks.value, msg.reid)
+    }
+
+    // Update frame info
+    updateFrameInfo(msg.frames)
+  }
+
+  /**
+   * Apply track changes to a specific track map
+   */
+  function applyTrackChanges(trackMap: Map<string, GlobalTrack>, changes: TrackChanges): void {
+    // Handle created tracks
+    if (changes.created) {
+      for (const track of changes.created) {
+        const converted = convertServerTrack(track)
+        trackMap.set(converted.globalTrackId, converted)
+      }
+    }
+
+    // Handle updated tracks
+    if (changes.updated) {
+      for (const track of changes.updated) {
+        const converted = convertServerTrack(track)
+        const existing = trackMap.get(converted.globalTrackId)
+        if (existing) {
+          // Update in place
+          existing.currentPosition = converted.currentPosition
+          existing.trail = converted.trail
+          existing.lastSeen = converted.lastSeen
+          existing.isActive = converted.isActive
+          existing.isConfirmed = converted.isConfirmed
+          existing.detectionCount = converted.detectionCount
+          existing.confidence = converted.confidence
+          existing.cameraAssociations = converted.cameraAssociations
+          existing.state = converted.state
+          existing.exitReason = converted.exitReason
+          existing.predictedPosition = converted.predictedPosition
+          existing.videoTiming = converted.videoTiming
+          existing.attributes = converted.attributes
+        } else {
+          trackMap.set(converted.globalTrackId, converted)
+        }
+      }
+    }
+
+    // Handle expired tracks
+    if (changes.expired) {
+      for (const trackId of changes.expired) {
+        trackMap.delete(trackId)
+      }
+    }
+  }
+
   return {
     // State
     tracks,
     showTrails,
     config, // Configurable tracking parameters
     trackingFrameInfo, // Frame info for timing diagnostics
+    // Dual mode state
+    trackingMode,
+    dualModeEnabled,
+    spatialTracks,
+    reidTracks,
     // Getters
     activeTracks,
     allActiveTracks, // Includes unconfirmed tracks (for debugging)
     activeTrackCount,
     pendingTrackCount, // Tracks waiting for confirmation
     allTracks,
+    spatialTrackCount,
+    reidTrackCount,
     // Actions
     processDetection,
     cleanupExpiredTracks,
@@ -776,6 +1000,11 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     updateFrameInfo,
     getFrameInfoForCamera,
     getAllFrameInfo,
+    // Dual mode methods
+    setTrackingMode,
+    toggleTrackingMode,
+    handleDualSnapshot,
+    handleDualUpdate,
     // For testing/debugging
     findNearbyTrack,
   }
