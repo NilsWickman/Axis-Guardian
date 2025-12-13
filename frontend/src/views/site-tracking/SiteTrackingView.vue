@@ -4,7 +4,8 @@
     <div class="flex-1 flex flex-col overflow-hidden min-h-[300px] lg:min-h-0">
       <!-- Canvas Container -->
       <div
-        class="flex-1 bg-gray-900 relative overflow-hidden"
+        class="flex-1 relative overflow-hidden"
+        style="background-color: var(--canvas-background)"
         ref="canvasContainer"
         @mousemove="handleMouseMove"
         @mouseleave="handleMouseLeave"
@@ -23,7 +24,7 @@
           :show-trails="true"
           :show-confidence="true"
           :show-person-icon="false"
-          :show-stats="true"
+          :show-stats="!isDemoMode"
           :show-heatmap="false"
           :show-debug-mode="showDebugMode"
           :marker-radius="8"
@@ -53,6 +54,7 @@
 
         <!-- Debug Mode Toggle -->
         <button
+          v-if="!isDemoMode"
           @click="showDebugMode = !showDebugMode"
           class="absolute bottom-4 left-4 px-3 py-1.5 rounded text-xs font-medium transition-colors"
           :class="showDebugMode
@@ -66,7 +68,8 @@
         <!-- Loading State -->
         <div
           v-if="!currentMap"
-          class="absolute inset-0 flex items-center justify-center bg-gray-900"
+          class="absolute inset-0 flex items-center justify-center"
+          style="background-color: var(--canvas-background)"
         >
           <div class="text-center text-muted-foreground">
             <div class="w-12 h-12 border-4 border-muted border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
@@ -86,10 +89,10 @@
           @click="selectCamera(camera)"
           :class="[
             'p-2 rounded-lg cursor-pointer transition-all duration-200 border-2',
-            'bg-muted/30',
+            'bg-muted/70 shadow-md dark:shadow-sm dark:shadow-black/20',
             selectedCamera?.id === camera.id
-              ? 'bg-background border-primary/30'
-              : 'border-transparent hover:bg-accent hover:border-primary/30'
+              ? 'bg-background border-primary/70 shadow-lg dark:shadow-md'
+              : 'border hover:bg-accent hover:border-primary/30 hover:shadow-lg dark:hover:shadow-md'
           ]"
         >
           <div class="mb-1.5 flex justify-between items-center">
@@ -115,6 +118,7 @@
 
           <!-- Detection Metadata Panel -->
           <DetectionMetadataPanel
+            v-if="!isDemoMode"
             :metadata="cameraMetadataMap[camera.id]"
             class="mt-1.5 bg-muted/20 rounded px-1.5 py-1"
           />
@@ -128,10 +132,13 @@
 import { ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useCameraStore } from '@/stores/cameras'
 import { useGlobalTrackStore } from '@/stores/globalTracks'
+import { useZoneStore } from '@/stores/zones'
 import { useCameraConnectionManager } from '@/composables/useCameraConnectionManager'
 import { useSiteMapCanvas, type CanvasRenderOptions } from '@/composables/useSiteMapCanvas'
 import { useSiteMapConfig } from '@/composables/useSiteMapConfig'
 import { useTrackingServiceWebSocket } from '@/composables/useTrackingServiceWebSocket'
+import { useDemoMode } from '@/composables/useDemoMode'
+import { useTheme } from '@/composables/useTheme'
 // Global track store is used by PersonPositionOverlay component
 import { extractValue, metersToPixels, RENDER_SCALE } from '@/utils/siteMapConversion'
 import PersonPositionOverlay from '@/components/features/site-map/PersonPositionOverlay.vue'
@@ -145,7 +152,10 @@ interface Camera {
 // Stores and composables
 const cameraStore = useCameraStore()
 const globalTrackStore = useGlobalTrackStore()
+const zoneStore = useZoneStore()
 const { siteMap: currentMap, loadSiteMap } = useSiteMapConfig()
+const { isDemoMode } = useDemoMode()
+const { currentTheme } = useTheme()
 
 // HC3 camera configuration (single camera tracking mode)
 const TRACKED_CAMERA_ID = 'camera1'
@@ -262,6 +272,11 @@ const drawMap = () => {
 
   canvas.drawWalls(currentMap.value.walls)
 
+  // Draw zones in minimal mode (just dashed outlines, subtle fill when occupied)
+  if (zoneStore.enabledZones.length > 0) {
+    canvas.drawZones(zoneStore.enabledZones, null, null, false, zoneStore.zoneMetrics, true)
+  }
+
   // Pre-calculate all camera FOV polygons for overlap detection
   const allCameraFOVs = currentMap.value.cameras.map(camera =>
     canvas.getCameraFOVPolygon(camera, currentMap.value!.walls, currentMap.value!.obstacles)
@@ -365,6 +380,27 @@ watch(currentMap, async (newMap) => {
     resizeCanvas()
   }
 })
+
+// Redraw canvas when theme changes
+watch(currentTheme, () => {
+  if (currentMap.value) {
+    drawMap()
+  }
+})
+
+// Redraw canvas when zones change
+watch(() => zoneStore.zones, () => {
+  if (currentMap.value) {
+    drawMap()
+  }
+}, { deep: true })
+
+// Redraw canvas when zone metrics change (occupancy updates)
+watch(() => zoneStore.zoneMetrics, () => {
+  if (currentMap.value) {
+    drawMap()
+  }
+}, { deep: true })
 
 // Resize handler
 const handleResize = () => {

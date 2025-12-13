@@ -1,6 +1,7 @@
 import { ref, type Ref } from 'vue'
+import { useTheme } from './useTheme'
 import type { CameraPlacement, Wall, Obstacle } from '../types/site-map-types'
-import type { ZoneConfig } from '../stores/zones'
+import type { ZoneConfig, ZoneMetricsData } from '../stores/zones'
 import { calculateVisibleFOV, drawPolygon, type Point, type LineSegment, type CircleObstacle, type RectangleObstacle, type HeightAwareOptions } from './useGeometry'
 import {
   extractValue,
@@ -535,11 +536,15 @@ export function useSiteMapCanvas(
     context.restore()
   }
 
-  // Category-based default colors
-  const OBSTACLE_CATEGORY_COLORS: Record<string, string> = {
-    furniture: '#78716c',   // stone-500
-    structural: '#64748b',  // slate-500
-    equipment: '#1e293b',   // slate-800
+  // Category-based default colors (theme-aware)
+  const getObstacleCategoryColors = () => {
+    const { currentTheme } = useTheme()
+    const isLightMode = currentTheme.value === 'light'
+    return {
+      furniture: isLightMode ? '#1c1917' : '#78716c',   // stone-900 / stone-500
+      structural: isLightMode ? '#0f172a' : '#64748b',  // slate-900 / slate-500
+      equipment: isLightMode ? '#0f172a' : '#1e293b',   // slate-900 / slate-800
+    }
   }
 
   // Zone type default colors
@@ -570,8 +575,14 @@ export function useSiteMapCanvas(
       const centerX = metersToPixels(extractValue(position.x))
       const centerY = metersToPixels(extractValue(position.y))
 
-      // Get color (use provided color or category default)
-      const baseColor = color || OBSTACLE_CATEGORY_COLORS[category] || OBSTACLE_CATEGORY_COLORS.furniture
+      // Get color (use category default in light mode for better visibility, otherwise use provided color)
+      const { currentTheme } = useTheme()
+      const isLightMode = currentTheme.value === 'light'
+      const obstacleColors = getObstacleCategoryColors()
+      // In light mode, always use dark category colors; in dark mode, use provided color or category default
+      const baseColor = isLightMode
+        ? (obstacleColors[category] || obstacleColors.furniture)
+        : (color || obstacleColors[category] || obstacleColors.furniture)
 
       // Determine fill and stroke colors based on state
       let fillColor = baseColor
@@ -774,12 +785,15 @@ export function useSiteMapCanvas(
 
   /**
    * Draw restricted zones on the canvas
+   * @param minimal - If true, renders just dashed outlines without fill (for main tracking view)
    */
   const drawZones = (
     zones: ZoneConfig[],
     hoveredZoneId?: string | null,
     selectedZoneId?: string | null,
-    showLabels: boolean = true
+    showLabels: boolean = true,
+    zoneMetrics?: Map<string, ZoneMetricsData>,
+    minimal: boolean = false
   ) => {
     if (!ctx.value || !zones || zones.length === 0) return
 
@@ -811,6 +825,35 @@ export function useSiteMapCanvas(
 
       // Get zone color (use provided or type default)
       const baseColor = color || ZONE_TYPE_COLORS[type] || ZONE_TYPE_COLORS.restricted
+
+      // Minimal mode: just dashed outlines, no fill
+      if (minimal) {
+        context.beginPath()
+        context.moveTo(pixelVertices[0].x, pixelVertices[0].y)
+        for (let i = 1; i < pixelVertices.length; i++) {
+          context.lineTo(pixelVertices[i].x, pixelVertices[i].y)
+        }
+        context.closePath()
+
+        // Very subtle fill only when occupied
+        const metrics = zoneMetrics?.get(id)
+        if (metrics && metrics.currentCount > 0) {
+          context.fillStyle = `${baseColor}22` // 13% opacity when occupied
+          context.fill()
+        }
+
+        // Dashed outline
+        context.strokeStyle = `${baseColor}88` // 53% opacity
+        context.lineWidth = 1.5
+        context.setLineDash([6, 4])
+        context.stroke()
+        context.setLineDash([])
+
+        // Skip labels and vertex rendering in minimal mode
+        return
+      }
+
+      // Full mode below (for zones management page)
 
       // Determine fill opacity based on state
       let fillOpacity = '33' // 20% default
@@ -925,6 +968,30 @@ export function useSiteMapCanvas(
           context.fillStyle = '#ffffffaa'
           const typeLabel = type.charAt(0).toUpperCase() + type.slice(1)
           context.fillText(typeLabel, centroid.x, centroid.y + 14)
+        }
+
+        // Draw occupancy badge if there are people in the zone
+        const metrics = zoneMetrics?.get(id)
+        if (metrics && metrics.currentCount > 0) {
+          const badgeRadius = 12
+          const badgeX = centroid.x + labelMetrics.width / 2 + labelPadding + badgeRadius + 4
+          const badgeY = centroid.y
+
+          // Badge background (red for occupied)
+          context.beginPath()
+          context.arc(badgeX, badgeY, badgeRadius, 0, Math.PI * 2)
+          context.fillStyle = '#ef4444'
+          context.fill()
+          context.strokeStyle = '#ffffff'
+          context.lineWidth = 2
+          context.stroke()
+
+          // Badge text (count)
+          context.fillStyle = '#ffffff'
+          context.font = 'bold 11px sans-serif'
+          context.textAlign = 'center'
+          context.textBaseline = 'middle'
+          context.fillText(String(metrics.currentCount), badgeX, badgeY)
         }
       }
     })
@@ -1300,13 +1367,19 @@ export function useSiteMapCanvas(
     )
 
     // Draw FOV cone with wall occlusion
+    // Use higher opacity in light mode for better visibility
+    const { currentTheme } = useTheme()
+    const isLightMode = currentTheme.value === 'light'
     const fillStyle = isPreview
-      ? `${hexColor}40`
+      ? `${hexColor}${isLightMode ? '50' : '40'}`
       : isSelected
-        ? `${hexColor}50`
-        : `${hexColor}30`
+        ? `${hexColor}${isLightMode ? '70' : '50'}`
+        : `${hexColor}${isLightMode ? '50' : '30'}`
 
-    const strokeStyle = isSelected || isHovered ? '#ffffff' : `${hexColor}cc`
+    // Only stroke when selected or hovered to avoid border around obstacle cutouts
+    const strokeStyle = (isSelected || isHovered)
+      ? (isLightMode ? '#333333' : '#ffffff')
+      : undefined
     const lineWidth = isSelected ? 3 : isHovered ? 2.5 : 2
 
     drawPolygon(context, visiblePolygon, fillStyle, strokeStyle, lineWidth)

@@ -17,9 +17,11 @@ import type {
   CameraTrackAssociation,
   Point2D,
   VideoTimingInfo,
+  DetectionAttributes,
 } from '../types.js'
 import type { ZoneManager } from '../zones/zone-manager.js'
 import { DEFAULT_TRACKING_CONFIG } from '../types.js'
+import { AttributeAggregator } from './attribute-aggregator.js'
 import { calculateDistance, predictPosition, mergeWorldPositions } from '../correlation/track-matcher.js'
 import { KalmanTrackFilter } from '../filters/kalman-track-filter.js'
 import { assignDetectionsToTracks } from '../correlation/hungarian-assignment.js'
@@ -86,6 +88,7 @@ export function trackToJSON(track: GlobalTrack): GlobalTrackJSON {
     exitReason: track.exitReason,
     predictedPosition: track.predictedPosition,
     videoTiming: track.videoTiming,
+    attributes: track.attributes,  // Include re-ID attributes
   }
 }
 
@@ -93,6 +96,12 @@ export interface TrackManagerOptions {
   config?: Partial<TrackingConfig>
   clock?: () => number
   idGenerator?: () => string
+  /**
+   * Weight for embedding similarity in Hungarian assignment (0-1).
+   * Set to 0 for spatial-only tracking, 0.3 for re-ID enabled tracking.
+   * Default is 0 (spatial only).
+   */
+  embeddingWeight?: number
 }
 
 /**
@@ -132,6 +141,10 @@ export class TrackManager {
   private lastDetectionTimestamp: number | null = null
   /** Recently-ended local track IDs per camera for stitching */
   private endedLocalTracks: Map<string, EndedLocalTrack[]> = new Map()
+  /** Per-track attribute aggregators for re-ID */
+  private attributeAggregators: Map<string, AttributeAggregator> = new Map()
+  /** Embedding weight for Hungarian assignment (0 = spatial only, 0.3 = re-ID enabled) */
+  private embeddingWeight: number
 
   /** Sitemap geometry for exit detection */
   private siteMapGeometry?: {
@@ -152,6 +165,8 @@ export class TrackManager {
     this.config = { ...DEFAULT_TRACKING_CONFIG, ...options.config }
     this.clock = options.clock ?? (() => Date.now())
     this.idGenerator = options.idGenerator ?? (() => `global-${this.nextTrackId++}`)
+    // Embedding weight: 0 for spatial-only, 0.3 for re-ID enabled
+    this.embeddingWeight = options.embeddingWeight ?? 0
     // Create a new KalmanTrackFilter instance for each TrackManager
     // to avoid state cache pollution between tests or different managers
     this.kalmanFilter = new KalmanTrackFilter()
@@ -380,6 +395,7 @@ export class TrackManager {
           this.tracks.delete(trackId)
           this.kalmanFilter.removeTrackState(trackId)
           this.zoneManager?.clearTrackState(trackId)
+          this.attributeAggregators.delete(trackId)
           continue
         }
       }
@@ -496,6 +512,7 @@ export class TrackManager {
           this.tracks.delete(trackId)
           this.kalmanFilter.removeTrackState(trackId)
           this.zoneManager?.clearTrackState(trackId)
+          this.attributeAggregators.delete(trackId)
         }
       }
 
@@ -518,6 +535,7 @@ export class TrackManager {
         this.tracks.delete(trackId)
         this.kalmanFilter.removeTrackState(trackId)
         this.zoneManager?.clearTrackState(trackId)
+        this.attributeAggregators.delete(trackId)
       }
     }
   }
@@ -532,6 +550,7 @@ export class TrackManager {
     this.kalmanFilter.clearCache()
     this.zoneManager?.resetAllStates()
     this.lastDetectionTimestamp = null
+    this.attributeAggregators.clear()
   }
 
   /**
@@ -567,6 +586,27 @@ export class TrackManager {
   setZoneManager(zoneManager: ZoneManager): void {
     this.zoneManager = zoneManager
     console.log(`[TrackManager] Zone manager connected`)
+  }
+
+  /**
+   * Aggregate detection attributes into track-level attributes
+   * Called when a detection with attributes is associated with a track
+   */
+  private aggregateDetectionAttributes(track: GlobalTrack, attributes: DetectionAttributes): void {
+    // Get or create aggregator for this track
+    let aggregator = this.attributeAggregators.get(track.globalTrackId)
+    if (!aggregator) {
+      aggregator = new AttributeAggregator()
+      this.attributeAggregators.set(track.globalTrackId, aggregator)
+    }
+
+    // Add detection attributes to aggregator
+    aggregator.addDetection(attributes)
+
+    // Update track with aggregated attributes
+    if (aggregator.hasData()) {
+      track.attributes = aggregator.getAggregatedAttributes()
+    }
   }
 
   /**
@@ -1237,6 +1277,14 @@ export class TrackManager {
     }
 
     this.tracks.set(globalTrackId, track)
+
+    // Aggregate attributes from all detections in cluster
+    for (const det of cluster.detections) {
+      if (det.attributes) {
+        this.aggregateDetectionAttributes(track, det.attributes)
+      }
+    }
+
     return track
   }
 
@@ -1285,6 +1333,11 @@ export class TrackManager {
     }
 
     this.tracks.set(globalTrackId, track)
+
+    // Aggregate attributes if present
+    if (detection.attributes) {
+      this.aggregateDetectionAttributes(track, detection.attributes)
+    }
 
     // Record metrics
     getMetrics().recordTrackCreated()
@@ -1352,6 +1405,11 @@ export class TrackManager {
     const videoTiming = this.extractVideoTiming(detection)
     if (videoTiming) {
       track.videoTiming = videoTiming
+    }
+
+    // Aggregate detection attributes for re-ID
+    if (detection.attributes) {
+      this.aggregateDetectionAttributes(track, detection.attributes)
     }
 
     track.detectionCount++
@@ -1471,6 +1529,11 @@ export class TrackManager {
     const videoTiming = this.extractVideoTiming(detection)
     if (videoTiming) {
       track.videoTiming = videoTiming
+    }
+
+    // Aggregate detection attributes for re-ID
+    if (detection.attributes) {
+      this.aggregateDetectionAttributes(track, detection.attributes)
     }
 
     track.detectionCount++
@@ -1632,6 +1695,9 @@ export class TrackManager {
       const primary = cluster.detections.reduce((a, b) =>
         a.confidence > b.confidence ? a : b
       )
+      // Find the best attributes from cluster (prefer detection with embedding)
+      const bestAttributes = cluster.detections.find(d => d.attributes?.embedding)?.attributes
+        ?? primary.attributes
       virtualDetections.push({
         cameraId: primary.cameraId,
         trackId: primary.trackId,
@@ -1640,6 +1706,7 @@ export class TrackManager {
         confidence: Math.max(...cluster.detections.map(d => d.confidence)),
         timestamp: primary.timestamp,
         frameNumber: primary.frameNumber,
+        attributes: bestAttributes,  // Pass through re-ID attributes for Hungarian assignment
       })
       clusterMap.set(i, cluster)
     }
@@ -1654,6 +1721,8 @@ export class TrackManager {
         useKalmanPrediction: true,
         associationBonus: 0.15,  // Stronger identity binding (85% cost reduction)
         kalmanFilter: this.kalmanFilter,
+        // Embedding weight: 0 for spatial-only, 0.3 for re-ID enabled
+        embeddingWeight: this.embeddingWeight,
       }
     )
 

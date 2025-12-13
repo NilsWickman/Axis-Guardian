@@ -7,7 +7,7 @@
 
 import mqtt from 'mqtt'
 import type { MqttClient, IClientOptions } from 'mqtt'
-import type { DetectionProcessor } from '../detection/detection-processor.js'
+import type { IDetectionProcessor } from '../detection/detection-processor.js'
 import type { CameraRegistry } from '../detection/camera-registry.js'
 import type { AcapClientConfig, AcapConnectionStatus, CameraFrameState } from './types.js'
 import {
@@ -40,7 +40,7 @@ export class AcapClient {
   private isConnecting = false
 
   constructor(
-    private detectionProcessor: DetectionProcessor,
+    private detectionProcessor: IDetectionProcessor,
     private cameraRegistry: CameraRegistry,
     config: AcapClientConfig
   ) {

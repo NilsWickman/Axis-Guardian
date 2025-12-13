@@ -1,0 +1,20 @@
+# YOLOv8 + Re-ID Preprocessor Dependencies
+#
+# Install with: pip install -r requirements.txt
+
+# Core dependencies
+ultralytics>=8.0.0    # YOLOv8
+opencv-python>=4.8.0  # Video processing
+numpy>=1.24.0         # Numerical operations
+tqdm>=4.65.0          # Progress bars
+torch>=2.0.0          # PyTorch (required by ultralytics and torchreid)
+
+# Re-ID embedding extraction (optional but recommended)
+# Note: torchreid requires separate installation:
+#   pip install torchreid
+# Or install from source for latest features:
+#   pip install git+https://github.com/KaiyangZhou/deep-person-reid.git
+
+# GPU support (optional, for faster processing)
+# If using CUDA, install torch with CUDA support:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121

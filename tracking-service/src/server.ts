@@ -8,7 +8,7 @@ import cors from '@fastify/cors'
 import type { FastifyInstance } from 'fastify'
 import { TrackManager } from './tracks/track-manager.js'
 import { CameraRegistry } from './detection/camera-registry.js'
-import { DetectionProcessor } from './detection/detection-processor.js'
+import { DetectionProcessor, DualModeDetectionProcessor } from './detection/detection-processor.js'
 import { registerRoutes } from './api/routes.js'
 import { WebSocketBroadcaster, registerWebSocket } from './api/websocket.js'
 import { loadEnvironment } from './config/environment.js'
@@ -24,8 +24,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export interface TrackingServiceComponents {
   trackManager: TrackManager
+  /** Spatial-only track manager (no re-ID) */
+  spatialTrackManager?: TrackManager
+  /** Re-ID enabled track manager */
+  reidTrackManager?: TrackManager
   cameraRegistry: CameraRegistry
-  detectionProcessor: DetectionProcessor
+  detectionProcessor: DetectionProcessor | DualModeDetectionProcessor
   broadcaster: WebSocketBroadcaster
   acapClient: AcapClient | null
 }
@@ -118,7 +122,13 @@ export async function startServer() {
   }
 }
 
-export async function createServerWithComponents(options: CreateServerOptions = {}): Promise<{ app: FastifyInstance; trackManager: TrackManager; acapClient: AcapClient | null }> {
+export async function createServerWithComponents(options: CreateServerOptions = {}): Promise<{
+  app: FastifyInstance
+  trackManager: TrackManager
+  spatialTrackManager: TrackManager
+  reidTrackManager: TrackManager
+  acapClient: AcapClient | null
+}> {
   const env = loadEnvironment()
   const port = options.port ?? env.port
   const host = options.host ?? env.host
@@ -135,9 +145,25 @@ export async function createServerWithComponents(options: CreateServerOptions = 
   // Register WebSocket plugin
   await app.register(websocket)
 
-  // Create core components
-  const trackManager = new TrackManager()
+  // Create camera registry (shared between both track managers)
   const cameraRegistry = new CameraRegistry()
+
+  // Create DUAL track managers for parallel tracking algorithms:
+  // 1. Spatial-only manager - uses only spatial proximity for correlation
+  // 2. Re-ID manager - uses spatial proximity + embedding similarity
+
+  // Spatial-only track manager (embeddingWeight = 0)
+  const spatialTrackManager = new TrackManager({
+    embeddingWeight: 0,  // Spatial-only: no embedding similarity
+  })
+
+  // Re-ID enabled track manager (embeddingWeight = 0.3)
+  const reidTrackManager = new TrackManager({
+    embeddingWeight: 0.3,  // Re-ID: 30% weight for embedding similarity in cost
+  })
+
+  // For backwards compatibility, use spatial manager as the "primary" trackManager
+  const trackManager = spatialTrackManager
 
   // Load cameras from sitemap JSON (single source of truth)
   const sitemapPath = resolve(__dirname, '../../frontend/public/sitemap-rectangular-room.json')
@@ -145,12 +171,13 @@ export async function createServerWithComponents(options: CreateServerOptions = 
   cameraRegistry.loadFromSiteMapConfig(sitemapConfig.cameras)
 
   // Set up sitemap geometry for exit detection (FOV, boundaries, pillars)
+  // Apply to BOTH track managers
   const geometryCameras2 = siteMapCamerasToGeometryConfig(sitemapConfig.cameras)
-  trackManager.setSiteMapGeometry(
-    geometryCameras2,
-    sitemapConfig.obstacles ?? [],
-    { width: sitemapConfig.dimensions.width, height: sitemapConfig.dimensions.height }
-  )
+  const roomBounds = { width: sitemapConfig.dimensions.width, height: sitemapConfig.dimensions.height }
+  const obstacles = sitemapConfig.obstacles ?? []
+
+  spatialTrackManager.setSiteMapGeometry(geometryCameras2, obstacles, roomBounds)
+  reidTrackManager.setSiteMapGeometry(geometryCameras2, obstacles, roomBounds)
 
   // Register additional cameras if provided
   if (options.cameras) {
@@ -159,15 +186,23 @@ export async function createServerWithComponents(options: CreateServerOptions = 
     }
   }
 
-  const detectionProcessor = new DetectionProcessor(trackManager, cameraRegistry)
+  // Create DUAL MODE detection processor that feeds both track managers
+  const detectionProcessor = new DualModeDetectionProcessor(
+    spatialTrackManager,
+    reidTrackManager,
+    cameraRegistry
+  )
 
   // Load obstacles for detection filtering
   if (sitemapConfig.obstacles && sitemapConfig.obstacles.length > 0) {
     detectionProcessor.setObstacles(sitemapConfig.obstacles)
   }
 
+  // Create broadcaster with dual track support
   const broadcaster = new WebSocketBroadcaster(trackManager, {
     getFrameInfo: () => detectionProcessor.getCameraFrameInfo(),
+    spatialTrackManager,
+    reidTrackManager,
   })
 
   // Initialize zone manager for restricted zone violation detection
@@ -179,14 +214,16 @@ export async function createServerWithComponents(options: CreateServerOptions = 
     console.log('[ZoneManager] No zones loaded (database may not be seeded)')
   }
 
-  // Wire up zone manager to track manager, detection processor, and broadcaster
-  trackManager.setZoneManager(zoneManager)
+  // Wire up zone manager to BOTH track managers, detection processor, and broadcaster
+  spatialTrackManager.setZoneManager(zoneManager)
+  reidTrackManager.setZoneManager(zoneManager)
   detectionProcessor.setZoneManager(zoneManager)
   broadcaster.setZoneManager(zoneManager)
 
-  // Set up periodic cleanup (200ms for quick FOV/boundary exit detection)
+  // Set up periodic cleanup for BOTH track managers (200ms for quick FOV/boundary exit detection)
   const cleanupInterval = setInterval(() => {
-    trackManager.cleanupExpiredTracks()
+    spatialTrackManager.cleanupExpiredTracks()
+    reidTrackManager.cleanupExpiredTracks()
   }, 200)
 
   // Initialize ACAP client if enabled
@@ -211,7 +248,11 @@ export async function createServerWithComponents(options: CreateServerOptions = 
   }
 
   // Register routes (pass acapClient, zoneManager, broadcaster for runtime control)
-  registerRoutes(app, trackManager, detectionProcessor, cameraRegistry, acapClient, zoneManager, broadcaster)
+  // Also pass both track managers for dual-mode debugging endpoints
+  registerRoutes(app, trackManager, detectionProcessor, cameraRegistry, acapClient, zoneManager, broadcaster, {
+    spatialTrackManager,
+    reidTrackManager,
+  })
   registerWebSocket(app, broadcaster)
 
   // Cleanup on shutdown
@@ -225,5 +266,7 @@ export async function createServerWithComponents(options: CreateServerOptions = 
   // Start listening
   await app.listen({ port, host })
 
-  return { app, trackManager, acapClient }
+  console.log('[Server] Dual tracking mode enabled: spatial + re-ID managers running in parallel')
+
+  return { app, trackManager, spatialTrackManager, reidTrackManager, acapClient }
 }

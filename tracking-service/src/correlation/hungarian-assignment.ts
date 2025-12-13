@@ -9,6 +9,7 @@ import { munkres } from 'munkres'
 import type { Point2D, GlobalTrack, CameraDetection } from '../types.js'
 import { calculateDistance } from './track-matcher.js'
 import { KalmanTrackFilter } from '../filters/kalman-track-filter.js'
+import { cosineSimilarity } from '../tracks/attribute-aggregator.js'
 
 /**
  * Result of detection-to-track assignment
@@ -56,6 +57,12 @@ export interface AssignmentConfig {
   maxAccelerationMs2: number
   /** Weight for acceleration consistency cost component */
   accelerationConsistencyWeight: number
+  /** Weight for embedding similarity in cost (0-1, default 0.3) */
+  embeddingWeight: number
+  /** Minimum embedding similarity to apply bonus (0-1, default 0.5) */
+  embeddingMinSimilarity: number
+  /** Minimum embedding quality to use in matching (0-1, default 0.3) */
+  embeddingMinQuality: number
 }
 
 const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
@@ -72,6 +79,9 @@ const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
   crossCameraBonusWindowMs: 2000,  // Allow 2s window for handoff gaps
   maxAccelerationMs2: 3.0,         // Relaxed - walking acceleration can vary
   accelerationConsistencyWeight: 0.1,  // Reduced penalty weight
+  embeddingWeight: 0.3,            // Embedding similarity contributes 30% to cost
+  embeddingMinSimilarity: 0.5,     // Only apply embedding bonus if similarity > 0.5
+  embeddingMinQuality: 0.3,        // Minimum embedding quality to use
 }
 
 /**
@@ -87,6 +97,7 @@ export function buildCostMatrix(
   tracks: GlobalTrack[],
   config: AssignmentConfig = DEFAULT_ASSIGNMENT_CONFIG
 ): { matrix: number[][]; adaptiveGates: number[] } {
+
   const kalmanFilter = config.kalmanFilter ?? new KalmanTrackFilter()
 
   // Calculate adaptive gate for each track based on Kalman uncertainty
@@ -215,6 +226,43 @@ export function buildCostMatrix(
               const excessAccel = acceleration - config.maxAccelerationMs2
               const accelPenalty = Math.min(0.4, excessAccel * config.accelerationConsistencyWeight)
               cost += accelPenalty
+            }
+          }
+        }
+      }
+
+      // Add embedding similarity bonus/penalty
+      // This helps with re-identification and reduces ID switches
+      if (config.embeddingWeight > 0) {
+        const detEmbedding = det.attributes?.embedding
+        const detQuality = det.attributes?.embedding_quality ?? 0
+        const trackEmbedding = track.attributes?.embedding
+        const trackQuality = track.attributes?.embedding_quality ?? 0
+
+
+        // Only use embeddings if both have sufficient quality
+        if (
+          detEmbedding &&
+          trackEmbedding &&
+          detEmbedding.length > 0 &&
+          trackEmbedding.length === detEmbedding.length &&
+          detQuality >= config.embeddingMinQuality &&
+          trackQuality >= config.embeddingMinQuality
+        ) {
+          const similarity = cosineSimilarity(detEmbedding, trackEmbedding)
+
+          if (similarity > config.embeddingMinSimilarity) {
+            // High similarity = bonus (reduce cost)
+            // Scale: similarity 0.5->1.0 maps to cost multiplier 1.0->0.7
+            const embeddingBonus = 1 - (config.embeddingWeight * (similarity - config.embeddingMinSimilarity) /
+              (1 - config.embeddingMinSimilarity))
+            cost *= embeddingBonus
+          } else if (similarity < 0.3) {
+            // Very low similarity = penalty (increase cost for likely different person)
+            // Only apply penalty for well-established tracks with high-quality embeddings
+            if (trackQuality > 0.6 && track.attributes?.sample_count && track.attributes.sample_count >= 5) {
+              const embeddingPenalty = 1 + (config.embeddingWeight * (0.3 - similarity))
+              cost *= embeddingPenalty
             }
           }
         }

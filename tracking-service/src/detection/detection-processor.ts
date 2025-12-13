@@ -19,13 +19,41 @@ import type { SiteMapObstacle } from '../config/sitemap-loader.js'
 import { isPointInsideAnyObstacle } from '../geometry/obstacles.js'
 import type { ZoneManager } from '../zones/zone-manager.js'
 
+/**
+ * Common interface for detection processors (single or dual mode)
+ * Used by AcapClient and other consumers that need to process detections
+ */
+export interface IDetectionProcessor {
+  processMessage(message: DetectionMessage): GlobalTrack[]
+  processMultiCameraMessages(messages: DetectionMessage[]): GlobalTrack[]
+  setZoneManager(zoneManager: ZoneManager): void
+  setObstacles(obstacles: SiteMapObstacle[]): void
+  getCameraFrameInfo(): CameraFrameInfo[]
+  getLastProcessedFrame(cameraId: string): number
+  updateFrameInfo(cameraId: string, frameNumber: number): void
+  resetFrameTracking(): void
+  processInjection(
+    cameraId: string,
+    bbox: { x: number; y: number; width: number; height: number },
+    confidence: number,
+    trackId?: number
+  ): GlobalTrack | null
+  processWorldPosition(
+    cameraId: string,
+    worldX: number,
+    worldY: number,
+    confidence: number,
+    trackId?: number
+  ): GlobalTrack
+}
+
 const MIN_CONFIDENCE = 0.7
 const IMAGE_WIDTH = 1920
 const IMAGE_HEIGHT = 1080
 // Threshold to detect camera restart (frame number reset)
 const FRAME_JUMP_BACKWARD_THRESHOLD = 10
 
-export class DetectionProcessor {
+export class DetectionProcessor implements IDetectionProcessor {
   private lastProcessedFrames: Map<string, number> = new Map()
   private lastFrameTimestamps: Map<string, number> = new Map()
   private lastCleanupTime: number = Date.now()
@@ -41,7 +69,7 @@ export class DetectionProcessor {
 
   constructor(
     private trackManager: TrackManager,
-    private cameraRegistry: CameraRegistry
+    protected cameraRegistry: CameraRegistry
   ) {}
 
   /**
@@ -230,6 +258,7 @@ export class DetectionProcessor {
         frameNumber: message.frame_number,
         videoTimeMs: message.video_time_ms,
         rtpTimestamp: message.rtp_timestamp,
+        attributes: detection.attributes,  // Pass through re-ID attributes
       })
     }
 
@@ -483,6 +512,7 @@ export class DetectionProcessor {
           frameNumber: message.frame_number,
           videoTimeMs: message.video_time_ms,
           rtpTimestamp: message.rtp_timestamp,
+          attributes: detection.attributes,  // Pass through re-ID attributes
         })
       }
     }
@@ -568,5 +598,127 @@ export class DetectionProcessor {
         this.lastProcessedFrames.set(id, frame)
       }
     }
+  }
+}
+
+/**
+ * Dual Mode Detection Processor
+ *
+ * Wraps two DetectionProcessors (spatial-only and re-ID) and feeds
+ * the same detections to both track managers in parallel.
+ *
+ * This allows running both tracking algorithms simultaneously so the
+ * frontend can switch between viewing modes.
+ */
+export class DualModeDetectionProcessor implements IDetectionProcessor {
+  private spatialProcessor: DetectionProcessor
+  private reidProcessor: DetectionProcessor
+
+  constructor(
+    spatialTrackManager: TrackManager,
+    reidTrackManager: TrackManager,
+    cameraRegistry: CameraRegistry
+  ) {
+    // Create separate processors for each tracking algorithm
+    // They share the same CameraRegistry but have different TrackManagers
+    this.spatialProcessor = new DetectionProcessor(spatialTrackManager, cameraRegistry)
+    this.reidProcessor = new DetectionProcessor(reidTrackManager, cameraRegistry)
+  }
+
+  /**
+   * Set zone manager for camera restart detection (both processors)
+   */
+  setZoneManager(zoneManager: ZoneManager): void {
+    this.spatialProcessor.setZoneManager(zoneManager)
+    this.reidProcessor.setZoneManager(zoneManager)
+  }
+
+  /**
+   * Set obstacles for detection filtering (both processors)
+   */
+  setObstacles(obstacles: SiteMapObstacle[]): void {
+    this.spatialProcessor.setObstacles(obstacles)
+    this.reidProcessor.setObstacles(obstacles)
+  }
+
+  /**
+   * Process a detection message through BOTH tracking algorithms
+   * Returns results from the spatial processor (primary for backwards compat)
+   */
+  processMessage(message: DetectionMessage): GlobalTrack[] {
+    // Feed to both processors in parallel
+    const spatialResults = this.spatialProcessor.processMessage(message)
+    this.reidProcessor.processMessage(message)
+
+    // Return spatial results for backwards compatibility
+    return spatialResults
+  }
+
+  /**
+   * Process multiple camera messages through BOTH tracking algorithms
+   */
+  processMultiCameraMessages(messages: DetectionMessage[]): GlobalTrack[] {
+    const spatialResults = this.spatialProcessor.processMultiCameraMessages(messages)
+    this.reidProcessor.processMultiCameraMessages(messages)
+    return spatialResults
+  }
+
+  /**
+   * Reset frame tracking (both processors)
+   */
+  resetFrameTracking(): void {
+    this.spatialProcessor.resetFrameTracking()
+    this.reidProcessor.resetFrameTracking()
+  }
+
+  /**
+   * Get last processed frame for a camera (from spatial processor)
+   */
+  getLastProcessedFrame(cameraId: string): number {
+    return this.spatialProcessor.getLastProcessedFrame(cameraId)
+  }
+
+  /**
+   * Get frame info for all cameras (from spatial processor)
+   */
+  getCameraFrameInfo(): CameraFrameInfo[] {
+    return this.spatialProcessor.getCameraFrameInfo()
+  }
+
+  /**
+   * Update frame info for a camera (both processors)
+   */
+  updateFrameInfo(cameraId: string, frameNumber: number): void {
+    this.spatialProcessor.updateFrameInfo(cameraId, frameNumber)
+    this.reidProcessor.updateFrameInfo(cameraId, frameNumber)
+  }
+
+  /**
+   * Process injection through both processors
+   */
+  processInjection(
+    cameraId: string,
+    bbox: { x: number; y: number; width: number; height: number },
+    confidence: number,
+    trackId: number = 0
+  ): GlobalTrack | null {
+    const spatialResult = this.spatialProcessor.processInjection(cameraId, bbox, confidence, trackId)
+    this.reidProcessor.processInjection(cameraId, bbox, confidence, trackId)
+    return spatialResult
+  }
+
+  /**
+   * Process world position through both processors
+   */
+  processWorldPosition(
+    cameraId: string,
+    worldX: number,
+    worldY: number,
+    confidence: number,
+    trackId: number = 0
+  ): GlobalTrack {
+    const spatialResult = this.spatialProcessor.processWorldPosition(cameraId, worldX, worldY, confidence, trackId)
+    this.reidProcessor.processWorldPosition(cameraId, worldX, worldY, confidence, trackId)
+    return spatialResult
   }
 }

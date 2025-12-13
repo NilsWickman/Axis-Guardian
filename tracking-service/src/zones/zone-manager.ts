@@ -10,12 +10,21 @@ import type {
   ZoneViolation,
   ZoneVertex,
   Point2D,
+  ZoneMetricsData,
 } from '../types.js'
 
 interface TrackZoneState {
   wasInside: boolean
   lastViolationTime: number
 }
+
+interface ZoneMetrics {
+  currentOccupants: Set<string> // trackIds currently inside
+  totalEntered: number // cumulative count since reset
+}
+
+// Re-export for consumers
+export type { ZoneMetricsData } from '../types.js'
 
 /**
  * Point-in-polygon using ray casting algorithm
@@ -47,20 +56,43 @@ export class ZoneManager {
   // Track state per zone per track: Map<trackId, Map<zoneId, state>>
   private trackZoneStates: Map<string, Map<string, TrackZoneState>> = new Map()
 
+  // Zone metrics: Map<zoneId, metrics>
+  private zoneMetrics: Map<string, ZoneMetrics> = new Map()
+
   // Event callback for violations
   onViolation?: (violation: ZoneViolation) => void
+
+  // Event callback for metrics changes
+  onMetricsChanged?: (zoneId: string, metrics: ZoneMetricsData) => void
+
+  // Event callback for zone reset
+  onZonesReset?: () => void
 
   /**
    * Load zones from database
    */
   loadZones(zones: ZoneConfig[]): void {
     this.zones.clear()
+    this.zoneMetrics.clear()
     for (const zone of zones) {
       if (zone.enabled) {
         this.zones.set(zone.id, zone)
+        this.initializeZoneMetrics(zone.id)
       }
     }
     console.log(`[ZoneManager] Loaded ${this.zones.size} active zones`)
+  }
+
+  /**
+   * Initialize metrics for a zone
+   */
+  private initializeZoneMetrics(zoneId: string): void {
+    if (!this.zoneMetrics.has(zoneId)) {
+      this.zoneMetrics.set(zoneId, {
+        currentOccupants: new Set(),
+        totalEntered: 0,
+      })
+    }
   }
 
   /**
@@ -69,9 +101,11 @@ export class ZoneManager {
   setZone(zone: ZoneConfig): void {
     if (zone.enabled) {
       this.zones.set(zone.id, zone)
+      this.initializeZoneMetrics(zone.id)
       console.log(`[ZoneManager] Zone '${zone.name}' (${zone.id}) added/updated`)
     } else {
       this.zones.delete(zone.id)
+      this.zoneMetrics.delete(zone.id)
       console.log(`[ZoneManager] Zone '${zone.name}' (${zone.id}) disabled/removed`)
     }
   }
@@ -82,6 +116,7 @@ export class ZoneManager {
   removeZone(zoneId: string): void {
     const zone = this.zones.get(zoneId)
     this.zones.delete(zoneId)
+    this.zoneMetrics.delete(zoneId)
     // Clean up track states for this zone
     for (const trackStates of this.trackZoneStates.values()) {
       trackStates.delete(zoneId)
@@ -119,6 +154,27 @@ export class ZoneManager {
         wasInside: isInside,
         lastViolationTime: previousState?.lastViolationTime ?? 0,
       })
+
+      // Update zone metrics
+      const metrics = this.zoneMetrics.get(zone.id)
+      if (metrics) {
+        let metricsChanged = false
+
+        if (isInside && !wasInside) {
+          // Track entered the zone
+          metrics.currentOccupants.add(trackId)
+          metrics.totalEntered++
+          metricsChanged = true
+        } else if (!isInside && wasInside) {
+          // Track exited the zone
+          metrics.currentOccupants.delete(trackId)
+          metricsChanged = true
+        }
+
+        if (metricsChanged) {
+          this.emitMetricsChanged(zone.id, metrics)
+        }
+      }
 
       // Check for violations based on zone type
       let violation: ZoneViolation | null = null
@@ -220,6 +276,13 @@ export class ZoneManager {
    */
   clearTrackState(trackId: string): void {
     this.trackZoneStates.delete(trackId)
+
+    // Remove track from zone occupants
+    for (const [zoneId, metrics] of this.zoneMetrics.entries()) {
+      if (metrics.currentOccupants.delete(trackId)) {
+        this.emitMetricsChanged(zoneId, metrics)
+      }
+    }
   }
 
   /**
@@ -227,7 +290,15 @@ export class ZoneManager {
    */
   resetAllStates(): void {
     this.trackZoneStates.clear()
-    console.log('[ZoneManager] All track zone states reset')
+
+    // Reset all zone metrics
+    for (const [, metrics] of this.zoneMetrics.entries()) {
+      metrics.currentOccupants.clear()
+      metrics.totalEntered = 0
+    }
+
+    console.log('[ZoneManager] All track zone states and metrics reset')
+    this.onZonesReset?.()
   }
 
   /**
@@ -298,5 +369,47 @@ export class ZoneManager {
       inZone: containingZones.length > 0,
       zones: containingZones,
     }
+  }
+
+  /**
+   * Get metrics for a specific zone
+   */
+  getZoneMetrics(zoneId: string): ZoneMetricsData | undefined {
+    const metrics = this.zoneMetrics.get(zoneId)
+    if (!metrics) return undefined
+
+    return {
+      zoneId,
+      currentCount: metrics.currentOccupants.size,
+      totalEntered: metrics.totalEntered,
+      crossedCount: metrics.totalEntered, // same as totalEntered for entry-only
+    }
+  }
+
+  /**
+   * Get metrics for all zones
+   */
+  getAllZoneMetrics(): ZoneMetricsData[] {
+    const allMetrics: ZoneMetricsData[] = []
+    for (const zoneId of this.zoneMetrics.keys()) {
+      const metrics = this.getZoneMetrics(zoneId)
+      if (metrics) {
+        allMetrics.push(metrics)
+      }
+    }
+    return allMetrics
+  }
+
+  /**
+   * Emit metrics changed event
+   */
+  private emitMetricsChanged(zoneId: string, metrics: ZoneMetrics): void {
+    const metricsData: ZoneMetricsData = {
+      zoneId,
+      currentCount: metrics.currentOccupants.size,
+      totalEntered: metrics.totalEntered,
+      crossedCount: metrics.totalEntered,
+    }
+    this.onMetricsChanged?.(zoneId, metricsData)
   }
 }
