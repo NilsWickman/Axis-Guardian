@@ -707,15 +707,15 @@ export class TrackManager {
 
       // Same-camera re-identification bonus: When a detection comes from a camera
       // that already has an association with this track (but with a different local ID),
-      // it's likely local tracker fragmentation. Give a significant preference.
+      // it's likely local tracker fragmentation. Give preference but be careful.
       let sameCameraBonus = 0
       if (excludeCameraId) {
         const assoc = track.cameraAssociations.get(excludeCameraId)
-        if (assoc && timeSinceUpdate < 1000) {
+        if (assoc && timeSinceUpdate < 1500) {
           // This camera was recently tracking this person - likely fragmentation
-          // Expand threshold by 50% and reduce effective distance
-          threshold *= 1.5
-          sameCameraBonus = 0.3  // Reduce effective distance by 30%
+          // Expand threshold moderately and reduce effective distance
+          threshold = Math.max(threshold * 1.8, 1.5)  // At least 1.5m for same-camera
+          sameCameraBonus = 0.4  // Reduce effective distance by 40%
         }
       }
 
@@ -789,8 +789,8 @@ export class TrackManager {
     const cameraEnded = this.endedLocalTracks.get(cameraId)
     if (!cameraEnded || cameraEnded.length === 0) return null
 
-    const maxGapMs = 1000  // 1 second max gap for stitching
-    const maxDistance = this.config.correlationDistanceM * 1.5  // Slightly relaxed
+    const maxGapMs = 2000  // 2 second max gap for stitching (increased from 1s)
+    const maxDistance = this.config.correlationDistanceM * 2.5  // More relaxed for stitching
 
     let bestMatch: EndedLocalTrack | null = null
     let bestDistance = Infinity
@@ -818,7 +818,7 @@ export class TrackManager {
         // Reactivate the track if it was recently deactivated
         if (!globalTrack.isActive) {
           const timeSinceExpiry = timestamp - globalTrack.lastSeen
-          if (timeSinceExpiry < 2000) {  // Only reactivate within 2 seconds
+          if (timeSinceExpiry < 3000) {  // Reactivate within 3 seconds
             globalTrack.isActive = true
             globalTrack.state = globalTrack.isConfirmed ? 'confirmed' : 'unconfirmed'
             // Re-assign color if needed

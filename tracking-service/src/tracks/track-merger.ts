@@ -108,19 +108,39 @@ export class TrackMerger {
         // Detect cross-camera merge candidate (tracks from different cameras)
         const isCrossCameraMerge = sharedCameras.length === 0
 
-        // Allow same-camera merges only for local fragmentation recovery:
-        // one confirmed + one unconfirmed, and the confirmed track is at least 2 frames behind.
+        // Allow same-camera merges for local fragmentation recovery:
+        // Either: one confirmed + one unconfirmed with frame gap
+        // Or: both from same camera with different local track IDs and close proximity
         let allowSameCameraFragmentMerge = false
         if (sharedCameras.length > 0) {
           const oneConfirmedOneUnconfirmed = track1.isConfirmed !== track2.isConfirmed
-          if (oneConfirmedOneUnconfirmed && sharedCameras.length === 1) {
+          if (sharedCameras.length === 1) {
             const camId = sharedCameras[0]
             const assoc1 = track1.cameraAssociations.get(camId)
             const assoc2 = track2.cameraAssociations.get(camId)
             const f1 = assoc1?.lastFrameNumber
             const f2 = assoc2?.lastFrameNumber
-            if (f1 !== undefined && f2 !== undefined && Math.abs(f1 - f2) >= 2) {
-              allowSameCameraFragmentMerge = true
+
+            // Case 1: One confirmed, one unconfirmed with frame gap
+            if (oneConfirmedOneUnconfirmed) {
+              if (f1 !== undefined && f2 !== undefined && Math.abs(f1 - f2) >= 2) {
+                allowSameCameraFragmentMerge = true
+              }
+            }
+
+            // Case 2: Different local track IDs on same camera - likely fragmentation
+            // Check if track IDs don't overlap (fragmentation creates new ID)
+            if (assoc1 && assoc2) {
+              const trackIds1 = assoc1.trackIds
+              const trackIds2 = assoc2.trackIds
+              const hasOverlap = trackIds1.some(id => trackIds2.includes(id))
+              if (!hasOverlap) {
+                // Different track IDs, check time proximity (one stopped, other started)
+                const timeDiff = Math.abs(assoc1.lastSeen - assoc2.lastSeen)
+                if (timeDiff < 2000) {  // Within 2 seconds
+                  allowSameCameraFragmentMerge = true
+                }
+              }
             }
           }
         }
