@@ -1,13 +1,27 @@
 /**
  * Detection data loader
  * Loads detection JSON files (supports .json and .json.gz)
+ * Applies track stitching to reduce fragmentation from YOLOv8's tracker
  */
 
 import fs from 'fs'
 import zlib from 'zlib'
 import type { DetectionData } from '../types.js'
+import { stitchTracks, type StitchConfig } from './track-stitcher.js'
 
-export async function loadDetections(filePath: string): Promise<DetectionData> {
+export interface LoadOptions {
+  /** Enable track stitching to reduce fragmentation (default: true) */
+  enableStitching?: boolean
+  /** Track stitching configuration */
+  stitchConfig?: Partial<StitchConfig>
+}
+
+export async function loadDetections(
+  filePath: string,
+  options: LoadOptions = {}
+): Promise<DetectionData> {
+  const { enableStitching = true, stitchConfig } = options
+
   console.log(`Loading detections from ${filePath}`)
 
   const isGzipped = filePath.endsWith('.gz')
@@ -26,6 +40,12 @@ export async function loadDetections(filePath: string): Promise<DetectionData> {
   console.log(`Loaded ${data.frames.length} detection frames`)
   console.log(`  Video info: ${data.video_info.width}x${data.video_info.height} @ ${data.video_info.fps} fps`)
   console.log(`  Total frames: ${data.video_info.total_frames}`)
+
+  // Apply track stitching to reduce fragmentation
+  if (enableStitching) {
+    const result = stitchTracks(data, stitchConfig)
+    console.log(`  Track stitching: ${result.originalTrackCount} -> ${result.stitchedTrackCount} tracks (${result.stitchesPerformed} stitches)`)
+  }
 
   return data
 }

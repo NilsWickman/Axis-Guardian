@@ -105,6 +105,16 @@ interface CameraFrameTracker {
 }
 
 /**
+ * Tracks a recently-ended local track ID for same-camera stitching
+ */
+interface EndedLocalTrack {
+  localTrackId: number
+  globalTrackId: string
+  lastPosition: { x: number; y: number }
+  endedAt: number  // timestamp
+}
+
+/**
  * TrackManager - Pure TypeScript class for managing global tracks
  */
 export class TrackManager {
@@ -120,6 +130,8 @@ export class TrackManager {
   private cameraFrameTrackers: Map<string, CameraFrameTracker> = new Map()
   /** Last detection timestamp processed (used to keep a consistent time base) */
   private lastDetectionTimestamp: number | null = null
+  /** Recently-ended local track IDs per camera for stitching */
+  private endedLocalTracks: Map<string, EndedLocalTrack[]> = new Map()
 
   /** Sitemap geometry for exit detection */
   private siteMapGeometry?: {
@@ -246,7 +258,9 @@ export class TrackManager {
     worldY: number,
     confidence: number
   ): GlobalTrack {
-    const now = this.lastDetectionTimestamp ?? this.clock()
+    // For single detection processing, always use current clock time
+    // (batch processing uses detection timestamps directly)
+    const now = this.clock()
     this.lastDetectionTimestamp = now
     const detection: CameraDetection = {
       cameraId,
@@ -269,11 +283,14 @@ export class TrackManager {
     }
 
     if (existingTrack) {
-      if (this.associateWithTrack(existingTrack, detection)) {
+      // IMPORTANT: For same camera+trackId, trust the local tracker's identity
+      // Only reject if motion is truly impossible (catches tracker bugs/ID swaps)
+      if (this.forceAssociateWithTrack(existingTrack, detection)) {
         this.processPendingMerge(existingTrack, now)
         this.onTrackUpdated?.(existingTrack)
         return existingTrack
       }
+      // If forceAssociate failed (impossible motion), fall through to find nearby or create new
     }
 
     // Look for nearby track to correlate with
@@ -287,6 +304,21 @@ export class TrackManager {
       }
     }
 
+    // Check for same-camera stitch candidate (local tracker fragmentation)
+    // This catches cases where YOLOv8 assigned a new track ID to the same person
+    const stitchCandidate = this.findStitchCandidate(
+      cameraId, trackId, { x: worldX, y: worldY }, now
+    )
+    if (stitchCandidate) {
+      // Found a recently-ended track from this camera at a nearby position
+      // Associate with it instead of creating a new track
+      if (this.forceAssociateWithTrack(stitchCandidate, detection)) {
+        this.processPendingMerge(stitchCandidate, now)
+        this.onTrackUpdated?.(stitchCandidate)
+        return stitchCandidate
+      }
+    }
+
     // No match found or velocity check failed, create new global track
     const newTrack = this.createGlobalTrack(detection)
     this.onTrackCreated?.(newTrack)
@@ -297,10 +329,14 @@ export class TrackManager {
    * Cleanup expired tracks with occlusion state handling
    */
   cleanupExpiredTracks(): void {
-    const now = this.lastDetectionTimestamp ?? this.clock()
+    // Use current clock time for expiry calculations
+    const now = this.clock()
     const maxTracks = 200
     const unconfirmedExpiryMs = this.config.unconfirmedTrackExpiryMs ?? 2000
     const occlusionCoastTimeMs = this.config.occlusionCoastTimeMs ?? 2000
+
+    // Clean up old ended local track entries
+    this.cleanupEndedLocalTracks(now)
 
     for (const [trackId, track] of this.tracks.entries()) {
       const timeSinceLastSeen = now - track.lastSeen
@@ -427,6 +463,9 @@ export class TrackManager {
         if (timeSinceOcclusion > effectiveTimeout) {
           // Occlusion timeout exceeded, expire the track
           if (track.isActive) {
+            // Record ended local tracks for potential stitching
+            this.recordEndedLocalTracksForTrack(track, now)
+
             track.isActive = false
             this.releaseColor(track.color)
             // Record expiry metrics
@@ -441,6 +480,9 @@ export class TrackManager {
       // Full track expiry
       if (timeSinceLastSeen > this.config.trackExpiryMs) {
         if (track.isActive) {
+          // Record ended local tracks for potential stitching
+          this.recordEndedLocalTracksForTrack(track, now)
+
           track.isActive = false
           this.releaseColor(track.color)
           // Record expiry metrics
@@ -599,6 +641,10 @@ export class TrackManager {
   /**
    * Find a nearby active track within correlation distance
    * Uses Kalman filter prediction for better accuracy
+   *
+   * Same-camera re-identification: When a new local track ID appears from the
+   * same camera, we should strongly prefer re-associating with existing tracks
+   * from that camera (local tracker fragmentation is common).
    */
   findNearbyTrack(
     worldX: number,
@@ -607,7 +653,7 @@ export class TrackManager {
     excludeTrackId?: number
   ): GlobalTrack | null {
     let bestMatch: GlobalTrack | null = null
-    let bestDistance = this.config.correlationDistanceM
+    let bestScore = Infinity  // Lower is better (distance-based)
     const now = this.lastDetectionTimestamp ?? this.clock()
 
     for (const track of this.tracks.values()) {
@@ -659,6 +705,20 @@ export class TrackManager {
         threshold = this.config.correlationDistanceM * 1.5
       }
 
+      // Same-camera re-identification bonus: When a detection comes from a camera
+      // that already has an association with this track (but with a different local ID),
+      // it's likely local tracker fragmentation. Give a significant preference.
+      let sameCameraBonus = 0
+      if (excludeCameraId) {
+        const assoc = track.cameraAssociations.get(excludeCameraId)
+        if (assoc && timeSinceUpdate < 1000) {
+          // This camera was recently tracking this person - likely fragmentation
+          // Expand threshold by 50% and reduce effective distance
+          threshold *= 1.5
+          sameCameraBonus = 0.3  // Reduce effective distance by 30%
+        }
+      }
+
       // Expand gating for occluded tracks to allow re-association
       if (track.state === 'occluded') {
         const occlusionCoastTimeMs = this.config.occlusionCoastTimeMs ?? 2000
@@ -668,13 +728,149 @@ export class TrackManager {
         threshold *= expansionFactor
       }
 
-      if (distance < threshold && distance < bestDistance) {
-        bestDistance = distance
-        bestMatch = track
+      if (distance < threshold) {
+        // Calculate score (lower is better)
+        const effectiveDistance = distance * (1 - sameCameraBonus)
+        if (effectiveDistance < bestScore) {
+          bestScore = effectiveDistance
+          bestMatch = track
+        }
       }
     }
 
     return bestMatch
+  }
+
+  /**
+   * Record that a local track ID has ended (for same-camera stitching)
+   */
+  private recordEndedLocalTrack(
+    cameraId: string,
+    localTrackId: number,
+    globalTrackId: string,
+    position: { x: number; y: number },
+    timestamp: number
+  ): void {
+    let cameraEnded = this.endedLocalTracks.get(cameraId)
+    if (!cameraEnded) {
+      cameraEnded = []
+      this.endedLocalTracks.set(cameraId, cameraEnded)
+    }
+
+    // Remove any existing entry for this local track ID
+    const existingIdx = cameraEnded.findIndex(e => e.localTrackId === localTrackId)
+    if (existingIdx >= 0) {
+      cameraEnded.splice(existingIdx, 1)
+    }
+
+    cameraEnded.push({
+      localTrackId,
+      globalTrackId,
+      lastPosition: position,
+      endedAt: timestamp,
+    })
+
+    // Keep only recent entries (last 50 per camera)
+    if (cameraEnded.length > 50) {
+      cameraEnded.shift()
+    }
+  }
+
+  /**
+   * Find a stitch candidate for a new local track ID
+   * Returns the global track to associate with, or null if no match
+   */
+  private findStitchCandidate(
+    cameraId: string,
+    localTrackId: number,
+    position: { x: number; y: number },
+    timestamp: number
+  ): GlobalTrack | null {
+    const cameraEnded = this.endedLocalTracks.get(cameraId)
+    if (!cameraEnded || cameraEnded.length === 0) return null
+
+    const maxGapMs = 1000  // 1 second max gap for stitching
+    const maxDistance = this.config.correlationDistanceM * 1.5  // Slightly relaxed
+
+    let bestMatch: EndedLocalTrack | null = null
+    let bestDistance = Infinity
+
+    for (const ended of cameraEnded) {
+      // Skip if too old
+      const gapMs = timestamp - ended.endedAt
+      if (gapMs <= 0 || gapMs > maxGapMs) continue
+
+      // Check spatial distance
+      const dist = calculateDistance(position, ended.lastPosition)
+      if (dist < maxDistance && dist < bestDistance) {
+        bestDistance = dist
+        bestMatch = ended
+      }
+    }
+
+    if (bestMatch) {
+      const globalTrack = this.tracks.get(bestMatch.globalTrackId)
+      if (globalTrack) {
+        // Remove the matched entry
+        const idx = cameraEnded.indexOf(bestMatch)
+        if (idx >= 0) cameraEnded.splice(idx, 1)
+
+        // Reactivate the track if it was recently deactivated
+        if (!globalTrack.isActive) {
+          const timeSinceExpiry = timestamp - globalTrack.lastSeen
+          if (timeSinceExpiry < 2000) {  // Only reactivate within 2 seconds
+            globalTrack.isActive = true
+            globalTrack.state = globalTrack.isConfirmed ? 'confirmed' : 'unconfirmed'
+            // Re-assign color if needed
+            if (!this.usedColors.has(globalTrack.color)) {
+              this.usedColors.add(globalTrack.color)
+            }
+          } else {
+            return null  // Too old to reactivate
+          }
+        }
+        return globalTrack
+      }
+    }
+
+    return null
+  }
+
+  /**
+   * Clean up old ended local track entries
+   */
+  private cleanupEndedLocalTracks(now: number): void {
+    const maxAgeMs = 2000  // Remove entries older than 2 seconds
+
+    for (const [cameraId, entries] of this.endedLocalTracks) {
+      const filtered = entries.filter(e => now - e.endedAt < maxAgeMs)
+      if (filtered.length !== entries.length) {
+        this.endedLocalTracks.set(cameraId, filtered)
+      }
+    }
+  }
+
+  /**
+   * Record all local track IDs from an expiring track for potential future stitching
+   */
+  private recordEndedLocalTracksForTrack(track: GlobalTrack, timestamp: number): void {
+    // For each camera that was tracking this person, record the local track IDs
+    for (const [cameraId, assoc] of track.cameraAssociations) {
+      // Only record if the camera was recently seeing this track
+      const timeSinceLastSeen = timestamp - assoc.lastSeen
+      if (timeSinceLastSeen > 2000) continue  // Too stale
+
+      // Record each local track ID from this camera
+      for (const localTrackId of assoc.trackIds) {
+        this.recordEndedLocalTrack(
+          cameraId,
+          localTrackId,
+          track.globalTrackId,
+          track.currentPosition,
+          timestamp
+        )
+      }
+    }
   }
 
   /**
@@ -1111,6 +1307,87 @@ export class TrackManager {
     }
   }
 
+  /**
+   * Force association with track, trusting local tracker identity.
+   * For same camera+trackId, we trust the local tracker with a very generous
+   * velocity threshold. Only reject truly impossible motions (>50 m/s).
+   *
+   * Note: We use a very high threshold because:
+   * 1. Kalman-filtered positions can lag significantly behind actual positions
+   * 2. The local tracker (YOLOv8) has better continuity information
+   * 3. Position jumps are usually projection errors, not different people
+   * 4. Only reject motions that are clearly impossible (>50 m/s = 180 km/h)
+   */
+  private forceAssociateWithTrack(track: GlobalTrack, detection: CameraDetection): boolean {
+    // Only reject truly impossible motions (>50 m/s = 180 km/h)
+    // This catches tracker bugs/ID swaps while allowing projection jitter
+    const timeDelta = (detection.timestamp - track.lastSeen) / 1000
+    if (timeDelta > 0.05) {  // Only check if time delta is meaningful (>50ms)
+      const detPos = { x: detection.worldX, y: detection.worldY }
+      const distance = calculateDistance(detPos, track.currentPosition)
+      const velocity = distance / timeDelta
+      if (velocity > 50) {  // 50 m/s = 180 km/h - clearly impossible for humans
+        return false
+      }
+    }
+
+    // Update camera association
+    let assoc = track.cameraAssociations.get(detection.cameraId)
+    if (assoc) {
+      if (!assoc.trackIds.includes(detection.trackId)) {
+        assoc.trackIds.push(detection.trackId)
+      }
+      assoc.lastSeen = detection.timestamp
+      if (detection.frameNumber !== undefined) {
+        assoc.lastFrameNumber = detection.frameNumber
+      }
+    }
+
+    // Update camera frame tracker
+    if (detection.frameNumber !== undefined) {
+      this.updateCameraFrameTracker(detection.cameraId, detection.frameNumber, detection.timestamp)
+    }
+
+    // Update video timing
+    const videoTiming = this.extractVideoTiming(detection)
+    if (videoTiming) {
+      track.videoTiming = videoTiming
+    }
+
+    track.detectionCount++
+    track.missedFrames = 0
+
+    // Transition state on confirmation
+    if (!track.isConfirmed && track.detectionCount >= this.config.minDetectionsToConfirm) {
+      track.isConfirmed = true
+      track.state = 'confirmed'
+      const creationTime = track.trail[0]?.timestamp ?? track.lastSeen
+      getMetrics().recordTrackConfirmed(detection.timestamp - creationTime)
+    }
+
+    // Recover from occlusion
+    if (track.state === 'occluded') {
+      const detectionsRequired = this.config.detectionsToExitOcclusion ?? 2
+      track.consecutiveDetections++
+      if (track.consecutiveDetections >= detectionsRequired) {
+        track.state = 'confirmed'
+        const occlusionDuration = track.occludedSince ? detection.timestamp - track.occludedSince : 0
+        getMetrics().recordOcclusionEnd(occlusionDuration, true)
+        track.occludedSince = undefined
+        track.consecutiveDetections = 0
+      }
+    } else {
+      track.consecutiveDetections = 0
+    }
+
+    track.pendingDetections.push(detection)
+    if (track.pendingDetections.length > 50) {
+      track.pendingDetections = track.pendingDetections.slice(-20)
+    }
+    track.lastSeen = detection.timestamp
+    return true
+  }
+
   private associateWithTrack(track: GlobalTrack, detection: CameraDetection): boolean {
     // Velocity sanity check
     const timeDelta = (detection.timestamp - track.lastSeen) / 1000
@@ -1136,6 +1413,23 @@ export class TrackManager {
         : baseMaxVelocity
       if (velocity > effectiveMaxVelocity) {
         return false
+      }
+
+      // Mahalanobis distance validation for established tracks
+      // Reject detections that are kinematically implausible even if geometrically close
+      if (track.kalmanState && track.isConfirmed && track.detectionCount >= 3) {
+        const detPos = { x: detection.worldX, y: detection.worldY }
+        const mahalanobis = this.kalmanFilter.getMahalanobisDistance(track.kalmanState, detPos)
+
+        // Relax threshold for same-camera re-identification (likely fragmentation)
+        const assoc = track.cameraAssociations.get(detection.cameraId)
+        const isSameCameraReId = assoc && !assoc.trackIds.includes(detection.trackId) &&
+          timeDelta < 0.5  // Recent same-camera with new local ID
+        const mahalanobisThreshold = isSameCameraReId ? 6.0 : 4.0
+
+        if (mahalanobis > mahalanobisThreshold) {
+          return false
+        }
       }
     }
 
@@ -1355,10 +1649,10 @@ export class TrackManager {
       virtualDetections,
       activeTracks,
       {
-        // Use tighter gating; re-id handles longer handoffs and local fragmentation.
-        maxCost: this.config.correlationDistanceM * 1.2,
+        // Use tighter gating to reduce false merges
+        maxCost: this.config.correlationDistanceM,  // Removed 1.2x multiplier for stricter gating
         useKalmanPrediction: true,
-        associationBonus: 0.2,  // Stronger identity binding
+        associationBonus: 0.15,  // Stronger identity binding (85% cost reduction)
         kalmanFilter: this.kalmanFilter,
       }
     )
@@ -1459,6 +1753,35 @@ export class TrackManager {
       const validCluster: DetectionCluster = {
         detections: validDetections,
         centroid: merged.position,
+      }
+
+      // Try stitching with recently-ended tracks (local tracker fragmentation fix)
+      // Check each detection in the cluster for a stitch candidate
+      let stitchedTrack: GlobalTrack | null = null
+      for (const det of validDetections) {
+        const candidate = this.findStitchCandidate(
+          det.cameraId,
+          det.trackId,
+          { x: det.worldX, y: det.worldY },
+          det.timestamp
+        )
+        if (candidate) {
+          stitchedTrack = candidate
+          break
+        }
+      }
+
+      if (stitchedTrack) {
+        // Associate all detections with the stitched track
+        for (const det of validDetections) {
+          this.forceAssociateWithTrack(stitchedTrack, det)
+        }
+        this.processPendingMerge(stitchedTrack, now)
+        this.onTrackUpdated?.(stitchedTrack)
+        if (!results.includes(stitchedTrack)) {
+          results.push(stitchedTrack)
+        }
+        continue
       }
 
       // Use centroid for exclusion zone check

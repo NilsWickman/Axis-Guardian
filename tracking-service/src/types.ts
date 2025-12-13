@@ -415,22 +415,22 @@ export interface TrackingConfig {
 }
 
 export const DEFAULT_TRACKING_CONFIG: TrackingConfig = {
-  correlationDistanceM: 0.6,       // Increased from 0.5 to handle cross-camera projection variance
+  correlationDistanceM: 0.8,       // Relaxed further to catch fragmented tracks (was 0.6)
   mergeWindowMs: 200,
   trackExpiryMs: 10000,            // Tracks expire after 10 seconds without detections
   maxTrailLength: 20,
-  minDetectionsToConfirm: 3,       // Require 3 detections to confirm (gives merger time to absorb local ID splits)
+  minDetectionsToConfirm: 2,       // Reduced to 2 - single-camera tracks confirm faster
   maxVelocityMs: 8,               // Human max sprint ~7-8 m/s; prevents teleporting
-  unconfirmedTrackExpiryMs: 2000,  // Ghost tracks expire faster
+  unconfirmedTrackExpiryMs: 2000,  // Shorter - confirm or expire quickly
   minCreationConfidence: 0.7,      // Require higher confidence for new tracks
-  exclusionRadius: 0.5,            // Exclusion radius for confirmed tracks
+  exclusionRadius: 0.4,            // Reduced exclusion for confirmed tracks (allows more tracks)
   crossingProximityThreshold: 1.5, // Detect crossing when tracks within 1.5m
   occlusionCoastTimeMs: 7000,      // Coast for 7 seconds during occlusion (allows walking behind pillars)
   reidentificationGateMultiplier: 4.0, // 4x expanded gate for re-ID after occlusion
   missedFramesBeforeOcclusion: 8,  // Allow brief dropouts before occlusion
   detectionsToExitOcclusion: 2,    // Require 2 detections to exit occlusion state
-  clusteringDistanceM: 0.8,        // Cluster detections within 0.8m from different cameras (increased for projection variance)
-  mergeDistanceM: 0.6,             // Consider merging tracks within 0.6m
+  clusteringDistanceM: 0.8,        // Cluster detections within 0.8m from different cameras
+  mergeDistanceM: 0.8,             // Consider merging tracks within 0.8m
   mergeConfidenceThreshold: 0.7,   // Require 70% confidence to merge tracks
   unconfirmedExclusionRadius: 0.7, // Larger exclusion for unconfirmed (prevent duplicates in overlap)
   unconfirmedMergeDistanceM: 0.4,  // Tighter merge distance for unconfirmed tracks
@@ -438,11 +438,11 @@ export const DEFAULT_TRACKING_CONFIG: TrackingConfig = {
   fovExitTimeoutMs: 500,           // Quick exit for FOV boundary departures
   boundaryExitTimeoutMs: 500,      // Quick exit for room boundary departures
   maxPillarOcclusionMs: 5000,      // Max 5s ghost track behind pillar
-  crossCameraMergeDistanceM: 0.9,  // Expanded merge distance for cross-camera unconfirmed tracks
+  crossCameraMergeDistanceM: 1.0,  // Expanded merge distance for cross-camera unconfirmed tracks
   crossCameraExclusionRadius: 0.5, // Prevent duplicate track creation from different cameras
   crossCameraExclusionTimeMs: 200, // Time window for cross-camera exclusion check
   minDetectionsForVelocityMerge: 3, // Need 3+ detections for reliable velocity in merge scoring
-  simultaneousDetectionBonus: 0.15, // Bonus for same-frame detections from different cameras
+  simultaneousDetectionBonus: 0.08, // Reduced bonus to prevent false merges
   simultaneousWindowMs: 150,       // Time window for simultaneous detection
 }
 

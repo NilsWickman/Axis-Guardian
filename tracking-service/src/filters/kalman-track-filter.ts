@@ -345,11 +345,14 @@ export class KalmanTrackFilter {
   /**
    * Get gating distance for data association
    * Returns adaptive threshold based on position uncertainty
+   * Capped at 2x base distance to prevent over-expansion with high initial uncertainty
    */
   getGatingDistance(state: KalmanState, baseDistance: number = 1.0): number {
     const uncertainty = this.getPositionUncertainty(state)
-    // Expand gate based on uncertainty, with minimum of base distance
-    return Math.max(baseDistance, baseDistance + 2 * uncertainty)
+    // Expand gate based on uncertainty, but cap at 2x base to prevent
+    // unreasonable expansion with high initial uncertainty
+    const expanded = baseDistance + 2 * uncertainty
+    return Math.min(expanded, baseDistance * 2)
   }
 }
 

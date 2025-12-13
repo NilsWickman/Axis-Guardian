@@ -48,7 +48,7 @@ export interface TrackMergerConfig {
 const DEFAULT_MERGER_CONFIG: TrackMergerConfig = {
   mergeDistanceM: 0.6,
   mergeConfidenceThreshold: 0.7,
-  mergeVelocityThreshold: 2.0,
+  mergeVelocityThreshold: 1.2,  // Lowered from 2.0 for stricter velocity matching
   unconfirmedMergeDistanceM: 0.4,
   unconfirmedMergeConfidenceThreshold: 0.5,
   crossCameraMergeDistanceM: 0.9,
@@ -159,7 +159,7 @@ export class TrackMerger {
         // - Confirmed tracks: highest threshold (0.7)
         let effectiveThreshold: number
         if (isUnconfirmedMerge && isCrossCameraMerge) {
-          effectiveThreshold = 0.4  // Lower threshold for cross-camera unconfirmed
+          effectiveThreshold = 0.55  // Raised threshold to reduce false merges
         } else if (isUnconfirmedMerge) {
           effectiveThreshold = this.config.unconfirmedMergeConfidenceThreshold
         } else {
@@ -236,19 +236,26 @@ export class TrackMerger {
         track2.detectionCount >= this.config.minDetectionsForVelocity
 
       if (velocityReliable && velocityDiff > this.config.mergeVelocityThreshold) {
-        // Velocities too different and reliable - penalize but don't reject
-        confidence -= 0.1
+        // Velocities too different and reliable - stronger penalty
+        confidence -= 0.25  // Increased from 0.1
       } else if (!velocityReliable) {
         // Velocity not reliable yet - give neutral score (don't penalize early tracks)
-        confidence += 0.15
-      } else if (speed1 > 0.2 && speed2 > 0.2) {
+        confidence += 0.1  // Reduced from 0.15 to be more conservative
+      } else if (speed1 > 0.15 && speed2 > 0.15) {
         // Both moving with reliable velocity - check direction alignment
         const cosineSim = (v1.x * v2.x + v1.y * v2.y) / (speed1 * speed2)
-        // Map [-1, 1] to [0, 0.3]
-        confidence += 0.3 * (cosineSim + 1) / 2
+
+        // CRITICAL: Reject merges of tracks moving in opposite directions
+        if (cosineSim < -0.3) {
+          return 0  // Opposite directions - cannot be same person
+        }
+
+        // Map [-0.3, 1] to [0, 0.35] for direction bonus
+        const normalizedSim = (cosineSim + 0.3) / 1.3
+        confidence += 0.35 * normalizedSim
       } else {
         // One or both stationary - neutral
-        confidence += 0.15
+        confidence += 0.1
       }
     } else {
       // No Kalman state - neutral
