@@ -170,11 +170,15 @@ shared/cameras/*.mp4
 shared/cameras/**/*.mp4
 # Ignore preprocessed videos (can be regenerated)
 shared/cameras/preprocessed/*/*.mp4
-# Keep detection metadata and directory structure
-!shared/cameras/preprocessed/*/*.json
+# Ignore large uncompressed detection JSON files (use .json.gz instead)
+shared/cameras/preprocessed/*/*.json
+# Keep only compressed detection metadata
 !shared/cameras/preprocessed/*/*.json.gz
 # Old rendered directory (backward compat symlink)
 shared/cameras/rendered
+
+# Large preprocessing output files (keep only compressed versions)
+scripts/preprocessing/*.json
 
 # YOLO model files (large, auto-downloaded)
 shared/models/**/*.pt
