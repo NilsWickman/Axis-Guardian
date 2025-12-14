@@ -209,17 +209,20 @@ export function buildCostMatrix(
         maxAccelerationMs2: config.maxAccelerationMs2,
       })
 
-      // 3. Apply embedding similarity multiplier
+      // 3. Check if track is in crossing situation (needed for embedding and crossing gate)
+      const isCrossing = crossingTrackIds.has(track.globalTrackId)
+
+      // 4. Apply embedding similarity multiplier
+      // During crossings, bypass temporal gating to use full embedding weight
       const embeddingResult = calculateEmbeddingSimilarityMultiplier(det, track, timeDeltaMs, {
         embeddingWeight: config.embeddingWeight,
         embeddingMinSimilarity: config.embeddingMinSimilarity,
         embeddingMinQuality: config.embeddingMinQuality,
-      })
+      }, true, isCrossing)
       cost *= embeddingResult.multiplier
 
-      // 4. Apply appearance-gated crossing penalty
+      // 5. Apply appearance-gated crossing penalty
       // When tracks are crossing, require embedding match to prevent ID switches
-      const isCrossing = crossingTrackIds.has(track.globalTrackId)
       const crossingGate = calculateCrossingGateMultiplier(det, track, isCrossing, {
         crossingMinSimilarity: config.crossingMinSimilarity,
         crossingMismatchPenalty: config.crossingMismatchPenalty,

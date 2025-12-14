@@ -399,7 +399,7 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
     crossCameraBonusWindowMs: 2000,
     maxAccelerationMs2: 3.0,
     accelerationConsistencyWeight: 0.1,
-    embeddingWeight: 0.35,  // Increased from 0.25 - stronger ReID for occlusion recovery
+    embeddingWeight: 0.45,  // Increased from 0.35 - stronger appearance matching to reduce ID swaps
     embeddingMinSimilarity: 0.65,  // Lowered from 0.7 for more embedding matches
     embeddingMinQuality: 0.25,  // Lowered from 0.3 for more embeddings used
     trajectoryPredictionSteps: [200, 500, 800, 1000],
@@ -451,9 +451,9 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
     reidentificationGateMultiplier: 5.0,  // Increased from 4.0 - wider gate for re-ID after occlusion
     fovExitTimeoutMs: 1500,
     boundaryExitTimeoutMs: 1000,
-    maxPillarOcclusionMs: 3500,  // Reduced from 5000 - less drift during pillar occlusion
+    maxPillarOcclusionMs: 2500,  // Reduced from 3500 - shorter coasting to reduce ghost drift
     maxNonPillarCoastMs: 1500,
-    coastingDampingFactor: 0.88,  // Increased damping from 0.92 - reduce velocity drift during coasting
+    coastingDampingFactor: 0.80,  // 20% velocity reduction per update - more aggressive to reduce drift
     maxOcclusionTrailLength: 50,
     minRecoveryTimeMs: 300,  // Minimum time before exiting occlusion (flicker protection)
     partialPillarOcclusionMs: 2500,  // Reduced from 3000 - less drift for partial occlusions
@@ -528,7 +528,7 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
     minTrailPointsForCurve: 5,  // Need 5+ points to fit a circle
     maxTrailAgeForCurveMs: 2000,  // Only use recent 2s of trail
     minCurvatureThreshold: 0.1,  // 10m radius minimum - below this use linear
-    curveBlendWeight: 0.7,  // 70% curve, 30% linear for stability
+    curveBlendWeight: 0.4,  // 40% curve, 60% linear - more conservative to reduce erratic predictions
     maxCurveExtrapolationMs: 1500,  // Don't trust curve beyond 1.5s
   },
 

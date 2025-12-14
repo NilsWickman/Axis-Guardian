@@ -62,28 +62,36 @@ function isPointInRectangle(
 
 /**
  * Check if a point is inside an obstacle
+ * @param margin - Positive margin shrinks the obstacle (for filtering with tolerance)
  */
 export function isPointInsideObstacle(
   point: Point2D,
-  obstacle: SiteMapObstacle
+  obstacle: SiteMapObstacle,
+  margin: number = 0
 ): boolean {
   switch (obstacle.type) {
     case 'circle':
       if (obstacle.radius === undefined) return false
-      return isPointInCircle(point, obstacle.position, obstacle.radius)
+      // Apply margin to shrink the effective radius
+      const effectiveRadius = Math.max(0, obstacle.radius - margin)
+      return isPointInCircle(point, obstacle.position, effectiveRadius)
 
     case 'rectangle':
       if (!obstacle.dimensions) return false
+      // Apply margin to shrink the effective dimensions
+      const effectiveWidth = Math.max(0, obstacle.dimensions.width - margin * 2)
+      const effectiveHeight = Math.max(0, obstacle.dimensions.height - margin * 2)
       return isPointInRectangle(
         point,
         obstacle.position,
-        obstacle.dimensions.width,
-        obstacle.dimensions.height,
+        effectiveWidth,
+        effectiveHeight,
         obstacle.rotation ?? 0
       )
 
     case 'polygon':
       if (!obstacle.vertices || obstacle.vertices.length < 3) return false
+      // Polygon margin would require complex shrinking - not supported
       return isPointInPolygon(point, obstacle.vertices)
 
     default:
@@ -93,12 +101,14 @@ export function isPointInsideObstacle(
 
 /**
  * Check if a point is inside any of the given obstacles
+ * @param margin - Positive margin shrinks obstacles (for filtering with tolerance)
  */
 export function isPointInsideAnyObstacle(
   point: Point2D,
-  obstacles: SiteMapObstacle[]
+  obstacles: SiteMapObstacle[],
+  margin: number = 0
 ): boolean {
-  return obstacles.some((obstacle) => isPointInsideObstacle(point, obstacle))
+  return obstacles.some((obstacle) => isPointInsideObstacle(point, obstacle, margin))
 }
 
 /**
