@@ -1,4 +1,4 @@
 // WebSocket connection composable
-export function useWebSocket(url: string) {
+export function useWebSocket(_url: string) {
   // TODO: Implement WebSocket connection handling
 }

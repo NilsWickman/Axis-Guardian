@@ -1,6 +1,6 @@
 import { ref, type Ref } from 'vue'
 import type { CameraPlacement } from '../types/site-map-types'
-import { RENDER_SCALE, extractValue, metersToPixels, pixelsToMeters } from '../utils/siteMapConversion'
+import { RENDER_SCALE, extractValue, metersToPixels } from '../utils/siteMapConversion'
 
 export interface DragState {
   isDragging: boolean

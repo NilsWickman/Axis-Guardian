@@ -1,4 +1,5 @@
 import type { CameraPlacement, Wall } from '../types/site-map-types'
+import { extractValue } from '../utils/siteMapConversion'
 
 export interface ValidationWarning {
   type: 'blocked' | 'too-close' | 'no-coverage'
@@ -10,36 +11,43 @@ export function useCameraValidation() {
   const validateCamera = (camera: CameraPlacement, walls: Wall[]): ValidationWarning[] => {
     const warnings: ValidationWarning[] = []
 
+    const elevation = extractValue(camera.elevation)
+    const height = extractValue(camera.height)
+    const fov = extractValue(camera.fov)
+
+    // Calculate effective view distance from height and elevation
+    const viewDistance = elevation > 0 ? height / Math.tan(elevation * Math.PI / 180) : 20
+
     // Check if camera has very low view distance
-    if (camera.viewDistance < 50) {
+    if (viewDistance < 0.5) {  // Less than 0.5 meters
       warnings.push({
         type: 'no-coverage',
-        message: 'View distance is very low (< 50px)',
+        message: 'View distance is very low (< 0.5m)',
         severity: 'warning'
       })
     }
 
     // Check if camera angle is pointing straight down
-    if (camera.angle > 80) {
+    if (elevation > 80) {
       warnings.push({
         type: 'no-coverage',
-        message: 'Camera angle is too steep (> 80°), may only see floor',
+        message: 'Camera elevation is too steep (> 80°), may only see floor',
         severity: 'warning'
       })
     }
 
     // Check if camera is too close to a wall in its viewing direction
     const distanceToWall = getDistanceToNearestWallInDirection(camera, walls)
-    if (distanceToWall !== null && distanceToWall < 30) {
+    if (distanceToWall !== null && distanceToWall < 0.3) {  // Less than 0.3 meters
       warnings.push({
         type: 'too-close',
-        message: `Camera is very close to a wall (${Math.round(distanceToWall)}px)`,
+        message: `Camera is very close to a wall (${(distanceToWall * 100).toFixed(0)}cm)`,
         severity: 'warning'
       })
     }
 
     // Check if FOV is unusually narrow
-    if (camera.fov < 45) {
+    if (fov < 45) {
       warnings.push({
         type: 'no-coverage',
         message: 'Field of view is very narrow (< 45°)',
@@ -51,23 +59,26 @@ export function useCameraValidation() {
   }
 
   const getDistanceToNearestWallInDirection = (camera: CameraPlacement, walls: Wall[]): number | null => {
-    const angleRad = (camera.rotation * Math.PI) / 180
+    const azimuth = extractValue(camera.azimuth)
+    const angleRad = (azimuth * Math.PI) / 180
     const dirX = Math.cos(angleRad)
     const dirY = Math.sin(angleRad)
+    const cameraX = extractValue(camera.position.x)
+    const cameraY = extractValue(camera.position.y)
 
     let minDistance: number | null = null
 
     for (const wall of walls) {
       // Ray-line intersection
       const distance = rayLineIntersection(
-        camera.x,
-        camera.y,
+        cameraX,
+        cameraY,
         dirX,
         dirY,
-        wall.start.x,
-        wall.start.y,
-        wall.end.x,
-        wall.end.y
+        extractValue(wall.start.x),
+        extractValue(wall.start.y),
+        extractValue(wall.end.x),
+        extractValue(wall.end.y)
       )
 
       if (distance !== null && (minDistance === null || distance < minDistance)) {

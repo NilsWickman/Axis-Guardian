@@ -105,8 +105,6 @@ const CAMERA_COLORS: Record<string, string> = {
   camera1: '#00bcd4',
   camera2: '#ff9800',
 }
-const GROUND_TRUTH_COLOR = '#4caf50'
-const ERROR_LINE_COLOR = '#ffeb3b'
 const ERROR_THRESHOLD = 0.5 // meters
 
 // ============================================================================
@@ -280,15 +278,6 @@ function generateFrameSVG(
     const startAngle = azimuthMath + fovRad / 2
     const endAngle = azimuthMath - fovRad / 2
 
-    // Calculate distances to walls for left and right edges of FOV
-    const dxStart = Math.cos(startAngle)
-    const dyStart = Math.sin(startAngle)
-    const dxEnd = Math.cos(endAngle)
-    const dyEnd = Math.sin(endAngle)
-
-    const distStart = rayToWallDistance(cam.position.x, cam.position.y, dxStart, dyStart)
-    const distEnd = rayToWallDistance(cam.position.x, cam.position.y, dxEnd, dyEnd)
-
     // Generate polygon points along the FOV arc, clipped to walls
     const numSegments = 20
     let pathPoints = `M ${pos.x} ${pos.y}`
@@ -357,8 +346,8 @@ function generateFrameSVG(
 async function processFrame(
   frameNumber: number,
   annotations: Annotation[],
-  camera1Detections: DetectionFile | null,
-  camera2Detections: DetectionFile | null,
+  _camera1Detections: DetectionFile | null,
+  _camera2Detections: DetectionFile | null,
   cameraRegistry: CameraRegistry,
   cameraParams: Record<string, ReturnType<typeof siteMapCameraToCameraParams>>
 ): Promise<{
@@ -443,7 +432,6 @@ function generateSummaryHTML(
   const allErrors = results.flatMap((r) => r.errors)
   const avgError = allErrors.length > 0 ? allErrors.reduce((a, b) => a + b, 0) / allErrors.length : 0
   const totalPassed = results.reduce((sum, r) => sum + r.passed, 0)
-  const totalFailed = results.reduce((sum, r) => sum + r.failed, 0)
   const passRate = totalAnnotations > 0 ? (totalPassed / totalAnnotations) * 100 : 0
 
   // Error distribution

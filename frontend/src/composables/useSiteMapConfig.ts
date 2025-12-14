@@ -5,7 +5,7 @@
  * from the siteMapConfigLoader and converting it to the expected types.
  */
 
-import { ref, computed, type Ref, type ComputedRef } from 'vue'
+import { ref, type Ref } from 'vue'
 import {
   loadSiteMapConfig,
   type SiteMapConfig,

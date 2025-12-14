@@ -38,7 +38,7 @@
         <!-- Video Container with Canvas Overlay -->
         <div class="camera-container">
           <video
-            :ref="el => videoRefs[camera.id] = el"
+            :ref="setVideoRef(camera.id)"
             :id="`video-${camera.id}`"
             autoplay
             muted
@@ -50,7 +50,7 @@
             <source :src="camera.streamUrl" type="application/x-mpegURL" />
           </video>
           <canvas
-            :ref="el => canvasRefs[camera.id] = el"
+            :ref="setCanvasRef(camera.id)"
             :id="`canvas-${camera.id}`"
             class="canvas-overlay"
           />
@@ -65,11 +65,11 @@
             <template v-if="getTiming(camera.id)?.value">
               <div class="debug-section">
                 <div class="debug-label">Detection Time:</div>
-                <div class="debug-value">{{ new Date(getTiming(camera.id)!.value!.frame_timestamp * 1000).toLocaleTimeString() }}</div>
+                <div class="debug-value">{{ new Date((getTiming(camera.id)?.value?.frame_timestamp ?? 0) * 1000).toLocaleTimeString() }}</div>
               </div>
               <div class="debug-section">
                 <div class="debug-label">Processing Latency:</div>
-                <div class="debug-value">{{ getTiming(camera.id)?.value?.processing_latency_ms.toFixed(1) }}ms</div>
+                <div class="debug-value">{{ (getTiming(camera.id)?.value?.processing_latency_ms ?? 0).toFixed(1) }}ms</div>
               </div>
               <div class="debug-section">
                 <div class="debug-label">Sync Offset:</div>
@@ -85,7 +85,7 @@
               </div>
               <div v-if="getTiming(camera.id)?.value?.pts_based" class="debug-section">
                 <div class="debug-label">Video PTS:</div>
-                <div class="debug-value">{{ (getTiming(camera.id)?.value?.video_pts_ms / 1000).toFixed(1) }}s</div>
+                <div class="debug-value">{{ ((getTiming(camera.id)?.value?.video_pts_ms ?? 0) / 1000).toFixed(1) }}s</div>
               </div>
               <div v-if="getTiming(camera.id)?.value?.pts_based" class="debug-section">
                 <div class="debug-label">Loops:</div>
@@ -105,13 +105,13 @@
               <div class="debug-section-header">Adaptive Sync</div>
               <div class="debug-section">
                 <div class="debug-label">HLS Latency:</div>
-                <div class="debug-value" :class="getMetrics(camera.id)?.value ? getSyncQualityClass(getMetrics(camera.id).value.quality) : ''">
+                <div class="debug-value" :class="getMetricsSyncQualityClass(camera.id)">
                   {{ getMetrics(camera.id)?.value?.latency_ms?.toFixed(0) ?? 'N/A' }}ms
                 </div>
               </div>
               <div class="debug-section">
                 <div class="debug-label">Sync Quality:</div>
-                <div class="debug-value" :class="getMetrics(camera.id)?.value ? getSyncQualityClass(getMetrics(camera.id).value.quality) : ''">
+                <div class="debug-value" :class="getMetricsSyncQualityClass(camera.id)">
                   {{ getMetrics(camera.id)?.value?.quality?.toUpperCase() ?? 'N/A' }}
                 </div>
               </div>
@@ -171,7 +171,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, type Ref } from 'vue'
 import { useDetections } from '@/composables/useDetections'
 import { useVideoSync } from '@/composables/useVideoSync'
 import Hls from 'hls.js'
@@ -239,18 +239,26 @@ const CLASS_COLORS: Record<string, string> = {
 }
 
 // Detection composable
-const { isConnected, connect, subscribe, getDetections, getTotalCount, getTiming } = useDetections()
+const { isConnected, connect, subscribe, getDetections, getTiming } = useDetections()
 
 // Video sync composable
 const { connect: connectSync, startMonitoring, stopMonitoring, getMetrics } = useVideoSync()
 
-// Refs
+// Refs - using any for template ref callbacks
 const videoRefs = ref<Record<string, HTMLVideoElement | null>>({})
 const canvasRefs = ref<Record<string, HTMLCanvasElement | null>>({})
+
+// Template ref setter helpers to handle Element | ComponentPublicInstance | null
+const setVideoRef = (cameraId: string) => (el: unknown) => {
+  videoRefs.value[cameraId] = el as HTMLVideoElement | null
+}
+const setCanvasRef = (cameraId: string) => (el: unknown) => {
+  canvasRefs.value[cameraId] = el as HTMLCanvasElement | null
+}
 const videoLoaded = ref<Record<string, boolean>>({})
 const cameraDetections = reactive<Record<string, CameraDetectionData>>({})
 const animationFrames = ref<Record<string, number>>({})
-const hlsInstances = ref<Record<string, Hls>>({})
+const hlsInstances = ref<Record<string, Hls | null>>({})
 const videoPlaybackTimes = ref<Record<string, number>>({})
 const showDebugOverlay = ref(true)
 
@@ -281,7 +289,7 @@ function getClassColor(className: string): string {
   return CLASS_COLORS[className] || '#94a3b8'
 }
 
-function getSyncQualityClass(quality: 'good' | 'fair' | 'poor'): string {
+function getSyncQualityClass(quality: 'good' | 'fair' | 'poor' | undefined): string {
   switch (quality) {
     case 'good':
       return 'sync-quality-good'
@@ -294,9 +302,14 @@ function getSyncQualityClass(quality: 'good' | 'fair' | 'poor'): string {
   }
 }
 
+function getMetricsSyncQualityClass(cameraId: string): string {
+  const metrics = getMetrics(cameraId)?.value
+  return metrics ? getSyncQualityClass(metrics.quality) : ''
+}
+
 function getStreamDelay(cameraId: string): number {
   const timing = getTiming(cameraId)?.value
-  if (!timing) return 0
+  if (!timing?.frame_timestamp) return 0
 
   // Calculate how far behind the video player is compared to real-time detections
   // Positive value means video is behind (delayed)
@@ -411,12 +424,12 @@ function initializeHLS(camera: Camera) {
 
       // Start sync monitoring for this camera
       // Note: Need to pass refs, not raw objects
-      const videoRef = computed(() => videoRefs.value[camera.id])
-      const hlsRef = computed(() => hlsInstances.value[camera.id])
+      const videoRef = computed<HTMLVideoElement | null>(() => videoRefs.value[camera.id] ?? null)
+      const hlsRef = computed<Hls | null>(() => hlsInstances.value[camera.id] ?? null)
       startMonitoring(camera.id, videoRef, hlsRef)
     })
 
-    hls.on(Hls.Events.ERROR, (event, data) => {
+    hls.on(Hls.Events.ERROR, (_event, data) => {
       if (data.fatal) {
         console.error('HLS fatal error:', data)
         // Try to recover
@@ -434,8 +447,8 @@ function initializeHLS(camera: Camera) {
       video.play().catch(e => console.error('Error playing video:', e))
 
       // Start sync monitoring for native HLS
-      const videoRef = computed(() => videoRefs.value[camera.id])
-      const hlsRef = ref<Hls | null>(null)
+      const videoRef = computed<HTMLVideoElement | null>(() => videoRefs.value[camera.id] ?? null)
+      const hlsRef = ref(null) as Ref<Hls | null>
       startMonitoring(camera.id, videoRef, hlsRef)
     })
   }
@@ -495,7 +508,7 @@ onUnmounted(() => {
 
   // Destroy HLS instances
   Object.values(hlsInstances.value).forEach(hls => {
-    hls.destroy()
+    hls?.destroy()
   })
 })
 </script>

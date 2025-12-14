@@ -4,7 +4,7 @@ import { useMultiCameraAnnotation } from '@/composables/useMultiCameraAnnotation
 import { useSiteMapCanvas, type CanvasRenderOptions } from '@/composables/useSiteMapCanvas'
 import { useSiteMapConfig } from '@/composables/useSiteMapConfig'
 import { AVAILABLE_VIDEOS } from '@/types/frame-review'
-import { extractValue, metersToPixels, RENDER_SCALE } from '@/utils/siteMapConversion'
+import { extractValue, RENDER_SCALE } from '@/utils/siteMapConversion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'

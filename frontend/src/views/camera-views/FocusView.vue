@@ -29,8 +29,8 @@
             <VideoMetrics
               v-if="selectedCamera && currentConnection"
               :camera-id="selectedCamera.id"
-              :connection-quality="currentConnection.connectionQuality"
-              :stats="currentConnection.stats"
+              :connection-quality="currentConnectionQuality"
+              :stats="currentStats"
               :connection-state="connectionState"
             />
           </div>
@@ -81,7 +81,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useCameraConnectionManager } from '@/composables/useCameraConnectionManager'
 import VideoMetrics from '@/components/features/camera/VideoMetrics.vue'
 import type { Detection } from '@/types/detection.types'
@@ -95,8 +95,6 @@ interface Camera {
 const {
   cameras,
   isInitialized,
-  isInitializing,
-  connections,
   connectionStatuses,
   attachToVideoElement,
   getConnection
@@ -135,6 +133,10 @@ const currentConnection = computed(() => {
   const conn = getConnection(selectedCamera.value.id)
   return conn?.connection || null
 })
+
+// Unwrap nested refs for template use
+const currentConnectionQuality = computed(() => currentConnection.value?.connectionQuality.value)
+const currentStats = computed(() => currentConnection.value?.stats.value)
 
 // Methods
 function getClassColor(className: string): string {
@@ -289,7 +291,7 @@ async function attachThumbnailVideos() {
     if (selectedCamera.value) {
       const conn = getConnection(selectedCamera.value.id)
       if (conn) {
-        connectionState.value = conn.connection.connectionState.value
+        connectionState.value = conn.connection.connectionState.value as RTCPeerConnectionState
       }
     }
   }, 100)
@@ -335,7 +337,7 @@ function selectCamera(camera: Camera) {
   frameNumber.value = conn.connection.frameNumber.value
   detectionCount.value = conn.connection.detectionCount.value
   classCounts.value = conn.connection.classCounts.value
-  connectionState.value = conn.connection.connectionState.value
+  connectionState.value = conn.connection.connectionState.value as RTCPeerConnectionState
 }
 
 onMounted(async () => {

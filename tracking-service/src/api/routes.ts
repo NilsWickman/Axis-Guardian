@@ -680,7 +680,7 @@ export function registerRoutes(
 
   // Start debug session
   // Protected by read-only guard
-  app.post('/api/debug/session/start', { preHandler: readOnlyGuard }, async (request: FastifyRequest<{ Body: { name?: string } }>) => {
+  app.post('/api/debug/session/start', { preHandler: readOnlyGuard }, async (request) => {
     const logger = getPipelineLogger()
     const name = (request.body as { name?: string })?.name
     const sessionId = await logger.startSession(name)
@@ -693,7 +693,7 @@ export function registerRoutes(
 
   // End debug session
   // Protected by read-only guard
-  app.post('/api/debug/session/end', { preHandler: readOnlyGuard }, async (request: FastifyRequest<{ Body: { notes?: string } }>) => {
+  app.post('/api/debug/session/end', { preHandler: readOnlyGuard }, async (request) => {
     const logger = getPipelineLogger()
     const notes = (request.body as { notes?: string })?.notes
     await logger.endSession(notes)

@@ -56,12 +56,10 @@ export function useCameraSelection() {
   const copyCameraConfig = (camera: CameraPlacement) => {
     // Copy all properties except cameraId and position
     copiedCameraConfig.value = {
-      rotation: camera.rotation,
-      angle: camera.angle,
+      azimuth: camera.azimuth,
+      elevation: camera.elevation,
       height: camera.height,
       fov: camera.fov,
-      viewDistance: camera.viewDistance,
-      autoCalculateDistance: camera.autoCalculateDistance,
       color: camera.color,
       notes: camera.notes
     }

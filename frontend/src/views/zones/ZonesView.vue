@@ -585,7 +585,7 @@ const drawMap = () => {
 
   // Draw zone being created
   if (isDrawingMode.value && drawingVertices.value.length > 0) {
-    canvas.drawZonePreview(drawingVertices.value, mousePosition.value)
+    canvas.drawZonePreview(drawingVertices.value, newZone.type, undefined, mousePosition.value ?? undefined)
   }
 
   // Draw cameras (simplified, no FOV)

@@ -6,7 +6,39 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { useGlobalTrackStore, type GlobalTrack, type TrailPosition } from '../globalTracks'
+import { useGlobalTrackStore, type TrailPosition, type ExitReason, type VideoTimingInfo } from '../globalTracks'
+
+// Server track format (matching what comes from the tracking service)
+interface ServerTrack {
+  globalTrackId: string
+  cameraAssociations: Record<string, {
+    cameraId: string
+    trackIds: number[]
+    lastSeen: number
+  }>
+  currentPosition: { x: number; y: number }
+  trail: TrailPosition[]
+  color: string
+  lastSeen: number
+  isActive: boolean
+  isConfirmed: boolean
+  detectionCount: number
+  confidence: number
+  state: 'unconfirmed' | 'confirmed' | 'occluded'
+  exitReason?: ExitReason
+  predictedPosition?: { x: number; y: number }
+  videoTiming?: VideoTimingInfo
+  attributes: {
+    upper_clothing: {
+      dominant_colors: { name: string; score: number }[]
+    }
+    lower_clothing: {
+      dominant_colors: { name: string; score: number }[]
+    }
+    embedding_quality: number
+    sample_count: number
+  }
+}
 
 // Mock track data matching server format
 function createMockServerTrack(id: number, options: Partial<{
@@ -16,7 +48,7 @@ function createMockServerTrack(id: number, options: Partial<{
   state: 'unconfirmed' | 'confirmed' | 'occluded'
   detectionCount: number
   trailLength: number
-}> = {}) {
+}> = {}): ServerTrack {
   const x = options.x ?? 5.0
   const y = options.y ?? 5.0
   const trail: TrailPosition[] = []
@@ -255,8 +287,6 @@ describe('globalTracks store', () => {
   describe('Configuration', () => {
     it('updateConfig merges config updates', () => {
       const store = useGlobalTrackStore()
-
-      const originalCorrelationDistance = store.config.correlationDistanceM
 
       store.updateConfig({ correlationDistanceM: 2.0 })
 

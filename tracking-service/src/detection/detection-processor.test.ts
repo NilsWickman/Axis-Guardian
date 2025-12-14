@@ -2,7 +2,7 @@
  * Tests for Detection Processor - Obstacle Filtering
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { DetectionProcessor } from './detection-processor.js'
 import { TrackManager } from '../tracks/track-manager.js'
 import { CameraRegistry } from './camera-registry.js'
@@ -21,7 +21,7 @@ describe('DetectionProcessor - Obstacle Filtering', () => {
     cameraRegistry.registerCamera('test-camera', {
       position: { x: 0, y: 0, z: 2.5 },
       azimuth: 90,
-      tilt: 45,
+      elevation: 45,
       fov: 80,
     })
 
@@ -167,7 +167,7 @@ describe('DetectionProcessor - processMessage with obstacles', () => {
     cameraRegistry.registerCamera('camera-1', {
       position: { x: 9, y: 0, z: 2.8 },
       azimuth: 0,
-      tilt: 45,
+      elevation: 45,
       fov: 80,
     })
 
@@ -191,6 +191,7 @@ describe('DetectionProcessor - processMessage with obstacles', () => {
       camera_id: 'camera-1',
       frame_number: 1,
       timestamp: 1000,
+      detection_count: 0,
       detections: [],
     }
 
@@ -205,6 +206,7 @@ describe('DetectionProcessor - processMessage with obstacles', () => {
       camera_id: 'camera-1',
       frame_number: 1,
       timestamp: Date.now() / 1000,
+      detection_count: 1,
       detections: [
         {
           track_id: 1,
@@ -226,6 +228,7 @@ describe('DetectionProcessor - processMessage with obstacles', () => {
       camera_id: 'camera-1',
       frame_number: 2,
       timestamp: Date.now() / 1000,
+      detection_count: 1,
       detections: [
         {
           track_id: 1,
@@ -245,6 +248,7 @@ describe('DetectionProcessor - processMessage with obstacles', () => {
       camera_id: 'camera-1',
       frame_number: 3,
       timestamp: Date.now() / 1000,
+      detection_count: 1,
       detections: [
         {
           track_id: 1,

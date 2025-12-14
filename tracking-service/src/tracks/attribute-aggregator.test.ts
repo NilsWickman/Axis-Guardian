@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { AttributeAggregator, cosineSimilarity, euclideanDistance } from './attribute-aggregator'
-import type { DetectionAttributes } from '../types'
+import type { DetectionAttributes as _DetectionAttributes } from '../types'
 
 describe('AttributeAggregator', () => {
   let aggregator: AttributeAggregator
@@ -160,7 +160,7 @@ describe('AttributeAggregator', () => {
       expect(attrs.embedding).toBeDefined()
 
       // Result should be closer to [0, 1, 0] due to higher quality weight
-      const [x, y, z] = attrs.embedding!
+      const [x, y, _z] = attrs.embedding!
       expect(y).toBeGreaterThan(x) // y should dominate
     })
 

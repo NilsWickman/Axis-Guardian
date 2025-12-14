@@ -1020,11 +1020,9 @@ export function calculateVisibleFOVWithArcs(
       // We want the arc on the far side from camera (the occluded side)
       // Calculate which direction gives us the arc facing away from camera
       const midAngleCW = normalizeAngle((startNorm + endNorm) / 2)
-      const midAngleCCW = normalizeAngle((startNorm + endNorm) / 2 + Math.PI)
 
       // Check which midpoint is further from camera direction
       const cwDiff = Math.abs(normalizeAngle(midAngleCW - cameraToCenter))
-      const ccwDiff = Math.abs(normalizeAngle(midAngleCCW - cameraToCenter))
 
       // If CW midpoint is closer to "away from camera", go CW; otherwise go CCW
       const anticlockwise = cwDiff < Math.PI / 2 ? false : true

@@ -3,14 +3,13 @@ import type {
   CrossCameraDataset,
   CrossCameraAnnotation,
   LinkedDetection,
-  CameraSource,
 } from '@/types/ground-truth'
 import {
   createEmptyCrossCameraDataset,
   generateAnnotationId,
   calculateCrossCameraStats,
 } from '@/types/ground-truth'
-import type { DetectionFile, FrameData, Detection } from '@/types/frame-review'
+import type { DetectionFile, FrameData } from '@/types/frame-review'
 
 const STORAGE_KEY = 'cross-camera-ground-truth'
 

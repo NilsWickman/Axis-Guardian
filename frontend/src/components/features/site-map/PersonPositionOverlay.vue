@@ -426,16 +426,6 @@ function isGhostTrack(track: GlobalTrack): boolean {
 }
 
 /**
- * Get display position for a track (predicted for ghost tracks, current otherwise)
- */
-function getDisplayPosition(track: GlobalTrack): { x: number; y: number } {
-  if (isGhostTrack(track) && track.predictedPosition) {
-    return track.predictedPosition
-  }
-  return track.currentPosition
-}
-
-/**
  * Draw ghost track marker (semi-transparent, dashed)
  * Used for pillar-occluded tracks showing predicted position
  */

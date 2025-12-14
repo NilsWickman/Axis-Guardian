@@ -4,7 +4,7 @@
  * These tests verify the coordinate transformation math using known inputs/outputs.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import {
   calculateFocalLength,
   degToRad,
@@ -288,7 +288,6 @@ describe('groundPlaneProjection', () => {
       azimuth: 0, // Looking North (+Y)
       elevation: 45, // Looking down at 45°
       fov: 60,
-      maxDistance: 20,
     }
 
     const baseImage = { width: 1920, height: 1080 }
@@ -370,25 +369,6 @@ describe('groundPlaneProjection', () => {
       expect(topResult.distance).toBeGreaterThan(centerResult.distance)
     })
 
-    it('should mark as invalid if beyond max distance', () => {
-      const farCamera: CameraParams = {
-        ...baseCamera,
-        elevation: 30, // Looking down at 30° - will have valid intersection
-        maxDistance: 2, // Very short max distance
-      }
-
-      const result = projectToGround(
-        { x: 960, y: 540 }, // Image center
-        farCamera,
-        baseImage
-      )
-
-      // At 30° elevation from 3m height, ground intersection is at ~5.2m
-      // With maxDistance=2, this should be invalid
-      expect(result.isValid).toBe(false)
-      expect(result.reason).toBe('beyond_max_distance')
-    })
-
     it('should handle camera looking East (azimuth=90)', () => {
       const eastCamera: CameraParams = {
         ...baseCamera,
@@ -435,7 +415,6 @@ describe('groundPlaneProjection', () => {
       azimuth: 0, // Looking North
       elevation: 45,
       fov: 60, // ±30° from center
-      maxDistance: 20,
     }
 
     it('should return true for point directly ahead', () => {
@@ -501,7 +480,6 @@ describe('groundPlaneProjection', () => {
       azimuth: 0,
       elevation: 45,
       fov: 60,
-      maxDistance: 20,
     }
 
     it('should project normalized bbox correctly', () => {
@@ -532,10 +510,9 @@ describe('groundPlaneProjection', () => {
       const config = {
         id: 'camera1',
         position: { x: 1.3, y: 10.9 },
-        rotation: 321,
+        azimuth: 321,
         height: 1.5,
         fieldOfView: 60,
-        viewDistance: 100,
       }
 
       const camera = siteMapConfigToCamera(config)
@@ -545,7 +522,6 @@ describe('groundPlaneProjection', () => {
       expect(camera.position.z).toBe(1.5)
       expect(camera.azimuth).toBe(321)
       expect(camera.fov).toBe(60)
-      expect(camera.maxDistance).toBe(100)
     })
   })
 
@@ -558,20 +534,18 @@ describe('groundPlaneProjection', () => {
     const camera1 = siteMapConfigToCamera({
       id: 'camera1',
       position: { x: 1.3, y: 10.9 },
-      rotation: 321, // Facing roughly Northwest
+      azimuth: 321, // Facing roughly Northwest
       height: 1.5,
       fieldOfView: 60,
-      viewDistance: 100,
     })
 
     // Camera 2: Back Corner
     const camera2 = siteMapConfigToCamera({
       id: 'camera2',
       position: { x: 15.75, y: 10.9 },
-      rotation: 253, // Facing roughly Southwest
+      azimuth: 253, // Facing roughly Southwest
       height: 1.5,
       fieldOfView: 60,
-      viewDistance: 100,
     })
 
     it('camera1: should project center detection correctly', () => {

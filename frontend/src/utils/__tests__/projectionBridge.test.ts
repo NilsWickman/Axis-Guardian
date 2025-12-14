@@ -19,11 +19,10 @@ import { createMeterUnit, createDegreeUnit } from '../siteMapConversion'
 function createTestPlacement(overrides: Partial<{
   x: number
   y: number
-  rotation: number
-  angle: number
+  azimuth: number
+  elevation: number
   height: number
   fov: number
-  viewDistance: number
 }> = {}): CameraPlacement {
   return {
     cameraId: 'test-camera',
@@ -31,12 +30,10 @@ function createTestPlacement(overrides: Partial<{
       x: createMeterUnit(overrides.x ?? 5),
       y: createMeterUnit(overrides.y ?? 5),
     },
-    rotation: createDegreeUnit(overrides.rotation ?? 0),
-    angle: createDegreeUnit(overrides.angle ?? 45),
+    azimuth: createDegreeUnit(overrides.azimuth ?? 0),
+    elevation: createDegreeUnit(overrides.elevation ?? 45),
     height: createMeterUnit(overrides.height ?? 3),
     fov: createDegreeUnit(overrides.fov ?? 60),
-    viewDistance: createMeterUnit(overrides.viewDistance ?? 20),
-    autoCalculateDistance: false,
     color: 'cyan-500',
   }
 }
@@ -47,7 +44,7 @@ function createTestDetection(bbox: BoundingBox, cameraId: string = 'test-camera'
     id: 'det-1',
     cameraId,
     trackId: 1,
-    className: 'person',
+    type: 'person',
     confidence: 0.9,
     bbox,
     timestamp: new Date().toISOString(),
@@ -60,11 +57,10 @@ describe('projectionBridge', () => {
       const placement = createTestPlacement({
         x: 10,
         y: 8,
-        rotation: 90,
-        angle: 30,
+        azimuth: 90,
+        elevation: 30,
         height: 2.5,
         fov: 75,
-        viewDistance: 15,
       })
 
       const params = cameraPlacementToParams(placement)
@@ -75,19 +71,18 @@ describe('projectionBridge', () => {
       expect(params.azimuth).toBe(90)
       expect(params.elevation).toBe(30)
       expect(params.fov).toBe(75)
-      expect(params.maxDistance).toBe(15)
     })
 
-    it('should use default elevation when angle is 0', () => {
-      const placement = createTestPlacement({ angle: 0 })
+    it('should use default elevation when elevation is 0', () => {
+      const placement = createTestPlacement({ elevation: 0 })
       const params = cameraPlacementToParams(placement)
 
-      // When angle is 0, should use default elevation (45)
+      // When elevation is 0, should use default elevation (45)
       expect(params.elevation).toBe(45)
     })
 
     it('should allow elevation override', () => {
-      const placement = createTestPlacement({ angle: 30 })
+      const placement = createTestPlacement({ elevation: 30 })
       const params = cameraPlacementToParams(placement, 60)
 
       expect(params.elevation).toBe(60)
@@ -99,8 +94,8 @@ describe('projectionBridge', () => {
       const placement = createTestPlacement({
         x: 5,
         y: 5,
-        rotation: 0, // North
-        angle: 45,
+        azimuth: 0, // North
+        elevation: 45,
         height: 3,
       })
 
@@ -126,8 +121,8 @@ describe('projectionBridge', () => {
       const placement = createTestPlacement({
         x: 5,
         y: 5,
-        rotation: 0,
-        angle: 45,
+        azimuth: 0,
+        elevation: 45,
         height: 3,
       })
 
@@ -149,24 +144,25 @@ describe('projectionBridge', () => {
       const placement = createTestPlacement({
         x: 5,
         y: 5,
-        rotation: 0,
-        angle: 10, // Very shallow angle
+        azimuth: 0,
+        elevation: 5, // Very shallow angle - ray goes nearly horizontal
         height: 3,
-        viewDistance: 3, // Very short distance
       })
 
-      // Detection at top of image (far away)
+      // Detection at top of image (far away) with very shallow camera angle
+      // should result in ray not hitting ground
       const detection = createTestDetection({
         x: 0.4,
-        y: 0.05,
+        y: 0.05, // Top of image - ray goes above horizon
         width: 0.2,
         height: 0.2,
       })
 
       const result = projectDetectionToWorld(detection, placement, true)
 
+      // With such a shallow angle, the ray from top of image may not intersect ground
       expect(result.isValid).toBe(false)
-      expect(result.reason).toBe('beyond_max_distance')
+      expect(result.reason).toBe('no_ground_intersection')
     })
   })
 
@@ -200,8 +196,8 @@ describe('projectionBridge', () => {
       const placement = createTestPlacement({
         x: 5,
         y: 5,
-        rotation: 0,
-        angle: 45,
+        azimuth: 0,
+        elevation: 45,
         height: 3,
       })
 
@@ -232,8 +228,8 @@ describe('projectionBridge', () => {
       const placement = createTestPlacement({
         x: 5,
         y: 5,
-        rotation: 0,
-        angle: 45,
+        azimuth: 0,
+        elevation: 45,
         height: 3,
       })
 
@@ -259,10 +255,9 @@ describe('projectionBridge', () => {
       const placement = createTestPlacement({
         x: 5,
         y: 5,
-        rotation: 0,
-        angle: 5, // Very shallow
+        azimuth: 0,
+        elevation: 5, // Very shallow
         height: 3,
-        viewDistance: 2, // Very short
       })
 
       const detections = [
@@ -283,10 +278,9 @@ describe('projectionBridge', () => {
       const placement = createTestPlacement({
         x: 5,
         y: 5,
-        rotation: 0,
-        angle: 5,
+        azimuth: 0,
+        elevation: 5,
         height: 3,
-        viewDistance: 2,
       })
 
       const detections = [
@@ -310,11 +304,10 @@ describe('projectionBridge', () => {
       const placement = createTestPlacement({
         x: 1.3,
         y: 10.9,
-        rotation: 321, // NW direction
-        angle: 45,
+        azimuth: 321, // NW direction
+        elevation: 45,
         height: 1.5,
         fov: 60,
-        viewDistance: 100,
       })
 
       // Person detection in center of frame
@@ -344,11 +337,10 @@ describe('projectionBridge', () => {
       const placement = createTestPlacement({
         x: 15.75,
         y: 10.9,
-        rotation: 253, // SW direction
-        angle: 45,
+        azimuth: 253, // SW direction
+        elevation: 45,
         height: 1.5,
         fov: 60,
-        viewDistance: 100,
       })
 
       const detection = createTestDetection({

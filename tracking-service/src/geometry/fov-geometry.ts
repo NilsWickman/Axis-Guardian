@@ -359,3 +359,135 @@ export function validateDisappearanceLocation(
     details: `Track disappeared at (${point.x.toFixed(2)}, ${point.y.toFixed(2)}) inside FOV`,
   }
 }
+
+// =============================================================================
+// Boundary Distance Calculation for Predictive Handoff
+// =============================================================================
+
+/**
+ * Result of time-to-boundary calculation for predictive handoff zones
+ */
+export interface BoundaryInfo {
+  /** Distance to nearest FOV boundary in meters */
+  distanceM: number
+  /** Time to exit at current velocity (ms), null if not heading toward boundary */
+  timeToExitMs: number | null
+  /** Whether track is heading toward the boundary */
+  isHeadingOut: boolean
+  /** Nearest point on the boundary */
+  nearestBoundaryPoint: Point2D | null
+}
+
+/**
+ * Find closest point on a line segment to a given point
+ */
+function closestPointOnSegment(point: Point2D, segStart: Point2D, segEnd: Point2D): Point2D {
+  const dx = segEnd.x - segStart.x
+  const dy = segEnd.y - segStart.y
+  const lengthSq = dx * dx + dy * dy
+
+  if (lengthSq < 1e-10) {
+    // Degenerate segment - just return start
+    return segStart
+  }
+
+  // Project point onto line, clamping to segment bounds
+  const t = Math.max(0, Math.min(1,
+    ((point.x - segStart.x) * dx + (point.y - segStart.y) * dy) / lengthSq
+  ))
+
+  return {
+    x: segStart.x + t * dx,
+    y: segStart.y + t * dy,
+  }
+}
+
+/**
+ * Calculate distance and time to nearest FOV boundary.
+ *
+ * Used for predictive handoff detection - when a track is heading toward
+ * a FOV boundary, we can anticipate a handoff and pre-apply cost bonuses.
+ *
+ * This uses existing velocity from Kalman filter (geometry-based, not tuned).
+ *
+ * @param position - Current track position
+ * @param velocity - Current velocity vector
+ * @param fovPolygons - FOV polygons for all cameras
+ * @param roomBounds - Room dimensions
+ * @returns Boundary info including distance and time to exit
+ */
+export function calculateTimeToBoundary(
+  position: Point2D,
+  velocity: Point2D,
+  fovPolygons: Point2D[][],
+  roomBounds: RoomBounds
+): BoundaryInfo {
+  let minDistance = Infinity
+  let nearestBoundaryPoint: Point2D | null = null
+
+  // Check all FOV polygon edges
+  for (const polygon of fovPolygons) {
+    for (let i = 0; i < polygon.length; i++) {
+      const p1 = polygon[i]
+      const p2 = polygon[(i + 1) % polygon.length]
+      const closest = closestPointOnSegment(position, p1, p2)
+      const dist = distance(position, closest)
+
+      if (dist < minDistance) {
+        minDistance = dist
+        nearestBoundaryPoint = closest
+      }
+    }
+  }
+
+  // Also check room boundaries
+  const roomWalls = createRoomWalls(roomBounds)
+  for (const wall of roomWalls) {
+    const closest = closestPointOnSegment(position, wall.start, wall.end)
+    const dist = distance(position, closest)
+
+    if (dist < minDistance) {
+      minDistance = dist
+      nearestBoundaryPoint = closest
+    }
+  }
+
+  if (!nearestBoundaryPoint || minDistance === Infinity) {
+    return {
+      distanceM: Infinity,
+      timeToExitMs: null,
+      isHeadingOut: false,
+      nearestBoundaryPoint: null,
+    }
+  }
+
+  // Calculate velocity component toward boundary
+  const toBoundaryX = nearestBoundaryPoint.x - position.x
+  const toBoundaryY = nearestBoundaryPoint.y - position.y
+  const toBoundaryNorm = Math.sqrt(toBoundaryX * toBoundaryX + toBoundaryY * toBoundaryY)
+
+  if (toBoundaryNorm < 0.01) {
+    // Already at boundary
+    return {
+      distanceM: 0,
+      timeToExitMs: 0,
+      isHeadingOut: true,
+      nearestBoundaryPoint,
+    }
+  }
+
+  // Dot product of velocity with direction to boundary
+  const velocityTowardBoundary = (velocity.x * toBoundaryX + velocity.y * toBoundaryY) / toBoundaryNorm
+
+  const isHeadingOut = velocityTowardBoundary > 0
+  const timeToExitMs = isHeadingOut && velocityTowardBoundary > 0.01
+    ? (minDistance / velocityTowardBoundary) * 1000
+    : null
+
+  return {
+    distanceM: minDistance,
+    timeToExitMs,
+    isHeadingOut,
+    nearestBoundaryPoint,
+  }
+}

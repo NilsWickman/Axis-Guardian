@@ -226,7 +226,7 @@ export function use3DViewer() {
     scene.traverse((child) => {
       if (
         child instanceof THREE.Mesh ||
-        (child instanceof THREE.Group && child !== scene)
+        (child instanceof THREE.Group && (child as THREE.Object3D) !== (scene as THREE.Object3D))
       ) {
         objectsToRemove.push(child)
       }

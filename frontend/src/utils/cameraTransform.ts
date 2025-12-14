@@ -95,15 +95,16 @@ export function imageToWorldCoordinates(
   intrinsics: CameraIntrinsics,
   options: TransformOptions
 ): Point2D {
-  const { scale, assumeGroundPlane = true, personHeightMeters = 1.7 } = options
+  const { scale, assumeGroundPlane = true } = options
 
   // Extract numeric values from UnitValue wrappers
   const cameraX = extractValue(camera.position.x)
   const cameraY = extractValue(camera.position.y)
   const cameraHeight = extractValue(camera.height)
-  const cameraRotation = extractValue(camera.rotation)
-  const cameraAngle = extractValue(camera.angle)
-  const cameraViewDistance = extractValue(camera.viewDistance)
+  const cameraAzimuth = extractValue(camera.azimuth)
+  const cameraElevation = extractValue(camera.elevation)
+  // Default view distance based on elevation and height
+  const defaultViewDistance = cameraHeight / Math.tan((cameraElevation * Math.PI) / 180) * 2
 
   // Camera position is already in meters, convert to site map pixel coordinates then back
   const cameraPosMeters = {
@@ -117,8 +118,8 @@ export function imageToWorldCoordinates(
   const normalizedY = (imagePoint.y - intrinsics.principalPointY) / intrinsics.focalLengthPixels
 
   // Camera angles in radians
-  const azimuthRad = degToRad(cameraRotation)
-  const elevationRad = degToRad(cameraAngle)
+  const azimuthRad = degToRad(cameraAzimuth)
+  const elevationRad = degToRad(cameraElevation)
 
   // Create ray direction in camera space
   // X-right, Y-down, Z-forward (camera convention)
@@ -158,13 +159,13 @@ export function imageToWorldCoordinates(
     // t = -camera.z / ray.z
     if (Math.abs(rayWorld.z) < 0.001) {
       // Ray is parallel to ground, use default distance
-      distance = cameraViewDistance
+      distance = defaultViewDistance
     } else {
       distance = -cameraPosMeters.z / rayWorld.z
     }
   } else {
     // Use a fixed distance based on camera view distance
-    distance = cameraViewDistance
+    distance = defaultViewDistance
   }
 
   // Ensure distance is positive and reasonable
@@ -231,32 +232,39 @@ export function simpleImageToWorldApproximation(
   imagePoint: Point2D,
   camera: CameraPlacement,
   imageWidth: number,
-  imageHeight: number,
+  _imageHeight: number,
   options: TransformOptions
 ): Point2D {
   const { scale } = options
 
   // Normalize image coordinates to -1 to 1
   const normX = (imagePoint.x / imageWidth) * 2 - 1
-  const normY = (imagePoint.y / imageHeight) * 2 - 1
+
+  // Extract numeric values from UnitValue wrappers
+  const cameraX = extractValue(camera.position.x)
+  const cameraY = extractValue(camera.position.y)
+  const cameraHeight = extractValue(camera.height)
+  const cameraAzimuth = extractValue(camera.azimuth)
+  const cameraElevation = extractValue(camera.elevation)
+  const cameraFov = extractValue(camera.fov)
 
   // Estimate distance based on camera height and elevation
-  const elevationRad = degToRad(camera.angle)
-  const baseDistance = camera.height / Math.tan(Math.max(0.1, Math.abs(elevationRad)))
-  const distance = Math.min(camera.viewDistance / scale, baseDistance)
+  const elevationRad = degToRad(cameraElevation)
+  const baseDistance = cameraHeight / Math.tan(Math.max(0.1, Math.abs(elevationRad)))
+  const distance = Math.min(baseDistance * 2, baseDistance)
 
   // Calculate angle offset based on horizontal position
-  const fovRad = degToRad(camera.fov)
+  const fovRad = degToRad(cameraFov)
   const horizontalAngle = normX * (fovRad / 2)
 
   // Camera azimuth in radians
-  const azimuthRad = degToRad(camera.rotation)
+  const azimuthRad = degToRad(cameraAzimuth)
 
   // Calculate world position
   const totalAngle = azimuthRad + horizontalAngle
   const cameraPosMeters = {
-    x: (camera.x - 60) / scale,
-    y: (camera.y - 60) / scale,
+    x: cameraX,
+    y: cameraY,
   }
 
   const worldPosMeters = {
@@ -284,9 +292,12 @@ export function isPointInCameraFOV(
   // Extract camera parameters
   const cameraX = extractValue(camera.position.x)
   const cameraY = extractValue(camera.position.y)
-  const cameraRotation = extractValue(camera.rotation)
+  const cameraAzimuth = extractValue(camera.azimuth)
   const cameraFov = extractValue(camera.fov)
-  const cameraViewDistance = extractValue(camera.viewDistance)
+  const cameraHeight = extractValue(camera.height)
+  const cameraElevation = extractValue(camera.elevation)
+  // Calculate view distance from height and elevation
+  const cameraViewDistance = cameraHeight / Math.tan((cameraElevation * Math.PI) / 180) * 2
 
   // Vector from camera to point
   const dx = worldPoint.x - cameraX
@@ -304,8 +315,8 @@ export function isPointInCameraFOV(
   // Normalize to 0-360
   const normalizedAngle = ((angleToPoint % 360) + 360) % 360
 
-  // Camera rotation is already 0-360 (0 = North)
-  const cameraAngle = ((cameraRotation % 360) + 360) % 360
+  // Camera azimuth is already 0-360 (0 = North)
+  const cameraAngle = ((cameraAzimuth % 360) + 360) % 360
 
   // Calculate angular difference
   let angleDiff = normalizedAngle - cameraAngle
@@ -349,12 +360,14 @@ export function detectionToWorldCoordinatesWithValidation(
 
   // Calculate angle to point for debugging
   const angleToPoint = Math.atan2(dx, dy) * (180 / Math.PI)
-  const cameraRotation = extractValue(camera.rotation)
+  const cameraAzimuth = extractValue(camera.azimuth)
   const cameraFov = extractValue(camera.fov)
-  const viewDistance = extractValue(camera.viewDistance)
+  const cameraHeight = extractValue(camera.height)
+  const cameraElevation = extractValue(camera.elevation)
+  const viewDistance = cameraHeight / Math.tan((cameraElevation * Math.PI) / 180) * 2
 
   // Normalize angle difference to -180 to 180
-  let angleDiff = angleToPoint - cameraRotation
+  let angleDiff = angleToPoint - cameraAzimuth
   while (angleDiff > 180) angleDiff -= 360
   while (angleDiff < -180) angleDiff += 360
 
@@ -362,7 +375,7 @@ export function detectionToWorldCoordinatesWithValidation(
     worldMeters,
     distance: distance.toFixed(2),
     angleToPoint: angleToPoint.toFixed(1),
-    cameraRotation: cameraRotation.toFixed(1),
+    cameraAzimuth: cameraAzimuth.toFixed(1),
     angleDiff: angleDiff.toFixed(1),
     halfFov: (cameraFov / 2).toFixed(1),
     viewDistance: viewDistance.toFixed(1)

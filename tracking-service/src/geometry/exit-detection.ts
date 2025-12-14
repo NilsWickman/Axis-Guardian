@@ -313,6 +313,69 @@ export function getTimeoutForExitReason(
 }
 
 /**
+ * Get timeout adjusted for track's embedding quality
+ *
+ * Higher quality embeddings are more likely to successfully re-identify the track,
+ * so we extend the timeout proportionally. This is a principled approach based on
+ * the observation that embedding quality correlates with re-ID success rate.
+ *
+ * Formula: baseTimeout * (1 + qualityBonus * normalizedQuality)
+ * - normalizedQuality is scaled to 0-1 above the minQuality threshold
+ * - Only applied to pillar/partial/timeout exits where re-ID might succeed
+ * - FOV/boundary exits get no bonus (person left the monitored space)
+ *
+ * @param reason - Why the track disappeared
+ * @param embeddingQuality - Track's embedding quality (0-1)
+ * @param config - Timeout configuration with quality-adaptive parameters
+ */
+export function getQualityAdaptiveTimeout(
+  reason: ExitReason,
+  embeddingQuality: number,
+  config: {
+    fovExitTimeoutMs?: number
+    boundaryExitTimeoutMs?: number
+    maxPillarOcclusionMs?: number
+    partialPillarOcclusionMs?: number
+    occlusionCoastTimeMs?: number
+    qualityRetentionBonus?: number
+    maxRetentionMultiplier?: number
+    minQualityForRetention?: number
+  }
+): number {
+  const baseTimeout = getTimeoutForExitReason(reason, config)
+
+  // Quality-adaptive parameters with defaults
+  const qualityBonus = config.qualityRetentionBonus ?? 0.5
+  const maxMultiplier = config.maxRetentionMultiplier ?? 1.8
+  const minQuality = config.minQualityForRetention ?? 0.3
+
+  // Don't extend for FOV/boundary exits - person left the monitored space
+  // Re-ID won't help if they're gone
+  if (reason === 'fov_exit' || reason === 'boundary_exit') {
+    return baseTimeout
+  }
+
+  // Don't extend for low-quality embeddings
+  if (embeddingQuality < minQuality) {
+    return baseTimeout
+  }
+
+  // Scale quality to 0-1 range above threshold
+  // This normalizes so minQuality maps to 0 and 1.0 maps to 1
+  const normalizedQuality = (embeddingQuality - minQuality) / (1 - minQuality)
+
+  // Calculate multiplier: 1 + (bonus * normalizedQuality), capped at maxMultiplier
+  // Examples with default values (bonus=0.5, maxMultiplier=1.8, minQuality=0.3):
+  //   quality=0.3 -> normalizedQuality=0 -> multiplier=1.0
+  //   quality=0.5 -> normalizedQuality=0.286 -> multiplier=1.143
+  //   quality=0.7 -> normalizedQuality=0.571 -> multiplier=1.286
+  //   quality=1.0 -> normalizedQuality=1.0 -> multiplier=1.5
+  const multiplier = Math.min(1 + qualityBonus * normalizedQuality, maxMultiplier)
+
+  return baseTimeout * multiplier
+}
+
+/**
  * Check if a track should be shown as a ghost track
  * (pillar-occluded tracks with predicted positions)
  */

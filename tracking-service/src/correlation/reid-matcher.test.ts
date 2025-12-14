@@ -44,12 +44,18 @@ describe('ReIDMatcher', () => {
     lastSeen,
     isActive: true,
     isConfirmed: true,
+    detectionCount: 5,
+    confidence: 0.9,
+    pendingDetections: [],
+    consecutiveDetections: 0,
     state: 'confirmed',
     missedFrames: 0,
     attributes: {
       embedding,
       embedding_quality: quality,
       sample_count: 5,
+      upper_clothing: { dominant_colors: [] },
+      lower_clothing: { dominant_colors: [] },
     },
   })
 

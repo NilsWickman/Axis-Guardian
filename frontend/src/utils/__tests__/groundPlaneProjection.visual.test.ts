@@ -23,20 +23,18 @@ const CAMERA1_CONFIG = {
   id: 'camera1',
   name: 'Front Entrance',
   position: { x: 1.3, y: 10.9 },
-  rotation: 321, // Facing roughly NW
+  azimuth: 321, // Facing roughly NW
   height: 1.5,
   fieldOfView: 60,
-  viewDistance: 100,
 }
 
 const CAMERA2_CONFIG = {
   id: 'camera2',
   name: 'Back Corner',
   position: { x: 15.75, y: 10.9 },
-  rotation: 253, // Facing roughly SW
+  azimuth: 253, // Facing roughly SW
   height: 1.5,
   fieldOfView: 60,
-  viewDistance: 100,
 }
 
 // Test with multiple elevation angles
@@ -81,7 +79,6 @@ describe('Visual Verification - Camera Projection', () => {
         console.log('Image Position      | World Position (m)  | Distance | Valid')
         console.log('-'.repeat(70))
 
-        let allValid = true
         const worldPoints: Array<{ label: string; x: number; y: number; valid: boolean }> = []
 
         positions.forEach(({ label, bbox }) => {
@@ -98,7 +95,6 @@ describe('Visual Verification - Camera Projection', () => {
             valid: result.isValid,
           })
 
-          if (!result.isValid) allValid = false
         })
 
         console.log('-'.repeat(70))
@@ -273,7 +269,6 @@ describe('Visual Verification - Camera Projection', () => {
         azimuth: 0, // North
         elevation: 45,
         fov: 60,
-        maxDistance: 20,
       }
 
       const leftResult = projectDetectionToGround(
@@ -305,7 +300,6 @@ describe('Visual Verification - Camera Projection', () => {
         azimuth: 90, // East
         elevation: 45,
         fov: 60,
-        maxDistance: 20,
       }
 
       const leftResult = projectDetectionToGround(

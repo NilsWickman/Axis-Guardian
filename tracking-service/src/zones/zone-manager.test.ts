@@ -2,7 +2,7 @@
  * Zone Manager Tests
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { ZoneManager } from './zone-manager'
 import type { ZoneConfig, ZoneViolation } from '../types'
 
