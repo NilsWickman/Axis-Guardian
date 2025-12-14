@@ -447,19 +447,38 @@ describe('Tracking Quality Metrics', () => {
     })
 
     it('calculates Track Continuity Index (TCI)', () => {
-      // Estimate unique persons from ground truth
-      // Use position clustering - annotations within 1m at same time are likely same person
-      const uniquePersonEstimate = estimateUniquePersonsAcrossScene(
-        groundTruth.annotations.filter(a => a.confidence === 'certain')
-      )
+      // Try to load TrackTruths.json for accurate person count
+      let uniquePersonCount: number
+      let personCountSource: string
 
-      const tci = calculateTrackContinuityIndex(uniquePersonEstimate, totalTracksCreated)
+      try {
+        const trackTruthsPath = join(__dirname, '../../../TrackTruths.json')
+        const trackTruths = JSON.parse(readFileSync(trackTruthsPath, 'utf-8'))
+        if (trackTruths.persons && trackTruths.persons.length > 0) {
+          uniquePersonCount = trackTruths.persons.length
+          personCountSource = 'TrackTruths.json (explicit annotation)'
+        } else {
+          // Fall back to estimation
+          uniquePersonCount = estimateUniquePersonsAcrossScene(
+            groundTruth.annotations.filter(a => a.confidence === 'certain')
+          )
+          personCountSource = 'position clustering estimate'
+        }
+      } catch {
+        // Fall back to estimation if TrackTruths.json not found
+        uniquePersonCount = estimateUniquePersonsAcrossScene(
+          groundTruth.annotations.filter(a => a.confidence === 'certain')
+        )
+        personCountSource = 'position clustering estimate'
+      }
+
+      const tci = calculateTrackContinuityIndex(uniquePersonCount, totalTracksCreated)
 
       console.log('\n--- Track Continuity Index (TCI) ---')
-      console.log(`  Estimated unique persons: ${uniquePersonEstimate}`)
+      console.log(`  Unique persons: ${uniquePersonCount} (${personCountSource})`)
       console.log(`  Total tracks created: ${totalTracksCreated}`)
       console.log(`  TCI: ${(tci * 100).toFixed(1)}%`)
-      console.log(`  Target: > 85%`)
+      console.log(`  Target: > 75%`)
 
       // Store for final report
       metrics = metrics || {} as MetricsResult
@@ -565,7 +584,7 @@ describe('Tracking Quality Metrics', () => {
         {
           name: 'Track Continuity Index (TCI)',
           value: metrics?.trackContinuityIndex ?? 0,
-          target: 0.85,
+          target: 0.75,  // Aligned with completion promise target
           format: (v: number) => `${(v * 100).toFixed(1)}%`,
         },
         {
@@ -578,7 +597,7 @@ describe('Tracking Quality Metrics', () => {
         {
           name: 'Velocity Consistency Index (VCI)',
           value: metrics?.velocityConsistencyIndex ?? 0,
-          target: 0.85,
+          target: 0.90,  // Aligned with completion promise target
           format: (v: number) => `${(v * 100).toFixed(1)}%`,
         },
         {

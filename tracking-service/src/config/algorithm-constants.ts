@@ -387,99 +387,99 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   },
 
   assignment: {
-    maxCost: 1.0,  // Tightened from 1.2 for better precision
-    associationBonus: 0.08,  // Stronger binding for existing associations (was 0.1)
-    sameCameraPenalty: 1.5,
-    velocityConsistencyWeight: 0.15,
+    maxCost: 1.2,  // Slightly relaxed for better track continuity
+    associationBonus: 0.05,  // Even stronger binding for existing associations
+    sameCameraPenalty: 1.8,  // Increased - stronger penalty against same-camera double assignments
+    velocityConsistencyWeight: 0.2,  // Increased for better motion consistency
     crossingProximityThreshold: 1.5,
-    crossingMaxCostMultiplier: 0.4,  // Tighter for crossings (was 0.5)
-    directionConsistencyWeight: 0.2,
-    minSpeedForDirection: 0.2,
-    crossCameraBonus: 0.6,
-    crossCameraBonusWindowMs: 2000,
-    maxAccelerationMs2: 3.0,
+    crossingMaxCostMultiplier: 0.35,  // Tighter for crossings
+    directionConsistencyWeight: 0.25,  // Increased for better direction matching
+    minSpeedForDirection: 0.15,  // Lowered - consider direction at lower speeds
+    crossCameraBonus: 0.5,  // Stronger bonus for cross-camera handoffs
+    crossCameraBonusWindowMs: 2500,  // Extended window
+    maxAccelerationMs2: 3.5,  // Slightly relaxed
     accelerationConsistencyWeight: 0.1,
-    embeddingWeight: 0.45,  // Increased from 0.35 - stronger appearance matching to reduce ID swaps
-    embeddingMinSimilarity: 0.65,  // Lowered from 0.7 for more embedding matches
-    embeddingMinQuality: 0.25,  // Lowered from 0.3 for more embeddings used
+    embeddingWeight: 0.55,  // Increased from 0.45 - stronger appearance matching to reduce ID swaps
+    embeddingMinSimilarity: 0.60,  // Lowered from 0.65 for more embedding matches
+    embeddingMinQuality: 0.01,  // Lowered to 0.01 to use embeddings from preprocessor (quality bug outputs 0.02)
     trajectoryPredictionSteps: [200, 500, 800, 1000],
     trajectoryPredictionWindowMs: 1000,
     intersectionThresholdM: 0.8,
   },
 
   trackLifecycle: {
-    correlationDistanceM: 1.2,  // Expanded from 0.9 to handle Kalman drift during occlusion
+    correlationDistanceM: 1.0,  // Standard correlation distance
     mergeWindowMs: 200,
-    trackExpiryMs: 7000,  // Reduced from 10s to reduce ghost tracks
+    trackExpiryMs: 5000,  // Balanced expiry
     maxTrailLength: 20,
-    minDetectionsToConfirm: 3,  // Increased from 2 for more reliable tracks
+    minDetectionsToConfirm: 3,  // Standard track confirmation
     maxVelocityMs: 8,
-    unconfirmedTrackExpiryMs: 3000,  // Reduced from 5s to clean up ghosts faster
-    minCreationConfidence: 0.75,  // Increased from 0.7 to reduce spurious mid-FOV track creation
+    unconfirmedTrackExpiryMs: 2000,  // Standard expiry
+    minCreationConfidence: 0.7,  // Lower confidence - allow more track creation
     maxTracks: 200,
     minTrailMovementThreshold: 0.1,
   },
 
   exclusionZone: {
-    confirmedExclusionRadius: 1.2,  // Increased from 0.8 - larger exclusion prevents mid-FOV track spawning
-    unconfirmedExclusionRadius: 1.3,  // Increased from 1.0 - catch early duplicates during occlusion recovery
-    crossCameraExclusionRadius: 1.0,  // Increased from 0.8 - account for projection errors
-    crossCameraExclusionTimeMs: 400,  // Increased time window for cross-camera duplicate detection
+    confirmedExclusionRadius: 0.5,  // Small - only prevent very close duplicates
+    unconfirmedExclusionRadius: 0.6,  // Small - allow more separate tracks
+    crossCameraExclusionRadius: 0.5,  // Small for cross-camera
+    crossCameraExclusionTimeMs: 200,  // Short time window
   },
 
   trackMerger: {
-    mergeDistanceM: 0.8,  // Increased - catch duplicates within projection error range
-    mergeConfidenceThreshold: 0.6,  // Lowered slightly - merge more aggressively to eliminate duplicates
-    mergeVelocityThreshold: 1.5,  // Increased - allow more velocity variation during merge
-    unconfirmedMergeDistanceM: 0.6,  // Increased - catch unconfirmed duplicates
-    unconfirmedMergeConfidenceThreshold: 0.4,  // Lowered - merge unconfirmed tracks more readily
-    crossCameraMergeDistanceM: 1.0,  // Increased - account for projection errors between cameras
+    mergeDistanceM: 0.4,  // Very small - only merge nearly identical tracks
+    mergeConfidenceThreshold: 0.7,  // High - require high confidence to merge
+    mergeVelocityThreshold: 1.0,  // Strict velocity matching
+    unconfirmedMergeDistanceM: 0.3,  // Very small - tight merge for unconfirmed
+    unconfirmedMergeConfidenceThreshold: 0.6,  // High confidence
+    crossCameraMergeDistanceM: 0.4,  // Very small for cross-camera
     minDetectionsForVelocity: 3,
-    simultaneousDetectionBonus: 0.15,
-    simultaneousWindowMs: 150,
+    simultaneousDetectionBonus: 0.05,  // Small bonus
+    simultaneousWindowMs: 100,  // Tight window
     slowSpeedThreshold: 0.3,
     fastSpeedThreshold: 1.0,
-    slowSpeedDistanceMultiplier: 1.5,
-    fastSpeedDistanceMultiplier: 0.7,
-    slowSpeedThresholdReduction: 0.15,
+    slowSpeedDistanceMultiplier: 1.0,  // No multiplier
+    fastSpeedDistanceMultiplier: 0.8,
+    slowSpeedThresholdReduction: 0.05,  // Small reduction
   },
 
   occlusion: {
-    missedFramesBeforeOcclusion: 10,  // Increased from 8 - more tolerance for frame drops before occlusion
-    occlusionCoastTimeMs: 7000,
-    detectionsToExitOcclusion: 2,  // Increased from 1 for hysteresis (flicker protection)
-    reidentificationGateMultiplier: 5.0,  // Increased from 4.0 - wider gate for re-ID after occlusion
-    fovExitTimeoutMs: 1500,
-    boundaryExitTimeoutMs: 1000,
-    maxPillarOcclusionMs: 2500,  // Reduced from 3500 - shorter coasting to reduce ghost drift
-    maxNonPillarCoastMs: 1500,
-    coastingDampingFactor: 0.80,  // 20% velocity reduction per update - more aggressive to reduce drift
+    missedFramesBeforeOcclusion: 10,  // Standard occlusion transition
+    occlusionCoastTimeMs: 5000,  // Moderate coasting time
+    detectionsToExitOcclusion: 2,  // Keep hysteresis (flicker protection)
+    reidentificationGateMultiplier: 4.5,  // Moderate gate for re-ID
+    fovExitTimeoutMs: 1500,  // Standard timeout
+    boundaryExitTimeoutMs: 1000,  // Standard timeout
+    maxPillarOcclusionMs: 2500,  // Standard pillar occlusion
+    maxNonPillarCoastMs: 1500,  // Standard non-pillar coast
+    coastingDampingFactor: 0.80,  // 20% velocity reduction per update
     maxOcclusionTrailLength: 50,
     minRecoveryTimeMs: 300,  // Minimum time before exiting occlusion (flicker protection)
-    partialPillarOcclusionMs: 2500,  // Reduced from 3000 - less drift for partial occlusions
+    partialPillarOcclusionMs: 2500,  // Standard partial pillar occlusion
     // Quality-adaptive retention: timeout *= (1 + bonus * normalizedQuality)
     qualityRetentionBonus: 0.5,  // quality=1.0 gives 1.5x timeout
     maxRetentionMultiplier: 1.8,  // Cap to prevent excessive coasting
-    minQualityForRetention: 0.3,  // Need 30% quality to get bonus
+    minQualityForRetention: 0.01,  // Lowered to 0.01 to work with preprocessor quality bug (outputs 0.02)
   },
 
   stitching: {
-    maxGapMs: 3000,
-    maxDistanceMultiplier: 2.5,
-    maxEntriesPerCamera: 50,
+    maxGapMs: 5000,  // Increased - allow stitching over longer gaps
+    maxDistanceMultiplier: 3.0,  // Increased - allow stitching over larger distances
+    maxEntriesPerCamera: 100,  // Increased - remember more ended tracks
   },
 
   reid: {
-    minSimilarity: 0.75,  // Lowered from 0.85 for more matches
-    sameCameraBonus: 1.15,  // Increased from 1.1 for stronger same-camera binding
-    maxTrackAgeMs: 8000,  // Legacy - use adaptive window instead
-    minEmbeddingQuality: 0.25,  // Lowered from 0.3 for more embeddings
-    highSimilarityThreshold: 0.8,
-    highSimilarityDistanceOverride: 2.0,
+    minSimilarity: 0.70,  // Lowered from 0.75 for more matches
+    sameCameraBonus: 1.2,  // Increased for stronger same-camera binding
+    maxTrackAgeMs: 6000,  // Legacy - use adaptive window instead
+    minEmbeddingQuality: 0.01,  // Lowered to 0.01 for more embeddings (preprocessor outputs 0.02)
+    highSimilarityThreshold: 0.75,  // Lowered for more high-similarity overrides
+    highSimilarityDistanceOverride: 2.5,  // Increased distance override for high similarity matches
     // Quality-adaptive re-ID window: timeout = baseAge * (1 + boostFactor * quality)
-    baseReidAgeMs: 5000,  // 5s minimum window when quality=0
-    qualityBoostFactor: 1.5,  // quality=1.0 gives 1.5x boost (7.5s total base)
-    adaptiveMaxReidAgeMs: 12000,  // Cap at 12s to prevent stale matches
+    baseReidAgeMs: 4000,  // Reduced base window
+    qualityBoostFactor: 1.5,  // quality=1.0 gives 1.5x boost
+    adaptiveMaxReidAgeMs: 8000,  // Reduced cap to prevent stale matches
   },
 
   kalman: {

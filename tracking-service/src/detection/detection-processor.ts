@@ -203,8 +203,8 @@ export class DetectionProcessor implements IDetectionProcessor {
 
     // Detect camera restart: frame number jumped backward significantly
     if (lastFrame > 0 && message.frame_number < lastFrame - FRAME_JUMP_BACKWARD_THRESHOLD) {
-      console.log(`[DetectionProcessor] Camera ${cameraId} appears to have restarted (frame ${message.frame_number} < ${lastFrame}). Resetting zone states.`)
-      this.zoneManager?.resetAllStates()
+      console.log(`[DetectionProcessor] Camera ${cameraId} appears to have restarted (frame ${message.frame_number} < ${lastFrame}). Clearing all tracks.`)
+      this.trackManager.clearAllTracks()
     }
 
     // Skip if we've already processed this frame (unless camera restarted)
