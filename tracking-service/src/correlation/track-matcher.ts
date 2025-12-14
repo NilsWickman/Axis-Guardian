@@ -194,10 +194,30 @@ export function mergeWorldPositions(
     maxConfidence = Math.max(maxConfidence, det.confidence)
   }
 
+  // Guard against division by zero or NaN
+  if (totalWeight <= 0 || !Number.isFinite(totalWeight)) {
+    // Fallback to centroid
+    return {
+      position: centroid,
+      confidence: maxConfidence > 0 ? maxConfidence : detections[0].confidence,
+    }
+  }
+
+  const resultX = weightedX / totalWeight
+  const resultY = weightedY / totalWeight
+
+  // Validate result is finite
+  if (!Number.isFinite(resultX) || !Number.isFinite(resultY)) {
+    return {
+      position: centroid,
+      confidence: maxConfidence > 0 ? maxConfidence : detections[0].confidence,
+    }
+  }
+
   return {
     position: {
-      x: weightedX / totalWeight,
-      y: weightedY / totalWeight,
+      x: resultX,
+      y: resultY,
     },
     confidence: maxConfidence,
   }

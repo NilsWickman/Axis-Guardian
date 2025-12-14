@@ -97,6 +97,10 @@ const interpolationStates = new Map<string, InterpolationState>()
 const SMOOTH_TIME = 0.2
 let lastFrameTime = 0
 
+// Stationary trail fading constants
+const STATIONARY_FADE_START_MS = 2000   // Start fading after 2 seconds stationary
+const STATIONARY_FADE_DURATION_MS = 6000 // Fully faded 8 seconds after becoming stationary (2 + 6)
+
 // Computed data from global track store
 const globalTracks = computed(() => globalTrackStore.activeTracks)
 const globalTrackCount = computed(() => globalTrackStore.activeTrackCount)
@@ -222,6 +226,43 @@ function getGhostInterpolatedPosition(track: GlobalTrack, now: number): { x: num
 }
 
 /**
+ * Validate that computed velocity is consistent with server prediction
+ * Returns true if velocity direction is reasonable
+ */
+function isVelocityConsistent(
+  velocity: { x: number; y: number },
+  startPos: { x: number; y: number },
+  serverPrediction: { x: number; y: number } | undefined
+): boolean {
+  // If no server prediction, trust the computed velocity
+  if (!serverPrediction) return true
+
+  // Calculate direction to server prediction
+  const toPredX = serverPrediction.x - startPos.x
+  const toPredY = serverPrediction.y - startPos.y
+  const predDist = Math.sqrt(toPredX * toPredX + toPredY * toPredY)
+
+  // If prediction is very close, velocity doesn't matter much
+  if (predDist < 0.1) return true
+
+  // Normalize both vectors
+  const velMag = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y)
+  if (velMag < 0.05) return true // Very slow, direction doesn't matter
+
+  const normVelX = velocity.x / velMag
+  const normVelY = velocity.y / velMag
+  const normPredX = toPredX / predDist
+  const normPredY = toPredY / predDist
+
+  // Dot product: > 0 means same general direction
+  const dot = normVelX * normPredX + normVelY * normPredY
+
+  // Reject if velocity points in opposite direction (dot < 0)
+  // Allow some tolerance for perpendicular movement (dot >= -0.3)
+  return dot >= -0.3
+}
+
+/**
  * Update interpolation state when track position changes
  * Updates the target position - the animation loop will smoothly lerp toward it
  * For ghost tracks, calculates velocity for smooth extrapolation
@@ -235,9 +276,18 @@ function updateInterpolationState(track: GlobalTrack, now: number): void {
     if (isGhost && !state.wasGhost) {
       // Track just became a ghost - capture velocity and start position
       const velocity = calculateVelocity(track.trail)
-      state.velocity = velocity ?? undefined
+      const startPos = { ...state.position }
+
+      // Validate velocity direction against server prediction
+      if (velocity && isVelocityConsistent(velocity, startPos, track.predictedPosition)) {
+        state.velocity = velocity
+      } else {
+        // Velocity is inconsistent - don't use it, fallback to server prediction
+        state.velocity = undefined
+      }
+
       state.ghostStartTime = now
-      state.ghostStartPosition = { ...state.position } // Use current rendered position for smoothness
+      state.ghostStartPosition = startPos // Use current rendered position for smoothness
       state.wasGhost = true
     } else if (!isGhost && state.wasGhost) {
       // Track is no longer a ghost - clear ghost state
@@ -283,21 +333,49 @@ function cleanupInterpolationStates(): void {
 }
 
 /**
- * Draw trail with fading opacity
+ * Calculate fade factor for stationary tracks based on trail age
+ * Returns 1 (fully visible) when moving, fades to 0 when stationary for too long
  */
-function drawTrail(ctx: CanvasRenderingContext2D, track: GlobalTrack, interpolatedPos: { x: number; y: number }) {
+function calculateStationaryFade(trail: GlobalTrack['trail'], now: number): number {
+  if (trail.length === 0) return 1
+
+  // Use the most recent trail position's timestamp
+  const newestTimestamp = trail[0].timestamp
+  const age = now - newestTimestamp
+
+  if (age < STATIONARY_FADE_START_MS) {
+    return 1 // No fade yet - still within grace period
+  }
+
+  // Calculate fade progress (0 = just started fading, 1 = fully faded)
+  const fadeProgress = (age - STATIONARY_FADE_START_MS) / STATIONARY_FADE_DURATION_MS
+  return Math.max(0, 1 - fadeProgress)
+}
+
+/**
+ * Draw trail with fading opacity
+ * Trail fades both by position (older = more transparent) and by time when stationary
+ */
+function drawTrail(ctx: CanvasRenderingContext2D, track: GlobalTrack, interpolatedPos: { x: number; y: number }, now: number) {
   if (!props.showTrails) return
 
   const trail = track.trail.slice(0, props.maxTrailLength)
   if (trail.length < 1) return
 
+  // Calculate stationary fade factor (1 = moving/visible, 0 = stationary/invisible)
+  const stationaryFade = calculateStationaryFade(trail, now)
+  if (stationaryFade <= 0) return // Trail fully faded, skip drawing
+
   ctx.lineWidth = 2
   ctx.lineCap = 'round'
   ctx.strokeStyle = track.color
 
+  // Base opacity multiplied by stationary fade
+  const baseOpacity = 0.6 * stationaryFade
+
   // Draw line from interpolated position to first trail point
   if (trail.length >= 1) {
-    ctx.globalAlpha = 0.6
+    ctx.globalAlpha = baseOpacity
     ctx.beginPath()
     ctx.moveTo(worldToCanvasX(interpolatedPos.x), worldToCanvasY(interpolatedPos.y))
     ctx.lineTo(worldToCanvasX(trail[0].x), worldToCanvasY(trail[0].y))
@@ -306,7 +384,7 @@ function drawTrail(ctx: CanvasRenderingContext2D, track: GlobalTrack, interpolat
 
   // Draw remaining trail segments
   for (let i = 0; i < trail.length - 1; i++) {
-    const opacity = 0.6 * (1 - (i + 1) / trail.length)
+    const opacity = baseOpacity * (1 - (i + 1) / trail.length)
     ctx.globalAlpha = opacity
     ctx.beginPath()
     ctx.moveTo(worldToCanvasX(trail[i].x), worldToCanvasY(trail[i].y))
@@ -476,21 +554,29 @@ function drawGhostMarker(ctx: CanvasRenderingContext2D, track: GlobalTrack, posi
 
 /**
  * Draw ghost track trail (dashed, semi-transparent)
+ * Also fades when stationary for extended periods
  */
-function drawGhostTrail(ctx: CanvasRenderingContext2D, track: GlobalTrack, ghostPos: { x: number; y: number }) {
+function drawGhostTrail(ctx: CanvasRenderingContext2D, track: GlobalTrack, ghostPos: { x: number; y: number }, now: number) {
   if (!props.showTrails) return
 
   const trail = track.trail.slice(0, props.maxTrailLength)
   if (trail.length < 1) return
+
+  // Calculate stationary fade factor
+  const stationaryFade = calculateStationaryFade(trail, now)
+  if (stationaryFade <= 0) return // Trail fully faded, skip drawing
 
   ctx.lineWidth = 2
   ctx.lineCap = 'round'
   ctx.strokeStyle = track.color
   ctx.setLineDash([4, 4])
 
+  // Base opacity for ghost trails (0.3) multiplied by stationary fade
+  const baseOpacity = 0.3 * stationaryFade
+
   // Draw line from ghost position to first trail point
   if (trail.length >= 1) {
-    ctx.globalAlpha = 0.3
+    ctx.globalAlpha = baseOpacity
     ctx.beginPath()
     ctx.moveTo(worldToCanvasX(ghostPos.x), worldToCanvasY(ghostPos.y))
     ctx.lineTo(worldToCanvasX(trail[0].x), worldToCanvasY(trail[0].y))
@@ -499,7 +585,7 @@ function drawGhostTrail(ctx: CanvasRenderingContext2D, track: GlobalTrack, ghost
 
   // Draw remaining trail segments (fading)
   for (let i = 0; i < trail.length - 1; i++) {
-    const opacity = 0.3 * (1 - (i + 1) / trail.length)
+    const opacity = baseOpacity * (1 - (i + 1) / trail.length)
     ctx.globalAlpha = opacity
     ctx.beginPath()
     ctx.moveTo(worldToCanvasX(trail[i].x), worldToCanvasY(trail[i].y))
@@ -540,11 +626,11 @@ function animate() {
     if (isGhostTrack(track)) {
       // Ghost track: use velocity extrapolation for smooth motion
       const ghostPos = getGhostInterpolatedPosition(track, now)
-      drawGhostTrail(ctx, track, ghostPos)
+      drawGhostTrail(ctx, track, ghostPos, now)
     } else {
       // Normal track: use interpolated position
       const interpolatedPos = getInterpolatedPosition(track, now)
-      drawTrail(ctx, track, interpolatedPos)
+      drawTrail(ctx, track, interpolatedPos, now)
     }
   }
 

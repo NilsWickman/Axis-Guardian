@@ -40,7 +40,6 @@ import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
 import {
   calculateCombinedFOVPolygons,
   isPointInAnyFOV,
-  isPointInRoom,
   clampPointToRoom,
   type CameraConfig,
   type RoomBounds,
@@ -772,15 +771,15 @@ export class TrackManager {
 
       // Same-camera re-identification bonus: When a detection comes from a camera
       // that already has an association with this track (but with a different local ID),
-      // it's likely local tracker fragmentation. Give preference but be careful.
+      // it's likely local tracker fragmentation. Give small preference to avoid over-merging.
       let sameCameraBonus = 0
       if (excludeCameraId) {
         const assoc = track.cameraAssociations.get(excludeCameraId)
-        if (assoc && timeSinceUpdate < 1500) {
+        if (assoc && timeSinceUpdate < 1000) {
           // This camera was recently tracking this person - likely fragmentation
-          // Expand threshold moderately and reduce effective distance
-          threshold = Math.max(threshold * 1.8, 1.5)  // At least 1.5m for same-camera
-          sameCameraBonus = 0.4  // Reduce effective distance by 40%
+          // Small threshold expansion to avoid over-merging different persons
+          threshold = Math.max(threshold * 1.2, 0.8)  // Small expansion
+          sameCameraBonus = 0.2  // Reduce effective distance by 20%
         }
       }
 
@@ -1263,8 +1262,8 @@ export class TrackManager {
         // Relax threshold for same-camera re-identification (likely fragmentation)
         const assoc = track.cameraAssociations.get(detection.cameraId)
         const isSameCameraReId = assoc && !assoc.trackIds.includes(detection.trackId) &&
-          timeDelta < 0.5  // Recent same-camera with new local ID
-        const mahalanobisThreshold = isSameCameraReId ? 6.0 : 4.0
+          timeDelta < 2.0  // Increased window for same-camera re-ID
+        const mahalanobisThreshold = isSameCameraReId ? 8.0 : 4.0  // Increased threshold for same-camera
 
         if (mahalanobis > mahalanobisThreshold) {
           return false
@@ -1393,6 +1392,13 @@ export class TrackManager {
 
     const merged = mergeWorldPositions(recentDetections)
 
+    // Validate merged position before Kalman update
+    if (!Number.isFinite(merged.position.x) || !Number.isFinite(merged.position.y)) {
+      // Skip this update if position is invalid
+      track.pendingDetections = []
+      return
+    }
+
     // Update Kalman filter state with merged position
     if (track.kalmanState) {
       track.kalmanState = this.kalmanFilter.update(
@@ -1403,7 +1409,11 @@ export class TrackManager {
       )
       // Use Kalman-filtered position for smoother tracking
       const filteredPosition = this.kalmanFilter.getPosition(track.kalmanState)
-      merged.position = filteredPosition
+
+      // Validate Kalman output
+      if (Number.isFinite(filteredPosition.x) && Number.isFinite(filteredPosition.y)) {
+        merged.position = filteredPosition
+      }
     }
 
     // Clamp unrealistically large position jumps to reduce visible teleporting.
