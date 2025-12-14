@@ -14,21 +14,22 @@ import type {
   ColorScore,
   ClothingTypeScore,
 } from '../types.js'
+import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
 
 /**
  * Maximum number of top colors to keep in aggregated attributes
  */
-const MAX_DOMINANT_COLORS = 3
+const MAX_DOMINANT_COLORS = ALGORITHM_CONSTANTS.attributeAggregation.maxDominantColors
 
 /**
  * Minimum score threshold for a color to be considered
  */
-const MIN_COLOR_SCORE = 0.1
+const MIN_COLOR_SCORE = ALGORITHM_CONSTANTS.attributeAggregation.minColorScore
 
 /**
  * Minimum samples required for reliable embedding aggregation
  */
-const MIN_EMBEDDING_SAMPLES = 2
+const MIN_EMBEDDING_SAMPLES = ALGORITHM_CONSTANTS.attributeAggregation.minEmbeddingSamples
 
 /**
  * Aggregates detection attributes into track-level attributes over time.

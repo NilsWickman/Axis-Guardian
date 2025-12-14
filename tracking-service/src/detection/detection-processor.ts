@@ -18,9 +18,10 @@ import { getPipelineLogger } from '../debug/pipeline-logger.js'
 import type { SiteMapObstacle } from '../config/sitemap-loader.js'
 import { isPointInsideAnyObstacle } from '../geometry/obstacles.js'
 import type { ZoneManager } from '../zones/zone-manager.js'
+import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
 
 /**
- * Common interface for detection processors (single or dual mode)
+ * Common interface for detection processors
  * Used by AcapClient and other consumers that need to process detections
  */
 export interface IDetectionProcessor {
@@ -47,11 +48,13 @@ export interface IDetectionProcessor {
   ): GlobalTrack
 }
 
-const MIN_CONFIDENCE = 0.7
-const IMAGE_WIDTH = 1920
-const IMAGE_HEIGHT = 1080
+const MIN_CONFIDENCE = ALGORITHM_CONSTANTS.detection.minConfidence
+const IMAGE_WIDTH = ALGORITHM_CONSTANTS.detection.imageWidth
+const IMAGE_HEIGHT = ALGORITHM_CONSTANTS.detection.imageHeight
 // Threshold to detect camera restart (frame number reset)
-const FRAME_JUMP_BACKWARD_THRESHOLD = 10
+const FRAME_JUMP_BACKWARD_THRESHOLD = ALGORITHM_CONSTANTS.detection.frameJumpBackwardThreshold
+// Same-camera deduplication distance (removes duplicate YOLO detections for same person)
+const SAME_CAMERA_DEDUP_DISTANCE = ALGORITHM_CONSTANTS.detection.sameCameraDeduplicationDistanceM
 
 export class DetectionProcessor implements IDetectionProcessor {
   private lastProcessedFrames: Map<string, number> = new Map()
@@ -64,6 +67,8 @@ export class DetectionProcessor implements IDetectionProcessor {
   /** Tables/furniture that block view (used for occlusion-based position adjustment) */
   private viewBlockingObstacles: SiteMapObstacle[] = []
   private obstacleFilterCount: number = 0
+  /** Counter for same-camera deduplicated detections */
+  private sameCameraDeduplicatedCount: number = 0
   /** Zone manager for clearing zone states on camera restart */
   private zoneManager?: ZoneManager
 
@@ -111,6 +116,75 @@ export class DetectionProcessor implements IDetectionProcessor {
   private isInsideObstacle(worldX: number, worldY: number): boolean {
     if (this.trackingBlockingObstacles.length === 0) return false
     return isPointInsideAnyObstacle({ x: worldX, y: worldY }, this.trackingBlockingObstacles)
+  }
+
+  /**
+   * Deduplicate same-camera detections that are very close in world coordinates.
+   * This handles cases where YOLO outputs multiple overlapping bounding boxes
+   * for the same person with different track IDs.
+   *
+   * Algorithm: Greedy NMS - keep highest confidence detection, remove others within threshold
+   */
+  private deduplicateSameCameraDetections(detections: CameraDetection[]): CameraDetection[] {
+    if (detections.length <= 1) return detections
+
+    // Group detections by camera
+    const byCamera = new Map<string, CameraDetection[]>()
+    for (const det of detections) {
+      const existing = byCamera.get(det.cameraId)
+      if (existing) {
+        existing.push(det)
+      } else {
+        byCamera.set(det.cameraId, [det])
+      }
+    }
+
+    const result: CameraDetection[] = []
+
+    for (const [cameraId, cameraDetections] of byCamera) {
+      if (cameraDetections.length === 1) {
+        result.push(cameraDetections[0])
+        continue
+      }
+
+      // Sort by confidence descending (keep highest confidence first)
+      const sorted = [...cameraDetections].sort((a, b) => b.confidence - a.confidence)
+      const kept: CameraDetection[] = []
+      const suppressed = new Set<number>()
+
+      for (let i = 0; i < sorted.length; i++) {
+        if (suppressed.has(i)) continue
+
+        const current = sorted[i]
+        kept.push(current)
+
+        // Suppress all lower-confidence detections within threshold distance
+        for (let j = i + 1; j < sorted.length; j++) {
+          if (suppressed.has(j)) continue
+
+          const other = sorted[j]
+          const dx = current.worldX - other.worldX
+          const dy = current.worldY - other.worldY
+          const distance = Math.sqrt(dx * dx + dy * dy)
+
+          if (distance < SAME_CAMERA_DEDUP_DISTANCE) {
+            suppressed.add(j)
+            this.sameCameraDeduplicatedCount++
+            if (this.sameCameraDeduplicatedCount <= 5 || this.sameCameraDeduplicatedCount % 500 === 0) {
+              console.log(
+                `[DetectionProcessor] Deduplicated same-camera detection: camera=${cameraId} ` +
+                `dist=${distance.toFixed(3)}m kept_conf=${current.confidence.toFixed(2)} ` +
+                `removed_conf=${other.confidence.toFixed(2)} [total: ${this.sameCameraDeduplicatedCount}]`
+              )
+            }
+          }
+        }
+      }
+
+      result.push(...kept)
+    }
+
+    return result
   }
 
   /**
@@ -262,9 +336,12 @@ export class DetectionProcessor implements IDetectionProcessor {
       })
     }
 
+    // Deduplicate same-camera detections before sending to track manager
+    const deduplicatedDetections = this.deduplicateSameCameraDetections(projectedDetections)
+
     // Use batch processing with Hungarian algorithm for optimal assignment
-    if (projectedDetections.length > 0) {
-      return this.trackManager.processBatchDetections(projectedDetections)
+    if (deduplicatedDetections.length > 0) {
+      return this.trackManager.processBatchDetections(deduplicatedDetections)
     }
 
     return []
@@ -520,10 +597,13 @@ export class DetectionProcessor implements IDetectionProcessor {
     // Periodic cleanup
     this.periodicCleanup()
 
+    // Deduplicate same-camera detections before sending to track manager
+    const deduplicatedDetections = this.deduplicateSameCameraDetections(allProjectedDetections)
+
     // Process ALL cameras' detections together in a single batch
     // This allows proper cross-camera clustering before Hungarian assignment
-    if (allProjectedDetections.length > 0) {
-      return this.trackManager.processBatchDetections(allProjectedDetections)
+    if (deduplicatedDetections.length > 0) {
+      return this.trackManager.processBatchDetections(deduplicatedDetections)
     }
 
     return []
@@ -601,124 +681,3 @@ export class DetectionProcessor implements IDetectionProcessor {
   }
 }
 
-/**
- * Dual Mode Detection Processor
- *
- * Wraps two DetectionProcessors (spatial-only and re-ID) and feeds
- * the same detections to both track managers in parallel.
- *
- * This allows running both tracking algorithms simultaneously so the
- * frontend can switch between viewing modes.
- */
-export class DualModeDetectionProcessor implements IDetectionProcessor {
-  private spatialProcessor: DetectionProcessor
-  private reidProcessor: DetectionProcessor
-
-  constructor(
-    spatialTrackManager: TrackManager,
-    reidTrackManager: TrackManager,
-    cameraRegistry: CameraRegistry
-  ) {
-    // Create separate processors for each tracking algorithm
-    // They share the same CameraRegistry but have different TrackManagers
-    this.spatialProcessor = new DetectionProcessor(spatialTrackManager, cameraRegistry)
-    this.reidProcessor = new DetectionProcessor(reidTrackManager, cameraRegistry)
-  }
-
-  /**
-   * Set zone manager for camera restart detection (both processors)
-   */
-  setZoneManager(zoneManager: ZoneManager): void {
-    this.spatialProcessor.setZoneManager(zoneManager)
-    this.reidProcessor.setZoneManager(zoneManager)
-  }
-
-  /**
-   * Set obstacles for detection filtering (both processors)
-   */
-  setObstacles(obstacles: SiteMapObstacle[]): void {
-    this.spatialProcessor.setObstacles(obstacles)
-    this.reidProcessor.setObstacles(obstacles)
-  }
-
-  /**
-   * Process a detection message through BOTH tracking algorithms
-   * Returns results from the spatial processor (primary for backwards compat)
-   */
-  processMessage(message: DetectionMessage): GlobalTrack[] {
-    // Feed to both processors in parallel
-    const spatialResults = this.spatialProcessor.processMessage(message)
-    this.reidProcessor.processMessage(message)
-
-    // Return spatial results for backwards compatibility
-    return spatialResults
-  }
-
-  /**
-   * Process multiple camera messages through BOTH tracking algorithms
-   */
-  processMultiCameraMessages(messages: DetectionMessage[]): GlobalTrack[] {
-    const spatialResults = this.spatialProcessor.processMultiCameraMessages(messages)
-    this.reidProcessor.processMultiCameraMessages(messages)
-    return spatialResults
-  }
-
-  /**
-   * Reset frame tracking (both processors)
-   */
-  resetFrameTracking(): void {
-    this.spatialProcessor.resetFrameTracking()
-    this.reidProcessor.resetFrameTracking()
-  }
-
-  /**
-   * Get last processed frame for a camera (from spatial processor)
-   */
-  getLastProcessedFrame(cameraId: string): number {
-    return this.spatialProcessor.getLastProcessedFrame(cameraId)
-  }
-
-  /**
-   * Get frame info for all cameras (from spatial processor)
-   */
-  getCameraFrameInfo(): CameraFrameInfo[] {
-    return this.spatialProcessor.getCameraFrameInfo()
-  }
-
-  /**
-   * Update frame info for a camera (both processors)
-   */
-  updateFrameInfo(cameraId: string, frameNumber: number): void {
-    this.spatialProcessor.updateFrameInfo(cameraId, frameNumber)
-    this.reidProcessor.updateFrameInfo(cameraId, frameNumber)
-  }
-
-  /**
-   * Process injection through both processors
-   */
-  processInjection(
-    cameraId: string,
-    bbox: { x: number; y: number; width: number; height: number },
-    confidence: number,
-    trackId: number = 0
-  ): GlobalTrack | null {
-    const spatialResult = this.spatialProcessor.processInjection(cameraId, bbox, confidence, trackId)
-    this.reidProcessor.processInjection(cameraId, bbox, confidence, trackId)
-    return spatialResult
-  }
-
-  /**
-   * Process world position through both processors
-   */
-  processWorldPosition(
-    cameraId: string,
-    worldX: number,
-    worldY: number,
-    confidence: number,
-    trackId: number = 0
-  ): GlobalTrack {
-    const spatialResult = this.spatialProcessor.processWorldPosition(cameraId, worldX, worldY, confidence, trackId)
-    this.reidProcessor.processWorldPosition(cameraId, worldX, worldY, confidence, trackId)
-    return spatialResult
-  }
-}

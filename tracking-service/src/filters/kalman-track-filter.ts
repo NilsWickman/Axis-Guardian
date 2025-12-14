@@ -13,6 +13,7 @@ import kalmanFilter from 'kalman-filter'
 const { KalmanFilter, State } = kalmanFilter
 
 import type { Point2D, KalmanState } from '../types.js'
+import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type KalmanStateInternal = any  // The library's State class instance
@@ -45,10 +46,10 @@ export interface KalmanFilterConfig {
  * - Balance between smoothing and tracking lag
  */
 export const DEFAULT_KALMAN_CONFIG: KalmanFilterConfig = {
-  processNoise: 1.0,              // Velocity process noise (m/s)² - tuned for walking accelerations
-  measurementNoise: 0.25,         // Position measurement noise (m²) - based on ~0.5m projection std
-  initialPositionUncertainty: 1,  // Initial position uncertainty 1m
-  initialVelocityUncertainty: 1,  // Initial velocity uncertainty 1m/s
+  processNoise: ALGORITHM_CONSTANTS.kalman.processNoise,
+  measurementNoise: ALGORITHM_CONSTANTS.kalman.measurementNoise,
+  initialPositionUncertainty: ALGORITHM_CONSTANTS.kalman.initialPositionUncertainty,
+  initialVelocityUncertainty: ALGORITHM_CONSTANTS.kalman.initialVelocityUncertainty,
 }
 
 /**
@@ -59,7 +60,7 @@ export class KalmanTrackFilter {
   private config: KalmanFilterConfig
   // Store internal State objects keyed by track ID for proper library compatibility
   private stateCache: Map<string, KalmanStateInternal> = new Map()
-  private static readonly MAX_CACHE_SIZE = 500  // Prevent unbounded memory growth
+  private static readonly MAX_CACHE_SIZE = ALGORITHM_CONSTANTS.kalman.maxCacheSize
 
   constructor(config: Partial<KalmanFilterConfig> = {}) {
     this.config = { ...DEFAULT_KALMAN_CONFIG, ...config }

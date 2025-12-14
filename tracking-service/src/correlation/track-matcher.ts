@@ -12,6 +12,7 @@ import type {
   TrackingConfig,
 } from '../types.js'
 import { DEFAULT_TRACKING_CONFIG } from '../types.js'
+import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
 
 /**
  * Calculate Euclidean distance between two points
@@ -151,7 +152,7 @@ export function mergeWorldPositions(
   const regionPref = getRegionCameraPreference(centroid)
 
   // Calculate distance between camera projections
-  const DIVERGENCE_THRESHOLD = 0.8 // meters (avoid flip-flopping between cameras)
+  const DIVERGENCE_THRESHOLD = ALGORITHM_CONSTANTS.positionMerging.divergenceThreshold
   let maxDistance = 0
   for (let i = 0; i < detections.length; i++) {
     for (let j = i + 1; j < detections.length; j++) {
@@ -193,14 +194,16 @@ export function mergeWorldPositions(
   // Convergent case: use weighted average with regional bias
   // Base weights from global accuracy (cam1=73%, cam2=62%)
   const baseWeights: Record<string, number> = {
-    camera1: 1.2,
-    camera2: 0.8,
+    camera1: ALGORITHM_CONSTANTS.positionMerging.camera1BaseWeight,
+    camera2: ALGORITHM_CONSTANTS.positionMerging.camera2BaseWeight,
   }
 
   // Apply regional bias
+  const boostFactor = ALGORITHM_CONSTANTS.positionMerging.regionalBoostFactor
+  const penaltyFactor = ALGORITHM_CONSTANTS.positionMerging.regionalPenaltyFactor
   const regionalBoost: Record<string, number> = {
-    camera1: regionPref === 'camera1' ? 1.3 : regionPref === 'camera2' ? 0.7 : 1.0,
-    camera2: regionPref === 'camera2' ? 1.3 : regionPref === 'camera1' ? 0.7 : 1.0,
+    camera1: regionPref === 'camera1' ? boostFactor : regionPref === 'camera2' ? penaltyFactor : 1.0,
+    camera2: regionPref === 'camera2' ? boostFactor : regionPref === 'camera1' ? penaltyFactor : 1.0,
   }
 
   let totalWeight = 0

@@ -9,14 +9,15 @@
 
 import type { GlobalTrack, CameraDetection } from '../types.js'
 import { cosineSimilarity } from '../tracks/attribute-aggregator.js'
+import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
 
 /**
  * Configuration for re-ID matching
  */
 export interface ReIDMatcherConfig {
-  /** Minimum cosine similarity to consider a match (0-1, default 0.6) */
+  /** Minimum cosine similarity to consider a match (0-1, default 0.85) */
   minSimilarity: number
-  /** Bonus multiplier for same-camera re-ID (default 1.2) */
+  /** Bonus multiplier for same-camera re-ID (default 1.1) */
   sameCameraBonus: number
   /** Maximum age in ms for a track to be considered for re-ID (default 7000) */
   maxTrackAgeMs: number
@@ -25,10 +26,10 @@ export interface ReIDMatcherConfig {
 }
 
 const DEFAULT_CONFIG: ReIDMatcherConfig = {
-  minSimilarity: 0.6,
-  sameCameraBonus: 1.2,
-  maxTrackAgeMs: 7000,
-  minEmbeddingQuality: 0.3,
+  minSimilarity: ALGORITHM_CONSTANTS.reid.minSimilarity,
+  sameCameraBonus: ALGORITHM_CONSTANTS.reid.sameCameraBonus,
+  maxTrackAgeMs: ALGORITHM_CONSTANTS.reid.maxTrackAgeMs,
+  minEmbeddingQuality: ALGORITHM_CONSTANTS.reid.minEmbeddingQuality,
 }
 
 /**

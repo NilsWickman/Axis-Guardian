@@ -22,6 +22,7 @@ import type { AcapClient } from '../acap/acap-client.js'
 import type { ZoneManager } from '../zones/zone-manager.js'
 import type { WebSocketBroadcaster } from './websocket.js'
 import { getMetrics } from '../metrics/index.js'
+import type { MultiCameraSyncBuffer } from '../sync/multi-camera-sync-buffer.js'
 
 // Read-only mode for demo deployment (disables write endpoints except emulator-detections)
 const isReadOnlyMode = process.env.READ_ONLY_MODE === 'true'
@@ -167,9 +168,11 @@ function recordHttpLatency(dispatchTime: number): void {
   }
 }
 
-export interface DualTrackManagers {
-  spatialTrackManager?: TrackManager
-  reidTrackManager?: TrackManager
+export interface RouteOptions {
+  acapClient?: AcapClient | null
+  zoneManager?: ZoneManager | null
+  broadcaster?: WebSocketBroadcaster | null
+  syncBuffer?: MultiCameraSyncBuffer | null
 }
 
 export function registerRoutes(
@@ -180,7 +183,7 @@ export function registerRoutes(
   acapClient: AcapClient | null = null,
   zoneManager: ZoneManager | null = null,
   broadcaster: WebSocketBroadcaster | null = null,
-  dualManagers: DualTrackManagers = {}
+  syncBuffer: MultiCameraSyncBuffer | null = null
 ): void {
   // Log read-only mode status
   if (isReadOnlyMode) {
@@ -215,45 +218,6 @@ export function registerRoutes(
       confirmedCount: trackManager.getActiveTrackCount(),
       pendingCount: trackManager.getPendingTrackCount(),
       tracks: tracks.map(trackToJSON),
-    }
-  })
-
-  // DEBUG: Compare dual tracking modes
-  app.get('/api/dual-tracks', async () => {
-    const { spatialTrackManager, reidTrackManager } = dualManagers
-
-    if (!spatialTrackManager || !reidTrackManager) {
-      return {
-        error: 'Dual mode not enabled',
-        dualModeEnabled: false,
-      }
-    }
-
-    const spatialTracks = spatialTrackManager.getActiveTracks()
-    const reidTracks = reidTrackManager.getActiveTracks()
-
-    // Get max track ID to see total tracks created
-    const getMaxId = (tracks: typeof spatialTracks) => {
-      if (tracks.length === 0) return 0
-      return Math.max(...tracks.map(t => parseInt(t.globalTrackId.split('-')[1]) || 0))
-    }
-
-    return {
-      dualModeEnabled: true,
-      spatial: {
-        activeCount: spatialTracks.length,
-        totalCreated: getMaxId(spatialTracks),
-        trackIds: spatialTracks.map(t => t.globalTrackId),
-      },
-      reid: {
-        activeCount: reidTracks.length,
-        totalCreated: getMaxId(reidTracks),
-        trackIds: reidTracks.map(t => t.globalTrackId),
-      },
-      comparison: {
-        sameActiveCount: spatialTracks.length === reidTracks.length,
-        sameTotalCreated: getMaxId(spatialTracks) === getMaxId(reidTracks),
-      },
     }
   })
 
@@ -382,6 +346,152 @@ export function registerRoutes(
         track: trackToJSON(track),
         worldPoint: { x: track.currentPosition.x, y: track.currentPosition.y },
       })),
+    }
+  })
+
+  // Batch detection endpoint - receives detections from multiple cameras at once
+  // Enables true multi-camera synchronization
+  const BatchDetectionsSchema = z.object({
+    detections: z.array(EmulatorDetectionSchema),
+  })
+
+  app.post('/api/emulator-detections/batch', async (request: FastifyRequest, reply: FastifyReply) => {
+    const parseResult = BatchDetectionsSchema.safeParse(request.body)
+    if (!parseResult.success) {
+      return reply.status(400).send({
+        error: 'Invalid request body',
+        details: parseResult.error.issues,
+      })
+    }
+
+    const { detections } = parseResult.data
+
+    // Convert all messages to DetectionMessage format
+    const messages = detections.map(data => {
+      const rawTimestampSec = data.timestamp ?? Date.now() / 1000
+      const timestampSec = rawTimestampSec > 1e9 ? rawTimestampSec : Date.now() / 1000
+
+      return {
+        camera_id: data.camera_id,
+        frame_number: data.frame_number ?? 0,
+        timestamp: timestampSec,
+        detection_count: data.detections.length,
+        video_time_ms: data.video_time_ms,
+        rtp_timestamp: data.rtp_timestamp,
+        detections: data.detections.map((det, i) => {
+          let bbox: [number, number, number, number]
+          if (Array.isArray(det.bbox)) {
+            bbox = det.bbox
+          } else {
+            bbox = [
+              det.bbox.left,
+              det.bbox.top,
+              det.bbox.right - det.bbox.left,
+              det.bbox.bottom - det.bbox.top,
+            ]
+          }
+          return {
+            class_name: det.class_name,
+            confidence: det.confidence,
+            bbox,
+            track_id: det.track_id ?? i,
+            attributes: det.attributes,
+          }
+        }),
+      }
+    })
+
+    // Use multi-camera batch processing
+    const tracks = detectionProcessor.processMultiCameraMessages(messages)
+
+    detectionsReceived += detections.length
+    lastDetectionTime = Date.now()
+
+    return {
+      processed: messages.reduce((sum, m) => sum + m.detections.length, 0),
+      camerasInBatch: messages.length,
+      tracksUpdated: tracks.length,
+      results: tracks.map(track => ({
+        track: trackToJSON(track),
+        worldPoint: { x: track.currentPosition.x, y: track.currentPosition.y },
+      })),
+    }
+  })
+
+  // ============================================================================
+  // Clock Synchronization API
+  // ============================================================================
+
+  // Get server time for clock offset calculation
+  app.get('/api/time', async () => {
+    return {
+      serverTime: Date.now(),
+      timestamp: Date.now(),
+    }
+  })
+
+  // Record clock offset for a camera
+  const ClockOffsetSchema = z.object({
+    camera_id: z.string(),
+    client_time: z.number(),
+    server_time: z.number().optional(),
+  })
+
+  app.post('/api/time/offset', async (request: FastifyRequest, reply: FastifyReply) => {
+    const parseResult = ClockOffsetSchema.safeParse(request.body)
+    if (!parseResult.success) {
+      return reply.status(400).send({
+        error: 'Invalid request body',
+        details: parseResult.error.issues,
+      })
+    }
+
+    const { camera_id, client_time, server_time } = parseResult.data
+    const serverNow = Date.now()
+    const referenceTime = server_time ?? serverNow
+
+    // Calculate clock offset: positive = client ahead, negative = client behind
+    const offset = client_time - referenceTime
+
+    // Record in sync buffer if available
+    syncBuffer?.recordClockOffset(camera_id, offset)
+
+    // Also record in global metrics
+    getMetrics().recordCameraClockOffset(camera_id, offset)
+
+    return {
+      camera_id,
+      offset_ms: offset,
+      server_time: serverNow,
+      message: `Camera ${camera_id} clock offset: ${offset}ms`,
+    }
+  })
+
+  // Get sync buffer status
+  app.get('/api/sync/status', async () => {
+    if (!syncBuffer) {
+      return {
+        enabled: false,
+        message: 'Sync buffer not initialized',
+      }
+    }
+
+    const metrics = syncBuffer.getMetrics()
+    return {
+      enabled: true,
+      registeredCameras: syncBuffer.getRegisteredCameras(),
+      metrics: {
+        batchesProcessed: metrics.batchesProcessed,
+        timeoutFlushes: metrics.timeoutFlushes,
+        completeBatches: metrics.completeBatches,
+        avgCamerasPerBatch: metrics.avgCamerasPerBatch,
+        avgDetectionsPerBatch: metrics.avgDetectionsPerBatch,
+        maxFrameSkewMs: metrics.maxFrameSkewMs,
+        avgSyncWaitMs: metrics.avgSyncWaitMs,
+        droppedStaleFrames: metrics.droppedStaleFrames,
+        currentBufferSize: metrics.currentBufferSize,
+        cameraClockOffsets: Object.fromEntries(metrics.cameraClockOffsets),
+      },
     }
   })
 
@@ -548,6 +658,14 @@ export function registerRoutes(
 
   app.get('/api/metrics/diagnostic', async () => {
     return getMetrics().getDiagnosticMetrics()
+  })
+
+  app.get('/api/metrics/sync', async () => {
+    return getMetrics().getSyncMetrics()
+  })
+
+  app.get('/api/metrics/quality', async () => {
+    return getMetrics().getQualityMetrics()
   })
 
   // Reset metrics (protected by read-only guard)

@@ -1,0 +1,209 @@
+/**
+ * Tests for MultiCameraSyncBuffer
+ */
+
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { MultiCameraSyncBuffer } from './multi-camera-sync-buffer.js'
+import type { DetectionMessage } from '../types.js'
+
+describe('MultiCameraSyncBuffer', () => {
+  let syncBuffer: MultiCameraSyncBuffer
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    syncBuffer?.destroy()
+    vi.useRealTimers()
+  })
+
+  function createMessage(
+    cameraId: string,
+    frameNumber: number,
+    detectionCount: number = 1
+  ): DetectionMessage {
+    return {
+      camera_id: cameraId,
+      frame_number: frameNumber,
+      timestamp: Date.now() / 1000,
+      detection_count: detectionCount,
+      video_time_ms: frameNumber * 33, // ~30fps
+      detections: Array.from({ length: detectionCount }, (_, i) => ({
+        class_name: 'person',
+        confidence: 0.9,
+        bbox: [0.1, 0.1, 0.2, 0.4] as [number, number, number, number],
+        track_id: i,
+      })),
+    }
+  }
+
+  describe('basic buffering', () => {
+    it('should buffer messages and flush on timeout', async () => {
+      syncBuffer = new MultiCameraSyncBuffer({
+        syncWindowMs: 100,
+        minCamerasForSync: 2, // Require 2 cameras to complete
+      })
+
+      // Register 2 cameras so buffer waits for both
+      syncBuffer.registerCamera('camera1')
+      syncBuffer.registerCamera('camera2')
+
+      const flushed: DetectionMessage[][] = []
+      syncBuffer.onFlush((messages) => {
+        flushed.push(messages)
+      })
+
+      // Add a message from only one camera
+      syncBuffer.addMessage(createMessage('camera1', 1))
+
+      // No immediate flush (waiting for camera2)
+      expect(flushed.length).toBe(0)
+
+      // Wait for sync window
+      vi.advanceTimersByTime(150)
+
+      // Should have flushed on timeout
+      expect(flushed.length).toBe(1)
+      expect(flushed[0].length).toBe(1)
+      expect(flushed[0][0].camera_id).toBe('camera1')
+    })
+
+    it('should flush immediately when all cameras report', () => {
+      syncBuffer = new MultiCameraSyncBuffer({
+        syncWindowMs: 100,
+        minCamerasForSync: 2,
+      })
+
+      // Register cameras
+      syncBuffer.registerCamera('camera1')
+      syncBuffer.registerCamera('camera2')
+
+      const flushed: DetectionMessage[][] = []
+      syncBuffer.onFlush((messages) => {
+        flushed.push(messages)
+      })
+
+      // Add messages from both cameras
+      syncBuffer.addMessage(createMessage('camera1', 1))
+      syncBuffer.addMessage(createMessage('camera2', 1))
+
+      // Should flush immediately (all cameras reported)
+      expect(flushed.length).toBe(1)
+      expect(flushed[0].length).toBe(2)
+    })
+  })
+
+  describe('frame correlation', () => {
+    it('should group messages by frame number', () => {
+      syncBuffer = new MultiCameraSyncBuffer({
+        syncWindowMs: 100,
+        useFrameNumberCorrelation: true,
+      })
+
+      syncBuffer.registerCamera('camera1')
+      syncBuffer.registerCamera('camera2')
+
+      const flushed: DetectionMessage[][] = []
+      syncBuffer.onFlush((messages) => {
+        flushed.push(messages)
+      })
+
+      // Frame 1 from both cameras
+      syncBuffer.addMessage(createMessage('camera1', 1))
+      syncBuffer.addMessage(createMessage('camera2', 1))
+
+      // Frame 2 from both cameras
+      syncBuffer.addMessage(createMessage('camera1', 2))
+      syncBuffer.addMessage(createMessage('camera2', 2))
+
+      // Should have 2 batches (one per frame)
+      expect(flushed.length).toBe(2)
+      expect(flushed[0].every((m) => m.frame_number === 1)).toBe(true)
+      expect(flushed[1].every((m) => m.frame_number === 2)).toBe(true)
+    })
+  })
+
+  describe('metrics', () => {
+    it('should track batch metrics', () => {
+      syncBuffer = new MultiCameraSyncBuffer({
+        syncWindowMs: 50,
+      })
+
+      syncBuffer.registerCamera('camera1')
+      syncBuffer.registerCamera('camera2')
+
+      syncBuffer.onFlush(() => {})
+
+      // Add messages
+      syncBuffer.addMessage(createMessage('camera1', 1, 3))
+      syncBuffer.addMessage(createMessage('camera2', 1, 2))
+
+      const metrics = syncBuffer.getMetrics()
+
+      expect(metrics.batchesProcessed).toBe(1)
+      expect(metrics.completeBatches).toBe(1)
+      expect(metrics.avgCamerasPerBatch).toBe(2)
+      expect(metrics.avgDetectionsPerBatch).toBe(5)
+    })
+
+    it('should track timeout flushes', () => {
+      syncBuffer = new MultiCameraSyncBuffer({
+        syncWindowMs: 50,
+      })
+
+      syncBuffer.registerCamera('camera1')
+      syncBuffer.registerCamera('camera2')
+
+      syncBuffer.onFlush(() => {})
+
+      // Only one camera reports
+      syncBuffer.addMessage(createMessage('camera1', 1))
+
+      // Wait for timeout
+      vi.advanceTimersByTime(100)
+
+      const metrics = syncBuffer.getMetrics()
+
+      expect(metrics.batchesProcessed).toBe(1)
+      expect(metrics.timeoutFlushes).toBe(1)
+      expect(metrics.completeBatches).toBe(0)
+    })
+  })
+
+  describe('clock offset', () => {
+    it('should record camera clock offsets', () => {
+      syncBuffer = new MultiCameraSyncBuffer()
+
+      syncBuffer.recordClockOffset('camera1', 50)
+      syncBuffer.recordClockOffset('camera2', -30)
+
+      const metrics = syncBuffer.getMetrics()
+
+      expect(metrics.cameraClockOffsets.get('camera1')).toBe(50)
+      expect(metrics.cameraClockOffsets.get('camera2')).toBe(-30)
+    })
+  })
+
+  describe('buffer overflow', () => {
+    it('should flush on buffer overflow', () => {
+      syncBuffer = new MultiCameraSyncBuffer({
+        syncWindowMs: 10000, // Long timeout
+        maxBufferedDetections: 10,
+      })
+
+      const flushed: DetectionMessage[][] = []
+      syncBuffer.onFlush((messages) => {
+        flushed.push(messages)
+      })
+
+      // Add many frames to trigger overflow
+      for (let i = 0; i < 5; i++) {
+        syncBuffer.addMessage(createMessage('camera1', i, 5))
+      }
+
+      // Should have flushed some buckets due to overflow
+      expect(flushed.length).toBeGreaterThan(0)
+    })
+  })
+})

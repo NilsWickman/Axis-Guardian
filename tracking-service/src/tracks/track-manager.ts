@@ -21,7 +21,7 @@ import type {
 } from '../types.js'
 import type { ZoneManager } from '../zones/zone-manager.js'
 import { DEFAULT_TRACKING_CONFIG } from '../types.js'
-import { AttributeAggregator } from './attribute-aggregator.js'
+import { AttributeAggregator, cosineSimilarity } from './attribute-aggregator.js'
 import { calculateDistance, predictPosition, mergeWorldPositions } from '../correlation/track-matcher.js'
 import { KalmanTrackFilter } from '../filters/kalman-track-filter.js'
 import { assignDetectionsToTracks } from '../correlation/hungarian-assignment.js'
@@ -39,6 +39,11 @@ import {
   type RoomBounds,
 } from '../geometry/fov-geometry.js'
 import { getMetrics } from '../metrics/index.js'
+// Extracted components
+import { TrailManager } from './trail-manager.js'
+import { FrameTracker } from './frame-tracker.js'
+import { ExclusionZoneValidator } from './exclusion-zone-validator.js'
+import { LocalTrackStitcher } from './local-track-stitcher.js'
 
 /**
  * Cluster of detections from different cameras that likely represent same person
@@ -98,29 +103,9 @@ export interface TrackManagerOptions {
   idGenerator?: () => string
   /**
    * Weight for embedding similarity in Hungarian assignment (0-1).
-   * Set to 0 for spatial-only tracking, 0.3 for re-ID enabled tracking.
-   * Default is 0 (spatial only).
+   * Default is 0.3 for re-ID enabled tracking.
    */
   embeddingWeight?: number
-}
-
-/**
- * Per-camera frame tracking for accurate missed frame detection
- */
-interface CameraFrameTracker {
-  lastFrameNumber: number
-  lastFrameTimestamp: number
-  estimatedFps: number
-}
-
-/**
- * Tracks a recently-ended local track ID for same-camera stitching
- */
-interface EndedLocalTrack {
-  localTrackId: number
-  globalTrackId: string
-  lastPosition: { x: number; y: number }
-  endedAt: number  // timestamp
 }
 
 /**
@@ -135,16 +120,18 @@ export class TrackManager {
   private idGenerator: () => string
   private kalmanFilter: KalmanTrackFilter
   private trackMerger: TrackMerger
-  /** Per-camera frame tracking for frame-based missed detection */
-  private cameraFrameTrackers: Map<string, CameraFrameTracker> = new Map()
   /** Last detection timestamp processed (used to keep a consistent time base) */
   private lastDetectionTimestamp: number | null = null
-  /** Recently-ended local track IDs per camera for stitching */
-  private endedLocalTracks: Map<string, EndedLocalTrack[]> = new Map()
   /** Per-track attribute aggregators for re-ID */
   private attributeAggregators: Map<string, AttributeAggregator> = new Map()
-  /** Embedding weight for Hungarian assignment (0 = spatial only, 0.3 = re-ID enabled) */
+  /** Embedding weight for Hungarian assignment (default 0.3 for re-ID) */
   private embeddingWeight: number
+
+  // Extracted components
+  private trailManager: TrailManager
+  private frameTracker: FrameTracker
+  private exclusionValidator: ExclusionZoneValidator
+  private localStitcher: LocalTrackStitcher
 
   /** Sitemap geometry for exit detection */
   private siteMapGeometry?: {
@@ -165,8 +152,8 @@ export class TrackManager {
     this.config = { ...DEFAULT_TRACKING_CONFIG, ...options.config }
     this.clock = options.clock ?? (() => Date.now())
     this.idGenerator = options.idGenerator ?? (() => `global-${this.nextTrackId++}`)
-    // Embedding weight: 0 for spatial-only, 0.3 for re-ID enabled
-    this.embeddingWeight = options.embeddingWeight ?? 0
+    // Embedding weight for re-ID similarity in Hungarian cost (default 0.3)
+    this.embeddingWeight = options.embeddingWeight ?? 0.3
     // Create a new KalmanTrackFilter instance for each TrackManager
     // to avoid state cache pollution between tests or different managers
     this.kalmanFilter = new KalmanTrackFilter()
@@ -174,6 +161,30 @@ export class TrackManager {
     this.trackMerger = new TrackMerger(this.kalmanFilter, {
       mergeDistanceM: this.config.mergeDistanceM,
       mergeConfidenceThreshold: this.config.mergeConfidenceThreshold,
+    })
+
+    // Initialize extracted components
+    this.trailManager = new TrailManager({
+      maxTrailLength: this.config.maxTrailLength,
+      minMovementThreshold: 0.1,
+    })
+    this.frameTracker = new FrameTracker()
+    this.exclusionValidator = new ExclusionZoneValidator(
+      {
+        confirmedExclusionRadius: this.config.exclusionRadius ?? 0.5,
+        unconfirmedExclusionRadius: this.config.unconfirmedExclusionRadius ?? 0.7,
+        crossCameraExclusionRadius: this.config.crossCameraExclusionRadius ?? 0.5,
+        crossCameraExclusionTimeMs: this.config.crossCameraExclusionTimeMs ?? 200,
+      },
+      {
+        recordExclusionZoneBlock: () => getMetrics().recordExclusionZoneBlock(),
+        recordCrossCameraExclusionBlock: () => getMetrics().recordCrossCameraExclusionBlock(),
+      }
+    )
+    this.localStitcher = new LocalTrackStitcher({
+      maxGapMs: 3000,
+      maxDistanceMultiplier: 2.5,
+      correlationDistanceM: this.config.correlationDistanceM,
     })
   }
 
@@ -321,10 +332,20 @@ export class TrackManager {
 
     // Check for same-camera stitch candidate (local tracker fragmentation)
     // This catches cases where YOLOv8 assigned a new track ID to the same person
-    const stitchCandidate = this.findStitchCandidate(
-      cameraId, trackId, { x: worldX, y: worldY }, now
+    const stitchResult = this.localStitcher.findStitchCandidate(
+      cameraId, trackId, { x: worldX, y: worldY }, now,
+      (id) => this.tracks.get(id)
     )
-    if (stitchCandidate) {
+    if (stitchResult.track) {
+      const stitchCandidate = stitchResult.track
+      // Reactivate track if needed
+      if (stitchResult.needsReactivation) {
+        stitchCandidate.isActive = true
+        stitchCandidate.state = stitchCandidate.isConfirmed ? 'confirmed' : 'unconfirmed'
+        if (!this.usedColors.has(stitchCandidate.color)) {
+          this.usedColors.add(stitchCandidate.color)
+        }
+      }
       // Found a recently-ended track from this camera at a nearby position
       // Associate with it instead of creating a new track
       if (this.forceAssociateWithTrack(stitchCandidate, detection)) {
@@ -351,7 +372,7 @@ export class TrackManager {
     const occlusionCoastTimeMs = this.config.occlusionCoastTimeMs ?? 2000
 
     // Clean up old ended local track entries
-    this.cleanupEndedLocalTracks(now)
+    this.localStitcher.cleanup(now)
 
     for (const [trackId, track] of this.tracks.entries()) {
       const timeSinceLastSeen = now - track.lastSeen
@@ -392,6 +413,7 @@ export class TrackManager {
           // Not near a pillar or no geometry - expire normally
           track.isActive = false
           this.releaseColor(track.color)
+          this.onTrackExpired?.(track)  // Notify before deletion
           this.tracks.delete(trackId)
           this.kalmanFilter.removeTrackState(trackId)
           this.zoneManager?.clearTrackState(trackId)
@@ -407,22 +429,16 @@ export class TrackManager {
         // Calculate missed frames based on actual camera frame numbers.
         // Use the *minimum* missed frames across cameras so a multi-camera track
         // does not become occluded while at least one camera still sees it.
-        const perCameraMissed: number[] = []
+        const cameraFrames = new Map<string, number | undefined>()
         for (const [cameraId, assoc] of track.cameraAssociations) {
-          const cameraTracker = this.cameraFrameTrackers.get(cameraId)
-          if (cameraTracker && assoc.lastFrameNumber !== undefined) {
-            const framesMissed = cameraTracker.lastFrameNumber - assoc.lastFrameNumber
-            perCameraMissed.push(Math.max(0, framesMissed))
-          }
+          cameraFrames.set(cameraId, assoc.lastFrameNumber)
         }
 
-        let totalMissedFrames = perCameraMissed.length > 0
-          ? Math.min(...perCameraMissed)
-          : 0
+        let totalMissedFrames = this.frameTracker.getMinMissedFramesAcrossCameras(cameraFrames) ?? 0
 
         // Fall back to time-based detection if no frame info available
-        if (perCameraMissed.length === 0 && timeSinceLastSeen > 100) {
-          totalMissedFrames = Math.floor(timeSinceLastSeen / 100)  // Assume ~10fps
+        if (totalMissedFrames === 0 && timeSinceLastSeen > 100) {
+          totalMissedFrames = this.frameTracker.estimateMissedFramesFromTime(timeSinceLastSeen)
         }
 
         track.missedFrames = totalMissedFrames
@@ -480,7 +496,7 @@ export class TrackManager {
           // Occlusion timeout exceeded, expire the track
           if (track.isActive) {
             // Record ended local tracks for potential stitching
-            this.recordEndedLocalTracksForTrack(track, now)
+            this.localStitcher.recordEndedTracksFromGlobalTrack(track, now)
 
             track.isActive = false
             this.releaseColor(track.color)
@@ -497,7 +513,7 @@ export class TrackManager {
       if (timeSinceLastSeen > this.config.trackExpiryMs) {
         if (track.isActive) {
           // Record ended local tracks for potential stitching
-          this.recordEndedLocalTracksForTrack(track, now)
+          this.localStitcher.recordEndedTracksFromGlobalTrack(track, now)
 
           track.isActive = false
           this.releaseColor(track.color)
@@ -551,6 +567,10 @@ export class TrackManager {
     this.zoneManager?.resetAllStates()
     this.lastDetectionTimestamp = null
     this.attributeAggregators.clear()
+    // Clear extracted component states
+    this.trailManager.clearAllTrails()
+    this.frameTracker.clearAll()
+    this.localStitcher.clearAll()
   }
 
   /**
@@ -598,6 +618,12 @@ export class TrackManager {
     if (!aggregator) {
       aggregator = new AttributeAggregator()
       this.attributeAggregators.set(track.globalTrackId, aggregator)
+    }
+
+    // Record metrics for detections with embeddings
+    if (attributes.embedding && attributes.embedding.length > 0) {
+      const quality = attributes.embedding_quality ?? 0.5
+      getMetrics().recordDetectionWithEmbedding(quality)
     }
 
     // Add detection attributes to aggregator
@@ -651,31 +677,6 @@ export class TrackManager {
 
   private releaseColor(color: string): void {
     this.usedColors.delete(color)
-  }
-
-  /**
-   * Update camera frame tracker for frame-based missed detection
-   */
-  private updateCameraFrameTracker(cameraId: string, frameNumber: number, timestamp: number): void {
-    const existing = this.cameraFrameTrackers.get(cameraId)
-    if (existing) {
-      // Estimate FPS from frame delta
-      const frameDelta = frameNumber - existing.lastFrameNumber
-      const timeDelta = (timestamp - existing.lastFrameTimestamp) / 1000  // seconds
-      if (frameDelta > 0 && timeDelta > 0) {
-        const instantFps = frameDelta / timeDelta
-        // Exponential moving average for FPS estimation
-        existing.estimatedFps = existing.estimatedFps * 0.9 + instantFps * 0.1
-      }
-      existing.lastFrameNumber = frameNumber
-      existing.lastFrameTimestamp = timestamp
-    } else {
-      this.cameraFrameTrackers.set(cameraId, {
-        lastFrameNumber: frameNumber,
-        lastFrameTimestamp: timestamp,
-        estimatedFps: 10,  // Default assumption
-      })
-    }
   }
 
   /**
@@ -782,266 +783,11 @@ export class TrackManager {
   }
 
   /**
-   * Record that a local track ID has ended (for same-camera stitching)
-   */
-  private recordEndedLocalTrack(
-    cameraId: string,
-    localTrackId: number,
-    globalTrackId: string,
-    position: { x: number; y: number },
-    timestamp: number
-  ): void {
-    let cameraEnded = this.endedLocalTracks.get(cameraId)
-    if (!cameraEnded) {
-      cameraEnded = []
-      this.endedLocalTracks.set(cameraId, cameraEnded)
-    }
-
-    // Remove any existing entry for this local track ID
-    const existingIdx = cameraEnded.findIndex(e => e.localTrackId === localTrackId)
-    if (existingIdx >= 0) {
-      cameraEnded.splice(existingIdx, 1)
-    }
-
-    cameraEnded.push({
-      localTrackId,
-      globalTrackId,
-      lastPosition: position,
-      endedAt: timestamp,
-    })
-
-    // Keep only recent entries (last 50 per camera)
-    if (cameraEnded.length > 50) {
-      cameraEnded.shift()
-    }
-  }
-
-  /**
-   * Find a stitch candidate for a new local track ID
-   * Returns the global track to associate with, or null if no match
-   */
-  private findStitchCandidate(
-    cameraId: string,
-    localTrackId: number,
-    position: { x: number; y: number },
-    timestamp: number
-  ): GlobalTrack | null {
-    const cameraEnded = this.endedLocalTracks.get(cameraId)
-    if (!cameraEnded || cameraEnded.length === 0) return null
-
-    const maxGapMs = 2000  // 2 second max gap for stitching (increased from 1s)
-    const maxDistance = this.config.correlationDistanceM * 2.5  // More relaxed for stitching
-
-    let bestMatch: EndedLocalTrack | null = null
-    let bestDistance = Infinity
-
-    for (const ended of cameraEnded) {
-      // Skip if too old
-      const gapMs = timestamp - ended.endedAt
-      if (gapMs <= 0 || gapMs > maxGapMs) continue
-
-      // Check spatial distance
-      const dist = calculateDistance(position, ended.lastPosition)
-      if (dist < maxDistance && dist < bestDistance) {
-        bestDistance = dist
-        bestMatch = ended
-      }
-    }
-
-    if (bestMatch) {
-      const globalTrack = this.tracks.get(bestMatch.globalTrackId)
-      if (globalTrack) {
-        // Remove the matched entry
-        const idx = cameraEnded.indexOf(bestMatch)
-        if (idx >= 0) cameraEnded.splice(idx, 1)
-
-        // Reactivate the track if it was recently deactivated
-        if (!globalTrack.isActive) {
-          const timeSinceExpiry = timestamp - globalTrack.lastSeen
-          if (timeSinceExpiry < 3000) {  // Reactivate within 3 seconds
-            globalTrack.isActive = true
-            globalTrack.state = globalTrack.isConfirmed ? 'confirmed' : 'unconfirmed'
-            // Re-assign color if needed
-            if (!this.usedColors.has(globalTrack.color)) {
-              this.usedColors.add(globalTrack.color)
-            }
-          } else {
-            return null  // Too old to reactivate
-          }
-        }
-        return globalTrack
-      }
-    }
-
-    return null
-  }
-
-  /**
-   * Clean up old ended local track entries
-   */
-  private cleanupEndedLocalTracks(now: number): void {
-    const maxAgeMs = 2000  // Remove entries older than 2 seconds
-
-    for (const [cameraId, entries] of this.endedLocalTracks) {
-      const filtered = entries.filter(e => now - e.endedAt < maxAgeMs)
-      if (filtered.length !== entries.length) {
-        this.endedLocalTracks.set(cameraId, filtered)
-      }
-    }
-  }
-
-  /**
-   * Record all local track IDs from an expiring track for potential future stitching
-   */
-  private recordEndedLocalTracksForTrack(track: GlobalTrack, timestamp: number): void {
-    // For each camera that was tracking this person, record the local track IDs
-    for (const [cameraId, assoc] of track.cameraAssociations) {
-      // Only record if the camera was recently seeing this track
-      const timeSinceLastSeen = timestamp - assoc.lastSeen
-      if (timeSinceLastSeen > 2000) continue  // Too stale
-
-      // Record each local track ID from this camera
-      for (const localTrackId of assoc.trackIds) {
-        this.recordEndedLocalTrack(
-          cameraId,
-          localTrackId,
-          track.globalTrackId,
-          track.currentPosition,
-          timestamp
-        )
-      }
-    }
-  }
-
-  /**
-   * Check if a position is too close to existing tracks to create a new track
-   * (likely a duplicate detection in camera overlap zone)
-   *
-   * Uses different exclusion radii for confirmed vs unconfirmed tracks:
-   * - Confirmed tracks: smaller radius (config.exclusionRadius)
-   * - Unconfirmed tracks: larger radius (config.unconfirmedExclusionRadius)
-   *
-   * For unconfirmed tracks, only blocks if the detection is from a DIFFERENT camera.
-   * Same-camera detections at close positions are different people (camera can't see same person twice).
-   *
-   * @param worldX - X coordinate to check
-   * @param worldY - Y coordinate to check
-   * @param cameraId - Optional camera ID of the detection (for same-camera check)
-   */
-  private isInExclusionZone(worldX: number, worldY: number, cameraId?: string, timestamp?: number): boolean {
-    const confirmedExclusionRadius = this.config.exclusionRadius ?? 0.5
-    const unconfirmedExclusionRadius = this.config.unconfirmedExclusionRadius ?? 0.7
-    const crossCameraExclusionRadius = this.config.crossCameraExclusionRadius ?? 0.5
-    const crossCameraExclusionTimeMs = this.config.crossCameraExclusionTimeMs ?? 200
-
-    for (const track of this.tracks.values()) {
-      if (!track.isActive) continue
-
-      const distance = calculateDistance(
-        { x: worldX, y: worldY },
-        track.currentPosition
-      )
-
-      // For confirmed tracks, use standard exclusion radius
-      if (track.isConfirmed) {
-        if (distance < confirmedExclusionRadius) {
-          getMetrics().recordExclusionZoneBlock()
-          return true
-        }
-        continue
-      }
-
-      // For unconfirmed tracks, apply different logic based on camera relationship
-      const trackCameras = Array.from(track.cameraAssociations.keys())
-      const sameCamera = cameraId ? trackCameras.includes(cameraId) : false
-
-      if (sameCamera) {
-        // Same camera seeing two things close together = two different people
-        // Don't block (they're different people)
-        continue
-      }
-
-      // Cross-camera exclusion: Block duplicate creation when there's a very recent
-      // unconfirmed track from a DIFFERENT camera within a tighter radius.
-      // This catches the case where camera A just created an unconfirmed track
-      // and camera B is about to create a duplicate for the same person.
-      if (timestamp && cameraId) {
-        const timeSinceUpdate = timestamp - track.lastSeen
-        if (timeSinceUpdate < crossCameraExclusionTimeMs && distance < crossCameraExclusionRadius) {
-          // Very recent track from different camera, very close - likely duplicate
-          getMetrics().recordCrossCameraExclusionBlock()
-          return true
-        }
-      }
-
-      // Standard unconfirmed exclusion radius for different cameras
-      if (distance < unconfirmedExclusionRadius) {
-        getMetrics().recordExclusionZoneBlock()
-        return true
-      }
-    }
-
-    return false
-  }
-
-  /**
    * Check if a detection meets minimum confidence for track creation
    */
   private meetsCreationConfidence(detection: CameraDetection): boolean {
     const minConfidence = this.config.minCreationConfidence ?? 0.7
     return detection.confidence >= minConfidence
-  }
-
-  /**
-   * Cluster unmatched detections from different cameras that likely represent the same person.
-   * This prevents duplicate tracks when multiple cameras see the same person simultaneously.
-   */
-  private clusterUnmatchedDetections(detections: CameraDetection[]): DetectionCluster[] {
-    if (detections.length === 0) return []
-    if (detections.length === 1) {
-      return [{
-        detections: [detections[0]],
-        centroid: { x: detections[0].worldX, y: detections[0].worldY },
-      }]
-    }
-
-    const clusteringDistance = this.config.clusteringDistanceM ?? 0.6
-    const clusters: DetectionCluster[] = []
-    const used = new Set<number>()
-
-    for (let i = 0; i < detections.length; i++) {
-      if (used.has(i)) continue
-
-      const cluster: CameraDetection[] = [detections[i]]
-      used.add(i)
-
-      // Find spatially close detections from DIFFERENT cameras
-      for (let j = i + 1; j < detections.length; j++) {
-        if (used.has(j)) continue
-
-        // Only cluster detections from different cameras
-        if (detections[j].cameraId === detections[i].cameraId) continue
-
-        const dist = calculateDistance(
-          { x: detections[i].worldX, y: detections[i].worldY },
-          { x: detections[j].worldX, y: detections[j].worldY }
-        )
-
-        if (dist < clusteringDistance) {
-          cluster.push(detections[j])
-          used.add(j)
-        }
-      }
-
-      // Calculate centroid
-      const merged = mergeWorldPositions(cluster)
-      clusters.push({
-        detections: cluster,
-        centroid: merged.position,
-      })
-    }
-
-    return clusters
   }
 
   /**
@@ -1266,7 +1012,7 @@ export class TrackManager {
 
       // Update camera frame tracker
       if (det.frameNumber !== undefined) {
-        this.updateCameraFrameTracker(det.cameraId, det.frameNumber, det.timestamp)
+        this.frameTracker.updateFrame(det.cameraId, det.frameNumber, det.timestamp)
       }
     }
 
@@ -1329,7 +1075,7 @@ export class TrackManager {
 
     // Update camera frame tracker
     if (detection.frameNumber !== undefined) {
-      this.updateCameraFrameTracker(detection.cameraId, detection.frameNumber, detection.timestamp)
+      this.frameTracker.updateFrame(detection.cameraId, detection.frameNumber, detection.timestamp)
     }
 
     this.tracks.set(globalTrackId, track)
@@ -1398,7 +1144,7 @@ export class TrackManager {
 
     // Update camera frame tracker
     if (detection.frameNumber !== undefined) {
-      this.updateCameraFrameTracker(detection.cameraId, detection.frameNumber, detection.timestamp)
+      this.frameTracker.updateFrame(detection.cameraId, detection.frameNumber, detection.timestamp)
     }
 
     // Update video timing
@@ -1423,11 +1169,17 @@ export class TrackManager {
       getMetrics().recordTrackConfirmed(detection.timestamp - creationTime)
     }
 
-    // Recover from occlusion
+    // Recover from occlusion with hysteresis (flicker protection)
     if (track.state === 'occluded') {
       const detectionsRequired = this.config.detectionsToExitOcclusion ?? 2
+      const minRecoveryTimeMs = this.config.minRecoveryTimeMs ?? 300
+      const timeSinceOcclusion = detection.timestamp - (track.occludedSince ?? detection.timestamp)
+
       track.consecutiveDetections++
-      if (track.consecutiveDetections >= detectionsRequired) {
+
+      // Only exit occlusion after multiple detections AND minimum time has passed
+      // This prevents flicker when person briefly visible between pillars
+      if (track.consecutiveDetections >= detectionsRequired && timeSinceOcclusion >= minRecoveryTimeMs) {
         track.state = 'confirmed'
         const occlusionDuration = track.occludedSince ? detection.timestamp - track.occludedSince : 0
         getMetrics().recordOcclusionEnd(occlusionDuration, true)
@@ -1522,7 +1274,7 @@ export class TrackManager {
 
     // Update camera frame tracker
     if (detection.frameNumber !== undefined) {
-      this.updateCameraFrameTracker(detection.cameraId, detection.frameNumber, detection.timestamp)
+      this.frameTracker.updateFrame(detection.cameraId, detection.frameNumber, detection.timestamp)
     }
 
     // Update video timing for frontend sync
@@ -1548,19 +1300,41 @@ export class TrackManager {
       getMetrics().recordTrackConfirmed(detection.timestamp - creationTime)
     }
 
-    // Recover from occlusion with hysteresis (require multiple detections)
+    // Recover from occlusion with hysteresis (flicker protection)
     if (track.state === 'occluded') {
       const detectionsRequired = this.config.detectionsToExitOcclusion ?? 2
+      const minRecoveryTimeMs = this.config.minRecoveryTimeMs ?? 300
+      const timeSinceOcclusion = detection.timestamp - (track.occludedSince ?? detection.timestamp)
+
       track.consecutiveDetections++
 
-      // Only exit occlusion after multiple consecutive detections
-      if (track.consecutiveDetections >= detectionsRequired) {
+      // Only exit occlusion after multiple detections AND minimum time has passed
+      // This prevents flicker when person briefly visible between pillars
+      if (track.consecutiveDetections >= detectionsRequired && timeSinceOcclusion >= minRecoveryTimeMs) {
         track.state = 'confirmed'
         // Record occlusion recovery metrics
         const occlusionDuration = track.occludedSince ? detection.timestamp - track.occludedSince : 0
         getMetrics().recordOcclusionEnd(occlusionDuration, true)
+
+        // Reset Kalman velocity for boundary/FOV exits to prevent bouncing.
+        // When a track exits via boundary/FOV, the velocity still points toward the edge.
+        // If we don't reset it, the filter will produce erratic predictions when
+        // reconciling the stale edge-pointing velocity with new observations.
+        if (track.kalmanState && (track.exitReason === 'fov_exit' || track.exitReason === 'boundary_exit')) {
+          track.kalmanState.mean[2][0] = 0  // Reset vx
+          track.kalmanState.mean[3][0] = 0  // Reset vy
+          // Also update the Kalman position to the new detection to prevent jump
+          track.kalmanState.mean[0][0] = detection.worldX
+          track.kalmanState.mean[1][0] = detection.worldY
+          track.kalmanState.lastTimestamp = detection.timestamp
+          // Clear the cached library state so it gets recreated with fresh values
+          this.kalmanFilter.removeTrackState(track.globalTrackId)
+        }
+
         track.occludedSince = undefined
+        track.exitReason = null  // Clear exit reason after recovery
         track.consecutiveDetections = 0
+        track.predictedPosition = undefined  // Clear predicted position
       }
     } else {
       // Reset consecutive detection counter for non-occluded tracks
@@ -1721,7 +1495,7 @@ export class TrackManager {
         useKalmanPrediction: true,
         associationBonus: 0.15,  // Stronger identity binding (85% cost reduction)
         kalmanFilter: this.kalmanFilter,
-        // Embedding weight: 0 for spatial-only, 0.3 for re-ID enabled
+        // Embedding weight for re-ID similarity (default 0.3)
         embeddingWeight: this.embeddingWeight,
       }
     )
@@ -1778,8 +1552,18 @@ export class TrackManager {
       const cluster = clusterIdx >= 0 ? clusterMap.get(clusterIdx) : null
 
       // Try re-id with the virtual detection first
+      getMetrics().recordReIDMatchAttempt()
       const reidentified = this.attemptReidentification(virtualDet, occludedTracks)
       if (reidentified) {
+        // Record successful re-ID with similarity (compute if embeddings available)
+        let similarity = 0
+        const detEmb = virtualDet.attributes?.embedding
+        const trackEmb = reidentified.attributes?.embedding
+        if (detEmb && trackEmb && detEmb.length === trackEmb.length) {
+          similarity = cosineSimilarity(detEmb, trackEmb)
+        }
+        getMetrics().recordReIDMatchSuccess(similarity)
+
         // Restore track from occlusion - preserve confirmation status
         reidentified.state = reidentified.isConfirmed ? 'confirmed' : 'unconfirmed'
         reidentified.missedFrames = 0
@@ -1828,14 +1612,23 @@ export class TrackManager {
       // Check each detection in the cluster for a stitch candidate
       let stitchedTrack: GlobalTrack | null = null
       for (const det of validDetections) {
-        const candidate = this.findStitchCandidate(
+        const stitchResult = this.localStitcher.findStitchCandidate(
           det.cameraId,
           det.trackId,
           { x: det.worldX, y: det.worldY },
-          det.timestamp
+          det.timestamp,
+          (id) => this.tracks.get(id)
         )
-        if (candidate) {
-          stitchedTrack = candidate
+        if (stitchResult.track) {
+          stitchedTrack = stitchResult.track
+          // Reactivate track if needed
+          if (stitchResult.needsReactivation) {
+            stitchedTrack.isActive = true
+            stitchedTrack.state = stitchedTrack.isConfirmed ? 'confirmed' : 'unconfirmed'
+            if (!this.usedColors.has(stitchedTrack.color)) {
+              this.usedColors.add(stitchedTrack.color)
+            }
+          }
           break
         }
       }
@@ -1860,7 +1653,12 @@ export class TrackManager {
         : undefined
       // Get latest timestamp from cluster detections for cross-camera exclusion check
       const clusterTimestamp = Math.max(...validCluster.detections.map(d => d.timestamp))
-      if (this.isInExclusionZone(validCluster.centroid.x, validCluster.centroid.y, clusterCameraId, clusterTimestamp)) {
+      if (this.exclusionValidator.isInExclusionZone(
+        validCluster.centroid,
+        this.tracks.values(),
+        clusterCameraId,
+        clusterTimestamp
+      )) {
         continue
       }
 
@@ -1882,12 +1680,18 @@ export class TrackManager {
 
     // Update tracks per camera metric
     const tracksPerCamera: Record<string, number> = {}
+    let tracksWithEmbeddings = 0
     for (const track of this.getAllActiveTracks()) {
       for (const cameraId of track.cameraAssociations.keys()) {
         tracksPerCamera[cameraId] = (tracksPerCamera[cameraId] ?? 0) + 1
       }
+      // Count tracks with valid embeddings
+      if (track.attributes?.embedding && track.attributes.embedding.length > 0) {
+        tracksWithEmbeddings++
+      }
     }
     getMetrics().updateTracksPerCamera(tracksPerCamera)
+    getMetrics().updateTracksWithEmbeddings(tracksWithEmbeddings)
 
     return results
   }
@@ -1916,10 +1720,23 @@ export class TrackManager {
       if (dtMs <= 50 || dtMs > maxCoastMs) continue
 
       const isPillarGhost = track.state === 'occluded' && track.exitReason === 'pillar_occlusion'
+      const isFovOrBoundaryExit = track.exitReason === 'fov_exit' || track.exitReason === 'boundary_exit'
+      const isOccluded = track.state === 'occluded'
+      const timeSinceOcclusion = isOccluded ? now - (track.occludedSince ?? now) : 0
+      const maxNonPillarCoastMs = 1500  // Coast non-pillar occlusions for up to 1.5s
 
-      // Do not coast non-pillar occlusions (FOV/boundary exits or unknown).
-      // Keeping them moving causes "bouncing" at edges and wrong-direction ghost drift.
-      if (track.state === 'occluded' && !isPillarGhost) {
+      // Don't coast tracks that have exited via FOV or boundary - they've left the monitored area
+      // Freeze them at their last known position instead of predicting further movement
+      if (isOccluded && isFovOrBoundaryExit) {
+        if (track.predictedPosition) {
+          track.predictedPosition = undefined
+        }
+        continue
+      }
+
+      // Coast other occlusions for a short duration, but longer for pillar occlusions
+      if (isOccluded && !isPillarGhost && timeSinceOcclusion > maxNonPillarCoastMs) {
+        // Stop coasting after 1.5s for non-pillar occlusions
         if (track.predictedPosition) {
           track.predictedPosition = undefined
         }
@@ -1929,33 +1746,57 @@ export class TrackManager {
       let predictedPos: Point2D | null = null
       if (track.kalmanState) {
         predictedPos = this.kalmanFilter.predict(track.kalmanState, dtMs)
+
+        // Apply velocity damping for non-pillar occlusions to prevent drift/bouncing
+        // Gradually slow down the predicted motion
+        if (isOccluded && !isPillarGhost) {
+          const dampingFactor = 0.92  // 8% velocity reduction per update cycle
+          track.kalmanState.mean[2][0] *= dampingFactor  // vx
+          track.kalmanState.mean[3][0] *= dampingFactor  // vy
+        }
       } else if (track.trail.length >= 2) {
         predictedPos = predictPosition(track.trail, dtMs)
       }
 
       if (!predictedPos) continue
 
-      // If prediction exits the room or all FOVs, stop ghosting and expire quickly.
+      // If prediction exits the room, mark as boundary exit and freeze
       if (roomBounds && !isPointInRoom(predictedPos, roomBounds, 0)) {
         if (track.state === 'occluded') {
           track.exitReason = 'boundary_exit'
+          // Zero velocity to prevent bouncing on re-emergence
+          if (track.kalmanState) {
+            track.kalmanState.mean[2][0] = 0
+            track.kalmanState.mean[3][0] = 0
+          }
+          track.predictedPosition = undefined
+          // Notify frontend to freeze at current position (not the bad prediction)
+          this.onTrackUpdated?.(track)
         }
-        track.predictedPosition = undefined
         continue
       }
 
+      // If prediction exits all FOVs, mark as FOV exit and freeze
       if (fovPolygons && !isPointInAnyFOV(predictedPos, fovPolygons, 0)) {
         if (track.state === 'occluded') {
           track.exitReason = 'fov_exit'
+          // Zero velocity to prevent bouncing on re-emergence
+          if (track.kalmanState) {
+            track.kalmanState.mean[2][0] = 0
+            track.kalmanState.mean[3][0] = 0
+          }
+          track.predictedPosition = undefined
+          // Notify frontend to freeze at current position (not the bad prediction)
+          this.onTrackUpdated?.(track)
         }
-        track.predictedPosition = undefined
         continue
       }
 
       track.predictedPosition = predictedPos
-      // Advance position for occluded tracks, and for very short gaps on confirmed tracks
-      // to avoid flicker/teleport on the next detection.
-      if (isPillarGhost || (track.state === 'confirmed' && dtMs <= shortGapMs)) {
+      // Advance position for all coasting occlusions (not just pillar), and for very short gaps
+      // on confirmed tracks to avoid flicker/teleport on the next detection.
+      const shouldAdvancePosition = isOccluded || (track.state === 'confirmed' && dtMs <= shortGapMs)
+      if (shouldAdvancePosition) {
         track.currentPosition = predictedPos
 
         const lastTrailPos = track.trail[0]
@@ -2013,7 +1854,7 @@ export class TrackManager {
 
   /**
    * Attempt to re-identify a detection with a recently occluded track
-   * Uses camera trackId matching and spatial proximity
+   * Uses embedding similarity FIRST, then falls back to spatial proximity
    */
   private attemptReidentification(
     detection: CameraDetection,
@@ -2021,7 +1862,54 @@ export class TrackManager {
   ): GlobalTrack | null {
     const gateMultiplier = this.config.reidentificationGateMultiplier ?? 3.0
     const maxReidAgeMs = this.config.occlusionCoastTimeMs ?? 7000
+    const detPos = { x: detection.worldX, y: detection.worldY }
 
+    // Phase 1: Try embedding-based re-ID first (more robust to ghost drift)
+    const detEmbedding = detection.attributes?.embedding
+    const detQuality = detection.attributes?.embedding_quality ?? 0
+
+    if (detEmbedding && detEmbedding.length > 0 && detQuality >= 0.25) {
+      let bestEmbeddingTrack: GlobalTrack | null = null
+      let bestSimilarity = 0.65  // Minimum similarity threshold for embedding re-ID
+
+      for (const track of occludedTracks) {
+        const trackEmbedding = track.attributes?.embedding
+        const trackQuality = track.attributes?.embedding_quality ?? 0
+
+        if (!trackEmbedding || trackEmbedding.length === 0 || trackQuality < 0.25) continue
+
+        const timeSinceOcclusion = detection.timestamp - (track.occludedSince ?? track.lastSeen)
+        if (timeSinceOcclusion < 0 || timeSinceOcclusion > maxReidAgeMs) continue
+
+        const similarity = cosineSimilarity(detEmbedding, trackEmbedding)
+
+        if (similarity > bestSimilarity) {
+          // Validate with very wide spatial gate (5x) for embedding matches
+          // This allows re-ID even when ghost drifted significantly
+          const predicted = track.kalmanState
+            ? this.kalmanFilter.predict(track.kalmanState, timeSinceOcclusion)
+            : track.currentPosition
+          const distance = calculateDistance(detPos, predicted)
+          const wideGate = this.config.correlationDistanceM * 5.0
+
+          if (distance < wideGate) {
+            bestSimilarity = similarity
+            bestEmbeddingTrack = track
+          }
+        }
+      }
+
+      if (bestEmbeddingTrack) {
+        // Record successful embedding-based re-ID
+        getMetrics().recordReIDMatchSuccess(bestSimilarity)
+        getMetrics().recordSuccessfulReacquisition(
+          detection.timestamp - (bestEmbeddingTrack.occludedSince ?? bestEmbeddingTrack.lastSeen)
+        )
+        return bestEmbeddingTrack
+      }
+    }
+
+    // Phase 2: Fall back to spatial-only matching (existing logic)
     let bestTrack: GlobalTrack | null = null
     let bestDistance = Infinity
 
@@ -2032,10 +1920,7 @@ export class TrackManager {
       if (timeSinceOcclusion < 0 || timeSinceOcclusion > maxReidAgeMs) continue
 
       const predicted = this.kalmanFilter.predict(track.kalmanState, timeSinceOcclusion)
-      const distance = calculateDistance(
-        { x: detection.worldX, y: detection.worldY },
-        predicted
-      )
+      const distance = calculateDistance(detPos, predicted)
 
       const assoc = track.cameraAssociations.get(detection.cameraId)
       const hasExactSameCameraId = assoc?.trackIds.includes(detection.trackId) ?? false
@@ -2065,6 +1950,14 @@ export class TrackManager {
         bestDistance = distance
         bestTrack = track
       }
+    }
+
+    if (bestTrack) {
+      // Record successful spatial re-acquisition
+      getMetrics().recordReacquisitionAttempt()
+      getMetrics().recordSuccessfulReacquisition(
+        detection.timestamp - (bestTrack.occludedSince ?? bestTrack.lastSeen)
+      )
     }
 
     return bestTrack

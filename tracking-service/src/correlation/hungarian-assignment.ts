@@ -9,7 +9,14 @@ import { munkres } from 'munkres'
 import type { Point2D, GlobalTrack, CameraDetection } from '../types.js'
 import { calculateDistance } from './track-matcher.js'
 import { KalmanTrackFilter } from '../filters/kalman-track-filter.js'
-import { cosineSimilarity } from '../tracks/attribute-aggregator.js'
+import {
+  calculateAssociationMultiplier,
+  calculateMotionConsistencyCost,
+  calculateEmbeddingSimilarityMultiplier,
+  calculateCrossingGateMultiplier,
+  calculateAdaptiveGateFactor,
+} from './cost-components.js'
+import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
 
 /**
  * Result of detection-to-track assignment
@@ -57,31 +64,51 @@ export interface AssignmentConfig {
   maxAccelerationMs2: number
   /** Weight for acceleration consistency cost component */
   accelerationConsistencyWeight: number
-  /** Weight for embedding similarity in cost (0-1, default 0.3) */
+  /** Weight for embedding similarity in cost (0-1, default 0.1) */
   embeddingWeight: number
-  /** Minimum embedding similarity to apply bonus (0-1, default 0.5) */
+  /** Minimum embedding similarity to apply bonus (0-1, default 0.7) */
   embeddingMinSimilarity: number
   /** Minimum embedding quality to use in matching (0-1, default 0.3) */
   embeddingMinQuality: number
+  /** Minimum embedding similarity required during crossing (appearance gate) */
+  crossingMinSimilarity: number
+  /** Penalty multiplier for poor embedding match during crossing */
+  crossingMismatchPenalty: number
+  /** Minimum embedding quality to apply crossing gate */
+  crossingMinQuality: number
+  /** Minimum detection count for tight adaptive gating */
+  minConfidenceForTightGate: number
+  /** Gate reduction factor for confident tracks (0-1) */
+  confidentTrackGateFactor: number
+  /** Minimum embedding quality for adaptive gating */
+  adaptiveMinQuality: number
 }
 
 const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
-  maxCost: 1.0,             // Relaxed to allow better same-camera re-id
+  maxCost: ALGORITHM_CONSTANTS.assignment.maxCost,
   useKalmanPrediction: true,
-  associationBonus: 0.1,    // Strong binding for same local trackId (90% cost reduction)
-  sameCameraPenalty: 1.5,   // Reduced penalty - allow same-camera re-id
-  velocityConsistencyWeight: 0.15, // Reduced - don't over-penalize velocity changes
-  crossingProximityThreshold: 1.5, // Detect crossing when tracks within 1.5m
-  crossingMaxCostMultiplier: 0.5,  // Use 50% of maxCost for crossing tracks
-  directionConsistencyWeight: 0.2, // Reduced - allow direction changes
-  minSpeedForDirection: 0.2,       // Moderate threshold
-  crossCameraBonus: 0.6,           // 40% cost reduction for cross-camera handoff
-  crossCameraBonusWindowMs: 2000,  // Allow 2s window for handoff gaps
-  maxAccelerationMs2: 3.0,         // Relaxed - walking acceleration can vary
-  accelerationConsistencyWeight: 0.1,  // Reduced penalty weight
-  embeddingWeight: 0.3,            // Embedding similarity contributes 30% to cost
-  embeddingMinSimilarity: 0.5,     // Only apply embedding bonus if similarity > 0.5
-  embeddingMinQuality: 0.3,        // Minimum embedding quality to use
+  associationBonus: ALGORITHM_CONSTANTS.assignment.associationBonus,
+  sameCameraPenalty: ALGORITHM_CONSTANTS.assignment.sameCameraPenalty,
+  velocityConsistencyWeight: ALGORITHM_CONSTANTS.assignment.velocityConsistencyWeight,
+  crossingProximityThreshold: ALGORITHM_CONSTANTS.assignment.crossingProximityThreshold,
+  crossingMaxCostMultiplier: ALGORITHM_CONSTANTS.assignment.crossingMaxCostMultiplier,
+  directionConsistencyWeight: ALGORITHM_CONSTANTS.assignment.directionConsistencyWeight,
+  minSpeedForDirection: ALGORITHM_CONSTANTS.assignment.minSpeedForDirection,
+  crossCameraBonus: ALGORITHM_CONSTANTS.assignment.crossCameraBonus,
+  crossCameraBonusWindowMs: ALGORITHM_CONSTANTS.assignment.crossCameraBonusWindowMs,
+  maxAccelerationMs2: ALGORITHM_CONSTANTS.assignment.maxAccelerationMs2,
+  accelerationConsistencyWeight: ALGORITHM_CONSTANTS.assignment.accelerationConsistencyWeight,
+  embeddingWeight: ALGORITHM_CONSTANTS.assignment.embeddingWeight,
+  embeddingMinSimilarity: ALGORITHM_CONSTANTS.assignment.embeddingMinSimilarity,
+  embeddingMinQuality: ALGORITHM_CONSTANTS.assignment.embeddingMinQuality,
+  // Crossing gate - appearance-gated association
+  crossingMinSimilarity: 0.70,
+  crossingMismatchPenalty: 3.0,
+  crossingMinQuality: 0.35,
+  // Adaptive gate for confident tracks
+  minConfidenceForTightGate: 5,
+  confidentTrackGateFactor: 0.7,
+  adaptiveMinQuality: 0.4,
 }
 
 /**
@@ -90,26 +117,40 @@ const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
  * @param detections - Array of detections to assign
  * @param tracks - Array of active tracks
  * @param config - Assignment configuration
+ * @param crossingTrackIds - Optional set of track IDs in crossing situations
  * @returns Object with cost matrix and per-track adaptive gates
  */
 export function buildCostMatrix(
   detections: CameraDetection[],
   tracks: GlobalTrack[],
-  config: AssignmentConfig = DEFAULT_ASSIGNMENT_CONFIG
+  config: AssignmentConfig = DEFAULT_ASSIGNMENT_CONFIG,
+  crossingTrackIds: Set<string> = new Set()
 ): { matrix: number[][]; adaptiveGates: number[] } {
 
   const kalmanFilter = config.kalmanFilter ?? new KalmanTrackFilter()
 
-  // Calculate adaptive gate for each track based on Kalman uncertainty
+  // Calculate adaptive gate for each track based on:
+  // 1. Kalman uncertainty
+  // 2. Track confidence (adaptive gating for confident tracks)
   const adaptiveGates = tracks.map(track => {
+    let baseGate = config.maxCost
+
+    // Kalman-based uncertainty expansion
     if (track.kalmanState) {
       const uncertainty = kalmanFilter.getPositionUncertainty(track.kalmanState)
       // Expand gate based on uncertainty: baseGate + 2*sigma
-      // Clamp between 0.5x and 2x of maxCost
-      const adaptiveGate = config.maxCost + 2 * uncertainty
-      return Math.max(config.maxCost * 0.5, Math.min(config.maxCost * 2, adaptiveGate))
+      baseGate = config.maxCost + 2 * uncertainty
+      baseGate = Math.max(config.maxCost * 0.5, Math.min(config.maxCost * 1.5, baseGate))
     }
-    return config.maxCost
+
+    // Apply adaptive gate factor for confident tracks (tighter matching)
+    const adaptiveFactor = calculateAdaptiveGateFactor(track, {
+      minConfidenceForTightGate: config.minConfidenceForTightGate,
+      confidentTrackGateFactor: config.confidentTrackGateFactor,
+      adaptiveMinQuality: config.adaptiveMinQuality,
+    })
+
+    return baseGate * adaptiveFactor
   })
 
   const matrix = detections.map(det => {
@@ -131,142 +172,46 @@ export function buildCostMatrix(
       }
 
       // Calculate base distance cost
-      let cost = calculateDistance(detPos, targetPos)
-      const baseDistance = cost
+      const baseDistance = calculateDistance(detPos, targetPos)
+      let cost = baseDistance
 
-      // Apply association bonus for existing camera+trackId match
-      const assoc = track.cameraAssociations.get(det.cameraId)
-      if (assoc?.trackIds.includes(det.trackId)) {
-        cost *= config.associationBonus
-      } else if (assoc && assoc.trackIds.length > 0) {
-        // Same-camera with different trackId: could be fragmentation or different person
-        const timeSinceSameCam = det.timestamp - assoc.lastSeen
-        const isRecentAndClose = baseDistance < config.maxCost * 0.5 &&
-          timeSinceSameCam < 500  // Very recent (500ms) and reasonably close
-        const isVeryClose = baseDistance < config.maxCost * 0.25  // Within ~0.175m
+      // 1. Apply association cost multiplier
+      const associationMultiplier = calculateAssociationMultiplier(det, track, baseDistance, {
+        associationBonus: config.associationBonus,
+        sameCameraPenalty: config.sameCameraPenalty,
+        crossCameraBonus: config.crossCameraBonus,
+        crossCameraBonusWindowMs: config.crossCameraBonusWindowMs,
+        maxCost: config.maxCost,
+      })
+      cost *= associationMultiplier
 
-        if (isRecentAndClose || isVeryClose) {
-          // Likely local tracker fragmentation - give BONUS instead of penalty
-          // Strong bonus (50% cost reduction) for probable re-identification
-          cost *= 0.5
-        } else {
-          // Older or farther - probably different person, apply penalty
-          cost *= config.sameCameraPenalty
-        }
-      } else if (!assoc) {
-        // Cross-camera bonus: if track is seen by OTHER cameras but not this one yet
-        // This encourages cross-camera handoff in overlap zones
-        const now = det.timestamp
-        const hasRecentCrossCamera = Array.from(track.cameraAssociations.entries()).some(
-          ([camId, camAssoc]) =>
-            camId !== det.cameraId &&
-            (now - camAssoc.lastSeen) < config.crossCameraBonusWindowMs
-        )
-        if (hasRecentCrossCamera) {
-          cost *= config.crossCameraBonus
-        }
-      }
+      // 2. Add motion consistency cost (velocity, direction, acceleration)
+      const timeDeltaMs = det.timestamp - track.lastSeen
+      cost += calculateMotionConsistencyCost(detPos, track, predictedVelocity, timeDeltaMs, {
+        velocityConsistencyWeight: config.velocityConsistencyWeight,
+        directionConsistencyWeight: config.directionConsistencyWeight,
+        minSpeedForDirection: config.minSpeedForDirection,
+        accelerationConsistencyWeight: config.accelerationConsistencyWeight,
+        maxAccelerationMs2: config.maxAccelerationMs2,
+      })
 
-      // Add motion consistency cost
-      // Penalize assignments that would require implausible velocity changes
-      if (predictedVelocity && config.velocityConsistencyWeight > 0) {
-        const dt = (det.timestamp - track.lastSeen) / 1000  // seconds
-        if (dt > 0.01) {
-          const impliedVelocity = {
-            x: (detPos.x - track.currentPosition.x) / dt,
-            y: (detPos.y - track.currentPosition.y) / dt,
-          }
-          const velocityChange = Math.sqrt(
-            Math.pow(impliedVelocity.x - predictedVelocity.x, 2) +
-            Math.pow(impliedVelocity.y - predictedVelocity.y, 2)
-          )
-          // Add velocity consistency penalty (max 0.5m equivalent)
-          cost += Math.min(0.5, velocityChange * config.velocityConsistencyWeight)
+      // 3. Apply embedding similarity multiplier
+      const embeddingResult = calculateEmbeddingSimilarityMultiplier(det, track, timeDeltaMs, {
+        embeddingWeight: config.embeddingWeight,
+        embeddingMinSimilarity: config.embeddingMinSimilarity,
+        embeddingMinQuality: config.embeddingMinQuality,
+      })
+      cost *= embeddingResult.multiplier
 
-          // Add direction-of-travel consistency penalty
-          // Penalize assignments that would require reversal of direction
-          if (config.directionConsistencyWeight > 0) {
-            const currentSpeed = Math.sqrt(
-              predictedVelocity.x * predictedVelocity.x +
-              predictedVelocity.y * predictedVelocity.y
-            )
-            const impliedSpeed = Math.sqrt(
-              impliedVelocity.x * impliedVelocity.x +
-              impliedVelocity.y * impliedVelocity.y
-            )
-
-            // Only apply direction constraint if track has meaningful velocity
-            if (currentSpeed > config.minSpeedForDirection && impliedSpeed > config.minSpeedForDirection) {
-              // Calculate direction consistency using dot product (cosine similarity)
-              const dotProduct = (
-                predictedVelocity.x * impliedVelocity.x +
-                predictedVelocity.y * impliedVelocity.y
-              )
-              const cosineSimilarity = dotProduct / (currentSpeed * impliedSpeed)
-
-              // cosineSimilarity: 1 = same direction, -1 = opposite direction
-              // Convert to penalty: 0 for same direction, 1 for opposite
-              const directionPenalty = (1 - cosineSimilarity) / 2
-
-              // Apply weighted penalty (max 0.5m equivalent)
-              cost += Math.min(0.5, directionPenalty * config.directionConsistencyWeight)
-            }
-          }
-
-          // Add acceleration consistency penalty
-          // Penalize assignments that require unrealistic acceleration
-          if (config.accelerationConsistencyWeight > 0 && dt > 0.05) {
-            // Calculate acceleration (change in velocity per second)
-            const accelerationX = (impliedVelocity.x - predictedVelocity.x) / dt
-            const accelerationY = (impliedVelocity.y - predictedVelocity.y) / dt
-            const acceleration = Math.sqrt(accelerationX * accelerationX + accelerationY * accelerationY)
-
-            // Penalty increases for acceleration above max threshold
-            if (acceleration > config.maxAccelerationMs2) {
-              const excessAccel = acceleration - config.maxAccelerationMs2
-              const accelPenalty = Math.min(0.4, excessAccel * config.accelerationConsistencyWeight)
-              cost += accelPenalty
-            }
-          }
-        }
-      }
-
-      // Add embedding similarity bonus/penalty
-      // This helps with re-identification and reduces ID switches
-      if (config.embeddingWeight > 0) {
-        const detEmbedding = det.attributes?.embedding
-        const detQuality = det.attributes?.embedding_quality ?? 0
-        const trackEmbedding = track.attributes?.embedding
-        const trackQuality = track.attributes?.embedding_quality ?? 0
-
-
-        // Only use embeddings if both have sufficient quality
-        if (
-          detEmbedding &&
-          trackEmbedding &&
-          detEmbedding.length > 0 &&
-          trackEmbedding.length === detEmbedding.length &&
-          detQuality >= config.embeddingMinQuality &&
-          trackQuality >= config.embeddingMinQuality
-        ) {
-          const similarity = cosineSimilarity(detEmbedding, trackEmbedding)
-
-          if (similarity > config.embeddingMinSimilarity) {
-            // High similarity = bonus (reduce cost)
-            // Scale: similarity 0.5->1.0 maps to cost multiplier 1.0->0.7
-            const embeddingBonus = 1 - (config.embeddingWeight * (similarity - config.embeddingMinSimilarity) /
-              (1 - config.embeddingMinSimilarity))
-            cost *= embeddingBonus
-          } else if (similarity < 0.3) {
-            // Very low similarity = penalty (increase cost for likely different person)
-            // Only apply penalty for well-established tracks with high-quality embeddings
-            if (trackQuality > 0.6 && track.attributes?.sample_count && track.attributes.sample_count >= 5) {
-              const embeddingPenalty = 1 + (config.embeddingWeight * (0.3 - similarity))
-              cost *= embeddingPenalty
-            }
-          }
-        }
-      }
+      // 4. Apply appearance-gated crossing penalty
+      // When tracks are crossing, require embedding match to prevent ID switches
+      const isCrossing = crossingTrackIds.has(track.globalTrackId)
+      const crossingGate = calculateCrossingGateMultiplier(det, track, isCrossing, {
+        crossingMinSimilarity: config.crossingMinSimilarity,
+        crossingMismatchPenalty: config.crossingMismatchPenalty,
+        crossingMinQuality: config.crossingMinQuality,
+      })
+      cost *= crossingGate.multiplier
 
       // Cap cost at adaptive gate for this track
       return Math.min(cost, adaptiveGates[trackIdx])
@@ -398,10 +343,12 @@ export function assignDetectionsToTracks(
   )
 
   // Combine current and predicted crossings
-  const crossingTracks = new Set([...currentCrossings, ...predictedCrossings])
+  const crossingTracks = new Set<string>()
+  currentCrossings.forEach(id => crossingTracks.add(id))
+  predictedCrossings.forEach(id => crossingTracks.add(id))
 
-  // Build cost matrix with adaptive gates
-  const { matrix: costMatrix, adaptiveGates } = buildCostMatrix(detections, tracks, fullConfig)
+  // Build cost matrix with adaptive gates and crossing track IDs for appearance gating
+  const { matrix: costMatrix, adaptiveGates } = buildCostMatrix(detections, tracks, fullConfig, crossingTracks)
 
   // Run Hungarian algorithm
   // The munkres function returns array of [row, col] assignments
