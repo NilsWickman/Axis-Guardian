@@ -220,8 +220,12 @@ export function useWallEditor() {
   // Endpoint dragging utilities
   const findEndpointAtPoint = (x: number, y: number, wall: Wall): 'start' | 'end' | null => {
     const threshold = 10
-    const startDist = Math.sqrt(Math.pow(wall.start.x - x, 2) + Math.pow(wall.start.y - y, 2))
-    const endDist = Math.sqrt(Math.pow(wall.end.x - x, 2) + Math.pow(wall.end.y - y, 2))
+    const startX = extractValue(wall.start.x)
+    const startY = extractValue(wall.start.y)
+    const endX = extractValue(wall.end.x)
+    const endY = extractValue(wall.end.y)
+    const startDist = Math.sqrt(Math.pow(startX - x, 2) + Math.pow(startY - y, 2))
+    const endDist = Math.sqrt(Math.pow(endX - x, 2) + Math.pow(endY - y, 2))
 
     if (startDist < threshold) return 'start'
     if (endDist < threshold) return 'end'
@@ -240,12 +244,16 @@ export function useWallEditor() {
     }
 
     const snapped = snapPoint(x, y, walls.filter(w => w.id !== dragState.value.draggedWall?.id))
+    const snappedPoint = {
+      x: createMeterUnit(snapped.x),
+      y: createMeterUnit(snapped.y)
+    }
     const updatedWall = { ...dragState.value.draggedWall }
 
     if (dragState.value.draggedEndpoint === 'start') {
-      updatedWall.start = snapped
+      updatedWall.start = snappedPoint
     } else {
-      updatedWall.end = snapped
+      updatedWall.end = snappedPoint
     }
 
     return updatedWall

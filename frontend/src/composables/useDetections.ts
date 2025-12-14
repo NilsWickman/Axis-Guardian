@@ -11,6 +11,7 @@ declare const Paho: any
 interface MQTTClient {
   connect: (options: any) => void
   subscribe: (topic: string, options?: any) => void
+  unsubscribe: (topic: string) => void
   disconnect: () => void
   onConnectionLost: (callback: (response: any) => void) => void
   onMessageArrived: (callback: (message: any) => void) => void
@@ -84,9 +85,10 @@ export function useDetections() {
         connectionError.value = null
 
         const clientId = 'surveillance-frontend-' + Math.random().toString(16).substr(2, 8)
-        mqttClient = new Paho.MQTT.Client('localhost', 9001, clientId)
+        const client = new Paho.MQTT.Client('localhost', 9001, clientId)
+        mqttClient = client
 
-        mqttClient.onConnectionLost = (response: any) => {
+        client.onConnectionLost = (response: any) => {
           console.warn('MQTT connection lost:', response.errorMessage)
           isConnected.value = false
 
@@ -97,7 +99,7 @@ export function useDetections() {
           }, 5000)
         }
 
-        mqttClient.onMessageArrived = (message: any) => {
+        client.onMessageArrived = (message: any) => {
           try {
             const payload: DetectionMessage = JSON.parse(message.payloadString)
             handleDetectionMessage(payload)
@@ -106,7 +108,7 @@ export function useDetections() {
           }
         }
 
-        mqttClient.connect({
+        client.connect({
           onSuccess: () => {
             console.log('Connected to MQTT broker')
             isConnected.value = true

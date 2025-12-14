@@ -119,7 +119,7 @@ const setupVideoStream = async () => {
         console.log('📦 HLS fragment loaded')
       })
 
-      hls.on(Hls.Events.ERROR, (event: any, data: any) => {
+      hls.on(Hls.Events.ERROR, (_event: any, data: any) => {
         console.error('HLS error:', data)
         if (data.fatal) {
           switch (data.type) {

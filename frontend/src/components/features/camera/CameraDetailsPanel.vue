@@ -25,12 +25,12 @@
       <h4 class="text-[10px] font-semibold text-muted-foreground uppercase">Camera Settings</h4>
       <div class="space-y-0.5 text-xs">
         <div class="flex justify-between">
-          <span class="text-muted-foreground">Rotation:</span>
-          <span class="font-mono">{{ extractValue(camera.rotation) }}°</span>
+          <span class="text-muted-foreground">Azimuth:</span>
+          <span class="font-mono">{{ extractValue(camera.azimuth) }}°</span>
         </div>
         <div class="flex justify-between">
-          <span class="text-muted-foreground">Down Angle:</span>
-          <span class="font-mono">{{ extractValue(camera.angle) }}°</span>
+          <span class="text-muted-foreground">Elevation:</span>
+          <span class="font-mono">{{ extractValue(camera.elevation) }}°</span>
         </div>
         <div class="flex justify-between">
           <span class="text-muted-foreground">Height:</span>
@@ -39,10 +39,6 @@
         <div class="flex justify-between">
           <span class="text-muted-foreground">FOV:</span>
           <span class="font-mono">{{ extractValue(camera.fov) }}°</span>
-        </div>
-        <div class="flex justify-between">
-          <span class="text-muted-foreground">View Distance:</span>
-          <span class="font-mono">{{ extractValue(camera.viewDistance) }}m</span>
         </div>
         <div class="flex justify-between items-center">
           <span class="text-muted-foreground">Color:</span>

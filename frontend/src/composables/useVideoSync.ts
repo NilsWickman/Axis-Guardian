@@ -22,6 +22,7 @@ interface SyncFeedback {
 
 interface SyncMetrics {
   hls_latency_ms: number
+  latency_ms: number           // Alias for hls_latency_ms (for template compatibility)
   suggested_offset_ms: number
   measurement_count: number
   last_update: number
@@ -41,9 +42,6 @@ export function useVideoSync() {
 
   // Monitoring intervals
   const monitoringIntervals: Map<string, number> = new Map()
-
-  // Baseline timestamps for latency calculation
-  const streamStartTimes: Map<string, number> = new Map()
 
   /**
    * Connect to MQTT broker for publishing sync feedback
@@ -95,7 +93,7 @@ export function useVideoSync() {
   const calculateHLSLatency = (
     videoElement: HTMLVideoElement,
     hlsInstance: Hls | null,
-    cameraId: string
+    _cameraId: string
   ): { latency_ms: number; quality: 'good' | 'fair' | 'poor' } => {
     try {
       // For looped videos, we need a different approach
@@ -228,6 +226,7 @@ export function useVideoSync() {
       // Update local metrics
       const metrics = syncMetrics.value.get(cameraId) || {
         hls_latency_ms: 0,
+        latency_ms: 0,
         suggested_offset_ms: 0,
         measurement_count: 0,
         last_update: 0,
@@ -235,6 +234,7 @@ export function useVideoSync() {
       }
 
       metrics.hls_latency_ms = latency_ms
+      metrics.latency_ms = latency_ms  // Alias for template
       metrics.suggested_offset_ms = suggested_offset_ms
       metrics.measurement_count++
       metrics.last_update = Date.now()

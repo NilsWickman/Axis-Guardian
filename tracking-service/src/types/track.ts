@@ -44,6 +44,8 @@ export interface CameraDetection {
   rtpTimestamp?: number
   /** Person attributes from re-ID preprocessing (optional) */
   attributes?: DetectionAttributes
+  /** Camera position in world coordinates (for distance-based weighting) */
+  cameraPosition?: Point2D
 }
 
 /**

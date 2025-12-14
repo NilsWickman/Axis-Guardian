@@ -5,7 +5,7 @@
  * via WebRTC data channels. Metadata arrives with each frame for perfect alignment.
  */
 
-import { ref, computed, onUnmounted, getCurrentInstance, type Ref } from 'vue'
+import { ref, computed, onUnmounted, getCurrentInstance } from 'vue'
 import { useRouter } from 'vue-router'
 import msgpack from 'msgpack-lite'
 import type { Detection } from '@/types/detection.types'
@@ -309,7 +309,7 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
       const offer = await pc.createOffer()
 
       // Modify SDP to add bandwidth constraints
-      const sdpLines = offer.sdp.split('\r\n')
+      const sdpLines = (offer.sdp ?? '').split('\r\n')
       const modifiedSdp: string[] = []
 
       for (let i = 0; i < sdpLines.length; i++) {
@@ -416,17 +416,19 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
       try {
         const webrtcStats = await peerConnection.value.getStats()
-        let inboundRtp: RTCStatsReport | null = null
-        let candidatePair: RTCStatsReport | null = null
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let inboundRtp: any = null
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let candidatePair: any = null
 
-        webrtcStats.forEach((report: any) => {
+        webrtcStats.forEach((report) => {
           // Find inbound RTP stats for video
-          if (report.type === 'inbound-rtp' && report.kind === 'video') {
+          if (report.type === 'inbound-rtp' && (report as any).kind === 'video') {
             inboundRtp = report
           }
 
           // Find candidate pair for RTT
-          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+          if (report.type === 'candidate-pair' && (report as any).state === 'succeeded') {
             candidatePair = report
           }
         })

@@ -3,9 +3,7 @@ import type { CameraPlacement } from '../types/site-map-types'
 import {
   extractValue,
   createMeterUnit,
-  createDegreeUnit,
-  pixelsToMeters,
-  metersToPixels
+  createDegreeUnit
 } from '../utils/siteMapConversion'
 
 export interface CameraConfig {
@@ -74,16 +72,22 @@ export function useCameraPlacement() {
     selectedPlacedCamera.value = camera
     isUpdating.value = true
 
-    // Extract values from unit objects
+    const height = extractValue(camera.height)
+    const elevation = extractValue(camera.elevation)
+
+    // Calculate effective view distance from elevation and height
+    const calculatedViewDist = elevation > 0 ? height / Math.tan(elevation * Math.PI / 180) : 20
+
+    // Extract values from unit objects (mapping type names to UI names)
     cameraConfig.value = {
       x: extractValue(camera.position.x),
       y: extractValue(camera.position.y),
-      rotation: extractValue(camera.rotation),
-      angle: extractValue(camera.angle),
-      height: extractValue(camera.height),
+      rotation: extractValue(camera.azimuth),  // UI uses rotation, type uses azimuth
+      angle: elevation,                         // UI uses angle, type uses elevation
+      height: height,
       fov: extractValue(camera.fov),
-      viewDistance: extractValue(camera.viewDistance),
-      autoCalculateDistance: camera.autoCalculateDistance,
+      viewDistance: Math.max(5, Math.min(200, calculatedViewDist)),
+      autoCalculateDistance: true,  // Default to auto-calculate since type doesn't store this
       color: camera.color,
       notes: camera.notes || ''
     }
@@ -96,12 +100,10 @@ export function useCameraPlacement() {
         x: createMeterUnit(cameraConfig.value.x),
         y: createMeterUnit(cameraConfig.value.y)
       },
-      rotation: createDegreeUnit(cameraConfig.value.rotation),
-      angle: createDegreeUnit(cameraConfig.value.angle),
+      azimuth: createDegreeUnit(cameraConfig.value.rotation),  // Map UI rotation to type azimuth
+      elevation: createDegreeUnit(cameraConfig.value.angle),   // Map UI angle to type elevation
       height: createMeterUnit(cameraConfig.value.height),
       fov: createDegreeUnit(cameraConfig.value.fov),
-      viewDistance: createMeterUnit(effectiveViewDistance.value),
-      autoCalculateDistance: cameraConfig.value.autoCalculateDistance,
       color: cameraConfig.value.color,
       notes: cameraConfig.value.notes
     }

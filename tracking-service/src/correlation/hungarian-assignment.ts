@@ -17,6 +17,10 @@ import {
   calculateAdaptiveGateFactor,
 } from './cost-components.js'
 import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
+import {
+  calculateTimeToBoundary,
+  type RoomBounds,
+} from '../geometry/fov-geometry.js'
 
 /**
  * Result of detection-to-track assignment
@@ -118,13 +122,15 @@ const DEFAULT_ASSIGNMENT_CONFIG: AssignmentConfig = {
  * @param tracks - Array of active tracks
  * @param config - Assignment configuration
  * @param crossingTrackIds - Optional set of track IDs in crossing situations
+ * @param handoffTrackIds - Optional set of track IDs in predictive handoff zones
  * @returns Object with cost matrix and per-track adaptive gates
  */
 export function buildCostMatrix(
   detections: CameraDetection[],
   tracks: GlobalTrack[],
   config: AssignmentConfig = DEFAULT_ASSIGNMENT_CONFIG,
-  crossingTrackIds: Set<string> = new Set()
+  crossingTrackIds: Set<string> = new Set(),
+  handoffTrackIds: Set<string> = new Set()
 ): { matrix: number[][]; adaptiveGates: number[] } {
 
   const kalmanFilter = config.kalmanFilter ?? new KalmanTrackFilter()
@@ -150,7 +156,15 @@ export function buildCostMatrix(
       adaptiveMinQuality: config.adaptiveMinQuality,
     })
 
-    return baseGate * adaptiveFactor
+    let gate = baseGate * adaptiveFactor
+
+    // Apply predictive handoff gate expansion for tracks approaching FOV boundary
+    // This gives them a wider gate to catch cross-camera detections
+    if (handoffTrackIds.has(track.globalTrackId)) {
+      gate *= ALGORITHM_CONSTANTS.handoff.predictiveGateExpansion
+    }
+
+    return gate
   })
 
   const matrix = detections.map(det => {
@@ -212,6 +226,13 @@ export function buildCostMatrix(
         crossingMinQuality: config.crossingMinQuality,
       })
       cost *= crossingGate.multiplier
+
+      // 5. Apply predictive handoff bonus for tracks approaching FOV boundary
+      // This improves cross-camera association for tracks about to exit one camera's view
+      if (handoffTrackIds.has(track.globalTrackId)) {
+        // Bonus is applied as multiplier (0.7 = 30% cost reduction)
+        cost *= ALGORITHM_CONSTANTS.handoff.predictiveHandoffBonus
+      }
 
       // Cap cost at adaptive gate for this track
       return Math.min(cost, adaptiveGates[trackIdx])
@@ -293,17 +314,89 @@ export function predictTrajectoryIntersections(
 }
 
 /**
+ * Identify tracks that are in predictive handoff zones.
+ *
+ * A track is in a predictive handoff zone when:
+ * 1. It's within handoffZoneDistanceM of the FOV boundary
+ * 2. It's moving toward the boundary (velocity component > minVelocityTowardBoundary)
+ * 3. It will reach the boundary within timeToBoundaryThresholdMs
+ *
+ * These tracks get a cost bonus in the assignment to improve handoff continuity.
+ * This uses existing velocity from Kalman filter - geometry-based, not tuned parameters.
+ *
+ * @param tracks - Array of active tracks
+ * @param kalmanFilter - Kalman filter for velocity extraction
+ * @param fovPolygons - FOV polygons for all cameras (optional, skipped if not provided)
+ * @param roomBounds - Room dimensions (optional, skipped if not provided)
+ * @returns Set of track IDs in predictive handoff zones
+ */
+export function identifyPredictiveHandoffTracks(
+  tracks: GlobalTrack[],
+  kalmanFilter: KalmanTrackFilter,
+  fovPolygons?: Point2D[][],
+  roomBounds?: RoomBounds
+): Set<string> {
+  const handoffTrackIds = new Set<string>()
+
+  // Skip if geometry not provided
+  if (!fovPolygons || !roomBounds) {
+    return handoffTrackIds
+  }
+
+  const { handoff } = ALGORITHM_CONSTANTS
+
+  for (const track of tracks) {
+    if (!track.kalmanState || !track.isActive || !track.isConfirmed) continue
+
+    const velocity = kalmanFilter.getVelocity(track.kalmanState)
+    const boundaryInfo = calculateTimeToBoundary(
+      track.currentPosition,
+      velocity,
+      fovPolygons,
+      roomBounds
+    )
+
+    // Check all three conditions for predictive handoff zone
+    const isInZone =
+      boundaryInfo.distanceM < handoff.handoffZoneDistanceM &&
+      boundaryInfo.isHeadingOut &&
+      boundaryInfo.timeToExitMs !== null &&
+      boundaryInfo.timeToExitMs < handoff.timeToBoundaryThresholdMs
+
+    // Also check minimum velocity toward boundary
+    const speed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y)
+    const hasMinVelocity = speed > handoff.minVelocityTowardBoundary
+
+    if (isInZone && hasMinVelocity) {
+      handoffTrackIds.add(track.globalTrackId)
+    }
+  }
+
+  return handoffTrackIds
+}
+
+/**
+ * Options for predictive handoff detection
+ */
+export interface HandoffGeometry {
+  fovPolygons: Point2D[][]
+  roomBounds: RoomBounds
+}
+
+/**
  * Assign detections to tracks using Hungarian algorithm
  *
  * @param detections - Array of detections to assign
  * @param tracks - Array of active tracks
  * @param config - Assignment configuration
+ * @param handoffGeometry - Optional FOV/room geometry for predictive handoff zones
  * @returns Assignment result with matches and unmatched items
  */
 export function assignDetectionsToTracks(
   detections: CameraDetection[],
   tracks: GlobalTrack[],
-  config: Partial<AssignmentConfig> = {}
+  config: Partial<AssignmentConfig> = {},
+  handoffGeometry?: HandoffGeometry
 ): AssignmentResult {
   const fullConfig = { ...DEFAULT_ASSIGNMENT_CONFIG, ...config }
 
@@ -347,8 +440,24 @@ export function assignDetectionsToTracks(
   currentCrossings.forEach(id => crossingTracks.add(id))
   predictedCrossings.forEach(id => crossingTracks.add(id))
 
-  // Build cost matrix with adaptive gates and crossing track IDs for appearance gating
-  const { matrix: costMatrix, adaptiveGates } = buildCostMatrix(detections, tracks, fullConfig, crossingTracks)
+  // Identify tracks in predictive handoff zones (approaching FOV boundaries)
+  const handoffTracks = handoffGeometry
+    ? identifyPredictiveHandoffTracks(
+        tracks,
+        kalmanFilter,
+        handoffGeometry.fovPolygons,
+        handoffGeometry.roomBounds
+      )
+    : new Set<string>()
+
+  // Build cost matrix with adaptive gates, crossing track IDs, and handoff track IDs
+  const { matrix: costMatrix, adaptiveGates } = buildCostMatrix(
+    detections,
+    tracks,
+    fullConfig,
+    crossingTracks,
+    handoffTracks
+  )
 
   // Run Hungarian algorithm
   // The munkres function returns array of [row, col] assignments

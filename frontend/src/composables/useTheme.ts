@@ -30,7 +30,7 @@ function initializeTheme() {
   initialized = true
 
   // Check localStorage first
-  const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null
+  const savedTheme = localStorage.getItem(THEME_STORAGE_KEY)
 
   // Migrate old axis-dark to dark
   if (savedTheme === 'axis-dark') {
@@ -38,8 +38,8 @@ function initializeTheme() {
     return
   }
 
-  if (savedTheme && THEMES.includes(savedTheme)) {
-    applyTheme(savedTheme)
+  if (savedTheme && THEMES.includes(savedTheme as Theme)) {
+    applyTheme(savedTheme as Theme)
   } else {
     // Default to dark (Axis theme)
     applyTheme('dark')

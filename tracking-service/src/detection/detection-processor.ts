@@ -333,6 +333,7 @@ export class DetectionProcessor implements IDetectionProcessor {
         videoTimeMs: message.video_time_ms,
         rtpTimestamp: message.rtp_timestamp,
         attributes: detection.attributes,  // Pass through re-ID attributes
+        cameraPosition: { x: camera.position.x, y: camera.position.y },  // For distance-based weighting
       })
     }
 
@@ -590,6 +591,7 @@ export class DetectionProcessor implements IDetectionProcessor {
           videoTimeMs: message.video_time_ms,
           rtpTimestamp: message.rtp_timestamp,
           attributes: detection.attributes,  // Pass through re-ID attributes
+          cameraPosition: { x: camera.position.x, y: camera.position.y },  // For distance-based weighting
         })
       }
     }

@@ -2,11 +2,10 @@ import { ref, computed } from 'vue'
 import type {
   GroundTruthDataset,
   FrameAnnotation,
-  DetectionAnnotation,
   AnnotationSession,
 } from '@/types/ground-truth'
 import { createEmptyDataset, calculateStats } from '@/types/ground-truth'
-import type { FrameData, Detection } from '@/types/frame-review'
+import type { FrameData } from '@/types/frame-review'
 
 const STORAGE_KEY_PREFIX = 'ground-truth-'
 

@@ -58,6 +58,28 @@ export interface Detection {
 }
 
 /**
+ * Timing information for detection pipeline
+ */
+export interface DetectionTiming {
+  // Basic timing
+  inference?: number      // Time spent on inference (ms)
+  preprocessing?: number  // Time spent on preprocessing (ms)
+  postprocessing?: number // Time spent on postprocessing (ms)
+  total?: number          // Total processing time (ms)
+
+  // Video synchronization timing
+  frame_timestamp?: number       // Frame timestamp in seconds
+  processing_latency_ms?: number // Processing latency in ms
+  detection_delay_ms?: number    // Detection delay in ms
+
+  // PTS-based synchronization
+  pts_based?: boolean            // Whether using PTS-based sync
+  video_pts_ms?: number          // Video PTS in milliseconds
+  loop_count?: number            // Video loop count
+  use_video_pts?: boolean        // Whether to use video PTS
+}
+
+/**
  * Detection message received from MQTT
  */
 export interface DetectionMessage {
@@ -65,6 +87,7 @@ export interface DetectionMessage {
   timestamp: number           // Message timestamp
   detection_count: number     // Number of detections in this message
   detections: Detection[]     // Array of detection results
+  timing?: DetectionTiming    // Optional timing information
 }
 
 /**
@@ -75,6 +98,7 @@ export interface CameraDetectionState {
   last_update: number
   detections: Detection[]
   total_count: number
+  timing?: DetectionTiming  // Optional timing information
 }
 
 /**

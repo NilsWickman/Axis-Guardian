@@ -180,6 +180,12 @@ export interface OcclusionConstants {
   readonly coastingDampingFactor: number
   /** Maximum trail length for occlusion predictions */
   readonly maxOcclusionTrailLength: number
+  /** Quality retention bonus factor - multiplier for quality-based timeout extension */
+  readonly qualityRetentionBonus: number
+  /** Maximum retention multiplier (cap) */
+  readonly maxRetentionMultiplier: number
+  /** Minimum embedding quality to apply retention bonus */
+  readonly minQualityForRetention: number
 }
 
 // =============================================================================
@@ -204,7 +210,7 @@ export interface ReIDConstants {
   readonly minSimilarity: number
   /** Bonus multiplier for same-camera re-ID */
   readonly sameCameraBonus: number
-  /** Maximum age for track re-ID (ms) */
+  /** Maximum age for track re-ID (ms) - legacy, use adaptive window instead */
   readonly maxTrackAgeMs: number
   /** Minimum embedding quality for matching (0-1) */
   readonly minEmbeddingQuality: number
@@ -212,6 +218,12 @@ export interface ReIDConstants {
   readonly highSimilarityThreshold: number
   /** Distance override for high similarity (meters) */
   readonly highSimilarityDistanceOverride: number
+  /** Base re-ID window (ms) - applied when embedding quality is 0 */
+  readonly baseReidAgeMs: number
+  /** Quality boost factor - multiplier for embedding quality contribution */
+  readonly qualityBoostFactor: number
+  /** Maximum re-ID window (ms) - cap to prevent unbounded extension */
+  readonly adaptiveMaxReidAgeMs: number
 }
 
 // =============================================================================
@@ -247,14 +259,8 @@ export interface ClusteringConstants {
 export interface PositionMergingConstants {
   /** Divergence threshold for camera selection (meters) */
   readonly divergenceThreshold: number
-  /** Base weight for camera1 (based on calibration accuracy) */
-  readonly camera1BaseWeight: number
-  /** Base weight for camera2 (based on calibration accuracy) */
-  readonly camera2BaseWeight: number
-  /** Regional boost factor for preferred camera */
-  readonly regionalBoostFactor: number
-  /** Regional penalty factor for non-preferred camera */
-  readonly regionalPenaltyFactor: number
+  /** Epsilon for inverse-distance weighting (prevents extreme weights at close range) */
+  readonly distanceWeightEpsilon: number
 }
 
 // =============================================================================
@@ -309,6 +315,40 @@ export interface SyncConstants {
 }
 
 // =============================================================================
+// Trajectory Prediction Constants (for curve-aware coasting)
+// =============================================================================
+
+export interface TrajectoryConstants {
+  /** Minimum trail points needed for curve detection */
+  readonly minTrailPointsForCurve: number
+  /** Maximum trail age for curve fitting (ms) */
+  readonly maxTrailAgeForCurveMs: number
+  /** Minimum curvature (1/meters) to use curve extrapolation - below this use linear */
+  readonly minCurvatureThreshold: number
+  /** Weight blend between linear and curve prediction (0=all linear, 1=all curve) */
+  readonly curveBlendWeight: number
+  /** Maximum extrapolation time for curve (ms) - falls back to linear beyond this */
+  readonly maxCurveExtrapolationMs: number
+}
+
+// =============================================================================
+// Predictive Handoff Constants
+// =============================================================================
+
+export interface HandoffConstants {
+  /** Distance from FOV boundary to trigger predictive handoff (meters) */
+  readonly handoffZoneDistanceM: number
+  /** Velocity component toward boundary needed for predictive mode (m/s) */
+  readonly minVelocityTowardBoundary: number
+  /** Time-to-boundary threshold for predictive handoff (ms) */
+  readonly timeToBoundaryThresholdMs: number
+  /** Cost reduction for tracks in predictive handoff zone (0-1, lower = more bonus) */
+  readonly predictiveHandoffBonus: number
+  /** Gate expansion for tracks in predictive handoff zone */
+  readonly predictiveGateExpansion: number
+}
+
+// =============================================================================
 // Combined Algorithm Constants Interface
 // =============================================================================
 
@@ -327,6 +367,8 @@ export interface AlgorithmConstants {
   readonly attributeAggregation: AttributeAggregationConstants
   readonly velocity: VelocityConstants
   readonly sync: SyncConstants
+  readonly trajectory: TrajectoryConstants
+  readonly handoff: HandoffConstants
 }
 
 // =============================================================================
@@ -357,7 +399,7 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
     crossCameraBonusWindowMs: 2000,
     maxAccelerationMs2: 3.0,
     accelerationConsistencyWeight: 0.1,
-    embeddingWeight: 0.25,  // Increased from 0.1 for better ReID utilization
+    embeddingWeight: 0.35,  // Increased from 0.25 - stronger ReID for occlusion recovery
     embeddingMinSimilarity: 0.65,  // Lowered from 0.7 for more embedding matches
     embeddingMinQuality: 0.25,  // Lowered from 0.3 for more embeddings used
     trajectoryPredictionSteps: [200, 500, 800, 1000],
@@ -366,23 +408,23 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   },
 
   trackLifecycle: {
-    correlationDistanceM: 0.9,  // Tightened from 1.2 for better precision
+    correlationDistanceM: 1.2,  // Expanded from 0.9 to handle Kalman drift during occlusion
     mergeWindowMs: 200,
     trackExpiryMs: 7000,  // Reduced from 10s to reduce ghost tracks
     maxTrailLength: 20,
     minDetectionsToConfirm: 3,  // Increased from 2 for more reliable tracks
     maxVelocityMs: 8,
     unconfirmedTrackExpiryMs: 3000,  // Reduced from 5s to clean up ghosts faster
-    minCreationConfidence: 0.7,
+    minCreationConfidence: 0.75,  // Increased from 0.7 to reduce spurious mid-FOV track creation
     maxTracks: 200,
     minTrailMovementThreshold: 0.1,
   },
 
   exclusionZone: {
-    confirmedExclusionRadius: 0.8,  // Increased - prevent duplicates within projection error range
-    unconfirmedExclusionRadius: 1.0,  // Increased - catch early duplicates in overlap zones
-    crossCameraExclusionRadius: 0.8,  // Increased - match clustering distance to prevent cross-camera duplicates
-    crossCameraExclusionTimeMs: 300,  // Increased time window for cross-camera duplicate detection
+    confirmedExclusionRadius: 1.2,  // Increased from 0.8 - larger exclusion prevents mid-FOV track spawning
+    unconfirmedExclusionRadius: 1.3,  // Increased from 1.0 - catch early duplicates during occlusion recovery
+    crossCameraExclusionRadius: 1.0,  // Increased from 0.8 - account for projection errors
+    crossCameraExclusionTimeMs: 400,  // Increased time window for cross-camera duplicate detection
   },
 
   trackMerger: {
@@ -403,18 +445,22 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   },
 
   occlusion: {
-    missedFramesBeforeOcclusion: 8,
+    missedFramesBeforeOcclusion: 10,  // Increased from 8 - more tolerance for frame drops before occlusion
     occlusionCoastTimeMs: 7000,
     detectionsToExitOcclusion: 2,  // Increased from 1 for hysteresis (flicker protection)
-    reidentificationGateMultiplier: 4.0,
+    reidentificationGateMultiplier: 5.0,  // Increased from 4.0 - wider gate for re-ID after occlusion
     fovExitTimeoutMs: 1500,
     boundaryExitTimeoutMs: 1000,
-    maxPillarOcclusionMs: 5000,
+    maxPillarOcclusionMs: 3500,  // Reduced from 5000 - less drift during pillar occlusion
     maxNonPillarCoastMs: 1500,
-    coastingDampingFactor: 0.92,
+    coastingDampingFactor: 0.88,  // Increased damping from 0.92 - reduce velocity drift during coasting
     maxOcclusionTrailLength: 50,
     minRecoveryTimeMs: 300,  // Minimum time before exiting occlusion (flicker protection)
-    partialPillarOcclusionMs: 3000,  // Timeout for partial pillar occlusion (50%+ blocked)
+    partialPillarOcclusionMs: 2500,  // Reduced from 3000 - less drift for partial occlusions
+    // Quality-adaptive retention: timeout *= (1 + bonus * normalizedQuality)
+    qualityRetentionBonus: 0.5,  // quality=1.0 gives 1.5x timeout
+    maxRetentionMultiplier: 1.8,  // Cap to prevent excessive coasting
+    minQualityForRetention: 0.3,  // Need 30% quality to get bonus
   },
 
   stitching: {
@@ -426,10 +472,14 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   reid: {
     minSimilarity: 0.75,  // Lowered from 0.85 for more matches
     sameCameraBonus: 1.15,  // Increased from 1.1 for stronger same-camera binding
-    maxTrackAgeMs: 8000,  // Increased from 7s for longer re-ID window
+    maxTrackAgeMs: 8000,  // Legacy - use adaptive window instead
     minEmbeddingQuality: 0.25,  // Lowered from 0.3 for more embeddings
     highSimilarityThreshold: 0.8,
     highSimilarityDistanceOverride: 2.0,
+    // Quality-adaptive re-ID window: timeout = baseAge * (1 + boostFactor * quality)
+    baseReidAgeMs: 5000,  // 5s minimum window when quality=0
+    qualityBoostFactor: 1.5,  // quality=1.0 gives 1.5x boost (7.5s total base)
+    adaptiveMaxReidAgeMs: 12000,  // Cap at 12s to prevent stale matches
   },
 
   kalman: {
@@ -446,10 +496,7 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
 
   positionMerging: {
     divergenceThreshold: 0.8,
-    camera1BaseWeight: 1.2,
-    camera2BaseWeight: 0.8,
-    regionalBoostFactor: 1.3,
-    regionalPenaltyFactor: 0.7,
+    distanceWeightEpsilon: 1.0,  // At 1m distance, weight = 0.5; at 2m, weight = 0.2
   },
 
   attributeAggregation: {
@@ -460,8 +507,8 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
 
   velocity: {
     impossibleVelocityMs: 50,
-    mahalanobisThreshold: 4.0,
-    sameCameraMahalanobisThreshold: 6.0,
+    mahalanobisThreshold: 5.5,  // Relaxed from 4.0 - less strict gating for occluded track recovery
+    sameCameraMahalanobisThreshold: 7.0,  // Relaxed from 6.0 - better same-camera re-ID
     minTimeDeltaMs: 50,
     sameCameraReIDWindowMs: 500,
   },
@@ -474,5 +521,23 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
     useFrameNumberCorrelation: true, // Use frame numbers for emulator sync
     enabled: true,                  // Enable sync buffer by default
     staleFrameMultiplier: 2,        // Drop frames older than 2x sync window
+  },
+
+  // Trajectory curve estimation for coasting - uses geometry, not tuned params
+  trajectory: {
+    minTrailPointsForCurve: 5,  // Need 5+ points to fit a circle
+    maxTrailAgeForCurveMs: 2000,  // Only use recent 2s of trail
+    minCurvatureThreshold: 0.1,  // 10m radius minimum - below this use linear
+    curveBlendWeight: 0.7,  // 70% curve, 30% linear for stability
+    maxCurveExtrapolationMs: 1500,  // Don't trust curve beyond 1.5s
+  },
+
+  // Predictive handoff zones - uses velocity toward boundary
+  handoff: {
+    handoffZoneDistanceM: 1.5,  // Within 1.5m of FOV edge
+    minVelocityTowardBoundary: 0.3,  // Must be moving > 0.3 m/s toward edge
+    timeToBoundaryThresholdMs: 2000,  // Expected to exit within 2s
+    predictiveHandoffBonus: 0.7,  // 30% cost reduction for handoff candidates
+    predictiveGateExpansion: 1.3,  // 30% wider spatial gate
   },
 } as const

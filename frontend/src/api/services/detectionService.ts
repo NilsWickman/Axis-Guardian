@@ -5,7 +5,7 @@
 
 import { httpClient, type HttpClient } from '../client/httpClient'
 import type { Detection, Track } from '@/types/generated'
-import { mockDetections, mockTracks, getDetectionsByCameraId, addMockDetection } from '@/mocks/data'
+import { mockDetections, mockTracks, getDetectionsByCameraId } from '@/mocks/data'
 
 export interface DetectionFilters {
   cameraId?: string

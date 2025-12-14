@@ -22,6 +22,10 @@ interface CameraConnection {
   isConnected: boolean
   latestMetadata: DetectionMetadata | null
   stateWatchStop: (() => void) | null  // Store watch cleanup function
+  // Health monitoring state
+  stuckStateCount: number
+  lastHealthCheckTime: number
+  frozenCheckCount: number
 }
 
 // Camera ID mapping (emulator uses camera-HC3/HC4, frontend uses camera1/camera2)
@@ -179,10 +183,12 @@ async function initializeConnections() {
     cameras.value = loadedCameras
     console.log('[ConnectionManager] Loaded cameras from config:', cameras.value.length)
 
-    // Create connections for all cameras
-    await Promise.all(cameras.value.map(async (camera) => {
+    // Create connections for all cameras sequentially
+    // Sequential connection avoids WebRTC/mediasoup race conditions that can occur
+    // when multiple connections are initialized simultaneously
+    for (const camera of cameras.value) {
       if (cameraConnections[camera.id]) {
-        return
+        continue
       }
 
       // Get a video element from pool (or create new one)
@@ -192,7 +198,7 @@ async function initializeConnections() {
       const signalingUrl = getWebRTCUrl(camera)
       if (!signalingUrl) {
         console.error(`No WebRTC URL configured for ${camera.id}`)
-        return
+        continue
       }
 
       const connection = useMediasoupDetection(camera.id, {
@@ -207,7 +213,11 @@ async function initializeConnections() {
         videoElement,
         isConnected: false,
         latestMetadata: null,
-        stateWatchStop: null
+        stateWatchStop: null,
+        // Health monitoring state
+        stuckStateCount: 0,
+        lastHealthCheckTime: 0,
+        frozenCheckCount: 0
       }
 
       // Initialize metadata map entry
@@ -244,7 +254,7 @@ async function initializeConnections() {
         stateWatchStop()
         cameraConnections[camera.id].stateWatchStop = null
       }
-    }))
+    }
 
     isInitialized.value = true
 
@@ -468,17 +478,17 @@ function checkConnectionHealth() {
     // This catches cases where the WebRTC transport was never created or was closed unexpectedly
     if ((connectionState === 'new' || connectionState === 'closed') && !isConnected) {
       // Track how long the connection has been stuck
-      conn.connection.stuckStateCount = (conn.connection.stuckStateCount || 0) + 1
+      conn.stuckStateCount = (conn.stuckStateCount || 0) + 1
 
       // If stuck for 3 consecutive checks (30 seconds), attempt reconnection
-      if (conn.connection.stuckStateCount >= 3) {
+      if (conn.stuckStateCount >= 3) {
         console.warn(`[ConnectionManager] Connection to ${id} stuck in '${connectionState}' state, attempting recovery...`)
         attemptReconnection(id)
-        conn.connection.stuckStateCount = 0
+        conn.stuckStateCount = 0
       }
     } else if (isConnected) {
       // Connection is healthy, reset stuck counter
-      conn.connection.stuckStateCount = 0
+      conn.stuckStateCount = 0
     }
 
     // Check for frozen video streams
@@ -488,27 +498,27 @@ function checkConnectionHealth() {
       const readyState = videoElement.readyState
 
       // Store last known time for drift detection
-      if (!conn.connection.lastHealthCheckTime) {
-        conn.connection.lastHealthCheckTime = currentTime
+      if (!conn.lastHealthCheckTime) {
+        conn.lastHealthCheckTime = currentTime
         continue
       }
 
-      const timeDelta = currentTime - conn.connection.lastHealthCheckTime
-      conn.connection.lastHealthCheckTime = currentTime
+      const timeDelta = currentTime - conn.lastHealthCheckTime
+      conn.lastHealthCheckTime = currentTime
 
       // If video claims to be ready but time hasn't advanced in 5 seconds, it's frozen
       if (readyState >= 2 && timeDelta === 0 && !videoElement.paused) {
-        conn.connection.frozenCheckCount = (conn.connection.frozenCheckCount || 0) + 1
+        conn.frozenCheckCount = (conn.frozenCheckCount || 0) + 1
 
         // If frozen for 2 consecutive checks (10 seconds), attempt recovery
-        if (conn.connection.frozenCheckCount >= 2) {
+        if (conn.frozenCheckCount >= 2) {
           console.warn(`[ConnectionManager] Video stream for ${id} appears frozen, attempting recovery...`)
           attemptStreamRecovery(id)
-          conn.connection.frozenCheckCount = 0
+          conn.frozenCheckCount = 0
         }
       } else {
         // Stream is healthy, reset counter
-        conn.connection.frozenCheckCount = 0
+        conn.frozenCheckCount = 0
       }
     }
   }
@@ -606,7 +616,7 @@ function cleanup() {
   stopSyncMonitoring()
   stopHealthMonitoring()
 
-  for (const [id, conn] of Object.entries(cameraConnections)) {
+  for (const [_id, conn] of Object.entries(cameraConnections)) {
     // Stop reactive state watchers
     if (conn.stateWatchStop) {
       conn.stateWatchStop()

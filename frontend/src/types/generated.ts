@@ -174,28 +174,4 @@ export interface PaginatedResponse<T> {
 }
 
 // OpenAPI-style components namespace for compatibility
-export namespace components {
-  export namespace schemas {
-    export type Detection = import('.').Detection
-    export type BoundingBox = import('.').BoundingBox
-    export type Track = import('.').Track
-    export type Position = import('.').Position
-    export type Velocity = import('.').Velocity
-    export type AlarmStatus = import('.').AlarmStatus
-    export type AlarmType = import('.').AlarmType
-    export type AlarmSeverity = import('.').AlarmSeverity
-    export type OutcomeCategory = import('.').OutcomeCategory
-    export type Alarm = import('.').Alarm
-    export type AlarmSource = import('.').AlarmSource
-    export type Camera = import('.').Camera
-    export type CameraCapabilities = import('.').CameraCapabilities
-    export type Zone = import('.').Zone
-    export type Rule = import('.').Rule
-    export type StreamRequest = import('.').StreamRequest
-    export type StreamResponse = import('.').StreamResponse
-    export type PTZCommand = import('.').PTZCommand
-    export type ErrorResponse = import('.').ErrorResponse
-    export type ApiResponse<T = any> = import('.').ApiResponse<T>
-    export type PaginatedResponse<T> = import('.').PaginatedResponse<T>
-  }
-}
+// Re-exports are provided directly above - no namespace needed

@@ -1,15 +1,8 @@
 <script setup lang="ts">
-  import { ref, computed } from 'vue'
-  import { useRoute } from 'vue-router'
+  import { ref } from 'vue'
   import Sidebar from './Sidebar.vue'
   import { Toaster } from '@/components/ui/sonner'
   import Toast from '@/components/ui/Toast.vue'
-
-  const route = useRoute()
-
-  const pageTitle = computed(() => {
-    return route.meta.title || route.name || 'Page'
-  })
 
   // Sidebar state for mobile
   const isSidebarOpen = ref(false)

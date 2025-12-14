@@ -1,4 +1,4 @@
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive } from 'vue'
 import type { DetectionFile, FrameData, Detection } from '@/types/frame-review'
 import type { TrackThumbnail, TrackThumbnailSet } from '@/types/track-identity'
 import { AVAILABLE_VIDEOS } from '@/types/frame-review'

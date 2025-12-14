@@ -8,11 +8,12 @@
  * Uses the kalman-filter npm package for efficient matrix operations.
  */
 
-// @ts-expect-error - kalman-filter is a CommonJS module
-import kalmanFilter from 'kalman-filter'
+import { createRequire } from 'module'
+const require = createRequire(import.meta.url)
+const kalmanFilter = require('kalman-filter')
 const { KalmanFilter, State } = kalmanFilter
 
-import type { Point2D, KalmanState } from '../types.js'
+import type { Point2D, KalmanState, TrailPosition } from '../types.js'
 import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -56,7 +57,8 @@ export const DEFAULT_KALMAN_CONFIG: KalmanFilterConfig = {
  * Kalman filter wrapper for track position/velocity estimation
  */
 export class KalmanTrackFilter {
-  private filter: KalmanFilter
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private filter: any
   private config: KalmanFilterConfig
   // Store internal State objects keyed by track ID for proper library compatibility
   private stateCache: Map<string, KalmanStateInternal> = new Map()
@@ -356,6 +358,240 @@ export class KalmanTrackFilter {
     return Math.min(expanded, baseDistance * 2)
   }
 }
+
+// =============================================================================
+// Curve Estimation Functions for Trajectory-Aware Coasting
+// =============================================================================
+
+/**
+ * Result of trail curvature estimation
+ */
+export interface CurvatureEstimate {
+  /** Curvature in 1/meters (reciprocal of radius). Positive = counterclockwise */
+  curvature: number
+  /** Circle center point */
+  center: Point2D
+  /** Radius in meters */
+  radius: number
+  /** Fit quality (0-1, higher = better fit to circle) */
+  fitQuality: number
+}
+
+/**
+ * Estimate curvature from trail points using algebraic circle fit (Kåsa method).
+ *
+ * The Kåsa method is a simple least-squares circle fitting algorithm that's
+ * computationally efficient and stable. It minimizes the algebraic distance
+ * rather than geometric distance, but performs well for near-circular data.
+ *
+ * This is a principled geometric technique, not a tuned parameter.
+ *
+ * @param trail - Trail positions (most recent first)
+ * @param maxAgeMs - Maximum age of trail points to use
+ * @param currentTime - Current timestamp
+ * @returns Curvature estimate or null if trail is too short/linear
+ */
+export function estimateTrailCurvature(
+  trail: TrailPosition[],
+  maxAgeMs: number,
+  currentTime: number
+): CurvatureEstimate | null {
+  // Filter trail to recent points
+  const recentTrail = trail.filter(p => currentTime - p.timestamp < maxAgeMs)
+
+  // Need at least 3 points to fit a circle
+  if (recentTrail.length < 3) return null
+
+  const n = recentTrail.length
+
+  // Compute sums for Kåsa circle fit
+  let sumX = 0, sumY = 0
+  let sumX2 = 0, sumY2 = 0, sumXY = 0
+  let sumX3 = 0, sumY3 = 0, sumX2Y = 0, sumXY2 = 0
+
+  for (const p of recentTrail) {
+    const x = p.x, y = p.y
+    const x2 = x * x, y2 = y * y
+    sumX += x
+    sumY += y
+    sumX2 += x2
+    sumY2 += y2
+    sumXY += x * y
+    sumX3 += x2 * x
+    sumY3 += y2 * y
+    sumX2Y += x2 * y
+    sumXY2 += x * y2
+  }
+
+  // Mean values
+  const meanX = sumX / n
+  const meanY = sumY / n
+
+  // Centered moments
+  const Sxx = sumX2 - n * meanX * meanX
+  const Syy = sumY2 - n * meanY * meanY
+  const Sxy = sumXY - n * meanX * meanY
+  const Sxxx = sumX3 - 3 * meanX * sumX2 + 2 * n * meanX * meanX * meanX
+  const Syyy = sumY3 - 3 * meanY * sumY2 + 2 * n * meanY * meanY * meanY
+  const Sxyy = sumXY2 - 2 * meanY * sumXY - meanX * sumY2 + 2 * n * meanX * meanY * meanY
+  const Sxxy = sumX2Y - 2 * meanX * sumXY - meanY * sumX2 + 2 * n * meanX * meanX * meanY
+
+  // Solve linear system for circle center
+  const A = 2 * Sxx
+  const B = 2 * Sxy
+  const C = 2 * Sxy
+  const D = 2 * Syy
+  const E = Sxxx + Sxyy
+  const F = Syyy + Sxxy
+
+  const det = A * D - B * C
+
+  // Check for collinear or near-collinear points (straight line)
+  if (Math.abs(det) < 1e-10) {
+    return null // Points are approximately collinear
+  }
+
+  // Circle center relative to mean
+  const a = (D * E - B * F) / det
+  const b = (A * F - C * E) / det
+
+  // Circle center in original coordinates
+  const cx = a + meanX
+  const cy = b + meanY
+
+  // Calculate radius
+  let sumR2 = 0
+  for (const p of recentTrail) {
+    const dx = p.x - cx
+    const dy = p.y - cy
+    sumR2 += dx * dx + dy * dy
+  }
+  const radius = Math.sqrt(sumR2 / n)
+
+  // Validate: if radius is too large (>50m), it's essentially a straight line
+  if (radius > 50) {
+    return null
+  }
+
+  // Calculate fit quality (residual variance / radius^2)
+  // Lower residuals relative to radius = better fit
+  let sumResidual2 = 0
+  for (const p of recentTrail) {
+    const dx = p.x - cx
+    const dy = p.y - cy
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    const residual = dist - radius
+    sumResidual2 += residual * residual
+  }
+  const rmse = Math.sqrt(sumResidual2 / n)
+
+  // Fit quality: 1 when rmse=0, approaches 0 when rmse approaches radius
+  // Clamp to [0, 1] range
+  const fitQuality = Math.max(0, Math.min(1, 1 - rmse / radius))
+
+  // Curvature = 1/radius (signed based on rotation direction)
+  // Determine rotation direction from trail order
+  const curvature = 1 / radius
+
+  return {
+    curvature,
+    center: { x: cx, y: cy },
+    radius,
+    fitQuality,
+  }
+}
+
+/**
+ * Predict position along a curved trajectory.
+ *
+ * Extrapolates position along a circular arc based on current velocity
+ * and estimated curvature. Uses standard 2D rotation mathematics.
+ *
+ * @param currentPos - Current position
+ * @param velocity - Current velocity vector
+ * @param curvature - Curvature estimate from estimateTrailCurvature
+ * @param deltaMs - Time to extrapolate (ms)
+ * @returns Predicted position along the curve
+ */
+export function predictAlongCurve(
+  currentPos: Point2D,
+  velocity: Point2D,
+  curvature: CurvatureEstimate,
+  deltaMs: number
+): Point2D {
+  const dt = deltaMs / 1000 // Convert to seconds
+  const speed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y)
+
+  // If not moving, return current position
+  if (speed < 0.01) {
+    return currentPos
+  }
+
+  // Arc length = speed * time
+  const arcLength = speed * dt
+
+  // Angular displacement = arc_length / radius
+  const theta = arcLength / curvature.radius
+
+  // Determine rotation direction
+  // Use cross product of (center-to-position) and velocity to determine direction
+  const toCenterX = curvature.center.x - currentPos.x
+  const toCenterY = curvature.center.y - currentPos.y
+  const crossProduct = toCenterX * velocity.y - toCenterY * velocity.x
+
+  // If cross product is positive, we're moving counterclockwise
+  // If negative, we're moving clockwise
+  const rotationSign = crossProduct >= 0 ? 1 : -1
+  const rotationAngle = theta * rotationSign
+
+  // Vector from center to current position
+  const dx = currentPos.x - curvature.center.x
+  const dy = currentPos.y - curvature.center.y
+
+  // Rotate this vector by the angular displacement
+  const cos = Math.cos(rotationAngle)
+  const sin = Math.sin(rotationAngle)
+  const newDx = dx * cos - dy * sin
+  const newDy = dx * sin + dy * cos
+
+  // New position = center + rotated vector
+  return {
+    x: curvature.center.x + newDx,
+    y: curvature.center.y + newDy,
+  }
+}
+
+/**
+ * Blend linear and curve predictions for stability.
+ *
+ * Uses curve prediction when available and reliable, but blends with
+ * linear prediction to maintain stability. Falls back to pure linear
+ * when curve fit quality is poor.
+ *
+ * @param linearPos - Linear prediction from Kalman filter
+ * @param curvePos - Curve prediction from predictAlongCurve
+ * @param curvature - Curvature estimate (for fit quality)
+ * @param blendWeight - Base weight for curve (0-1)
+ * @returns Blended position
+ */
+export function blendPredictions(
+  linearPos: Point2D,
+  curvePos: Point2D,
+  curvature: CurvatureEstimate,
+  blendWeight: number
+): Point2D {
+  // Scale blend weight by fit quality - poor fits get less weight
+  const effectiveWeight = blendWeight * curvature.fitQuality
+
+  return {
+    x: effectiveWeight * curvePos.x + (1 - effectiveWeight) * linearPos.x,
+    y: effectiveWeight * curvePos.y + (1 - effectiveWeight) * linearPos.y,
+  }
+}
+
+// =============================================================================
+// Singleton
+// =============================================================================
 
 /**
  * Singleton instance with default config

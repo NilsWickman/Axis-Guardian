@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import Database, { type Database as DatabaseType } from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as schema from './schema.js';
 import { resolve, dirname } from 'path';
@@ -13,7 +13,7 @@ const DB_PATH = process.env.DATABASE_PATH || resolve(__dirname, '../../data/trac
 mkdirSync(dirname(DB_PATH), { recursive: true });
 
 // Create SQLite database connection
-const sqlite = new Database(DB_PATH);
+const sqlite: DatabaseType = new Database(DB_PATH);
 sqlite.pragma('journal_mode = WAL');
 
 // Create Drizzle ORM instance with schema

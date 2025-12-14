@@ -29,12 +29,6 @@ interface Track {
   color: string
 }
 
-interface Camera {
-  id: string
-  position: { x: number; y: number }
-  azimuth: number
-}
-
 interface SiteMapConfig {
   dimensions: { width: number; height: number }
   cameras: Array<{
@@ -137,7 +131,7 @@ class AsciiSitemap {
     }
   }
 
-  drawCamera(worldX: number, worldY: number, id: string, azimuth: number): void {
+  drawCamera(worldX: number, worldY: number, _id: string, azimuth: number): void {
     const pos = this.worldToScreen(worldX, worldY)
     if (!pos) return
 
@@ -213,11 +207,7 @@ class AsciiSitemap {
   }
 
   drawBorder(): void {
-    // Draw border using box-drawing characters
-    const topBorder = '┌' + '─'.repeat(this.width) + '┐'
-    const bottomBorder = '└' + '─'.repeat(this.width) + '┘'
-
-    // We'll add this to the render output, not the buffer
+    // Border is drawn directly in render(), this method is a placeholder
   }
 
   render(): string {

@@ -13,7 +13,6 @@ import {
   isInHorizontalFOV,
   type CameraParams,
   type DetectionBBox,
-  type ProjectionResult,
   type Point2D,
 } from './groundPlaneProjection'
 

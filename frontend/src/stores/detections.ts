@@ -263,6 +263,7 @@ export const useDetectionStore = defineStore('detections', () => {
     // Actions
     fetchDetections,
     fetchTracks,
+    fetchDetectionStats,
     addDetection,
     getDetectionsByCameraIdFromStore,
     setFilters,

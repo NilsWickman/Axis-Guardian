@@ -23,14 +23,20 @@ import type { ZoneManager } from '../zones/zone-manager.js'
 import { DEFAULT_TRACKING_CONFIG } from '../types.js'
 import { AttributeAggregator, cosineSimilarity } from './attribute-aggregator.js'
 import { calculateDistance, predictPosition, mergeWorldPositions } from '../correlation/track-matcher.js'
-import { KalmanTrackFilter } from '../filters/kalman-track-filter.js'
+import {
+  KalmanTrackFilter,
+  estimateTrailCurvature,
+  predictAlongCurve,
+  blendPredictions,
+} from '../filters/kalman-track-filter.js'
 import { assignDetectionsToTracks } from '../correlation/hungarian-assignment.js'
 import { TrackMerger } from './track-merger.js'
 import type { SiteMapObstacle } from '../config/sitemap-loader.js'
 import {
   classifyExitReason,
-  getTimeoutForExitReason,
+  getQualityAdaptiveTimeout,
 } from '../geometry/exit-detection.js'
+import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
 import {
   calculateCombinedFOVPolygons,
   isPointInAnyFOV,
@@ -474,9 +480,11 @@ export class TrackManager {
       if (track.state === 'occluded') {
         const timeSinceOcclusion = now - (track.occludedSince ?? track.lastSeen)
 
-        // Get the appropriate timeout based on exit reason
+        // Get the appropriate timeout based on exit reason AND embedding quality
+        // Higher quality embeddings get longer timeouts since they're more likely to re-ID
+        const embeddingQuality = track.attributes?.embedding_quality ?? 0
         const effectiveTimeout = this.siteMapGeometry
-          ? getTimeoutForExitReason(track.exitReason ?? 'timeout', this.config)
+          ? getQualityAdaptiveTimeout(track.exitReason ?? 'timeout', embeddingQuality, this.config)
           : occlusionCoastTimeMs
 
         // Update predicted position ONLY for pillar occlusions (ghost tracks).
@@ -1744,18 +1752,48 @@ export class TrackManager {
       }
 
       let predictedPos: Point2D | null = null
-      if (track.kalmanState) {
-        predictedPos = this.kalmanFilter.predict(track.kalmanState, dtMs)
 
-        // Apply velocity damping for non-pillar occlusions to prevent drift/bouncing
-        // Gradually slow down the predicted motion
-        if (isOccluded && !isPillarGhost) {
-          const dampingFactor = 0.92  // 8% velocity reduction per update cycle
-          track.kalmanState.mean[2][0] *= dampingFactor  // vx
-          track.kalmanState.mean[3][0] *= dampingFactor  // vy
+      // Try curve-aware prediction first if we have enough trail points
+      // This uses geometry (Kåsa circle fit) rather than tuned parameters
+      const { trajectory } = ALGORITHM_CONSTANTS
+      let usedCurvePrediction = false
+
+      if (track.trail.length >= trajectory.minTrailPointsForCurve && dtMs <= trajectory.maxCurveExtrapolationMs) {
+        const curvature = estimateTrailCurvature(
+          track.trail,
+          trajectory.maxTrailAgeForCurveMs,
+          now
+        )
+
+        // Only use curve if curvature is significant (radius < 10m = curvature > 0.1)
+        if (curvature && curvature.curvature > trajectory.minCurvatureThreshold && track.kalmanState) {
+          const velocity = this.kalmanFilter.getVelocity(track.kalmanState)
+          const curvePos = predictAlongCurve(track.currentPosition, velocity, curvature, dtMs)
+          const linearPos = this.kalmanFilter.predict(track.kalmanState, dtMs)
+
+          // Blend curve and linear predictions for stability
+          // fitQuality affects the blend - poor fits get less curve weight
+          predictedPos = blendPredictions(linearPos, curvePos, curvature, trajectory.curveBlendWeight)
+          usedCurvePrediction = true
         }
-      } else if (track.trail.length >= 2) {
+      }
+
+      // Fall back to linear Kalman prediction if curve prediction wasn't used
+      if (!predictedPos && track.kalmanState) {
+        predictedPos = this.kalmanFilter.predict(track.kalmanState, dtMs)
+      }
+
+      // Final fallback to simple linear extrapolation from trail
+      if (!predictedPos && track.trail.length >= 2) {
         predictedPos = predictPosition(track.trail, dtMs)
+      }
+
+      // Apply velocity damping for non-pillar occlusions to prevent drift/bouncing
+      // Only for linear predictions - curve predictions have built-in arc constraints
+      if (track.kalmanState && isOccluded && !isPillarGhost && !usedCurvePrediction) {
+        const dampingFactor = ALGORITHM_CONSTANTS.occlusion.coastingDampingFactor
+        track.kalmanState.mean[2][0] *= dampingFactor  // vx
+        track.kalmanState.mean[3][0] *= dampingFactor  // vy
       }
 
       if (!predictedPos) continue
@@ -1853,6 +1891,28 @@ export class TrackManager {
   }
 
   /**
+   * Get the adaptive re-ID window for a track based on its embedding quality.
+   *
+   * Higher quality embeddings are more discriminative and can be reliably matched
+   * over longer time periods. This is a principled observation from computer vision
+   * research, not tuned to specific test data.
+   *
+   * Formula: baseAge * (1 + boostFactor * quality), capped at adaptiveMaxReidAgeMs
+   */
+  private getAdaptiveReidWindow(track: GlobalTrack): number {
+    const { baseReidAgeMs, qualityBoostFactor, adaptiveMaxReidAgeMs } = ALGORITHM_CONSTANTS.reid
+    const embeddingQuality = track.attributes?.embedding_quality ?? 0
+
+    // Formula: baseAge * (1 + boostFactor * quality)
+    // Quality 0 -> baseAge (5000ms)
+    // Quality 0.5 -> baseAge * 1.75 (8750ms)
+    // Quality 1.0 -> baseAge * 2.5 (12500ms, capped at adaptiveMaxReidAgeMs)
+    const adaptiveAge = baseReidAgeMs * (1 + qualityBoostFactor * embeddingQuality)
+
+    return Math.min(adaptiveAge, adaptiveMaxReidAgeMs)
+  }
+
+  /**
    * Attempt to re-identify a detection with a recently occluded track
    * Uses embedding similarity FIRST, then falls back to spatial proximity
    */
@@ -1861,7 +1921,6 @@ export class TrackManager {
     occludedTracks: GlobalTrack[]
   ): GlobalTrack | null {
     const gateMultiplier = this.config.reidentificationGateMultiplier ?? 3.0
-    const maxReidAgeMs = this.config.occlusionCoastTimeMs ?? 7000
     const detPos = { x: detection.worldX, y: detection.worldY }
 
     // Phase 1: Try embedding-based re-ID first (more robust to ghost drift)
@@ -1878,6 +1937,8 @@ export class TrackManager {
 
         if (!trackEmbedding || trackEmbedding.length === 0 || trackQuality < 0.25) continue
 
+        // Use quality-adaptive re-ID window per track
+        const maxReidAgeMs = this.getAdaptiveReidWindow(track)
         const timeSinceOcclusion = detection.timestamp - (track.occludedSince ?? track.lastSeen)
         if (timeSinceOcclusion < 0 || timeSinceOcclusion > maxReidAgeMs) continue
 
@@ -1916,6 +1977,8 @@ export class TrackManager {
     for (const track of occludedTracks) {
       if (!track.kalmanState) continue
 
+      // Use quality-adaptive re-ID window per track
+      const maxReidAgeMs = this.getAdaptiveReidWindow(track)
       const timeSinceOcclusion = detection.timestamp - (track.occludedSince ?? track.lastSeen)
       if (timeSinceOcclusion < 0 || timeSinceOcclusion > maxReidAgeMs) continue
 

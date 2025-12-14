@@ -21,7 +21,7 @@
     <Select
       v-if="showModelFilter"
       :model-value="modelFilter"
-      @update:model-value="emit('update:modelFilter', $event)"
+      @update:model-value="emit('update:modelFilter', String($event))"
     >
       <SelectTrigger class="w-36 h-[30px] text-xs">
         <SelectValue placeholder="All Models" />
@@ -37,7 +37,7 @@
     <!-- Sort -->
     <Select
       :model-value="sortBy"
-      @update:model-value="emit('update:sortBy', $event)"
+      @update:model-value="emit('update:sortBy', String($event))"
     >
       <SelectTrigger class="w-36 h-[30px] text-xs">
         <SelectValue placeholder="Sort by" />
