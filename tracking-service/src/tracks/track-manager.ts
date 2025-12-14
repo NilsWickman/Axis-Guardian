@@ -29,7 +29,7 @@ import {
   predictAlongCurve,
   blendPredictions,
 } from '../filters/kalman-track-filter.js'
-import { assignDetectionsToTracks } from '../correlation/hungarian-assignment.js'
+import { assignDetectionsToTracks, detectCrossingTracks } from '../correlation/hungarian-assignment.js'
 import { TrackMerger } from './track-merger.js'
 import type { SiteMapObstacle } from '../config/sitemap-loader.js'
 import {
@@ -41,6 +41,7 @@ import {
   calculateCombinedFOVPolygons,
   isPointInAnyFOV,
   isPointInRoom,
+  clampPointToRoom,
   type CameraConfig,
   type RoomBounds,
 } from '../geometry/fov-geometry.js'
@@ -472,6 +473,21 @@ export class TrackManager {
             if (exitResult.reason === 'pillar_occlusion') {
               track.predictedPosition = exitResult.predictedExitPoint ?? track.currentPosition
             }
+
+            // Aggressively dampen velocity on occlusion entry to prevent drift/bouncing
+            // FOV/boundary exits: zero velocity (person left monitored area)
+            // Pillar occlusion: 50% reduction (person still in area but hidden)
+            if (track.kalmanState) {
+              if (exitResult.reason === 'fov_exit' || exitResult.reason === 'boundary_exit') {
+                // Zero velocity - person left the area, no coasting needed
+                track.kalmanState.mean[2][0] = 0
+                track.kalmanState.mean[3][0] = 0
+              } else if (exitResult.reason === 'pillar_occlusion' || exitResult.reason === 'partial_occlusion') {
+                // Reduce velocity by 50% upfront - person hidden but still moving
+                track.kalmanState.mean[2][0] *= 0.5
+                track.kalmanState.mean[3][0] *= 0.5
+              }
+            }
           }
         }
       }
@@ -810,7 +826,10 @@ export class TrackManager {
    * Without this: camera1's detection matches track-A, camera2's matches track-B
    * With this: cluster centroid matches track-A, both cameras associate with track-A
    */
-  private preClusterCrossCameraDetections(detections: CameraDetection[]): DetectionCluster[] {
+  private preClusterCrossCameraDetections(
+    detections: CameraDetection[],
+    hasAnyCrossings: boolean = false
+  ): DetectionCluster[] {
     if (detections.length === 0) return []
     if (detections.length === 1) {
       return [{
@@ -823,7 +842,9 @@ export class TrackManager {
     // Analysis: 0.5m = no clustering (same person can be 0.3-0.5m apart across cameras)
     //           0.9m = too aggressive (different people can be 0.51m apart)
     //           0.7m = compromise
-    const clusteringDistance = this.config.clusteringDistanceM ?? 0.7
+    // During crossings: use tighter 0.5m to avoid merging different people's detections
+    const baseClusteringDistance = this.config.clusteringDistanceM ?? 0.7
+    const clusteringDistance = hasAnyCrossings ? 0.5 : baseClusteringDistance
 
     // Build candidate cross-camera pairs under distance threshold
     const pairs: Array<{ i: number; j: number; dist: number }> = []
@@ -1460,11 +1481,18 @@ export class TrackManager {
     this.lastDetectionTimestamp = now
     const activeTracks = this.getAllActiveTracks()
 
+    // === CROSSING DETECTION ===
+    // Detect tracks that are close to each other (crossing situation)
+    // This affects pre-clustering and embedding weight
+    const crossingTrackIds = detectCrossingTracks(activeTracks, 1.5)
+    const hasAnyCrossings = crossingTrackIds.size > 0
+
     // === PRE-HUNGARIAN CLUSTERING ===
     // Cluster detections from different cameras that likely represent the same person.
     // Use cluster centroid for Hungarian assignment to ensure both cameras' detections
     // match to the SAME track instead of competing for different tracks.
-    const preClusters = this.preClusterCrossCameraDetections(detections)
+    // When tracks are crossing, use tighter clustering to avoid merging different people
+    const preClusters = this.preClusterCrossCameraDetections(detections, hasAnyCrossings)
 
     // Create virtual detections from clusters (use centroid position)
     // Track mapping from virtual detection back to original cluster
@@ -1661,11 +1689,14 @@ export class TrackManager {
         : undefined
       // Get latest timestamp from cluster detections for cross-camera exclusion check
       const clusterTimestamp = Math.max(...validCluster.detections.map(d => d.timestamp))
+      // Get embedding from cluster for appearance-based exclusion override
+      const clusterEmbedding = validCluster.detections.find(d => d.attributes?.embedding)?.attributes?.embedding
       if (this.exclusionValidator.isInExclusionZone(
         validCluster.centroid,
         this.tracks.values(),
         clusterCameraId,
-        clusterTimestamp
+        clusterTimestamp,
+        clusterEmbedding
       )) {
         continue
       }
@@ -1798,20 +1829,35 @@ export class TrackManager {
 
       if (!predictedPos) continue
 
-      // If prediction exits the room, mark as boundary exit and freeze
-      if (roomBounds && !isPointInRoom(predictedPos, roomBounds, 0)) {
-        if (track.state === 'occluded') {
+      // Boundary-aware prediction clamping: instead of abruptly freezing,
+      // clamp predictions to room bounds and dampen velocity on clamped axes
+      if (roomBounds) {
+        const clampResult = clampPointToRoom(predictedPos, roomBounds, 0.15)
+
+        // If clamping was applied, dampen velocity on that axis to prevent bouncing
+        if ((clampResult.clampedX || clampResult.clampedY) && track.kalmanState) {
+          if (clampResult.clampedX) {
+            track.kalmanState.mean[2][0] *= 0.3  // Strong damping on clamped X axis
+          }
+          if (clampResult.clampedY) {
+            track.kalmanState.mean[3][0] *= 0.3  // Strong damping on clamped Y axis
+          }
+        }
+
+        // Use clamped position instead of original prediction
+        predictedPos = clampResult.point
+
+        // If occluded and fully at boundary (both axes moving out), mark as exit
+        if (track.state === 'occluded' && clampResult.clampedX && clampResult.clampedY) {
           track.exitReason = 'boundary_exit'
-          // Zero velocity to prevent bouncing on re-emergence
           if (track.kalmanState) {
             track.kalmanState.mean[2][0] = 0
             track.kalmanState.mean[3][0] = 0
           }
           track.predictedPosition = undefined
-          // Notify frontend to freeze at current position (not the bad prediction)
           this.onTrackUpdated?.(track)
+          continue
         }
-        continue
       }
 
       // If prediction exits all FOVs, mark as FOV exit and freeze

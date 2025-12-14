@@ -289,6 +289,33 @@ export function isPointInRoom(point: Point2D, room: RoomBounds, tolerance: numbe
 }
 
 /**
+ * Clamp a point to stay within room bounds
+ * Returns the clamped point and whether clamping was applied on each axis
+ */
+export function clampPointToRoom(
+  point: Point2D,
+  room: RoomBounds,
+  margin: number = 0.1
+): { point: Point2D; clampedX: boolean; clampedY: boolean } {
+  const minX = margin
+  const maxX = room.width - margin
+  const minY = margin
+  const maxY = room.height - margin
+
+  const clampedX = point.x < minX || point.x > maxX
+  const clampedY = point.y < minY || point.y > maxY
+
+  return {
+    point: {
+      x: Math.max(minX, Math.min(maxX, point.x)),
+      y: Math.max(minY, Math.min(maxY, point.y)),
+    },
+    clampedX,
+    clampedY,
+  }
+}
+
+/**
  * Validate spawn location
  * Returns validation result with reason
  */

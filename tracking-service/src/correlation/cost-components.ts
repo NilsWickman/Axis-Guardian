@@ -228,7 +228,8 @@ export function calculateEmbeddingSimilarityMultiplier(
   track: GlobalTrack,
   timeSinceLastSeenMs: number,
   config: EmbeddingCostConfig,
-  recordMetrics: boolean = true
+  recordMetrics: boolean = true,
+  isTrackCrossing: boolean = false
 ): EmbeddingCostResult {
   const result: EmbeddingCostResult = {
     multiplier: 1.0,
@@ -245,12 +246,13 @@ export function calculateEmbeddingSimilarityMultiplier(
   const trackEmbedding = track.attributes?.embedding
   const trackQuality = track.attributes?.embedding_quality ?? 0
 
-  // Temporal gating: Full weight for re-ID or cross-camera, reduced for frame-to-frame
+  // Temporal gating: Full weight for re-ID, cross-camera, or CROSSING scenarios
+  // During crossings, appearance matters more than spatial proximity
   const isReidentification = timeSinceLastSeenMs > 500
   const isCrossCamera = !track.cameraAssociations.has(detection.cameraId)
 
   const effectiveWeight =
-    isReidentification || isCrossCamera
+    isReidentification || isCrossCamera || isTrackCrossing
       ? config.embeddingWeight
       : config.embeddingWeight * 0.3
 
@@ -458,12 +460,12 @@ export const DEFAULT_COST_CONFIG: CostConfig = {
   accelerationConsistencyWeight: 0.1,
   maxAccelerationMs2: 3.0,
   // Embedding
-  embeddingWeight: 0.25,
+  embeddingWeight: 0.45,  // Matches ALGORITHM_CONSTANTS - stronger appearance matching
   embeddingMinSimilarity: 0.65,
   embeddingMinQuality: 0.25,
   // Crossing Gate (appearance-gated association)
   crossingMinSimilarity: 0.70,  // Require higher similarity during crossings
-  crossingMismatchPenalty: 3.0,  // Heavy penalty for poor matches during crossing
+  crossingMismatchPenalty: 5.0,  // Heavy penalty for poor matches during crossing - prevents ID swaps
   crossingMinQuality: 0.35,  // Minimum quality to apply crossing gate
   // Adaptive Gate
   minConfidenceForTightGate: 5,  // Need 5+ detections for tight gating

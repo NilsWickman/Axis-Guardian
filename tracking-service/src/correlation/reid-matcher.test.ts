@@ -333,12 +333,12 @@ describe('ReIDMatcher', () => {
   describe('configuration', () => {
     it('should use default config', () => {
       const m = new ReIDMatcher()
-      // Default minSimilarity is 0.85
+      // Default minSimilarity is 0.75 (from ALGORITHM_CONSTANTS.reid.minSimilarity)
       const detection = createDetection('camera1', [1, 0, 0])
-      const track = createTrack('track2', 'camera2', [0.8, 0.6, 0]) // sim = 0.8
+      const track = createTrack('track2', 'camera2', [0.5, 0.866, 0]) // sim = 0.5 (below 0.75 threshold)
 
       const result = m.findBestMatch(detection, [track], Date.now())
-      expect(result.track).toBeNull() // Below 0.85 threshold
+      expect(result.track).toBeNull() // Below 0.75 threshold
     })
 
     it('should allow custom minSimilarity', () => {
@@ -352,15 +352,15 @@ describe('ReIDMatcher', () => {
 
     it('should allow updating config', () => {
       const detection = createDetection('camera1', [1, 0, 0])
-      // cosine similarity with [1,0,0] is 0.8 (below default 0.85 threshold)
-      const track = createTrack('track2', 'camera2', [0.8, 0.6, 0])
+      // cosine similarity with [1,0,0] is 0.5 (below default 0.75 threshold)
+      const track = createTrack('track2', 'camera2', [0.5, 0.866, 0])
 
-      // Initially won't match with default threshold of 0.85
+      // Initially won't match with default threshold of 0.75
       let result = matcher.findBestMatch(detection, [track], Date.now())
       expect(result.track).toBeNull()
 
-      // Lower threshold to 0.7
-      matcher.updateConfig({ minSimilarity: 0.7 })
+      // Lower threshold to 0.4
+      matcher.updateConfig({ minSimilarity: 0.4 })
       result = matcher.findBestMatch(detection, [track], Date.now())
       expect(result.track).toBe(track)
     })

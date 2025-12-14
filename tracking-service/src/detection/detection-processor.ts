@@ -112,10 +112,14 @@ export class DetectionProcessor implements IDetectionProcessor {
 
   /**
    * Check if a world position is inside any tracking-blocking obstacle
+   * Uses a margin to account for projection error - only filters if significantly inside
    */
   private isInsideObstacle(worldX: number, worldY: number): boolean {
     if (this.trackingBlockingObstacles.length === 0) return false
-    return isPointInsideAnyObstacle({ x: worldX, y: worldY }, this.trackingBlockingObstacles)
+    // Use 0.15m margin to avoid filtering detections near obstacle edges due to projection error
+    // This allows people sitting near pillars to be tracked
+    const OBSTACLE_FILTER_MARGIN = 0.15
+    return isPointInsideAnyObstacle({ x: worldX, y: worldY }, this.trackingBlockingObstacles, OBSTACLE_FILTER_MARGIN)
   }
 
   /**

@@ -8,10 +8,13 @@
 import type { GlobalTrack, Point2D } from '../types.js'
 import { calculateDistance } from '../correlation/track-matcher.js'
 import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
+import { cosineSimilarity } from './attribute-aggregator.js'
 
 export interface ExclusionZoneConfig {
   /** Exclusion radius for confirmed tracks (meters) */
   confirmedExclusionRadius: number
+  /** Embedding similarity threshold below which exclusion is overridden (different people) */
+  embeddingDissimilarityThreshold: number
   /** Exclusion radius for unconfirmed tracks from different cameras (meters) */
   unconfirmedExclusionRadius: number
   /** Exclusion radius for very recent cross-camera detections (meters) */
@@ -25,6 +28,7 @@ const DEFAULT_CONFIG: ExclusionZoneConfig = {
   unconfirmedExclusionRadius: ALGORITHM_CONSTANTS.exclusionZone.unconfirmedExclusionRadius,
   crossCameraExclusionRadius: ALGORITHM_CONSTANTS.exclusionZone.crossCameraExclusionRadius,
   crossCameraExclusionTimeMs: ALGORITHM_CONSTANTS.exclusionZone.crossCameraExclusionTimeMs,
+  embeddingDissimilarityThreshold: 0.5, // Below 0.5 similarity = clearly different people
 }
 
 export interface ExclusionCheckResult {
@@ -74,18 +78,29 @@ export class ExclusionZoneValidator {
    * @param activeTracks - Iterator of active tracks to check against
    * @param cameraId - Optional camera ID of the detection (for same-camera check)
    * @param timestamp - Optional timestamp for cross-camera exclusion timing
+   * @param embedding - Optional embedding for appearance-based exclusion override
    * @returns ExclusionCheckResult with exclusion status and details
    */
   checkExclusion(
     position: Point2D,
     activeTracks: Iterable<GlobalTrack>,
     cameraId?: string,
-    timestamp?: number
+    timestamp?: number,
+    embedding?: number[]
   ): ExclusionCheckResult {
     for (const track of activeTracks) {
       if (!track.isActive) continue
 
       const distance = calculateDistance(position, track.currentPosition)
+
+      // Check if embeddings indicate different people - if so, skip exclusion for this track
+      if (embedding && embedding.length > 0 && track.attributes?.embedding) {
+        const similarity = cosineSimilarity(embedding, track.attributes.embedding)
+        if (similarity < this.config.embeddingDissimilarityThreshold) {
+          // Low similarity = clearly different people, don't exclude
+          continue
+        }
+      }
 
       // For confirmed tracks, use standard exclusion radius
       if (track.isConfirmed) {
@@ -154,9 +169,10 @@ export class ExclusionZoneValidator {
     position: Point2D,
     activeTracks: Iterable<GlobalTrack>,
     cameraId?: string,
-    timestamp?: number
+    timestamp?: number,
+    embedding?: number[]
   ): boolean {
-    return this.checkExclusion(position, activeTracks, cameraId, timestamp).excluded
+    return this.checkExclusion(position, activeTracks, cameraId, timestamp, embedding).excluded
   }
 
   /**
