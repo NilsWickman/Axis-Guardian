@@ -17,16 +17,18 @@ import {
   distance,
 } from './fov-geometry.js'
 
-export type ExitReason = 'fov_exit' | 'boundary_exit' | 'pillar_occlusion' | 'timeout' | null
+export type ExitReason = 'fov_exit' | 'boundary_exit' | 'pillar_occlusion' | 'partial_occlusion' | 'timeout' | null
 
 export interface ExitClassificationResult {
   reason: ExitReason
-  /** For pillar_occlusion: the pillar that is blocking the view */
+  /** For pillar_occlusion/partial_occlusion: the pillar that is blocking the view */
   occludingPillar?: SiteMapObstacle
   /** For pillar_occlusion: predicted exit point on far side of pillar */
   predictedExitPoint?: Point2D
   /** For pillar_occlusion: estimated time to re-emerge (ms) */
   estimatedReemergenceMs?: number
+  /** For partial_occlusion: ratio of cameras blocked (0-1) */
+  blockageRatio?: number
 }
 
 /**
@@ -79,30 +81,58 @@ function isRayBlockedByPillar(
 }
 
 /**
- * Find which pillar (if any) is blocking the view from all cameras to the point
+ * Result of partial occlusion check
  */
-function findOccludingPillar(
+interface PartialOcclusionResult {
+  pillar: SiteMapObstacle | null
+  /** True if ALL cameras are blocked */
+  isFullOcclusion: boolean
+  /** True if 50%+ cameras are blocked (but not all) */
+  isPartialOcclusion: boolean
+  /** Ratio of cameras blocked (0-1) */
+  blockageRatio: number
+}
+
+/**
+ * Find which pillar (if any) is blocking the view from cameras to the point
+ * Returns both full occlusion (all cameras blocked) and partial occlusion (50%+ blocked)
+ */
+function findOccludingPillarWithPartial(
   point: Point2D,
   cameras: CameraConfig[],
   pillars: SiteMapObstacle[]
-): SiteMapObstacle | null {
-  // For each pillar, check if it blocks ALL cameras
+): PartialOcclusionResult {
+  if (cameras.length === 0) {
+    return { pillar: null, isFullOcclusion: false, isPartialOcclusion: false, blockageRatio: 0 }
+  }
+
+  let bestPillar: SiteMapObstacle | null = null
+  let bestBlockageRatio = 0
+
   for (const pillar of pillars) {
-    let blocksAllCameras = true
+    let blockedCount = 0
 
     for (const camera of cameras) {
-      if (!isRayBlockedByPillar(camera.position, point, pillar)) {
-        blocksAllCameras = false
-        break
+      if (isRayBlockedByPillar(camera.position, point, pillar)) {
+        blockedCount++
       }
     }
 
-    if (blocksAllCameras) {
-      return pillar
+    const blockageRatio = blockedCount / cameras.length
+
+    // Track the pillar with highest blockage ratio
+    if (blockageRatio > bestBlockageRatio) {
+      bestBlockageRatio = blockageRatio
+      bestPillar = pillar
     }
   }
 
-  return null
+  return {
+    pillar: bestPillar,
+    isFullOcclusion: bestBlockageRatio >= 1.0,
+    isPartialOcclusion: bestBlockageRatio >= 0.5 && bestBlockageRatio < 1.0,
+    blockageRatio: bestBlockageRatio,
+  }
 }
 
 /**
@@ -196,15 +226,28 @@ export function classifyExitReason(
     (o) => o.blocksTracking && o.type === 'circle'
   )
 
-  const occludingPillar = findOccludingPillar(position, cameras, pillars)
-  if (occludingPillar) {
-    const exitPrediction = predictPillarExit(position, velocity, occludingPillar)
+  const occlusionResult = findOccludingPillarWithPartial(position, cameras, pillars)
+
+  // Full occlusion - all cameras blocked by pillar
+  if (occlusionResult.isFullOcclusion && occlusionResult.pillar) {
+    const exitPrediction = predictPillarExit(position, velocity, occlusionResult.pillar)
 
     return {
       reason: 'pillar_occlusion',
-      occludingPillar,
+      occludingPillar: occlusionResult.pillar,
       predictedExitPoint: exitPrediction?.exitPoint,
       estimatedReemergenceMs: exitPrediction?.timeMs,
+      blockageRatio: occlusionResult.blockageRatio,
+    }
+  }
+
+  // Partial occlusion - 50%+ cameras blocked but not all
+  // This catches cases where track is near pillar edge and intermittently visible
+  if (occlusionResult.isPartialOcclusion && occlusionResult.pillar) {
+    return {
+      reason: 'partial_occlusion',
+      occludingPillar: occlusionResult.pillar,
+      blockageRatio: occlusionResult.blockageRatio,
     }
   }
 
@@ -249,6 +292,7 @@ export function getTimeoutForExitReason(
     fovExitTimeoutMs?: number
     boundaryExitTimeoutMs?: number
     maxPillarOcclusionMs?: number
+    partialPillarOcclusionMs?: number
     occlusionCoastTimeMs?: number
   }
 ): number {
@@ -259,6 +303,9 @@ export function getTimeoutForExitReason(
       return config.boundaryExitTimeoutMs ?? 500
     case 'pillar_occlusion':
       return config.maxPillarOcclusionMs ?? 5000
+    case 'partial_occlusion':
+      // Shorter timeout than full occlusion since track is still partially visible
+      return config.partialPillarOcclusionMs ?? 3000
     case 'timeout':
     default:
       return config.occlusionCoastTimeMs ?? 7000
@@ -270,5 +317,5 @@ export function getTimeoutForExitReason(
  * (pillar-occluded tracks with predicted positions)
  */
 export function shouldShowAsGhostTrack(exitReason: ExitReason): boolean {
-  return exitReason === 'pillar_occlusion'
+  return exitReason === 'pillar_occlusion' || exitReason === 'partial_occlusion'
 }

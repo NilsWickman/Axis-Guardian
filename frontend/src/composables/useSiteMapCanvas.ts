@@ -1367,14 +1367,13 @@ export function useSiteMapCanvas(
     )
 
     // Draw FOV cone with wall occlusion
-    // Use higher opacity in light mode for better visibility
     const { currentTheme } = useTheme()
     const isLightMode = currentTheme.value === 'light'
     const fillStyle = isPreview
-      ? `${hexColor}${isLightMode ? '50' : '40'}`
+      ? `${hexColor}40`
       : isSelected
-        ? `${hexColor}${isLightMode ? '70' : '50'}`
-        : `${hexColor}${isLightMode ? '50' : '30'}`
+        ? `${hexColor}50`
+        : `${hexColor}30`
 
     // Only stroke when selected or hovered to avoid border around obstacle cutouts
     const strokeStyle = (isSelected || isHovered)

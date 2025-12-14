@@ -97,8 +97,8 @@ function getWebRTCUrl(camera: Camera): string | undefined {
 
 // Video synchronization state
 let syncMonitorInterval: number | null = null
-const SYNC_CHECK_INTERVAL = 5000 // Check sync every 5 seconds (was 2s - reduced CPU pressure)
-const MAX_SYNC_DRIFT = 0.5 // Maximum allowed drift in seconds before correction (reduced from 1.0)
+const SYNC_CHECK_INTERVAL = 2000 // Check sync every 2 seconds for tighter sync
+const MAX_SYNC_DRIFT = 0.2 // Maximum allowed drift in seconds before correction (tightened from 0.5)
 const SYNC_ENABLED = true // Enable/disable sync monitoring
 let syncCorrectionCount = 0 // Track number of corrections for debugging
 

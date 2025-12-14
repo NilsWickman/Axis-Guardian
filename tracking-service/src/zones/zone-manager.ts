@@ -8,10 +8,10 @@
 import type {
   ZoneConfig,
   ZoneViolation,
-  ZoneVertex,
   Point2D,
   ZoneMetricsData,
 } from '../types.js'
+import { isPointInPolygon } from '../geometry/polygon.js'
 
 interface TrackZoneState {
   wasInside: boolean
@@ -25,30 +25,6 @@ interface ZoneMetrics {
 
 // Re-export for consumers
 export type { ZoneMetricsData } from '../types.js'
-
-/**
- * Point-in-polygon using ray casting algorithm
- */
-function isPointInPolygon(point: Point2D, vertices: ZoneVertex[]): boolean {
-  if (vertices.length < 3) return false
-
-  let inside = false
-  for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i++) {
-    const xi = vertices[i].x
-    const yi = vertices[i].y
-    const xj = vertices[j].x
-    const yj = vertices[j].y
-
-    if (
-      yi > point.y !== yj > point.y &&
-      point.x < ((xj - xi) * (point.y - yi)) / (yj - yi) + xi
-    ) {
-      inside = !inside
-    }
-  }
-
-  return inside
-}
 
 export class ZoneManager {
   private zones: Map<string, ZoneConfig> = new Map()

@@ -21,12 +21,24 @@ export interface TrackingServiceOptions {
   videoElement?: Ref<HTMLVideoElement | null>
   /** Camera ID to sync with (only buffer tracks from this camera) */
   syncCameraId?: string
+  /** Enable adaptive sync tolerance based on measured jitter */
+  adaptiveTolerance?: boolean
+  /** Base sync tolerance in ms (default 50) */
+  baseSyncToleranceMs?: number
+  /** Maximum sync tolerance in ms (default 200) */
+  maxSyncToleranceMs?: number
+  /** Stale update threshold in ms (default 2000) */
+  staleThresholdMs?: number
 }
 
 const DEFAULT_OPTIONS: Required<Omit<TrackingServiceOptions, 'videoElement' | 'syncCameraId'>> = {
   autoReconnect: true,
   reconnectIntervalMs: 3000,
   maxReconnectAttempts: 10,
+  adaptiveTolerance: true,
+  baseSyncToleranceMs: 50,
+  maxSyncToleranceMs: 200,
+  staleThresholdMs: 2000,
 }
 
 /** Track update with video timing for buffering */
@@ -57,6 +69,22 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
   let lastVideoRtpTimestamp: number | null = null
   let syncCalibrated = false
   let syncOffset = 0
+
+  // Adaptive sync tolerance state
+  const syncDeltas: number[] = []
+  const MAX_DELTA_SAMPLES = 50
+  let currentSyncTolerance = opts.baseSyncToleranceMs
+  let perCameraLastSeen: Map<string, number> = new Map()
+
+  // Sync metrics (exported for debugging)
+  const syncMetrics = ref({
+    bufferedUpdates: 0,
+    appliedUpdates: 0,
+    droppedStaleUpdates: 0,
+    currentTolerance: opts.baseSyncToleranceMs,
+    avgJitter: 0,
+    perCameraStale: {} as Record<string, boolean>,
+  })
 
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -151,6 +179,59 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
   }
 
   /**
+   * Calculate adaptive sync tolerance based on measured jitter
+   */
+  function calculateAdaptiveTolerance(): number {
+    if (!opts.adaptiveTolerance || syncDeltas.length < 5) {
+      return opts.baseSyncToleranceMs
+    }
+
+    // Calculate jitter (standard deviation of sync deltas)
+    const avg = syncDeltas.reduce((a, b) => a + b, 0) / syncDeltas.length
+    const variance = syncDeltas.reduce((sum, d) => sum + (d - avg) ** 2, 0) / syncDeltas.length
+    const jitter = Math.sqrt(variance)
+
+    // Adaptive tolerance = base + 2 * jitter (95th percentile coverage)
+    const adaptive = Math.min(
+      opts.maxSyncToleranceMs,
+      Math.max(opts.baseSyncToleranceMs, opts.baseSyncToleranceMs + jitter * 2)
+    )
+
+    // Update metrics
+    syncMetrics.value.avgJitter = jitter
+    syncMetrics.value.currentTolerance = adaptive
+
+    return adaptive
+  }
+
+  /**
+   * Record a sync delta for adaptive tolerance calculation
+   */
+  function recordSyncDelta(delta: number): void {
+    syncDeltas.push(Math.abs(delta))
+    if (syncDeltas.length > MAX_DELTA_SAMPLES) {
+      syncDeltas.shift()
+    }
+    currentSyncTolerance = calculateAdaptiveTolerance()
+  }
+
+  /**
+   * Check if a camera appears stale (no updates recently)
+   */
+  function updateCameraStaleness(cameraId: string): void {
+    const now = Date.now()
+    perCameraLastSeen.set(cameraId, now)
+
+    // Check all cameras for staleness (> 3 seconds without update)
+    const staleThreshold = 3000
+    const staleStatus: Record<string, boolean> = {}
+    for (const [cam, lastSeen] of perCameraLastSeen) {
+      staleStatus[cam] = (now - lastSeen) > staleThreshold
+    }
+    syncMetrics.value.perCameraStale = staleStatus
+  }
+
+  /**
    * Start the sync loop that releases buffered track updates
    */
   function startSyncLoop(): void {
@@ -170,12 +251,16 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
         console.log(`[TrackSync] Calibrated offset: ${syncOffset.toFixed(0)}ms`)
       }
 
-      // Prune stale updates (> 2 seconds behind video)
+      // Update buffer size metric
+      syncMetrics.value.bufferedUpdates = trackSyncBuffer.length
+
+      // Prune stale updates (configurable threshold)
       while (trackSyncBuffer.length > 0) {
         const oldest = trackSyncBuffer[0]
         const age = videoTimeMs - (oldest.videoTiming.videoTimeMs - syncOffset)
-        if (age > 2000) {
+        if (age > opts.staleThresholdMs) {
           trackSyncBuffer.shift()
+          syncMetrics.value.droppedStaleUpdates++
         } else {
           break
         }
@@ -186,6 +271,11 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
         const update = trackSyncBuffer[0]
         const timing = update.videoTiming
 
+        // Track per-camera staleness
+        if (timing.cameraId) {
+          updateCameraStaleness(timing.cameraId)
+        }
+
         // Use RTP timestamp if available for frame-perfect sync
         if (timing.rtpTimestamp !== undefined && lastVideoRtpTimestamp !== null) {
           const rtpDiff = lastVideoRtpTimestamp - timing.rtpTimestamp
@@ -193,17 +283,21 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
             // Video has caught up - release this update
             trackSyncBuffer.shift()
             applyTrackUpdate(update)
+            recordSyncDelta(rtpDiff / 90) // Convert RTP ticks to ~ms
           } else {
             // Update is ahead of video - wait
             break
           }
         } else {
-          // Fallback to time-based sync
+          // Fallback to time-based sync with adaptive tolerance
           const updateTime = timing.videoTimeMs - syncOffset
-          if (videoTimeMs >= updateTime - 50) {
-            // Within 50ms tolerance
+          const delta = videoTimeMs - updateTime
+
+          if (delta >= -currentSyncTolerance) {
+            // Within adaptive tolerance
             trackSyncBuffer.shift()
             applyTrackUpdate(update)
+            recordSyncDelta(delta)
           } else {
             break
           }
@@ -211,7 +305,7 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
       }
     }, 16) // ~60fps polling
 
-    console.log('[TrackSync] Started sync loop')
+    console.log('[TrackSync] Started sync loop with adaptive tolerance')
   }
 
   /**
@@ -225,7 +319,27 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
     trackSyncBuffer.length = 0
     syncCalibrated = false
     lastVideoRtpTimestamp = null
+    // Reset adaptive state
+    syncDeltas.length = 0
+    currentSyncTolerance = opts.baseSyncToleranceMs
+    perCameraLastSeen.clear()
     console.log('[TrackSync] Stopped sync loop')
+  }
+
+  /**
+   * Reset sync metrics
+   */
+  function resetSyncMetrics(): void {
+    syncMetrics.value = {
+      bufferedUpdates: 0,
+      appliedUpdates: 0,
+      droppedStaleUpdates: 0,
+      currentTolerance: opts.baseSyncToleranceMs,
+      avgJitter: 0,
+      perCameraStale: {},
+    }
+    syncDeltas.length = 0
+    currentSyncTolerance = opts.baseSyncToleranceMs
   }
 
   /**
@@ -234,6 +348,7 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
   function applyTrackUpdate(update: BufferedTrackUpdate): void {
     if (update.type === 'track_created' || update.type === 'track_updated') {
       globalTrackStore.upsertTrackFromServer(update.track)
+      syncMetrics.value.appliedUpdates++
     }
   }
 
@@ -257,11 +372,6 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
     zoneMetrics?: unknown[]
     violation?: unknown
     metrics?: unknown
-    // Dual mode fields
-    spatialTracks?: unknown[]
-    reidTracks?: unknown[]
-    spatial?: unknown
-    reid?: unknown
   }): void {
     // Update frame info if present
     if (message.frames) {
@@ -269,27 +379,6 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
     }
 
     switch (message.type) {
-      // ============================================
-      // Dual Tracking Mode Messages (new)
-      // ============================================
-      case 'dual_snapshot':
-        // Server is sending dual track sets - use dual mode handlers
-        globalTrackStore.handleDualSnapshot(message as Parameters<typeof globalTrackStore.handleDualSnapshot>[0])
-        // Handle zones and metrics in snapshot
-        zoneStore.handleSnapshot(
-          message.zones as import('@/stores/zones').ZoneConfig[] | undefined,
-          message.zoneMetrics as import('@/stores/zones').ZoneMetricsData[] | undefined
-        )
-        break
-
-      case 'dual_track_update':
-        // Server is sending incremental dual track updates
-        globalTrackStore.handleDualUpdate(message as Parameters<typeof globalTrackStore.handleDualUpdate>[0])
-        break
-
-      // ============================================
-      // Legacy Single Mode Messages
-      // ============================================
       case 'snapshot':
         // Snapshots apply immediately (initial state)
         if (Array.isArray(message.tracks)) {
@@ -377,6 +466,7 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
     reconnectAttempts,
     lastError,
     messageCount,
+    syncMetrics,
 
     // Actions
     connect,
@@ -385,5 +475,6 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
     // Video sync
     updateVideoRtpTimestamp,
     stopSyncLoop,
+    resetSyncMetrics,
   }
 }

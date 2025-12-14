@@ -104,6 +104,101 @@ export interface DiagnosticMetrics {
   projectionFailures: number
 }
 
+export interface ReIDMetrics {
+  /** Total re-ID match attempts (detection vs occluded track) */
+  reidMatchAttempts: number
+  /** Successful re-ID matches */
+  reidMatchSuccesses: number
+  /** Re-ID match success rate (0-1) */
+  reidMatchSuccessRate: number
+  /** Average embedding similarity for successful matches */
+  avgMatchSimilarity: number
+  /** Average embedding similarity for all comparisons */
+  avgComparisonSimilarity: number
+  /** Embedding similarity distribution buckets */
+  similarityDistribution: {
+    veryLow: number    // < 0.3
+    low: number        // 0.3-0.5
+    medium: number     // 0.5-0.7
+    high: number       // 0.7-0.9
+    veryHigh: number   // > 0.9
+  }
+  /** Tracks with valid embeddings */
+  tracksWithEmbeddings: number
+  /** Detections with valid embeddings */
+  detectionsWithEmbeddings: number
+  /** Average embedding quality score */
+  avgEmbeddingQuality: number
+  /** ID switches detected (track ID changed for same person) */
+  idSwitchCount: number
+  /** Hungarian assignment embedding bonus applications */
+  embeddingBonusApplied: number
+  /** Hungarian assignment embedding penalty applications */
+  embeddingPenaltyApplied: number
+}
+
+export interface SyncMetrics {
+  /** Total synchronized batches processed */
+  batchesProcessed: number
+  /** Batches released due to timeout (not all cameras reported) */
+  timeoutFlushes: number
+  /** Batches released with all cameras reporting */
+  completeBatches: number
+  /** Batch completion rate (0-1) */
+  batchCompletionRate: number
+  /** Average cameras per synchronized batch */
+  avgCamerasPerBatch: number
+  /** Average detections per synchronized batch */
+  avgDetectionsPerBatch: number
+  /** Maximum frame skew between cameras (ms) */
+  maxFrameSkewMs: number
+  /** Average sync wait time before flush (ms) */
+  avgSyncWaitMs: number
+  /** Frames dropped because they were too stale */
+  droppedStaleFrames: number
+  /** Current number of frames in sync buffer */
+  currentBufferSize: number
+  /** Registered camera count */
+  registeredCameras: number
+  /** Per-camera clock offsets (ms) */
+  cameraClockOffsets: Record<string, number>
+}
+
+export interface QualityMetrics {
+  /** Average time to re-acquire track after occlusion (ms) */
+  avgReacquisitionTimeMs: number
+  /** Median re-acquisition time (ms) */
+  medianReacquisitionTimeMs: number
+  /** Total re-acquisition attempts */
+  totalReacquisitionAttempts: number
+  /** Successful re-acquisitions */
+  successfulReacquisitions: number
+  /** Re-acquisition success rate (0-1) */
+  reacquisitionSuccessRate: number
+  /** Average track purity (% of track with correct ID) - estimated via embedding consistency */
+  avgTrackPurity: number
+  /** Tracks with high purity (>0.9) */
+  highPurityTracks: number
+  /** Average camera contribution per track */
+  avgCameraContribution: number
+  /** Tracks with multi-camera coverage */
+  multiCameraTracks: number
+  /** Single-camera only tracks */
+  singleCameraTracks: number
+  /** Kalman prediction accuracy - average error (meters) */
+  avgPredictionErrorM: number
+  /** Kalman prediction accuracy - 90th percentile error (meters) */
+  p90PredictionErrorM: number
+  /** Total predictions evaluated */
+  totalPredictionsEvaluated: number
+  /** Crossing events detected (tracks in close proximity) */
+  crossingEventsDetected: number
+  /** Crossing events where ID was maintained */
+  crossingEventsResolved: number
+  /** Crossing resolution rate (0-1) */
+  crossingResolutionRate: number
+}
+
 export interface TrackingMetrics {
   handoff: HandoffMetrics
   merger: MergerMetrics
@@ -111,6 +206,9 @@ export interface TrackingMetrics {
   lifecycle: LifecycleMetrics
   performance: PerformanceMetrics
   diagnostic: DiagnosticMetrics
+  reid: ReIDMetrics
+  sync: SyncMetrics
+  quality: QualityMetrics
   /** Timestamp when metrics were collected */
   timestamp: number
   /** Uptime in milliseconds */
@@ -147,6 +245,23 @@ interface MetricsState {
   kalmanTimings: number[]
   detectionTimestamps: number[]
 
+  // ReID tracking
+  matchSimilarities: number[]
+  comparisonSimilarities: number[]
+  embeddingQualities: number[]
+
+  // Sync tracking
+  syncCameraCounts: number[]
+  syncDetectionCounts: number[]
+  syncWaitTimes: number[]
+  syncFrameSkews: number[]
+
+  // Quality tracking
+  reacquisitionTimes: number[]
+  trackPurities: number[]
+  cameraContributions: number[]
+  predictionErrors: number[]
+
   // Start time
   startTime: number
 }
@@ -163,6 +278,9 @@ export class MetricsCollector {
   private lifecycle: LifecycleMetrics
   private performance: PerformanceMetrics
   private diagnostic: DiagnosticMetrics
+  private reid: ReIDMetrics
+  private sync: SyncMetrics
+  private quality: QualityMetrics
 
   private state: MetricsState
 
@@ -176,6 +294,9 @@ export class MetricsCollector {
     this.lifecycle = this.createEmptyLifecycleMetrics()
     this.performance = this.createEmptyPerformanceMetrics()
     this.diagnostic = this.createEmptyDiagnosticMetrics()
+    this.reid = this.createEmptyReIDMetrics()
+    this.sync = this.createEmptySyncMetrics()
+    this.quality = this.createEmptyQualityMetrics()
 
     this.state = {
       handoffLatencies: [],
@@ -194,6 +315,17 @@ export class MetricsCollector {
       hungarianTimings: [],
       kalmanTimings: [],
       detectionTimestamps: [],
+      matchSimilarities: [],
+      comparisonSimilarities: [],
+      embeddingQualities: [],
+      syncCameraCounts: [],
+      syncDetectionCounts: [],
+      syncWaitTimes: [],
+      syncFrameSkews: [],
+      reacquisitionTimes: [],
+      trackPurities: [],
+      cameraContributions: [],
+      predictionErrors: [],
       startTime: Date.now(),
     }
   }
@@ -409,6 +541,261 @@ export class MetricsCollector {
     this.diagnostic.projectionFailures++
   }
 
+  // ========== REID METRICS ==========
+
+  /**
+   * Record a re-ID match attempt (detection compared against occluded track)
+   */
+  recordReIDMatchAttempt(): void {
+    this.reid.reidMatchAttempts++
+  }
+
+  /**
+   * Record a successful re-ID match
+   */
+  recordReIDMatchSuccess(similarity: number): void {
+    this.reid.reidMatchSuccesses++
+    this.addToWindow(this.state.matchSimilarities, similarity)
+    this.reid.avgMatchSimilarity = this.average(this.state.matchSimilarities)
+    this.updateReIDSuccessRate()
+  }
+
+  /**
+   * Record an embedding comparison (for similarity distribution tracking)
+   */
+  recordEmbeddingComparison(similarity: number): void {
+    this.addToWindow(this.state.comparisonSimilarities, similarity)
+    this.reid.avgComparisonSimilarity = this.average(this.state.comparisonSimilarities)
+    this.updateSimilarityDistribution(similarity)
+  }
+
+  /**
+   * Record a detection with valid embedding
+   */
+  recordDetectionWithEmbedding(quality: number): void {
+    this.reid.detectionsWithEmbeddings++
+    this.addToWindow(this.state.embeddingQualities, quality)
+    this.reid.avgEmbeddingQuality = this.average(this.state.embeddingQualities)
+  }
+
+  /**
+   * Update count of tracks with valid embeddings
+   */
+  updateTracksWithEmbeddings(count: number): void {
+    this.reid.tracksWithEmbeddings = count
+  }
+
+  /**
+   * Record an ID switch event
+   */
+  recordIDSwitch(): void {
+    this.reid.idSwitchCount++
+  }
+
+  /**
+   * Record embedding bonus applied in Hungarian assignment
+   */
+  recordEmbeddingBonus(): void {
+    this.reid.embeddingBonusApplied++
+  }
+
+  /**
+   * Record embedding penalty applied in Hungarian assignment
+   */
+  recordEmbeddingPenalty(): void {
+    this.reid.embeddingPenaltyApplied++
+  }
+
+  private updateReIDSuccessRate(): void {
+    const total = this.reid.reidMatchAttempts
+    this.reid.reidMatchSuccessRate = total > 0 ? this.reid.reidMatchSuccesses / total : 0
+  }
+
+  private updateSimilarityDistribution(similarity: number): void {
+    if (similarity < 0.3) {
+      this.reid.similarityDistribution.veryLow++
+    } else if (similarity < 0.5) {
+      this.reid.similarityDistribution.low++
+    } else if (similarity < 0.7) {
+      this.reid.similarityDistribution.medium++
+    } else if (similarity < 0.9) {
+      this.reid.similarityDistribution.high++
+    } else {
+      this.reid.similarityDistribution.veryHigh++
+    }
+  }
+
+  // ========== SYNC METRICS ==========
+
+  /**
+   * Record a synchronized batch being processed
+   */
+  recordSyncBatch(
+    cameraCount: number,
+    detectionCount: number,
+    waitTimeMs: number,
+    wasComplete: boolean
+  ): void {
+    this.sync.batchesProcessed++
+    if (wasComplete) {
+      this.sync.completeBatches++
+    } else {
+      this.sync.timeoutFlushes++
+    }
+
+    this.addToWindow(this.state.syncCameraCounts, cameraCount)
+    this.addToWindow(this.state.syncDetectionCounts, detectionCount)
+    this.addToWindow(this.state.syncWaitTimes, waitTimeMs)
+
+    this.updateSyncStats()
+  }
+
+  /**
+   * Record frame skew between cameras in a batch
+   */
+  recordFrameSkew(skewMs: number): void {
+    this.addToWindow(this.state.syncFrameSkews, skewMs)
+    if (skewMs > this.sync.maxFrameSkewMs) {
+      this.sync.maxFrameSkewMs = skewMs
+    }
+  }
+
+  /**
+   * Record a stale frame being dropped
+   */
+  recordDroppedStaleFrame(): void {
+    this.sync.droppedStaleFrames++
+  }
+
+  /**
+   * Update sync buffer size
+   */
+  updateSyncBufferSize(size: number): void {
+    this.sync.currentBufferSize = size
+  }
+
+  /**
+   * Update registered camera count
+   */
+  updateRegisteredCameras(count: number): void {
+    this.sync.registeredCameras = count
+  }
+
+  /**
+   * Record a camera clock offset
+   */
+  recordCameraClockOffset(cameraId: string, offsetMs: number): void {
+    this.sync.cameraClockOffsets[cameraId] = offsetMs
+  }
+
+  private updateSyncStats(): void {
+    if (this.state.syncCameraCounts.length > 0) {
+      this.sync.avgCamerasPerBatch = this.average(this.state.syncCameraCounts)
+    }
+    if (this.state.syncDetectionCounts.length > 0) {
+      this.sync.avgDetectionsPerBatch = this.average(this.state.syncDetectionCounts)
+    }
+    if (this.state.syncWaitTimes.length > 0) {
+      this.sync.avgSyncWaitMs = this.average(this.state.syncWaitTimes)
+    }
+    if (this.sync.batchesProcessed > 0) {
+      this.sync.batchCompletionRate = this.sync.completeBatches / this.sync.batchesProcessed
+    }
+  }
+
+  // ========== QUALITY METRICS ==========
+
+  /**
+   * Record a re-acquisition attempt (track recovering from occlusion)
+   */
+  recordReacquisitionAttempt(): void {
+    this.quality.totalReacquisitionAttempts++
+  }
+
+  /**
+   * Record a successful re-acquisition
+   */
+  recordSuccessfulReacquisition(timeMs: number): void {
+    this.quality.successfulReacquisitions++
+    this.addToWindow(this.state.reacquisitionTimes, timeMs)
+    this.updateReacquisitionStats()
+  }
+
+  private updateReacquisitionStats(): void {
+    if (this.state.reacquisitionTimes.length > 0) {
+      this.quality.avgReacquisitionTimeMs = this.average(this.state.reacquisitionTimes)
+      const sorted = [...this.state.reacquisitionTimes].sort((a, b) => a - b)
+      this.quality.medianReacquisitionTimeMs = this.percentile(sorted, 0.5)
+    }
+    if (this.quality.totalReacquisitionAttempts > 0) {
+      this.quality.reacquisitionSuccessRate =
+        this.quality.successfulReacquisitions / this.quality.totalReacquisitionAttempts
+    }
+  }
+
+  /**
+   * Record track purity (embedding consistency score)
+   */
+  recordTrackPurity(purity: number): void {
+    this.addToWindow(this.state.trackPurities, purity)
+    this.quality.avgTrackPurity = this.average(this.state.trackPurities)
+    if (purity > 0.9) {
+      this.quality.highPurityTracks++
+    }
+  }
+
+  /**
+   * Record camera contribution for a track
+   */
+  recordCameraContribution(cameraCount: number): void {
+    this.addToWindow(this.state.cameraContributions, cameraCount)
+    this.quality.avgCameraContribution = this.average(this.state.cameraContributions)
+    if (cameraCount > 1) {
+      this.quality.multiCameraTracks++
+    } else {
+      this.quality.singleCameraTracks++
+    }
+  }
+
+  /**
+   * Record Kalman prediction accuracy
+   */
+  recordPredictionError(errorM: number): void {
+    this.addToWindow(this.state.predictionErrors, errorM)
+    this.quality.totalPredictionsEvaluated++
+    this.updatePredictionStats()
+  }
+
+  private updatePredictionStats(): void {
+    if (this.state.predictionErrors.length > 0) {
+      this.quality.avgPredictionErrorM = this.average(this.state.predictionErrors)
+      const sorted = [...this.state.predictionErrors].sort((a, b) => a - b)
+      this.quality.p90PredictionErrorM = this.percentile(sorted, 0.9)
+    }
+  }
+
+  /**
+   * Record a crossing event detected
+   */
+  recordCrossingEvent(): void {
+    this.quality.crossingEventsDetected++
+  }
+
+  /**
+   * Record a crossing event resolved (IDs maintained)
+   */
+  recordCrossingResolved(): void {
+    this.quality.crossingEventsResolved++
+    this.updateCrossingStats()
+  }
+
+  private updateCrossingStats(): void {
+    if (this.quality.crossingEventsDetected > 0) {
+      this.quality.crossingResolutionRate =
+        this.quality.crossingEventsResolved / this.quality.crossingEventsDetected
+    }
+  }
+
   // ========== METRICS RETRIEVAL ==========
 
   getMetrics(): TrackingMetrics {
@@ -419,6 +806,9 @@ export class MetricsCollector {
       lifecycle: { ...this.lifecycle },
       performance: { ...this.performance },
       diagnostic: { ...this.diagnostic },
+      reid: { ...this.reid, similarityDistribution: { ...this.reid.similarityDistribution } },
+      sync: { ...this.sync, cameraClockOffsets: { ...this.sync.cameraClockOffsets } },
+      quality: { ...this.quality },
       timestamp: Date.now(),
       uptimeMs: Date.now() - this.state.startTime,
     }
@@ -448,6 +838,18 @@ export class MetricsCollector {
     return { ...this.diagnostic }
   }
 
+  getReIDMetrics(): ReIDMetrics {
+    return { ...this.reid, similarityDistribution: { ...this.reid.similarityDistribution } }
+  }
+
+  getSyncMetrics(): SyncMetrics {
+    return { ...this.sync, cameraClockOffsets: { ...this.sync.cameraClockOffsets } }
+  }
+
+  getQualityMetrics(): QualityMetrics {
+    return { ...this.quality }
+  }
+
   // ========== RESET ==========
 
   reset(): void {
@@ -457,6 +859,9 @@ export class MetricsCollector {
     this.lifecycle = this.createEmptyLifecycleMetrics()
     this.performance = this.createEmptyPerformanceMetrics()
     this.diagnostic = this.createEmptyDiagnosticMetrics()
+    this.reid = this.createEmptyReIDMetrics()
+    this.sync = this.createEmptySyncMetrics()
+    this.quality = this.createEmptyQualityMetrics()
 
     this.state = {
       handoffLatencies: [],
@@ -475,6 +880,17 @@ export class MetricsCollector {
       hungarianTimings: [],
       kalmanTimings: [],
       detectionTimestamps: [],
+      matchSimilarities: [],
+      comparisonSimilarities: [],
+      embeddingQualities: [],
+      syncCameraCounts: [],
+      syncDetectionCounts: [],
+      syncWaitTimes: [],
+      syncFrameSkews: [],
+      reacquisitionTimes: [],
+      trackPurities: [],
+      cameraContributions: [],
+      predictionErrors: [],
       startTime: Date.now(),
     }
   }
@@ -564,6 +980,67 @@ export class MetricsCollector {
       costMatrixStats: { avgCost: 0, minCost: 0, maxCost: 0 },
       assignmentGateRejects: 0,
       projectionFailures: 0,
+    }
+  }
+
+  private createEmptyReIDMetrics(): ReIDMetrics {
+    return {
+      reidMatchAttempts: 0,
+      reidMatchSuccesses: 0,
+      reidMatchSuccessRate: 0,
+      avgMatchSimilarity: 0,
+      avgComparisonSimilarity: 0,
+      similarityDistribution: {
+        veryLow: 0,
+        low: 0,
+        medium: 0,
+        high: 0,
+        veryHigh: 0,
+      },
+      tracksWithEmbeddings: 0,
+      detectionsWithEmbeddings: 0,
+      avgEmbeddingQuality: 0,
+      idSwitchCount: 0,
+      embeddingBonusApplied: 0,
+      embeddingPenaltyApplied: 0,
+    }
+  }
+
+  private createEmptySyncMetrics(): SyncMetrics {
+    return {
+      batchesProcessed: 0,
+      timeoutFlushes: 0,
+      completeBatches: 0,
+      batchCompletionRate: 0,
+      avgCamerasPerBatch: 0,
+      avgDetectionsPerBatch: 0,
+      maxFrameSkewMs: 0,
+      avgSyncWaitMs: 0,
+      droppedStaleFrames: 0,
+      currentBufferSize: 0,
+      registeredCameras: 0,
+      cameraClockOffsets: {},
+    }
+  }
+
+  private createEmptyQualityMetrics(): QualityMetrics {
+    return {
+      avgReacquisitionTimeMs: 0,
+      medianReacquisitionTimeMs: 0,
+      totalReacquisitionAttempts: 0,
+      successfulReacquisitions: 0,
+      reacquisitionSuccessRate: 0,
+      avgTrackPurity: 0,
+      highPurityTracks: 0,
+      avgCameraContribution: 0,
+      multiCameraTracks: 0,
+      singleCameraTracks: 0,
+      avgPredictionErrorM: 0,
+      p90PredictionErrorM: 0,
+      totalPredictionsEvaluated: 0,
+      crossingEventsDetected: 0,
+      crossingEventsResolved: 0,
+      crossingResolutionRate: 0,
     }
   }
 }

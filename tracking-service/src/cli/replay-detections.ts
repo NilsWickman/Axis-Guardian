@@ -6,7 +6,13 @@
  * simulating camera emulators sending real detection data.
  *
  * Usage:
+ *   # With re-ID embeddings (recommended):
+ *   pnpm cli:replay --file ../shared/cameras/preprocessed/1080p/view-HC3-reid.detections.json.gz --camera camera1
+ *
+ *   # Without embeddings (spatial-only):
  *   pnpm cli:replay --file ../shared/cameras/preprocessed/1080p/view-HC3-preprocessed.detections.json.gz --camera camera1
+ *
+ *   # With options:
  *   pnpm cli:replay --file detections.json --camera camera1 --speed 2.0 --loop
  */
 
@@ -22,11 +28,25 @@ interface BBox {
   bottom: number
 }
 
+interface DetectionAttributes {
+  upper_clothing?: {
+    colors: { name: string; score: number }[]
+    type?: { name: string; score: number }
+  }
+  lower_clothing?: {
+    colors: { name: string; score: number }[]
+    type?: { name: string; score: number }
+  }
+  embedding?: number[]
+  embedding_quality?: number
+}
+
 interface Detection {
   bbox: BBox
   confidence: number
   class_name: string
   track_id: number
+  attributes?: DetectionAttributes
 }
 
 interface Frame {
@@ -228,11 +248,13 @@ async function replayFrames(frames: Frame[], options: ReplayOptions): Promise<vo
           camera_id: cameraId,
           timestamp: frame.timestamp,
           frame_number: frame.frame_number,
+          detection_count: frame.detections.length,
           detections: frame.detections.map(d => ({
             class_name: d.class_name,
             confidence: d.confidence,
             bbox: d.bbox,
             track_id: d.track_id,
+            attributes: d.attributes,  // Pass through re-ID attributes
           })),
         }),
       })

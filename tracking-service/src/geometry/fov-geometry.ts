@@ -5,15 +5,17 @@
  * for track exit detection and spawn/disappear validation.
  */
 
-export interface Point2D {
-  x: number
-  y: number
-}
+import {
+  type Point2D,
+  type LineSegment,
+  distance,
+  normalizeAngle,
+} from './primitives.js'
+import { isPointInPolygon, isPointNearPolygonEdge } from './polygon.js'
 
-export interface LineSegment {
-  start: Point2D
-  end: Point2D
-}
+// Re-export for backward compatibility
+export type { Point2D, LineSegment }
+export { distance, isPointInPolygon }
 
 export interface CameraConfig {
   id: string
@@ -49,13 +51,6 @@ export const DOOR_ZONES: DoorZone[] = [
     tolerance: 1.0, // 1m tolerance for entry/exit
   },
 ]
-
-/**
- * Calculate Euclidean distance between two points
- */
-export function distance(p1: Point2D, p2: Point2D): number {
-  return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2))
-}
 
 /**
  * Get intersection of two line segments
@@ -123,15 +118,6 @@ export function castRay(
   }
 
   return closestIntersection || rayEnd
-}
-
-/**
- * Normalize angle to [0, 2π)
- */
-function normalizeAngle(angle: number): number {
-  while (angle < 0) angle += 2 * Math.PI
-  while (angle >= 2 * Math.PI) angle -= 2 * Math.PI
-  return angle
 }
 
 /**
@@ -239,27 +225,6 @@ export function calculateCameraFOVPolygon(camera: CameraConfig, room: RoomBounds
 }
 
 /**
- * Check if a point is inside a polygon using ray casting algorithm
- */
-export function isPointInPolygon(point: Point2D, polygon: Point2D[]): boolean {
-  if (polygon.length < 3) return false
-
-  let inside = false
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i].x
-    const yi = polygon[i].y
-    const xj = polygon[j].x
-    const yj = polygon[j].y
-
-    if (((yi > point.y) !== (yj > point.y)) && (point.x < ((xj - xi) * (point.y - yi)) / (yj - yi) + xi)) {
-      inside = !inside
-    }
-  }
-
-  return inside
-}
-
-/**
  * Calculate combined FOV from multiple cameras
  * Returns array of polygons (one per camera) since union is complex
  */
@@ -282,43 +247,6 @@ export function isPointInAnyFOV(point: Point2D, fovPolygons: Point2D[][], tolera
     }
   }
   return false
-}
-
-/**
- * Check if a point is within tolerance distance of a polygon edge
- */
-function isPointNearPolygonEdge(point: Point2D, polygon: Point2D[], tolerance: number): boolean {
-  for (let i = 0; i < polygon.length; i++) {
-    const j = (i + 1) % polygon.length
-    const dist = distanceToLineSegment(point, polygon[i], polygon[j])
-    if (dist < tolerance) {
-      return true
-    }
-  }
-  return false
-}
-
-/**
- * Calculate distance from a point to a line segment
- */
-function distanceToLineSegment(point: Point2D, segStart: Point2D, segEnd: Point2D): number {
-  const dx = segEnd.x - segStart.x
-  const dy = segEnd.y - segStart.y
-  const lengthSquared = dx * dx + dy * dy
-
-  if (lengthSquared === 0) {
-    return distance(point, segStart)
-  }
-
-  // Project point onto line segment
-  const t = Math.max(0, Math.min(1, ((point.x - segStart.x) * dx + (point.y - segStart.y) * dy) / lengthSquared))
-
-  const projection: Point2D = {
-    x: segStart.x + t * dx,
-    y: segStart.y + t * dy,
-  }
-
-  return distance(point, projection)
 }
 
 /**

@@ -165,11 +165,11 @@ describe('Physics Validation', () => {
 
   const HC3_DETECTIONS_PATH = join(
     __dirname,
-    '../../../shared/cameras/preprocessed/1080p/view-HC3-preprocessed.detections.json'
+    '../../../shared/cameras/preprocessed/1080p/view-HC3-reid.detections.json.gz'
   )
   const HC4_DETECTIONS_PATH = join(
     __dirname,
-    '../../../shared/cameras/preprocessed/1080p/view-HC4-preprocessed.detections.json'
+    '../../../shared/cameras/preprocessed/1080p/view-HC4-reid.detections.json.gz'
   )
 
   beforeAll(() => {

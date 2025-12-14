@@ -259,6 +259,17 @@ class YOLOReIDPreprocessor:
         self.color_analyzer = ColorAnalyzer() if enable_colors else None
         self.reid_extractor = ReIDExtractor(device=self.device) if enable_reid else None
 
+    def _get_model_name(self) -> str:
+        """Get YOLO model name safely across different ultralytics versions."""
+        try:
+            if hasattr(self.yolo, 'ckpt_path') and self.yolo.ckpt_path:
+                return str(Path(self.yolo.ckpt_path).name)
+            if hasattr(self.yolo, 'model_name'):
+                return self.yolo.model_name
+            return 'yolov8'
+        except Exception:
+            return 'yolov8'
+
     def process_video(
         self,
         video_path: str,
@@ -409,7 +420,7 @@ class YOLOReIDPreprocessor:
                 'duration': total_frames / fps,
             },
             'detection_config': {
-                'model': str(Path(self.yolo.model.model.yaml_file).name) if hasattr(self.yolo.model, 'model') else 'yolov8',
+                'model': self._get_model_name(),
                 'confidence_threshold': self.confidence_threshold,
                 'iou_threshold': self.iou_threshold,
                 'reid_enabled': self.reid_extractor is not None and self.reid_extractor.model is not None,

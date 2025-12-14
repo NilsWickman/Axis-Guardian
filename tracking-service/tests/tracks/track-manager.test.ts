@@ -318,7 +318,7 @@ describe('TrackManager', () => {
       trackManager.updateConfig({ correlationDistanceM: 999 })
       trackManager.resetConfig()
       const config = trackManager.getConfig()
-      expect(config.correlationDistanceM).toBe(0.8) // Default from DEFAULT_TRACKING_CONFIG
+      expect(config.correlationDistanceM).toBe(1.2) // Default from ALGORITHM_CONSTANTS.trackLifecycle
     })
   })
 

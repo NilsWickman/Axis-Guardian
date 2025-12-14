@@ -10,6 +10,7 @@ import type { GlobalTrack } from '../types.js'
 import { calculateDistance } from '../correlation/track-matcher.js'
 import { KalmanTrackFilter } from '../filters/kalman-track-filter.js'
 import { getMetrics } from '../metrics/index.js'
+import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
 
 /**
  * Candidate pair for merging
@@ -43,18 +44,33 @@ export interface TrackMergerConfig {
   simultaneousDetectionBonus: number
   /** Time window (ms) to consider detections simultaneous */
   simultaneousWindowMs: number
+  /** Speed below which tracks are considered "slow" for adaptive merging (m/s) */
+  slowSpeedThreshold: number
+  /** Speed above which tracks are considered "fast" for adaptive merging (m/s) */
+  fastSpeedThreshold: number
+  /** Distance multiplier for slow-moving tracks (expands merge radius) */
+  slowSpeedDistanceMultiplier: number
+  /** Distance multiplier for fast-moving tracks (contracts merge radius) */
+  fastSpeedDistanceMultiplier: number
+  /** Confidence threshold reduction for slow-moving tracks */
+  slowSpeedThresholdReduction: number
 }
 
 const DEFAULT_MERGER_CONFIG: TrackMergerConfig = {
-  mergeDistanceM: 0.6,
-  mergeConfidenceThreshold: 0.7,
-  mergeVelocityThreshold: 1.2,  // Lowered from 2.0 for stricter velocity matching
-  unconfirmedMergeDistanceM: 0.4,
-  unconfirmedMergeConfidenceThreshold: 0.5,
-  crossCameraMergeDistanceM: 0.9,
-  minDetectionsForVelocity: 3,
-  simultaneousDetectionBonus: 0.15,
-  simultaneousWindowMs: 150,
+  mergeDistanceM: ALGORITHM_CONSTANTS.trackMerger.mergeDistanceM,
+  mergeConfidenceThreshold: ALGORITHM_CONSTANTS.trackMerger.mergeConfidenceThreshold,
+  mergeVelocityThreshold: ALGORITHM_CONSTANTS.trackMerger.mergeVelocityThreshold,
+  unconfirmedMergeDistanceM: ALGORITHM_CONSTANTS.trackMerger.unconfirmedMergeDistanceM,
+  unconfirmedMergeConfidenceThreshold: ALGORITHM_CONSTANTS.trackMerger.unconfirmedMergeConfidenceThreshold,
+  crossCameraMergeDistanceM: ALGORITHM_CONSTANTS.trackMerger.crossCameraMergeDistanceM,
+  minDetectionsForVelocity: ALGORITHM_CONSTANTS.trackMerger.minDetectionsForVelocity,
+  simultaneousDetectionBonus: ALGORITHM_CONSTANTS.trackMerger.simultaneousDetectionBonus,
+  simultaneousWindowMs: ALGORITHM_CONSTANTS.trackMerger.simultaneousWindowMs,
+  slowSpeedThreshold: ALGORITHM_CONSTANTS.trackMerger.slowSpeedThreshold,
+  fastSpeedThreshold: ALGORITHM_CONSTANTS.trackMerger.fastSpeedThreshold,
+  slowSpeedDistanceMultiplier: ALGORITHM_CONSTANTS.trackMerger.slowSpeedDistanceMultiplier,
+  fastSpeedDistanceMultiplier: ALGORITHM_CONSTANTS.trackMerger.fastSpeedDistanceMultiplier,
+  slowSpeedThresholdReduction: ALGORITHM_CONSTANTS.trackMerger.slowSpeedThresholdReduction,
 }
 
 /**
@@ -147,16 +163,23 @@ export class TrackMerger {
 
         // Use expanded distance for cross-camera unconfirmed merges (projection variance)
         // Use tighter distance for same-camera unconfirmed merges
-        let effectiveMergeDistance: number
+        let baseMergeDistance: number
         if (isUnconfirmedMerge && isCrossCameraMerge) {
-          effectiveMergeDistance = this.config.crossCameraMergeDistanceM  // 0.9m for cross-camera
+          baseMergeDistance = this.config.crossCameraMergeDistanceM  // 0.9m for cross-camera
         } else if (isUnconfirmedMerge) {
-          effectiveMergeDistance = allowSameCameraFragmentMerge
+          baseMergeDistance = allowSameCameraFragmentMerge
             ? this.config.mergeDistanceM
             : this.config.unconfirmedMergeDistanceM
         } else {
-          effectiveMergeDistance = this.config.mergeDistanceM
+          baseMergeDistance = this.config.mergeDistanceM
         }
+
+        // Apply velocity-adaptive scaling to merge distance:
+        // - Slow tracks: expand radius (projection uncertainty dominates)
+        // - Fast tracks: contract radius (velocity is reliable discriminator)
+        const avgSpeed = this.getAverageSpeed(track1, track2)
+        const velocityMultiplier = this.getVelocityDistanceMultiplier(avgSpeed)
+        const effectiveMergeDistance = baseMergeDistance * velocityMultiplier
 
         const distance = calculateDistance(
           track1.currentPosition,
@@ -177,14 +200,20 @@ export class TrackMerger {
         // - Cross-camera unconfirmed: lowest threshold (0.4) - projection variance expected
         // - Same-camera unconfirmed: medium threshold (0.5)
         // - Confirmed tracks: highest threshold (0.7)
-        let effectiveThreshold: number
+        let baseThreshold: number
         if (isUnconfirmedMerge && isCrossCameraMerge) {
-          effectiveThreshold = 0.55  // Raised threshold to reduce false merges
+          baseThreshold = 0.55  // Raised threshold to reduce false merges
         } else if (isUnconfirmedMerge) {
-          effectiveThreshold = this.config.unconfirmedMergeConfidenceThreshold
+          baseThreshold = this.config.unconfirmedMergeConfidenceThreshold
         } else {
-          effectiveThreshold = this.config.mergeConfidenceThreshold
+          baseThreshold = this.config.mergeConfidenceThreshold
         }
+
+        // Apply velocity-adaptive threshold reduction:
+        // - Slow tracks: lower threshold (easier to merge when projection uncertainty dominates)
+        // - Fast tracks: no reduction (velocity is reliable discriminator)
+        const thresholdReduction = this.getVelocityThresholdReduction(avgSpeed)
+        const effectiveThreshold = Math.max(0.3, baseThreshold - thresholdReduction)
 
         if (confidence > effectiveThreshold) {
           candidates.push({
@@ -344,6 +373,65 @@ export class TrackMerger {
     const cameras1 = Array.from(track1.cameraAssociations.keys())
     const cameras2 = Array.from(track2.cameraAssociations.keys())
     return cameras1.filter(c => cameras2.includes(c))
+  }
+
+  /**
+   * Calculate average speed of two tracks.
+   * Returns the mean of both track speeds, or 0 if velocity data unavailable.
+   */
+  private getAverageSpeed(track1: GlobalTrack, track2: GlobalTrack): number {
+    let totalSpeed = 0
+    let count = 0
+
+    if (track1.kalmanState) {
+      const v1 = this.kalmanFilter.getVelocity(track1.kalmanState)
+      totalSpeed += Math.sqrt(v1.x * v1.x + v1.y * v1.y)
+      count++
+    }
+
+    if (track2.kalmanState) {
+      const v2 = this.kalmanFilter.getVelocity(track2.kalmanState)
+      totalSpeed += Math.sqrt(v2.x * v2.x + v2.y * v2.y)
+      count++
+    }
+
+    return count > 0 ? totalSpeed / count : 0
+  }
+
+  /**
+   * Calculate velocity-adaptive distance multiplier.
+   * - Slow tracks get expanded merge radius (projection uncertainty dominates)
+   * - Fast tracks get contracted merge radius (velocity is a reliable discriminator)
+   */
+  private getVelocityDistanceMultiplier(avgSpeed: number): number {
+    if (avgSpeed <= this.config.slowSpeedThreshold) {
+      return this.config.slowSpeedDistanceMultiplier  // Expand for slow
+    } else if (avgSpeed >= this.config.fastSpeedThreshold) {
+      return this.config.fastSpeedDistanceMultiplier  // Contract for fast
+    } else {
+      // Linear interpolation between slow and fast
+      const t = (avgSpeed - this.config.slowSpeedThreshold) /
+                (this.config.fastSpeedThreshold - this.config.slowSpeedThreshold)
+      return this.config.slowSpeedDistanceMultiplier +
+             t * (this.config.fastSpeedDistanceMultiplier - this.config.slowSpeedDistanceMultiplier)
+    }
+  }
+
+  /**
+   * Calculate velocity-adaptive threshold reduction.
+   * Slow tracks get lower confidence threshold (easier to merge).
+   */
+  private getVelocityThresholdReduction(avgSpeed: number): number {
+    if (avgSpeed <= this.config.slowSpeedThreshold) {
+      return this.config.slowSpeedThresholdReduction  // Full reduction for slow
+    } else if (avgSpeed >= this.config.fastSpeedThreshold) {
+      return 0  // No reduction for fast
+    } else {
+      // Linear interpolation
+      const t = (avgSpeed - this.config.slowSpeedThreshold) /
+                (this.config.fastSpeedThreshold - this.config.slowSpeedThreshold)
+      return this.config.slowSpeedThresholdReduction * (1 - t)
+    }
   }
 
   /**

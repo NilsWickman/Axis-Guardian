@@ -14,12 +14,9 @@
     Menu,
     X,
     GitGraph,
-    MapPin,
-    Fingerprint,
   } from 'lucide-vue-next'
   import { useTheme } from '@/composables/useTheme'
   import { useDemoMode } from '@/composables/useDemoMode'
-  import { useTrackingMode } from '@/composables/useTrackingMode'
   import { Switch } from '@/components/ui/switch'
 
   defineProps<{
@@ -34,7 +31,6 @@
   const route = useRoute()
   const { currentTheme, toggleTheme } = useTheme()
   const { isDemoMode, toggleDemoMode } = useDemoMode()
-  const { isSpatialMode, isReIDMode, toggleMode, dualModeEnabled, spatialTrackCount, reidTrackCount, activeTrackCount } = useTrackingMode()
   const expandedMenus = ref<Set<string>>(new Set())
 
   const isDarkMode = computed(() => currentTheme.value === 'dark')
@@ -217,37 +213,6 @@
 
     <!-- Settings -->
     <div class="px-4 pb-4 space-y-3">
-      <!-- Tracking Mode Toggle (only shown when dual mode enabled) -->
-      <div v-if="dualModeEnabled" class="px-3 py-2 rounded-lg bg-accent/30 border border-accent/50">
-        <div class="flex items-center justify-between">
-          <span class="text-xs text-muted-foreground">Tracking Mode</span>
-          <div class="flex items-center gap-1.5">
-            <MapPin class="w-3 h-3" :class="isSpatialMode ? 'text-primary' : 'text-muted-foreground'" />
-            <Switch :model-value="isReIDMode" @update:model-value="toggleMode" />
-            <Fingerprint class="w-3 h-3" :class="isReIDMode ? 'text-primary' : 'text-muted-foreground'" />
-          </div>
-        </div>
-        <div class="flex items-center justify-between mt-1">
-          <p class="text-[10px] text-muted-foreground">
-            {{ isReIDMode ? 'Spatial + Re-ID' : 'Spatial Only' }}
-          </p>
-          <!-- Active track count for current mode -->
-          <p class="text-[10px] font-medium" :class="isSpatialMode ? 'text-primary' : 'text-purple-500'">
-            {{ activeTrackCount }} tracks
-          </p>
-        </div>
-        <!-- Side-by-side comparison of both modes -->
-        <div class="flex items-center gap-2 mt-1 text-[9px] text-muted-foreground">
-          <span :class="isSpatialMode ? 'font-medium text-primary' : ''">
-            Spatial: {{ spatialTrackCount }}
-          </span>
-          <span class="opacity-50">|</span>
-          <span :class="isReIDMode ? 'font-medium text-purple-500' : ''">
-            Re-ID: {{ reidTrackCount }}
-          </span>
-        </div>
-      </div>
-
       <div class="flex items-center justify-center gap-4 px-3 py-2 text-xs font-medium text-muted-foreground">
         <!-- Theme Switcher -->
         <div class="flex items-center gap-1.5">

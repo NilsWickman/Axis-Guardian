@@ -132,8 +132,8 @@ function loadCameraDetections(): Map<string, CameraDetectionData> {
   const cameras = new Map<string, CameraDetectionData>()
 
   const cameraConfigs = [
-    { cameraId: 'camera1', file: 'view-HC3-preprocessed.detections.json' },
-    { cameraId: 'camera2', file: 'view-HC4-preprocessed.detections.json' },
+    { cameraId: 'camera1', file: 'view-HC3-reid.detections.json.gz' },
+    { cameraId: 'camera2', file: 'view-HC4-reid.detections.json.gz' },
   ]
 
   for (const config of cameraConfigs) {

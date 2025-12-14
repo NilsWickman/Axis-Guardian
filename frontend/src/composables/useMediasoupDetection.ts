@@ -213,7 +213,8 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
   let loopTriggeredThisCycle = false
 
   // Detection callback
-  let onDetectionUpdate: ((metadata: DetectionMetadata) => void) | null = null
+  // Support multiple detection callbacks (connection manager + views)
+  const onDetectionUpdateCallbacks = new Set<(metadata: DetectionMetadata) => void>()
 
   // Pending promise resolvers for WebSocket responses
   const pendingRequests = new Map<string, { resolve: (data: any) => void; reject: (error: Error) => void }>()
@@ -1188,10 +1189,12 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
       }
     }
 
-    if (onDetectionUpdate) {
-      onDetectionUpdate(metadata)
+    if (onDetectionUpdateCallbacks.size > 0) {
+      for (const callback of onDetectionUpdateCallbacks) {
+        callback(metadata)
+      }
     } else {
-      console.warn(`[Mediasoup] ${cameraId}: onDetectionUpdate callback not set, detection not propagated to UI`)
+      console.warn(`[Mediasoup] ${cameraId}: No detection callbacks registered, detection not propagated to UI`)
     }
   }
 
@@ -1347,8 +1350,16 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
     })
   }
 
-  function setDetectionCallback(callback: (metadata: DetectionMetadata) => void) {
-    onDetectionUpdate = callback
+  /**
+   * Add a detection callback. Multiple callbacks can be registered.
+   * Returns a function to remove the callback.
+   */
+  function setDetectionCallback(callback: (metadata: DetectionMetadata) => void): () => void {
+    onDetectionUpdateCallbacks.add(callback)
+    // Return cleanup function
+    return () => {
+      onDetectionUpdateCallbacks.delete(callback)
+    }
   }
 
   function pauseVideo() {

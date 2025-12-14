@@ -71,12 +71,15 @@ Observation:  [x, y]
 - Adaptive gating based on uncertainty
 
 **Configuration (tuned for pedestrians):**
+
+See `src/config/algorithm-constants.ts` for current values:
 ```typescript
-{
-  processNoise: 0.5,              // Acceleration variance (m/s²)
-  measurementNoise: 0.3,          // Position variance (m²)
+ALGORITHM_CONSTANTS.kalman = {
+  processNoise: 1.0,              // Velocity process noise (m/s)²
+  measurementNoise: 0.25,         // Position variance (m²)
   initialPositionUncertainty: 1,  // Initial position σ (m)
   initialVelocityUncertainty: 1,  // Initial velocity σ (m/s)
+  maxCacheSize: 500,              // State cache limit
 }
 ```
 
@@ -117,16 +120,18 @@ cost = distance(detection, track.predictedPosition)
 
 // Apply association bonus for existing camera-track pairs
 if (track.cameraAssociations.has(cameraId)) {
-  cost *= 0.5  // 50% bonus
+  cost *= ALGORITHM_CONSTANTS.assignment.associationBonus  // Strong binding
 }
 ```
+
+**Configuration:** See `src/config/algorithm-constants.ts` for all assignment parameters including maxCost, sameCameraPenalty, velocityConsistencyWeight, embeddingWeight, etc.
 
 **Usage:**
 ```typescript
 const { matches, unmatchedDetections } = assignDetectionsToTracks(
   detections,
   activeTracks,
-  { maxCost: 2.0, useKalmanPrediction: true }
+  { maxCost: ALGORITHM_CONSTANTS.assignment.maxCost, useKalmanPrediction: true }
 )
 ```
 

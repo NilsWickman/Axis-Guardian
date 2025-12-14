@@ -6,11 +6,11 @@
  */
 
 import type { SiteMapObstacle } from '../config/sitemap-loader.js'
+import { type Point2D } from './primitives.js'
+import { isPointInPolygon, distanceToLineSegment } from './polygon.js'
 
-export interface Point2D {
-  x: number
-  y: number
-}
+// Re-export Point2D for backward compatibility
+export type { Point2D }
 
 /**
  * Check if a point is inside a circular obstacle
@@ -58,30 +58,6 @@ function isPointInRectangle(
   return (
     Math.abs(localX) <= halfWidth && Math.abs(localY) <= halfHeight
   )
-}
-
-/**
- * Check if a point is inside a polygon using ray casting algorithm
- */
-function isPointInPolygon(point: Point2D, vertices: Point2D[]): boolean {
-  if (vertices.length < 3) return false
-
-  let inside = false
-  for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i++) {
-    const xi = vertices[i].x
-    const yi = vertices[i].y
-    const xj = vertices[j].x
-    const yj = vertices[j].y
-
-    if (
-      yi > point.y !== yj > point.y &&
-      point.x < ((xj - xi) * (point.y - yi)) / (yj - yi) + xi
-    ) {
-      inside = !inside
-    }
-  }
-
-  return inside
 }
 
 /**
@@ -213,44 +189,6 @@ export function distanceToObstacle(
     default:
       return Infinity
   }
-}
-
-/**
- * Calculate distance from point to line segment
- */
-function distanceToLineSegment(
-  point: Point2D,
-  lineStart: Point2D,
-  lineEnd: Point2D
-): number {
-  const dx = lineEnd.x - lineStart.x
-  const dy = lineEnd.y - lineStart.y
-  const lengthSquared = dx * dx + dy * dy
-
-  if (lengthSquared === 0) {
-    // Line segment is a point
-    const px = point.x - lineStart.x
-    const py = point.y - lineStart.y
-    return Math.sqrt(px * px + py * py)
-  }
-
-  // Project point onto line segment
-  const t = Math.max(
-    0,
-    Math.min(
-      1,
-      ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) /
-        lengthSquared
-    )
-  )
-
-  const projX = lineStart.x + t * dx
-  const projY = lineStart.y + t * dy
-
-  const distX = point.x - projX
-  const distY = point.y - projY
-
-  return Math.sqrt(distX * distX + distY * distY)
 }
 
 /**
