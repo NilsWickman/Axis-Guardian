@@ -28,3 +28,20 @@ export {
   isCircleObstacle,
   isPolygonObstacle,
 } from './sitemap'
+
+// Track types - canonical definitions for tracking data
+export type {
+  TrackState,
+  ExitReason,
+  CameraDetection,
+  CameraTrackAssociation,
+  TrailPosition,
+  VideoTimingInfo,
+  ColorScore,
+  ClothingTypeScore,
+  AggregatedClothingAttributes,
+  TrackAttributes,
+  DetectionAttributes,
+  GlobalTrackJSON,
+  CameraFrameInfo,
+} from './track'
