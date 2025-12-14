@@ -33,6 +33,7 @@ export default defineConfig({
       '@/components': path.resolve(__dirname, '../../src/components'),
       '@/lib': path.resolve(__dirname, '../../src/lib'),
       '@/components/ui': path.resolve(__dirname, '../../src/components/ui'),
+      '@axis-guardian/types': path.resolve(__dirname, '../../../shared/types/src/index.ts'),
       buffer: 'buffer/',
     },
   },

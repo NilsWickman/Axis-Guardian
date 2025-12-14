@@ -201,74 +201,25 @@ export function predictPosition(
 
 /**
  * Calculate velocity from trail history (for ghost track extrapolation)
- * Uses multiple trail points with recency weighting for noise reduction
  *
  * @param trail - Position history (most recent first)
- * @param minPoints - Minimum points required (default 3)
- * @param maxPoints - Maximum points to use (default 6)
  * @returns Velocity in meters per second, or null if insufficient data
  */
 export function calculateVelocity(
-  trail: { x: number; y: number; timestamp: number }[],
-  minPoints: number = 3,
-  maxPoints: number = 6
+  trail: { x: number; y: number; timestamp: number }[]
 ): Point2D | null {
   if (trail.length < 2) return null
 
-  // Use up to maxPoints, but at least 2
-  const pointsToUse = Math.min(trail.length, maxPoints)
+  const latest = trail[0]
+  const previous = trail[1]
 
-  // If we have very few points, use simple 2-point calculation
-  if (pointsToUse < minPoints) {
-    const latest = trail[0]
-    const previous = trail[1]
-    const timeDiff = (latest.timestamp - previous.timestamp) / 1000
-    if (timeDiff <= 0) return null
-    return {
-      x: (latest.x - previous.x) / timeDiff,
-      y: (latest.y - previous.y) / timeDiff,
-    }
+  const timeDiff = (latest.timestamp - previous.timestamp) / 1000 // Convert ms to seconds
+  if (timeDiff <= 0) return null
+
+  return {
+    x: (latest.x - previous.x) / timeDiff, // m/s
+    y: (latest.y - previous.y) / timeDiff, // m/s
   }
-
-  // Calculate weighted average velocity over multiple segments
-  // More recent segments get higher weight (recency weighting)
-  let weightedVx = 0
-  let weightedVy = 0
-  let totalWeight = 0
-
-  for (let i = 0; i < pointsToUse - 1; i++) {
-    const p1 = trail[i]
-    const p2 = trail[i + 1]
-
-    const timeDiff = (p1.timestamp - p2.timestamp) / 1000 // seconds
-    if (timeDiff <= 0) continue
-
-    const vx = (p1.x - p2.x) / timeDiff
-    const vy = (p1.y - p2.y) / timeDiff
-
-    // Recency weight: more recent segments weighted higher
-    // Weight decreases exponentially: 1, 0.5, 0.25, ...
-    const weight = Math.pow(0.6, i)
-
-    weightedVx += vx * weight
-    weightedVy += vy * weight
-    totalWeight += weight
-  }
-
-  if (totalWeight <= 0) return null
-
-  const avgVx = weightedVx / totalWeight
-  const avgVy = weightedVy / totalWeight
-
-  // Sanity check: velocity should be reasonable (< 10 m/s for walking)
-  const speed = Math.sqrt(avgVx * avgVx + avgVy * avgVy)
-  if (speed > 10) {
-    // Cap velocity magnitude while preserving direction
-    const scale = 3.0 / speed // Cap at 3 m/s (fast walk)
-    return { x: avgVx * scale, y: avgVy * scale }
-  }
-
-  return { x: avgVx, y: avgVy }
 }
 
 /**

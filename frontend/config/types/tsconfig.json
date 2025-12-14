@@ -20,7 +20,8 @@
       "@/*": ["../../src/*"],
       "@/components/*": ["../../src/components/*"],
       "@/lib/*": ["../../src/lib/*"],
-      "@/components/ui/*": ["../../src/components/ui/*"]
+      "@/components/ui/*": ["../../src/components/ui/*"],
+      "@axis-guardian/types": ["../../../shared/types/src/index.ts"]
     }
   },
   "include": [

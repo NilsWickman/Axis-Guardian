@@ -2,6 +2,10 @@
  * Track Types
  *
  * Types for global tracks that span multiple cameras.
+ *
+ * NOTE: Core track types are defined here and should match the definitions
+ * in shared/types/src/track.ts. The shared types package provides canonical
+ * definitions that the frontend imports directly.
  */
 
 import type { Point2D } from './geometry.js'
@@ -19,34 +23,16 @@ export type TrackState = 'unconfirmed' | 'confirmed' | 'occluded'
 /**
  * Reason why a track stopped being detected
  * Used to determine timeout behavior and display mode
+ *
+ * IMPORTANT: This must match the definition in shared/types/src/track.ts
  */
-export type ExitReason = 'fov_exit' | 'boundary_exit' | 'pillar_occlusion' | 'partial_occlusion' | 'timeout' | null
-
-// ============================================================================
-// Camera Detection (processed for tracking)
-// ============================================================================
-
-/**
- * Position data from a single camera detection
- */
-export interface CameraDetection {
-  cameraId: string
-  trackId: number
-  worldX: number
-  worldY: number
-  confidence: number
-  timestamp: number // Unix timestamp in ms
-  /** Frame number from source camera (for frame-based missed detection) */
-  frameNumber?: number
-  /** Video time in milliseconds (position within video, for sync) */
-  videoTimeMs?: number
-  /** RTP timestamp (90kHz clock) for frame-perfect sync */
-  rtpTimestamp?: number
-  /** Person attributes from re-ID preprocessing (optional) */
-  attributes?: DetectionAttributes
-  /** Camera position in world coordinates (for distance-based weighting) */
-  cameraPosition?: Point2D
-}
+export type ExitReason =
+  | 'fov_exit'
+  | 'boundary_exit'
+  | 'pillar_occlusion'
+  | 'partial_occlusion'
+  | 'timeout'
+  | null
 
 /**
  * Camera-specific track association
@@ -58,10 +44,6 @@ export interface CameraTrackAssociation {
   /** Last frame number this track was seen in from this camera */
   lastFrameNumber?: number
 }
-
-// ============================================================================
-// Track Position History
-// ============================================================================
 
 /**
  * Trail position for history visualization
@@ -85,26 +67,6 @@ export interface VideoTimingInfo {
   /** Camera ID that provided this timing */
   cameraId: string
 }
-
-// ============================================================================
-// Kalman Filter State
-// ============================================================================
-
-/**
- * Kalman filter state for position/velocity estimation
- */
-export interface KalmanState {
-  /** State vector [[x], [y], [vx], [vy]] */
-  mean: number[][]
-  /** 4x4 covariance matrix */
-  covariance: number[][]
-  /** Last update timestamp in ms */
-  lastTimestamp: number
-}
-
-// ============================================================================
-// Track-Level Aggregated Attributes
-// ============================================================================
 
 /**
  * Aggregated clothing attributes for a track
@@ -132,6 +94,58 @@ export interface TrackAttributes {
   embedding_quality: number
   /** Number of detection samples used for aggregation */
   sample_count: number
+}
+
+/**
+ * Frame info for timing diagnostics
+ */
+export interface CameraFrameInfo {
+  cameraId: string
+  frameNumber: number
+  timestamp: number
+}
+
+// ============================================================================
+// Camera Detection (extended with local types)
+// ============================================================================
+
+/**
+ * Position data from a single camera detection
+ * Extended from shared type with local dependencies
+ */
+export interface CameraDetection {
+  cameraId: string
+  trackId: number
+  worldX: number
+  worldY: number
+  confidence: number
+  timestamp: number // Unix timestamp in ms
+  /** Frame number from source camera (for frame-based missed detection) */
+  frameNumber?: number
+  /** Video time in milliseconds (position within video, for sync) */
+  videoTimeMs?: number
+  /** RTP timestamp (90kHz clock) for frame-perfect sync */
+  rtpTimestamp?: number
+  /** Person attributes from re-ID preprocessing (optional) */
+  attributes?: DetectionAttributes
+  /** Camera position in world coordinates (for distance-based weighting) */
+  cameraPosition?: Point2D
+}
+
+// ============================================================================
+// Kalman Filter State (internal to tracking-service)
+// ============================================================================
+
+/**
+ * Kalman filter state for position/velocity estimation
+ */
+export interface KalmanState {
+  /** State vector [[x], [y], [vx], [vy]] */
+  mean: number[][]
+  /** 4x4 covariance matrix */
+  covariance: number[][]
+  /** Last update timestamp in ms */
+  lastTimestamp: number
 }
 
 // ============================================================================
@@ -175,6 +189,9 @@ export interface GlobalTrack {
 
 /**
  * Serializable version of GlobalTrack (for JSON API)
+ * This is the format sent to the frontend via WebSocket
+ *
+ * IMPORTANT: This must match the definition in shared/types/src/track.ts
  */
 export interface GlobalTrackJSON {
   globalTrackId: string

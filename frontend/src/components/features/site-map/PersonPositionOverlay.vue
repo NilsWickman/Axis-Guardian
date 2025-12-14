@@ -226,43 +226,6 @@ function getGhostInterpolatedPosition(track: GlobalTrack, now: number): { x: num
 }
 
 /**
- * Validate that computed velocity is consistent with server prediction
- * Returns true if velocity direction is reasonable
- */
-function isVelocityConsistent(
-  velocity: { x: number; y: number },
-  startPos: { x: number; y: number },
-  serverPrediction: { x: number; y: number } | undefined
-): boolean {
-  // If no server prediction, trust the computed velocity
-  if (!serverPrediction) return true
-
-  // Calculate direction to server prediction
-  const toPredX = serverPrediction.x - startPos.x
-  const toPredY = serverPrediction.y - startPos.y
-  const predDist = Math.sqrt(toPredX * toPredX + toPredY * toPredY)
-
-  // If prediction is very close, velocity doesn't matter much
-  if (predDist < 0.1) return true
-
-  // Normalize both vectors
-  const velMag = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y)
-  if (velMag < 0.05) return true // Very slow, direction doesn't matter
-
-  const normVelX = velocity.x / velMag
-  const normVelY = velocity.y / velMag
-  const normPredX = toPredX / predDist
-  const normPredY = toPredY / predDist
-
-  // Dot product: > 0 means same general direction
-  const dot = normVelX * normPredX + normVelY * normPredY
-
-  // Reject if velocity points in opposite direction (dot < 0)
-  // Allow some tolerance for perpendicular movement (dot >= -0.3)
-  return dot >= -0.3
-}
-
-/**
  * Update interpolation state when track position changes
  * Updates the target position - the animation loop will smoothly lerp toward it
  * For ghost tracks, calculates velocity for smooth extrapolation
@@ -276,18 +239,9 @@ function updateInterpolationState(track: GlobalTrack, now: number): void {
     if (isGhost && !state.wasGhost) {
       // Track just became a ghost - capture velocity and start position
       const velocity = calculateVelocity(track.trail)
-      const startPos = { ...state.position }
-
-      // Validate velocity direction against server prediction
-      if (velocity && isVelocityConsistent(velocity, startPos, track.predictedPosition)) {
-        state.velocity = velocity
-      } else {
-        // Velocity is inconsistent - don't use it, fallback to server prediction
-        state.velocity = undefined
-      }
-
+      state.velocity = velocity ?? undefined
       state.ghostStartTime = now
-      state.ghostStartPosition = startPos // Use current rendered position for smoothness
+      state.ghostStartPosition = { ...state.position } // Use current rendered position for smoothness
       state.wasGhost = true
     } else if (!isGhost && state.wasGhost) {
       // Track is no longer a ghost - clear ghost state

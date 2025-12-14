@@ -4,10 +4,43 @@
  * This store manages global track IDs that persist as people move between cameras.
  * It correlates detections from multiple cameras using spatial proximity and
  * merges overlapping FOV detections into single positions.
+ *
+ * NOTE: Core track types are imported from @axis-guardian/types (shared/types)
+ * to ensure consistency with the tracking-service.
  */
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { predictPosition } from '../utils/trackCorrelation'
+
+// Import shared types from canonical source
+import type {
+  TrackState,
+  ExitReason,
+  CameraTrackAssociation,
+  TrailPosition,
+  VideoTimingInfo,
+  ColorScore,
+  ClothingTypeScore,
+  AggregatedClothingAttributes,
+  TrackAttributes,
+  GlobalTrackJSON,
+  CameraFrameInfo,
+} from '@axis-guardian/types'
+
+// Re-export shared types for consumers of this module
+export type {
+  TrackState,
+  ExitReason,
+  CameraTrackAssociation,
+  TrailPosition,
+  VideoTimingInfo,
+  ColorScore,
+  ClothingTypeScore,
+  AggregatedClothingAttributes,
+  TrackAttributes,
+  GlobalTrackJSON,
+  CameraFrameInfo,
+}
 
 // Default configuration constants
 export const DEFAULT_CORRELATION_DISTANCE_M = 1.5 // Max distance (meters) to associate detection with existing track
@@ -27,27 +60,6 @@ export interface TrackingConfig {
   maxVelocityMs: number
 }
 
-// Frame info for timing diagnostics
-export interface CameraFrameInfo {
-  cameraId: string
-  frameNumber: number
-  timestamp: number
-}
-
-/**
- * Video timing information for track-to-video synchronization
- */
-export interface VideoTimingInfo {
-  /** Video time in milliseconds (position within video) */
-  videoTimeMs: number
-  /** RTP timestamp (90kHz clock) for frame-perfect sync */
-  rtpTimestamp?: number
-  /** Frame number from source camera */
-  frameNumber: number
-  /** Camera ID that provided this timing */
-  cameraId: string
-}
-
 // Color palette for global tracks (12 distinct colors)
 const TRACK_COLORS = [
   '#10b981', // emerald
@@ -65,7 +77,8 @@ const TRACK_COLORS = [
 ]
 
 /**
- * Position data from a single camera detection
+ * Position data from a single camera detection (local tracking only)
+ * Note: Server-synced tracks use the GlobalTrackJSON format from shared types
  */
 export interface CameraDetection {
   cameraId: string
@@ -76,79 +89,16 @@ export interface CameraDetection {
   timestamp: number // Unix timestamp in ms
 }
 
-/**
- * Camera-specific track association
- */
-export interface CameraTrackAssociation {
-  cameraId: string
-  trackIds: number[] // List of track IDs from this camera associated with this global track
-  lastSeen: number
-}
-
-/**
- * Trail position for history visualization
- */
-export interface TrailPosition {
-  x: number
-  y: number
-  timestamp: number
-}
-
-/**
- * Reason why a track stopped being detected
- * Used to determine timeout behavior and display mode
- */
-export type ExitReason = 'fov_exit' | 'boundary_exit' | 'pillar_occlusion' | 'timeout' | null
-
-// ============================================
-// Track Attributes (from re-ID preprocessing)
-// ============================================
-
-/**
- * Color with confidence score
- */
-export interface ColorScore {
-  name: string
-  score: number
-}
-
-/**
- * Clothing type with confidence score
- */
-export interface ClothingTypeScore {
-  name: string
-  score: number
-}
-
-/**
- * Aggregated clothing attributes for a track
- */
-export interface AggregatedClothingAttributes {
-  /** Top colors by vote count (max 3) */
-  dominant_colors: ColorScore[]
-  /** Most common clothing type */
-  type?: ClothingTypeScore
-}
-
-/**
- * Track-level aggregated attributes from multiple detections
- * Used for person re-identification and display
- */
-export interface TrackAttributes {
-  /** Upper body clothing aggregate */
-  upper_clothing: AggregatedClothingAttributes
-  /** Lower body clothing aggregate */
-  lower_clothing: AggregatedClothingAttributes
-  /** Averaged re-ID embedding (quality-weighted) */
-  embedding?: number[]
-  /** Confidence in the aggregated embedding (0-1) */
-  embedding_quality: number
-  /** Number of detection samples used for aggregation */
-  sample_count: number
-}
+// Note: CameraTrackAssociation, TrailPosition, ExitReason, ColorScore,
+// ClothingTypeScore, AggregatedClothingAttributes, and TrackAttributes
+// are now imported from @axis-guardian/types (see imports above)
 
 /**
  * Global track that spans multiple cameras
+ *
+ * NOTE: When using server sync (WebSocket), tracks come from the tracking-service
+ * in GlobalTrackJSON format. The `pendingDetections` field is only used for
+ * legacy local tracking mode (usePersonPositionTracking composable).
  */
 export interface GlobalTrack {
   globalTrackId: string
@@ -161,8 +111,12 @@ export interface GlobalTrack {
   isConfirmed: boolean // True after MIN_DETECTIONS_TO_CONFIRM detections
   detectionCount: number // Total number of detections for this track
   confidence: number // Latest confidence value
-  state: 'unconfirmed' | 'confirmed' | 'occluded' // Track lifecycle state
-  // Pending detections for multi-camera merge within time window
+  state: TrackState // Track lifecycle state
+  /**
+   * Pending detections for multi-camera merge within time window
+   * @deprecated Only used for legacy local tracking mode. Server-synced tracks
+   * set this to an empty array as merging is handled by the tracking-service.
+   */
   pendingDetections: CameraDetection[]
   /** Reason why track stopped being detected (for smart timeout behavior) */
   exitReason?: ExitReason
@@ -228,6 +182,11 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
   const tracks = ref<Map<string, GlobalTrack>>(new Map())
   const nextTrackId = ref(1)
   const usedColors = ref<Set<string>>(new Set())
+
+  // Track recently expired track IDs to prevent zombie tracks from late updates
+  // Maps trackId -> expiry timestamp (for cleanup)
+  const recentlyExpiredTracks = ref<Map<string, number>>(new Map())
+  const EXPIRED_TRACK_RETENTION_MS = 5000 // Keep expired IDs for 5 seconds
 
   // Tracking frame info for timing diagnostics (per camera)
   const trackingFrameInfo = ref<Map<string, CameraFrameInfo>>(new Map())
@@ -511,6 +470,9 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
 
   /**
    * Main entry point - process a new detection
+   * @deprecated Use server sync (WebSocket) instead. This local tracking method
+   * is retained for legacy usePersonPositionTracking composable compatibility.
+   * When using tracking-service WebSocket, use upsertTrackFromServer() instead.
    */
   function processDetection(
     cameraId: string,
@@ -613,6 +575,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
   function clearAllTracks() {
     tracks.value.clear()
     usedColors.value.clear()
+    recentlyExpiredTracks.value.clear()
     nextTrackId.value = 1
   }
 
@@ -676,26 +639,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
   // Server Sync Methods (for tracking-service WebSocket)
   // ============================================
 
-  /**
-   * JSON format received from tracking-service
-   */
-  interface GlobalTrackJSON {
-    globalTrackId: string
-    cameraAssociations: Record<string, CameraTrackAssociation>
-    currentPosition: { x: number; y: number }
-    trail: TrailPosition[]
-    color: string
-    lastSeen: number
-    isActive: boolean
-    isConfirmed: boolean
-    detectionCount: number
-    confidence: number
-    state: 'unconfirmed' | 'confirmed' | 'occluded'
-    exitReason?: ExitReason
-    predictedPosition?: { x: number; y: number }
-    videoTiming?: VideoTimingInfo
-    attributes?: TrackAttributes
-  }
+  // Note: GlobalTrackJSON is imported from @axis-guardian/types (see imports above)
 
   /**
    * Convert server JSON to frontend GlobalTrack (Map conversion)
@@ -735,6 +679,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
 
   /**
    * Update or insert a single track from server
+   * Prevents zombie tracks by checking if track was recently expired
    */
   function upsertTrackFromServer(serverTrack: unknown): void {
     const json = serverTrack as GlobalTrackJSON
@@ -758,6 +703,12 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
       existing.videoTiming = converted.videoTiming
       existing.attributes = converted.attributes
     } else {
+      // Check if this track was recently expired (prevents zombie tracks from late updates)
+      if (recentlyExpiredTracks.value.has(converted.globalTrackId)) {
+        // Skip inserting - this is a late update for an expired track
+        return
+      }
+
       // Insert new track
       tracks.value.set(converted.globalTrackId, converted)
       usedColors.value.add(converted.color)
@@ -766,12 +717,24 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
 
   /**
    * Remove a track by ID (when server reports expiry)
+   * Also adds to recently expired set to prevent zombie track resurrection
    */
   function removeTrack(trackId: string): void {
     const track = tracks.value.get(trackId)
     if (track) {
       releaseColor(track.color)
       tracks.value.delete(trackId)
+    }
+
+    // Add to recently expired set to prevent late updates from resurrecting this track
+    const now = Date.now()
+    recentlyExpiredTracks.value.set(trackId, now)
+
+    // Cleanup old expired track IDs
+    for (const [expiredId, timestamp] of recentlyExpiredTracks.value) {
+      if (now - timestamp > EXPIRED_TRACK_RETENTION_MS) {
+        recentlyExpiredTracks.value.delete(expiredId)
+      }
     }
   }
 
