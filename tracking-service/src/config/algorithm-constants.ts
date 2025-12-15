@@ -349,6 +349,43 @@ export interface HandoffConstants {
 }
 
 // =============================================================================
+// Batch Optimization Constants (Multi-frame global assignment)
+// =============================================================================
+
+export interface BatchOptimizationConstants {
+  /** Enable batch optimization mode (false = frame-by-frame) */
+  readonly enabled: boolean
+  /** Maximum frames to keep in rolling buffer (context window) */
+  readonly maxBufferSize: number
+  /** Minimum frames needed before starting emission (delay in frames) */
+  readonly emissionDelayFrames: number
+  /** Frames to optimize at once (optimization window) */
+  readonly optimizationWindowSize: number
+  /** Maximum time to wait before forcing optimization (ms) */
+  readonly maxBatchDelayMs: number
+  /** Penalty for ID switch within batch (meters equivalent) */
+  readonly idSwitchPenalty: number
+  /** Weight for trajectory smoothness penalty (0-1) */
+  readonly smoothnessWeight: number
+  /** Cost multiplier bonus for temporal continuity (0-1, lower = stronger bonus) */
+  readonly temporalContinuityBonus: number
+  /** Cost for creating new track (meters equivalent) */
+  readonly trackBirthCost: number
+  /** Cost per frame for unmatched track (meters equivalent) */
+  readonly trackDeathCost: number
+  /** Maximum iterations for block coordinate descent */
+  readonly maxIterations: number
+  /** Convergence threshold for optimization (meters) */
+  readonly convergenceThreshold: number
+  /** Enable streaming emission (vs batch emission) */
+  readonly streamingEmission: boolean
+  /** Frames to emit per tick when streaming */
+  readonly emissionBatchSize: number
+  /** @deprecated Use maxBufferSize instead */
+  readonly batchSize: number
+}
+
+// =============================================================================
 // Combined Algorithm Constants Interface
 // =============================================================================
 
@@ -369,6 +406,7 @@ export interface AlgorithmConstants {
   readonly sync: SyncConstants
   readonly trajectory: TrajectoryConstants
   readonly handoff: HandoffConstants
+  readonly batch: BatchOptimizationConstants
 }
 
 // =============================================================================
@@ -399,7 +437,7 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
     crossCameraBonusWindowMs: 4000,  // Extended window from 2500ms for cross-camera association
     maxAccelerationMs2: 3.5,  // Slightly relaxed
     accelerationConsistencyWeight: 0.1,
-    embeddingWeight: 0.70,  // Increased from 0.65 - stronger appearance matching for ID consistency
+    embeddingWeight: 0.50,  // Reduced from 0.70 - balance spatial vs appearance to reduce jitter
     embeddingMinSimilarity: 0.55,  // Raised from 0.50 - reduce noise from poor matches
     embeddingMinQuality: 0.15,  // Raised from 0.01 to 0.15 - filter garbage embeddings (helps VCI)
     trajectoryPredictionSteps: [200, 500, 800, 1000],
@@ -417,14 +455,14 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
     unconfirmedTrackExpiryMs: 3000,  // Increased from 2000ms - give unconfirmed tracks more time
     minCreationConfidence: 0.7,  // Lower confidence - allow more track creation
     maxTracks: 200,
-    minTrailMovementThreshold: 0.1,
+    minTrailMovementThreshold: 0.2,  // Increased from 0.1 - reduce trail jitter from small movements
   },
 
   exclusionZone: {
     confirmedExclusionRadius: 0.5,  // Small - only prevent very close duplicates
-    unconfirmedExclusionRadius: 0.6,  // Small - allow more separate tracks
+    unconfirmedExclusionRadius: 0.8,  // Increased from 0.6 to account for projection error between cameras
     crossCameraExclusionRadius: 0.5,  // Small for cross-camera
-    crossCameraExclusionTimeMs: 200,  // Short time window
+    crossCameraExclusionTimeMs: 400,  // Doubled from 200ms to catch async camera delivery
   },
 
   trackMerger: {
@@ -446,20 +484,20 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
 
   occlusion: {
     missedFramesBeforeOcclusion: 10,  // Standard occlusion transition
-    occlusionCoastTimeMs: 8000,  // Increased from 5000ms - longer coasting to maintain track through occlusions
+    occlusionCoastTimeMs: 3000,  // Reduced from 8000ms - faster ghost track cleanup
     detectionsToExitOcclusion: 2,  // Keep hysteresis (flicker protection)
     reidentificationGateMultiplier: 5.5,  // Increased from 4.5 - wider gate for re-ID after occlusion
-    fovExitTimeoutMs: 2500,  // Increased from 1500ms - longer FOV exit tolerance
-    boundaryExitTimeoutMs: 2000,  // Increased from 1000ms - longer boundary exit tolerance
-    maxPillarOcclusionMs: 6000,  // Extended from 4s to 6s - allow longer pillar occlusion recovery
-    maxNonPillarCoastMs: 4000,  // Extended from 2.5s to 4s - longer non-pillar coast for TCI
-    coastingDampingFactor: 0.88,  // Less aggressive damping (was 0.85) - maintain velocity better during coast
+    fovExitTimeoutMs: 1500,  // Reduced from 2500ms - faster FOV exit cleanup
+    boundaryExitTimeoutMs: 1000,  // Reduced from 2000ms - faster boundary exit cleanup
+    maxPillarOcclusionMs: 3000,  // Reduced from 6000ms - shorter pillar occlusion recovery
+    maxNonPillarCoastMs: 2000,  // Reduced from 4000ms - shorter non-pillar coast
+    coastingDampingFactor: 0.5,  // Reduced from 0.88 - much faster velocity decay during coast
     maxOcclusionTrailLength: 50,
     minRecoveryTimeMs: 300,  // Minimum time before exiting occlusion (flicker protection)
-    partialPillarOcclusionMs: 4000,  // Increased from 2500ms - longer partial pillar occlusion
+    partialPillarOcclusionMs: 2000,  // Reduced from 4000ms - shorter partial pillar timeout
     // Quality-adaptive retention: timeout *= (1 + bonus * normalizedQuality)
-    qualityRetentionBonus: 0.8,  // Increased from 0.5 - quality=1.0 gives 1.8x timeout
-    maxRetentionMultiplier: 2.5,  // Increased from 1.8 - allow longer retention for high-quality tracks
+    qualityRetentionBonus: 0.3,  // Reduced from 0.8 - less timeout extension for quality
+    maxRetentionMultiplier: 1.5,  // Reduced from 2.5 - cap timeout extension
     minQualityForRetention: 0.01,  // Lowered to 0.01 to work with preprocessor quality bug (outputs 0.02)
   },
 
@@ -484,14 +522,14 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
 
   kalman: {
     processNoise: 0.7,  // Reduced - smoother position estimates, less responsive to rapid changes
-    measurementNoise: 0.3,  // Slightly increased - more smoothing for noisy measurements
+    measurementNoise: 0.5,  // Increased from 0.3 - more smoothing to reduce jitter from projection noise
     initialPositionUncertainty: 1,
     initialVelocityUncertainty: 1,
     maxCacheSize: 500,
   },
 
   clustering: {
-    clusteringDistanceM: 1.2,  // Increased from 0.9m - account for projection error between cameras (~0.4m average)
+    clusteringDistanceM: 0.9,  // Reduced from 1.2m to prevent wrong merges - 0.9m balances projection error vs merge accuracy
   },
 
   positionMerging: {
@@ -539,5 +577,24 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
     timeToBoundaryThresholdMs: 3000,  // Increased from 2000ms - longer prediction window
     predictiveHandoffBonus: 0.5,  // Increased bonus (was 0.7) - 50% cost reduction for handoff candidates
     predictiveGateExpansion: 1.6,  // Increased from 1.3 - 60% wider spatial gate for handoffs
+  },
+
+  // Multi-frame batch optimization - sliding window with continuous emission
+  batch: {
+    enabled: true,                   // Re-enabled for debugging
+    maxBufferSize: 150,              // Keep up to 150 frames for context (5s @ 30fps)
+    emissionDelayFrames: 30,         // Emit after 30 frames (~1s delay for stability)
+    optimizationWindowSize: 30,      // Optimize 30 frames at a time
+    maxBatchDelayMs: 2000,           // Force flush after 2 seconds max
+    idSwitchPenalty: 2.0,            // Heavy penalty for ID switches (2m equivalent)
+    smoothnessWeight: 0.3,           // Weight for trajectory smoothness in cost
+    temporalContinuityBonus: 0.8,    // 20% cost reduction for temporal continuity
+    trackBirthCost: 0.9,             // Cost to create new track - raised from 0.5 to discourage fragmentation
+    trackDeathCost: 0.3,             // Cost per frame for unmatched track
+    maxIterations: 5,                // Block coordinate descent iterations
+    convergenceThreshold: 0.01,      // Stop when improvement < 1cm
+    streamingEmission: true,         // Stream results for smooth display
+    emissionBatchSize: 1,            // Emit 1 frame per incoming frame (continuous)
+    batchSize: 30,                   // @deprecated - use optimizationWindowSize
   },
 } as const

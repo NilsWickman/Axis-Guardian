@@ -19,6 +19,13 @@
     "cli:batch-visualize": "tsx src/cli/batch-visualize.ts",
     "cli:sitemap": "tsx src/cli/terminal-sitemap.ts",
     "cli:calibrate": "tsx src/calibration/calibrate-camera.ts",
+    "cli:analyze-projections": "tsx src/calibration/analyze-projections.ts",
+    "cli:optimize-extrinsics": "tsx src/calibration/optimize-extrinsics.ts",
+    "cli:optimize-intrinsics": "tsx src/calibration/optimize-intrinsics.ts",
+    "cli:optimize-distortion": "tsx src/calibration/optimize-distortion.ts",
+    "cli:optimize-joint": "tsx src/calibration/optimize-joint.ts",
+    "cli:calibrate-full": "tsx src/calibration/full-pipeline.ts",
+    "cli:recalibrate": "tsx src/calibration/recalibrate.ts",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/migrate.ts && tsx src/db/seed.ts",
     "db:reset": "rm -f data/tracking.db && pnpm db:seed"

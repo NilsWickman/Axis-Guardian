@@ -1,0 +1,67 @@
+{
+  "timestamp": "2025-12-15T03:26:44.770Z",
+  "sweepParams": {
+    "positionSteps": [
+      -0.3,
+      -0.2,
+      -0.1,
+      0,
+      0.1,
+      0.2,
+      0.3
+    ],
+    "azimuthSteps": [
+      -5,
+      -3,
+      -2,
+      -1,
+      0,
+      1,
+      2,
+      3,
+      5
+    ]
+  },
+  "results": [
+    {
+      "cameraId": "camera1",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaAzimuth": 0,
+      "avgError": 8.322224522419841,
+      "maxError": 13.17891856562042,
+      "passRate": 0,
+      "sampleCount": 112
+    },
+    {
+      "cameraId": "camera2",
+      "deltaX": 0,
+      "deltaY": 0,
+      "deltaAzimuth": 0,
+      "avgError": 11.469724371853868,
+      "maxError": 17.75684658034844,
+      "passRate": 0,
+      "sampleCount": 98
+    },
+    {
+      "cameraId": "camera1",
+      "deltaX": -0.3,
+      "deltaY": -0.3,
+      "deltaAzimuth": 0,
+      "avgError": 7.9819456938251445,
+      "maxError": 12.754667502151337,
+      "passRate": 0,
+      "sampleCount": 112
+    },
+    {
+      "cameraId": "camera2",
+      "deltaX": 0.3,
+      "deltaY": -0.3,
+      "deltaAzimuth": 2,
+      "avgError": 11.05848206339458,
+      "maxError": 17.33827755739012,
+      "passRate": 0.02040816326530612,
+      "sampleCount": 98
+    }
+  ]
+}

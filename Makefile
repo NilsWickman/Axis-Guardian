@@ -1,4 +1,4 @@
-.PHONY: setup dev help clean check-pnpm kill-ports dev-frontend dev-camera dev-tracking db-seed db-reset debug-tracking debug-tracking-stop https-setup dev-https https-stop
+.PHONY: setup dev help clean check-pnpm kill-ports _kill-ports _kill-https-ports dev-frontend dev-camera dev-tracking db-seed db-reset debug-tracking debug-tracking-stop https-setup dev-https https-stop
 
 # Colors for output
 CYAN := \033[0;36m
@@ -65,25 +65,37 @@ kill-ports: ## Kill any processes using development ports (5173, 9101, 3010) - U
 	@echo "$(RED)WARNING: This will kill ALL processes on ports $(DEV_PORTS)$(NC)"
 	@echo "$(RED)This may include IDE dev servers or other tools!$(NC)"
 	@read -p "Continue? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
+	@$(MAKE) _kill-ports
+
+# Internal target to kill ports without prompting (used by dev)
+_kill-ports:
 	@for port in $(DEV_PORTS); do \
 		pid=$$(lsof -t -i:$$port 2>/dev/null); \
 		if [ -n "$$pid" ]; then \
 			echo "$(YELLOW)Killing process $$pid on port $$port$(NC)"; \
+			pkill -TERM -P $$pid 2>/dev/null || true; \
 			kill -9 $$pid 2>/dev/null || true; \
 		fi; \
 	done
 	@echo "$(GREEN)✓ Ports cleared$(NC)"
 
+# Internal target to kill HTTPS ports without prompting (used by dev-https)
+_kill-https-ports:
+	@for port in $(HTTPS_PORTS); do \
+		pid=$$(lsof -t -i:$$port 2>/dev/null); \
+		if [ -n "$$pid" ]; then \
+			echo "$(YELLOW)Killing process $$pid on port $$port$(NC)"; \
+			pkill -TERM -P $$pid 2>/dev/null || true; \
+			kill -9 $$pid 2>/dev/null || true; \
+		fi; \
+	done
+	@echo "$(GREEN)✓ HTTPS ports cleared$(NC)"
+
 dev: ## Start all development servers (frontend + camera-emulator + tracking-service)
 	@echo "$(CYAN)Starting development servers...$(NC)"
 	@echo ""
-	@# Check if any ports are in use and warn (but don't kill - might be IDE)
-	@for port in $(DEV_PORTS); do \
-		pid=$$(lsof -t -i:$$port 2>/dev/null); \
-		if [ -n "$$pid" ]; then \
-			echo "$(YELLOW)Warning: Port $$port is in use by PID $$pid - server may fail to start$(NC)"; \
-		fi; \
-	done
+	@# Kill any existing processes on dev ports
+	@$(MAKE) _kill-ports
 	@echo "$(YELLOW)Starting frontend dev server (port 5173)...$(NC)"
 	@echo "$(YELLOW)Starting camera-emulator (port 9101)...$(NC)"
 	@echo "$(YELLOW)Starting tracking-service (port 3010)...$(NC)"
@@ -94,9 +106,9 @@ dev: ## Start all development servers (frontend + camera-emulator + tracking-ser
 	cleanup() { \
 		echo ""; \
 		echo "$(CYAN)Shutting down development servers...$(NC)"; \
-		[ $$FRONTEND_PID -ne 0 ] && kill $$FRONTEND_PID 2>/dev/null; \
-		[ $$CAMERA_PID -ne 0 ] && kill $$CAMERA_PID 2>/dev/null; \
-		[ $$TRACKING_PID -ne 0 ] && kill $$TRACKING_PID 2>/dev/null; \
+		[ $$FRONTEND_PID -ne 0 ] && { pkill -TERM -P $$FRONTEND_PID 2>/dev/null; kill $$FRONTEND_PID 2>/dev/null; }; \
+		[ $$CAMERA_PID -ne 0 ] && { pkill -TERM -P $$CAMERA_PID 2>/dev/null; kill $$CAMERA_PID 2>/dev/null; }; \
+		[ $$TRACKING_PID -ne 0 ] && { pkill -TERM -P $$TRACKING_PID 2>/dev/null; kill $$TRACKING_PID 2>/dev/null; }; \
 		wait 2>/dev/null; \
 		echo "$(GREEN)✓ All servers stopped$(NC)"; \
 		exit 0; \
@@ -187,13 +199,8 @@ https-setup: ## One-time HTTPS setup (mkcert + certs)
 dev-https: ## Start all services with HTTPS (requires https-setup first)
 	@echo "$(CYAN)Starting HTTPS development environment...$(NC)"
 	@echo ""
-	@# Check if any ports are in use and warn (but don't kill - might be IDE)
-	@for port in $(HTTPS_PORTS); do \
-		pid=$$(lsof -t -i:$$port 2>/dev/null); \
-		if [ -n "$$pid" ]; then \
-			echo "$(YELLOW)Warning: Port $$port is in use by PID $$pid$(NC)"; \
-		fi; \
-	done
+	@# Kill any existing processes on HTTPS ports
+	@$(MAKE) _kill-https-ports
 	@-docker stop axis-https-proxy 2>/dev/null || true
 	@echo ""
 	@echo "$(GREEN)Starting nginx HTTPS proxy...$(NC)"
@@ -215,9 +222,9 @@ dev-https: ## Start all services with HTTPS (requires https-setup first)
 	cleanup() { \
 		echo ""; \
 		echo "$(CYAN)Shutting down HTTPS development servers...$(NC)"; \
-		[ $$FRONTEND_PID -ne 0 ] && kill $$FRONTEND_PID 2>/dev/null; \
-		[ $$CAMERA_PID -ne 0 ] && kill $$CAMERA_PID 2>/dev/null; \
-		[ $$TRACKING_PID -ne 0 ] && kill $$TRACKING_PID 2>/dev/null; \
+		[ $$FRONTEND_PID -ne 0 ] && { pkill -TERM -P $$FRONTEND_PID 2>/dev/null; kill $$FRONTEND_PID 2>/dev/null; }; \
+		[ $$CAMERA_PID -ne 0 ] && { pkill -TERM -P $$CAMERA_PID 2>/dev/null; kill $$CAMERA_PID 2>/dev/null; }; \
+		[ $$TRACKING_PID -ne 0 ] && { pkill -TERM -P $$TRACKING_PID 2>/dev/null; kill $$TRACKING_PID 2>/dev/null; }; \
 		docker stop axis-https-proxy 2>/dev/null || true; \
 		wait 2>/dev/null; \
 		echo "$(GREEN)✓ All servers stopped$(NC)"; \

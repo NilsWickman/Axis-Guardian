@@ -5,10 +5,23 @@
  * - Database (SQLite via Drizzle ORM)
  * - Sitemap JSON config
  * - Manual registration
+ *
+ * Calibration data can be updated via:
+ * - setCalibration() for runtime updates from calibration tools
+ * - Loading from JSON file via loadCalibrationFromFile()
  */
 
 import type { CameraParams, CameraConfig, SiteMapCameraConfig, CameraCalibration } from '../types.js'
 import { siteMapConfigToCamera } from '../projection/ground-plane.js'
+
+/**
+ * Feature flag: Set to true to skip polynomial world transform and use
+ * direct K/R/T projection in sitemap coordinates.
+ *
+ * Once the new calibration tooling has been run and K/R/T matrices are
+ * properly calibrated for sitemap coordinates, set this to true.
+ */
+export const USE_DIRECT_KRT_PROJECTION = false
 
 /**
  * Per-camera world coordinate transformations from K/R/T dataset coords to sitemap coords
@@ -30,20 +43,15 @@ const CAMERA1_WORLD_TRANSFORM = {
   ],
   translation: [-4.145655, 7.232865],
   scale: 1.0,
-  // Quintic polynomial transform (Degree 5, IRLS Huber, 75.7% accuracy, 0.430m avg error)
+  // Cubic polynomial transform (Degree 3, IRLS Huber)
+  // Reduced from degree 5 to minimize overfitting (CV: 56.3% vs 62.5% train-only at deg 5)
   // Model: c0 + c1*x + c2*y + c3*x^2 + c4*y^2 + c5*x*y + c6*x^3 + c7*y^3 + c8*x^2*y + c9*x*y^2
-  //        + c10*x^4 + c11*y^4 + c12*x^3*y + c13*x*y^3 + c14*x^2*y^2
-  //        + c15*x^5 + c16*y^5 + c17*x^4*y + c18*x*y^4 + c19*x^3*y^2 + c20*x^2*y^3
   polynomial: {
-    degree: 5 as const,
-    coeffsX: [-1.20243549, -28.00488036, -0.36408432, -4.71330850, 0.28368388, 5.81942539,
-              -0.91267100, -0.02624124, 0.88787438, -0.33492363,
-              -0.00852128, 0.00119572, 0.10935611, 0.00223355, -0.05785497,
-              0.00010409, -0.00002171, 0.00051016, 0.00018249, -0.00321650, 0.00128864],
-    coeffsY: [2.65705442, 3.81103014, 5.74501228, -8.68036206, -0.58467140, -1.41401991,
-              0.67455166, -0.02118521, 1.30047040, 0.18874523,
-              0.12810622, 0.00378255, -0.10317153, -0.00898779, -0.06162696,
-              -0.00005059, -0.00010018, -0.00810052, 0.00012031, 0.00378997, 0.00093719],
+    degree: 3 as const,
+    coeffsX: [22.32593204, 4.63729893, -4.44547204, 0.10955637, 0.38193721, -0.48243390,
+              -0.00323602, -0.00863815, -0.00458418, 0.01411668],
+    coeffsY: [33.73112634, -0.82079720, -5.29428069, -0.03439330, 0.30184404, 0.35386261,
+              -0.00095459, -0.00613755, 0.00896840, -0.01668283],
   },
 }
 
@@ -55,20 +63,14 @@ const CAMERA2_WORLD_TRANSFORM = {
   ],
   translation: [-1.599807, 11.586605],
   scale: 1.0,
-  // Quintic polynomial transform (Degree 5, IRLS Huber, 75.7% accuracy, 0.430m avg error)
-  // Model: c0 + c1*x + c2*y + c3*x^2 + c4*y^2 + c5*x*y + c6*x^3 + c7*y^3 + c8*x^2*y + c9*x*y^2
-  //        + c10*x^4 + c11*y^4 + c12*x^3*y + c13*x*y^3 + c14*x^2*y^2
-  //        + c15*x^5 + c16*y^5 + c17*x^4*y + c18*x*y^4 + c19*x^3*y^2 + c20*x^2*y^3
+  // Linear (affine) polynomial transform (Degree 1, IRLS Huber)
+  // Reduced from degree 5 to minimize overfitting (CV: 38.8% vs severe overfit at deg 5)
+  // Camera2's K/R/T matrices are placeholder data, so higher-degree polynomials don't help
+  // Model: c0 + c1*x + c2*y
   polynomial: {
-    degree: 5 as const,
-    coeffsX: [-6.46764509, 8.27721697, 2.86585540, 1.65488188, -0.07816160, -4.58076200,
-              1.80007308, -0.04032460, -1.00892032, 0.92070060,
-              0.20256077, 0.00457054, -0.39938978, -0.07079538, 0.13548954,
-              0.01230032, -0.00013329, -0.01942319, 0.00183923, 0.01931707, -0.00510512],
-    coeffsY: [22.54797299, -8.20754098, -4.47828721, -2.61250573, 0.34391899, 4.86664091,
-              -1.52790720, 0.01482421, 1.35442868, -0.94624435,
-              -0.17986191, -0.00324616, 0.34420878, 0.07458430, -0.17450885,
-              -0.00782268, 0.00010886, 0.01730067, -0.00203099, -0.01745626, 0.00655016],
+    degree: 1 as const,
+    coeffsX: [-1.47934501, 0.80544563, 0.93488186],
+    coeffsY: [11.47235862, 0.96358997, -0.66733292],
   },
 }
 
@@ -213,12 +215,29 @@ export class CameraRegistry {
     return camera
   }
 
+  /** Runtime calibration overrides (from calibration tools or file) */
+  private calibrationOverrides: Map<string, CameraCalibration> = new Map()
+
   /**
    * Get K/R/T calibration data for a camera
+   *
+   * Returns calibration override if set, otherwise falls back to hardcoded calibrations.
+   * If USE_DIRECT_KRT_PROJECTION is true, returns calibration without worldTransform.
    */
   getCalibration(cameraId: string): CameraCalibration | undefined {
     const normalizedId = this.normalizeCameraId(cameraId)
-    return CAMERA_CALIBRATIONS[normalizedId]
+
+    // Check for runtime override first
+    const override = this.calibrationOverrides.get(normalizedId)
+    if (override) {
+      return USE_DIRECT_KRT_PROJECTION ? { ...override, worldTransform: undefined } : override
+    }
+
+    // Fall back to hardcoded calibrations
+    const hardcoded = CAMERA_CALIBRATIONS[normalizedId]
+    if (!hardcoded) return undefined
+
+    return USE_DIRECT_KRT_PROJECTION ? { ...hardcoded, worldTransform: undefined } : hardcoded
   }
 
   /**
@@ -226,7 +245,51 @@ export class CameraRegistry {
    */
   hasCalibration(cameraId: string): boolean {
     const normalizedId = this.normalizeCameraId(cameraId)
-    return normalizedId in CAMERA_CALIBRATIONS
+    return this.calibrationOverrides.has(normalizedId) || normalizedId in CAMERA_CALIBRATIONS
+  }
+
+  /**
+   * Set calibration data for a camera at runtime
+   *
+   * Used by calibration tools to apply optimized parameters without code changes.
+   */
+  setCalibration(cameraId: string, calibration: CameraCalibration): void {
+    const normalizedId = this.normalizeCameraId(cameraId)
+    this.calibrationOverrides.set(normalizedId, calibration)
+  }
+
+  /**
+   * Load calibration data from a JSON file (output from calibrate-full)
+   *
+   * @param filepath - Path to calibration JSON file
+   */
+  async loadCalibrationFromFile(filepath: string): Promise<void> {
+    const fs = await import('fs/promises')
+    const content = await fs.readFile(filepath, 'utf-8')
+    const data = JSON.parse(content)
+
+    if (data.cameras && Array.isArray(data.cameras)) {
+      for (const cam of data.cameras) {
+        const calibration: CameraCalibration = {
+          K: cam.K,
+          R: cam.R,
+          T: cam.T,
+          center: cam.center,
+          scale: cam.scale ?? 1,
+          distortion: cam.distortion,
+          // No worldTransform - new calibrations are in sitemap coords
+        }
+        this.setCalibration(cam.cameraId, calibration)
+      }
+      console.log(`📷 Loaded calibration for ${data.cameras.length} camera(s) from ${filepath}`)
+    }
+  }
+
+  /**
+   * Clear runtime calibration overrides
+   */
+  clearCalibrationOverrides(): void {
+    this.calibrationOverrides.clear()
   }
 
   /**

@@ -105,6 +105,10 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
         isConnected.value = true
         reconnectAttempts.value = 0
         lastError.value = null
+
+        // Clear all tracks on reconnection to prevent stale data from previous session
+        // The server will send a fresh snapshot immediately after connection
+        globalTrackStore.clearAllTracks()
       }
 
       socket.value.onmessage = (event) => {
