@@ -41,18 +41,18 @@
         </div>
 
         <!-- Bounding box coordinates -->
-        <div class="mt-0.5 font-mono text-muted-foreground grid grid-cols-2 gap-x-2">
-          <span>L: {{ formatCoord(det.bbox.left) }}</span>
-          <span>R: {{ formatCoord(det.bbox.right) }}</span>
-          <span>T: {{ formatCoord(det.bbox.top) }}</span>
-          <span>B: {{ formatCoord(det.bbox.bottom) }}</span>
+        <div v-if="getBbox(det)" class="mt-0.5 font-mono text-muted-foreground grid grid-cols-2 gap-x-2">
+          <span>L: {{ formatCoord(getBbox(det)?.left) }}</span>
+          <span>R: {{ formatCoord(getBbox(det)?.right) }}</span>
+          <span>T: {{ formatCoord(getBbox(det)?.top) }}</span>
+          <span>B: {{ formatCoord(getBbox(det)?.bottom) }}</span>
         </div>
 
         <!-- Derived values -->
-        <div class="mt-0.5 font-mono text-muted-foreground/70 flex gap-2">
-          <span>W: {{ formatCoord(det.bbox.right - det.bbox.left) }}</span>
-          <span>H: {{ formatCoord(det.bbox.bottom - det.bbox.top) }}</span>
-          <span>Cx: {{ formatCoord((det.bbox.left + det.bbox.right) / 2) }}</span>
+        <div v-if="getBbox(det)" class="mt-0.5 font-mono text-muted-foreground/70 flex gap-2">
+          <span>W: {{ formatCoord((getBbox(det)?.right ?? 0) - (getBbox(det)?.left ?? 0)) }}</span>
+          <span>H: {{ formatCoord((getBbox(det)?.bottom ?? 0) - (getBbox(det)?.top ?? 0)) }}</span>
+          <span>Cx: {{ formatCoord(((getBbox(det)?.left ?? 0) + (getBbox(det)?.right ?? 0)) / 2) }}</span>
         </div>
       </div>
     </div>
@@ -141,8 +141,60 @@ function getConfidenceClass(confidence: number): string {
   return 'text-orange-400'
 }
 
-function formatCoord(value: number): string {
+function formatCoord(value: number | undefined | null): string {
+  if (value === undefined || value === null || isNaN(value)) {
+    return '--'
+  }
   return value.toFixed(3)
+}
+
+/**
+ * Normalize bbox to {left, top, right, bottom} format
+ * Handles both array [x, y, w, h] and object {left, top, right, bottom} formats
+ */
+function normalizeBbox(bbox: unknown): { left: number; top: number; right: number; bottom: number } | null {
+  if (!bbox) return null
+
+  // Handle array format [x, y, w, h]
+  if (Array.isArray(bbox) && bbox.length >= 4) {
+    const [x, y, w, h] = bbox
+    return {
+      left: x,
+      top: y,
+      right: x + w,
+      bottom: y + h
+    }
+  }
+
+  // Handle object format {left, top, right, bottom}
+  if (typeof bbox === 'object') {
+    const b = bbox as Record<string, unknown>
+    if ('left' in b && 'top' in b && 'right' in b && 'bottom' in b) {
+      return {
+        left: Number(b.left),
+        top: Number(b.top),
+        right: Number(b.right),
+        bottom: Number(b.bottom)
+      }
+    }
+    // Handle {x, y, width, height} format
+    if ('x' in b && 'y' in b && 'width' in b && 'height' in b) {
+      const x = Number(b.x)
+      const y = Number(b.y)
+      return {
+        left: x,
+        top: y,
+        right: x + Number(b.width),
+        bottom: y + Number(b.height)
+      }
+    }
+  }
+
+  return null
+}
+
+function getBbox(det: Detection): { left: number; top: number; right: number; bottom: number } | null {
+  return normalizeBbox(det.bbox)
 }
 
 function formatTimestamp(ts: number): string {

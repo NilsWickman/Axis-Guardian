@@ -235,10 +235,20 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
   // UI settings
   const showTrails = ref(true)
 
+  // Reactive timestamp for time-based computed properties (updated by components)
+  // This allows activeTracks to re-evaluate when time passes, not just when tracks change
+  const lastCleanupTimestamp = ref(Date.now())
+
   // Getters
   const activeTracks = computed(() => {
+    // Access lastCleanupTimestamp to create reactive dependency on time
+    // This ensures the computed re-evaluates when the timestamp is updated
+    void lastCleanupTimestamp.value
     const now = Date.now()
     const occlusionGraceMs = 2000
+    // Maximum time to display occluded tracks even with predictions (client-side failsafe)
+    // This prevents "frozen" tracks if server fails to send track_expired message
+    const maxOcclusionDisplayMs = 10000  // 10 seconds max display for occluded tracks
     // Return confirmed tracks that are:
     // 1. Within normal expiry (brief dropouts stay visible), OR
     // 2. In ghost/occluded mode with a predicted position (server coasting), OR
@@ -253,12 +263,16 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
       const hasPrediction = track.predictedPosition !== undefined
       const isPillarGhost = track.state === 'occluded' && track.exitReason === 'pillar_occlusion'
       const withinOcclusionGrace = timeSinceLastSeen <= occlusionGraceMs
+      // Client-side failsafe: even occluded tracks with predictions should expire eventually
+      const withinMaxOcclusionDisplay = timeSinceLastSeen <= maxOcclusionDisplayMs
 
       if (track.state !== 'occluded') {
         return withinNormalExpiry
       }
 
-      return isPillarGhost || hasPrediction || withinOcclusionGrace || withinNormalExpiry
+      // Occluded tracks require BOTH their display condition AND the max display timeout
+      // This ensures tracks don't stay frozen forever if server fails to send expiry
+      return withinMaxOcclusionDisplay && (isPillarGhost || hasPrediction || withinOcclusionGrace || withinNormalExpiry)
     })
   })
 
@@ -801,6 +815,15 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     return Array.from(trackingFrameInfo.value.values())
   }
 
+  /**
+   * Trigger cleanup of stale tracks by updating the reactive timestamp.
+   * This causes activeTracks computed to re-evaluate and filter out expired tracks.
+   * Call this periodically from components that display tracks.
+   */
+  function triggerCleanup(): void {
+    lastCleanupTimestamp.value = Date.now()
+  }
+
   return {
     // State
     tracks,
@@ -829,6 +852,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     updateFrameInfo,
     getFrameInfoForCamera,
     getAllFrameInfo,
+    triggerCleanup,
     // For testing/debugging
     findNearbyTrack,
   }

@@ -511,8 +511,33 @@ export class TrackManager {
         if (track.isActive && track.exitReason === 'pillar_occlusion') {
           const predicted = this.getPredictedPosition(track, timeSinceOcclusion)
           if (predicted) {
-            track.predictedPosition = predicted
-            track.currentPosition = predicted
+            let clampedPos = predicted
+
+            // CRITICAL: Clamp pillar coasting to room bounds - prevents wall sliding
+            const roomBounds = this.siteMapGeometry?.roomBounds
+            if (roomBounds) {
+              const clampResult = clampPointToRoom(predicted, roomBounds, 0.1)
+              clampedPos = clampResult.point
+
+              // If pillar coasting hits boundary, convert to boundary_exit and freeze
+              if (clampResult.clampedX || clampResult.clampedY) {
+                track.exitReason = 'boundary_exit'
+                // Zero velocity on clamped axes
+                if (track.kalmanState) {
+                  if (clampResult.clampedX) {
+                    track.kalmanState.mean[2][0] = 0
+                    track.kalmanState.mean[0][0] = clampResult.point.x
+                  }
+                  if (clampResult.clampedY) {
+                    track.kalmanState.mean[3][0] = 0
+                    track.kalmanState.mean[1][0] = clampResult.point.y
+                  }
+                }
+              }
+            }
+
+            track.predictedPosition = clampedPos
+            track.currentPosition = clampedPos
             // Notify listeners so frontend can update ghost track
             this.onTrackUpdated?.(track)
           }
@@ -840,12 +865,11 @@ export class TrackManager {
       }]
     }
 
-    // Use moderate clustering distance for pre-clustering
-    // Analysis: 0.5m = no clustering (same person can be 0.3-0.5m apart across cameras)
-    //           0.9m = too aggressive (different people can be 0.51m apart)
-    //           0.7m = compromise
+    // Use clustering distance from ALGORITHM_CONSTANTS for pre-clustering
+    // This allows same-person detections from different cameras to be clustered
+    // accounting for projection error between cameras (0.3-0.4m per camera)
     // During crossings: use tighter 0.5m to avoid merging different people's detections
-    const baseClusteringDistance = this.config.clusteringDistanceM ?? 0.7
+    const baseClusteringDistance = ALGORITHM_CONSTANTS.clustering.clusteringDistanceM  // 1.2m
     const clusteringDistance = hasAnyCrossings ? 0.5 : baseClusteringDistance
 
     // Build candidate cross-camera pairs under distance threshold
@@ -1779,7 +1803,8 @@ export class TrackManager {
 
       // Don't coast tracks that have exited via FOV or boundary - they've left the monitored area
       // Freeze them at their last known position instead of predicting further movement
-      if (isOccluded && isFovOrBoundaryExit) {
+      // IMPORTANT: Apply to ALL track states, not just occluded - fixes wall sliding bug
+      if (isFovOrBoundaryExit) {
         if (track.predictedPosition) {
           track.predictedPosition = undefined
         }
@@ -1843,25 +1868,29 @@ export class TrackManager {
       if (!predictedPos) continue
 
       // Boundary-aware prediction clamping: instead of abruptly freezing,
-      // clamp predictions to room bounds and dampen velocity on clamped axes
+      // clamp predictions to room bounds and ZERO velocity on clamped axes to prevent bouncing
       if (roomBounds) {
-        const clampResult = clampPointToRoom(predictedPos, roomBounds, 0.15)
+        const clampResult = clampPointToRoom(predictedPos, roomBounds, 0.1)  // Reduced margin from 0.15
 
-        // If clamping was applied, dampen velocity on that axis to prevent bouncing
+        // If clamping was applied, ZERO velocity on that axis to prevent bouncing
+        // Also update Kalman position state to match clamped position
         if ((clampResult.clampedX || clampResult.clampedY) && track.kalmanState) {
           if (clampResult.clampedX) {
-            track.kalmanState.mean[2][0] *= 0.3  // Strong damping on clamped X axis
+            track.kalmanState.mean[2][0] = 0  // Zero X velocity (was 0.3 damping)
+            track.kalmanState.mean[0][0] = clampResult.point.x  // Update Kalman X position
           }
           if (clampResult.clampedY) {
-            track.kalmanState.mean[3][0] *= 0.3  // Strong damping on clamped Y axis
+            track.kalmanState.mean[3][0] = 0  // Zero Y velocity (was 0.3 damping)
+            track.kalmanState.mean[1][0] = clampResult.point.y  // Update Kalman Y position
           }
         }
 
         // Use clamped position instead of original prediction
         predictedPos = clampResult.point
 
-        // If occluded and fully at boundary (both axes moving out), mark as exit
-        if (track.state === 'occluded' && clampResult.clampedX && clampResult.clampedY) {
+        // If ANY axis hits boundary, mark as boundary exit and freeze
+        // IMPORTANT: Apply to ALL track states, not just occluded - fixes wall sliding bug
+        if (clampResult.clampedX || clampResult.clampedY) {
           track.exitReason = 'boundary_exit'
           if (track.kalmanState) {
             track.kalmanState.mean[2][0] = 0
@@ -1874,18 +1903,17 @@ export class TrackManager {
       }
 
       // If prediction exits all FOVs, mark as FOV exit and freeze
+      // IMPORTANT: Apply to ALL track states, not just occluded - fixes wall sliding bug
       if (fovPolygons && !isPointInAnyFOV(predictedPos, fovPolygons, 0)) {
-        if (track.state === 'occluded') {
-          track.exitReason = 'fov_exit'
-          // Zero velocity to prevent bouncing on re-emergence
-          if (track.kalmanState) {
-            track.kalmanState.mean[2][0] = 0
-            track.kalmanState.mean[3][0] = 0
-          }
-          track.predictedPosition = undefined
-          // Notify frontend to freeze at current position (not the bad prediction)
-          this.onTrackUpdated?.(track)
+        track.exitReason = 'fov_exit'
+        // Zero velocity to prevent bouncing on re-emergence
+        if (track.kalmanState) {
+          track.kalmanState.mean[2][0] = 0
+          track.kalmanState.mean[3][0] = 0
         }
+        track.predictedPosition = undefined
+        // Notify frontend to freeze at current position (not the bad prediction)
+        this.onTrackUpdated?.(track)
         continue
       }
 

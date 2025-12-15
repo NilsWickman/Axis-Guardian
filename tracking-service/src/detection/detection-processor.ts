@@ -19,6 +19,7 @@ import type { SiteMapObstacle } from '../config/sitemap-loader.js'
 import { isPointInsideAnyObstacle } from '../geometry/obstacles.js'
 import type { ZoneManager } from '../zones/zone-manager.js'
 import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
+import { BatchOptimizer, type BatchOptimizerConfig, type FrameAssignment } from '../optimization/batch-optimizer.js'
 
 /**
  * Common interface for detection processors
@@ -69,11 +70,49 @@ export class DetectionProcessor implements IDetectionProcessor {
   private obstacleFilterCount: number = 0
   /** Counter for same-camera deduplicated detections */
   private sameCameraDeduplicatedCount: number = 0
+  /** Optional batch optimizer for multi-frame global assignment */
+  private batchOptimizer: BatchOptimizer | null = null
+  /** Callback for when batch optimizer emits a frame */
+  public onBatchFrameEmitted?: (assignment: FrameAssignment) => void
 
   constructor(
     private trackManager: TrackManager,
-    protected cameraRegistry: CameraRegistry
-  ) {}
+    protected cameraRegistry: CameraRegistry,
+    batchOptimizerConfig?: Partial<BatchOptimizerConfig>
+  ) {
+    // Initialize batch optimizer if enabled
+    if (ALGORITHM_CONSTANTS.batch.enabled || batchOptimizerConfig?.enabled) {
+      this.batchOptimizer = new BatchOptimizer(
+        {
+          getActiveTracks: () => this.trackManager.getActiveTracks(),
+          getAllTracks: () => this.trackManager.getAllTracks(),
+          processBatchDetections: (dets) => this.trackManager.processBatchDetections(dets),
+        },
+        {
+          ...ALGORITHM_CONSTANTS.batch,
+          ...batchOptimizerConfig,
+          onFrameEmitted: (assignment) => {
+            this.onBatchFrameEmitted?.(assignment)
+          },
+        }
+      )
+      console.log(`[DetectionProcessor] Batch optimization enabled: ${ALGORITHM_CONSTANTS.batch.emissionDelayFrames} frame delay, ${ALGORITHM_CONSTANTS.batch.optimizationWindowSize} optimization window, ${ALGORITHM_CONSTANTS.batch.maxBufferSize} max buffer`)
+    }
+  }
+
+  /**
+   * Check if batch optimization is enabled
+   */
+  get isBatchOptimizationEnabled(): boolean {
+    return this.batchOptimizer?.isEnabled ?? false
+  }
+
+  /**
+   * Get batch optimizer status
+   */
+  getBatchOptimizerStatus(): { bufferSize: number; status: string; isBuffering: boolean; framesEmitted: number } | null {
+    return this.batchOptimizer?.getStatus() ?? null
+  }
 
   /**
    * Set zone manager for camera restart detection (future use)
@@ -343,9 +382,20 @@ export class DetectionProcessor implements IDetectionProcessor {
     // Deduplicate same-camera detections before sending to track manager
     const deduplicatedDetections = this.deduplicateSameCameraDetections(projectedDetections)
 
-    // Use batch processing with Hungarian algorithm for optimal assignment
+    // Route through batch optimizer if enabled, otherwise use direct processing
     if (deduplicatedDetections.length > 0) {
-      return this.trackManager.processBatchDetections(deduplicatedDetections)
+      if (this.batchOptimizer) {
+        // Batch mode: buffer frames for multi-frame optimization
+        // Returns tracks during hybrid mode (first window) or empty during buffering
+        return this.batchOptimizer.addFrame(
+          message.frame_number,
+          timestampMs,
+          deduplicatedDetections
+        )
+      } else {
+        // Frame-by-frame mode: direct Hungarian assignment
+        return this.trackManager.processBatchDetections(deduplicatedDetections)
+      }
     }
 
     return []

@@ -78,6 +78,8 @@ const canvasRef = ref<HTMLCanvasElement | null>(null)
 const trackingFrameNumbers = computed(() => globalTrackStore.getAllFrameInfo())
 let animationFrameId: number | null = null
 let isAnimating = false
+let lastCleanupTime = 0
+const CLEANUP_INTERVAL_MS = 1000  // Trigger cleanup every second to filter stale tracks
 
 // Interpolation state for smooth animation
 interface InterpolationState {
@@ -610,6 +612,13 @@ function animate() {
   // Update lastFrameTime for next frame's delta calculation
   lastFrameTime = now
 
+  // Periodically trigger cleanup to remove stale tracks
+  // This is needed because Vue computed properties don't automatically re-evaluate based on time
+  if (now - lastCleanupTime >= CLEANUP_INTERVAL_MS) {
+    lastCleanupTime = now
+    globalTrackStore.triggerCleanup()
+  }
+
   animationFrameId = requestAnimationFrame(animate)
 }
 
@@ -645,6 +654,19 @@ watch(
     cleanupInterpolationStates()
   },
   { deep: true }
+)
+
+// Watch for track store being completely cleared (e.g., on reconnection or video loop)
+// This handles the case where clearAllTracks() is called and we need to immediately
+// clear all interpolation states to prevent stale circles from rendering
+watch(
+  () => globalTrackStore.tracks.size,
+  (newSize, oldSize) => {
+    if (newSize === 0 && oldSize !== undefined && oldSize > 0) {
+      // Store was cleared - immediately clear all interpolation states
+      interpolationStates.clear()
+    }
+  }
 )
 
 // Start animation on mount

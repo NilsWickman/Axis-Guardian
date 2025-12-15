@@ -667,7 +667,19 @@ export function applyWorldTransform(point: Point2D, transform: WorldTransform): 
     const { coeffsX: cx, coeffsY: cy, degree } = transform.polynomial
 
     // Build feature vector based on degree
-    const features: number[] = [1, x, y, x*x, y*y, x*y]
+    // degree 1: [1, x, y]
+    // degree 2: [1, x, y, x^2, y^2, xy]
+    // degree 3: [1, x, y, x^2, y^2, xy, x^3, y^3, x^2y, xy^2]
+    // etc.
+    const features: number[] = [1]
+
+    if (degree >= 1) {
+      features.push(x, y)
+    }
+
+    if (degree >= 2) {
+      features.push(x*x, y*y, x*y)
+    }
 
     if (degree >= 3) {
       features.push(x*x*x, y*y*y, x*x*y, x*y*y)
