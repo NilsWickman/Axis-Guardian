@@ -25,6 +25,7 @@ import type {
   TrackAttributes,
   GlobalTrackJSON,
   CameraFrameInfo,
+  TrackingConfigBase,
 } from '@axis-guardian/types'
 
 // Re-export shared types for consumers of this module
@@ -40,25 +41,56 @@ export type {
   TrackAttributes,
   GlobalTrackJSON,
   CameraFrameInfo,
+  TrackingConfigBase,
 }
 
-// Default configuration constants
-export const DEFAULT_CORRELATION_DISTANCE_M = 1.5 // Max distance (meters) to associate detection with existing track
-export const DEFAULT_MERGE_WINDOW_MS = 200 // Time window for multi-camera merging
-export const DEFAULT_TRACK_EXPIRY_MS = 3000 // Remove tracks not seen for 3 seconds (reduces UI flicker)
-export const DEFAULT_MAX_TRAIL_LENGTH = 20 // Position history for trails
-export const DEFAULT_MIN_DETECTIONS_TO_CONFIRM = 3 // Minimum detections before track is considered confirmed
-export const DEFAULT_MAX_VELOCITY_MS = 10 // Max reasonable walking speed in m/s (reject teleporting tracks)
-
-// Configurable tracking parameters interface
-export interface TrackingConfig {
-  correlationDistanceM: number
-  mergeWindowMs: number
-  trackExpiryMs: number
-  maxTrailLength: number
-  minDetectionsToConfirm: number
-  maxVelocityMs: number
+/**
+ * Default tracking configuration values.
+ *
+ * IMPORTANT: These values MUST match ALGORITHM_CONSTANTS.trackLifecycle in
+ * tracking-service/src/config/algorithm-constants.ts
+ *
+ * The tracking-service is the source of truth. These defaults are provided for:
+ * 1. Frontend display when server is unavailable
+ * 2. Local tracking mode fallback (deprecated)
+ * 3. Type safety and consistency checks
+ */
+export const DEFAULT_TRACKING_CONFIG_BASE: TrackingConfigBase = {
+  correlationDistanceM: 1.0,  // ALGORITHM_CONSTANTS.trackLifecycle.correlationDistanceM
+  mergeWindowMs: 200,         // ALGORITHM_CONSTANTS.trackLifecycle.mergeWindowMs
+  trackExpiryMs: 5000,        // ALGORITHM_CONSTANTS.trackLifecycle.trackExpiryMs
+  maxTrailLength: 20,         // ALGORITHM_CONSTANTS.trackLifecycle.maxTrailLength
+  minDetectionsToConfirm: 3,  // ALGORITHM_CONSTANTS.trackLifecycle.minDetectionsToConfirm
+  maxVelocityMs: 8,           // ALGORITHM_CONSTANTS.trackLifecycle.maxVelocityMs
 }
+
+// Legacy constant exports for backwards compatibility
+export const DEFAULT_CORRELATION_DISTANCE_M = DEFAULT_TRACKING_CONFIG_BASE.correlationDistanceM
+export const DEFAULT_MERGE_WINDOW_MS = DEFAULT_TRACKING_CONFIG_BASE.mergeWindowMs
+export const DEFAULT_TRACK_EXPIRY_MS = DEFAULT_TRACKING_CONFIG_BASE.trackExpiryMs
+export const DEFAULT_MAX_TRAIL_LENGTH = DEFAULT_TRACKING_CONFIG_BASE.maxTrailLength
+export const DEFAULT_MIN_DETECTIONS_TO_CONFIRM = DEFAULT_TRACKING_CONFIG_BASE.minDetectionsToConfirm
+export const DEFAULT_MAX_VELOCITY_MS = DEFAULT_TRACKING_CONFIG_BASE.maxVelocityMs
+
+/**
+ * Local tracking configuration parameters.
+ *
+ * Extends TrackingConfigBase from @axis-guardian/types to ensure type consistency
+ * with the tracking-service.
+ *
+ * @deprecated This configuration is only used for legacy local tracking mode
+ * (usePersonPositionTracking composable). When using tracking-service WebSocket sync,
+ * all tracking logic is handled server-side. The server's ALGORITHM_CONSTANTS is
+ * the source of truth for active tracking.
+ *
+ * For server-synced mode, use the tracking-service REST API to query/modify config.
+ */
+export interface LocalTrackingConfig extends TrackingConfigBase {}
+
+/**
+ * @deprecated Use LocalTrackingConfig instead. This alias is kept for backwards compatibility.
+ */
+export type TrackingConfig = LocalTrackingConfig
 
 // Color palette for global tracks (12 distinct colors)
 const TRACK_COLORS = [
@@ -99,6 +131,9 @@ export interface CameraDetection {
  * NOTE: When using server sync (WebSocket), tracks come from the tracking-service
  * in GlobalTrackJSON format. The `pendingDetections` field is only used for
  * legacy local tracking mode (usePersonPositionTracking composable).
+ *
+ * For server-synced tracks, `pendingDetections` is undefined (not present) as
+ * all detection merging is handled by the tracking-service.
  */
 export interface GlobalTrack {
   globalTrackId: string
@@ -113,11 +148,13 @@ export interface GlobalTrack {
   confidence: number // Latest confidence value
   state: TrackState // Track lifecycle state
   /**
-   * Pending detections for multi-camera merge within time window
+   * Pending detections for multi-camera merge within time window.
+   *
    * @deprecated Only used for legacy local tracking mode. Server-synced tracks
-   * set this to an empty array as merging is handled by the tracking-service.
+   * do not have this field as merging is handled by the tracking-service.
+   * This field is optional - undefined for server tracks, array for local tracks.
    */
-  pendingDetections: CameraDetection[]
+  pendingDetections?: CameraDetection[]
   /** Reason why track stopped being detected (for smart timeout behavior) */
   exitReason?: ExitReason
   /** Predicted position during pillar occlusion (ghost track) */
@@ -191,15 +228,9 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
   // Tracking frame info for timing diagnostics (per camera)
   const trackingFrameInfo = ref<Map<string, CameraFrameInfo>>(new Map())
 
-  // Configurable tracking parameters
-  const config = ref<TrackingConfig>({
-    correlationDistanceM: DEFAULT_CORRELATION_DISTANCE_M,
-    mergeWindowMs: DEFAULT_MERGE_WINDOW_MS,
-    trackExpiryMs: DEFAULT_TRACK_EXPIRY_MS,
-    maxTrailLength: DEFAULT_MAX_TRAIL_LENGTH,
-    minDetectionsToConfirm: DEFAULT_MIN_DETECTIONS_TO_CONFIRM,
-    maxVelocityMs: DEFAULT_MAX_VELOCITY_MS,
-  })
+  // Configurable tracking parameters - initialized from shared defaults
+  // @deprecated Local config is only used for legacy local tracking mode
+  const config = ref<TrackingConfig>({ ...DEFAULT_TRACKING_CONFIG_BASE })
 
   // UI settings
   const showTrails = ref(true)
@@ -418,6 +449,10 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     }
 
     // Add to pending detections for merge (limit to prevent memory growth)
+    // Initialize array if undefined (handles mixed local/server tracks)
+    if (!track.pendingDetections) {
+      track.pendingDetections = []
+    }
     track.pendingDetections.push(detection)
     if (track.pendingDetections.length > 50) {
       track.pendingDetections = track.pendingDetections.slice(-20)
@@ -428,8 +463,14 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
 
   /**
    * Process pending detections and merge positions
+   * @deprecated Only used for legacy local tracking mode
    */
   function processPendingMerge(track: GlobalTrack, now: number) {
+    // Skip if no pending detections (server-synced tracks)
+    if (!track.pendingDetections) {
+      return
+    }
+
     // Filter detections within merge window
     const recentDetections = track.pendingDetections.filter(
       det => now - det.timestamp < config.value.mergeWindowMs
@@ -546,8 +587,8 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
         }
       }
 
-      // Also clear pending detections on inactive tracks
-      if (!track.isActive) {
+      // Also clear pending detections on inactive tracks (local tracking only)
+      if (!track.isActive && track.pendingDetections) {
         track.pendingDetections = []
       }
     }
@@ -623,16 +664,10 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
 
   /**
    * Reset configuration to defaults
+   * Uses DEFAULT_TRACKING_CONFIG_BASE from shared types as source of truth
    */
   function resetConfig() {
-    config.value = {
-      correlationDistanceM: DEFAULT_CORRELATION_DISTANCE_M,
-      mergeWindowMs: DEFAULT_MERGE_WINDOW_MS,
-      trackExpiryMs: DEFAULT_TRACK_EXPIRY_MS,
-      maxTrailLength: DEFAULT_MAX_TRAIL_LENGTH,
-      minDetectionsToConfirm: DEFAULT_MIN_DETECTIONS_TO_CONFIRM,
-      maxVelocityMs: DEFAULT_MAX_VELOCITY_MS,
-    }
+    config.value = { ...DEFAULT_TRACKING_CONFIG_BASE }
   }
 
   // ============================================
@@ -643,12 +678,16 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
 
   /**
    * Convert server JSON to frontend GlobalTrack (Map conversion)
+   *
+   * NOTE: Server-synced tracks do not include `pendingDetections` as all
+   * detection merging is handled by the tracking-service. The field is
+   * intentionally omitted (undefined) to distinguish from local tracks.
    */
   function convertServerTrack(json: GlobalTrackJSON): GlobalTrack {
     return {
       ...json,
       cameraAssociations: new Map(Object.entries(json.cameraAssociations)),
-      pendingDetections: [], // Server handles merging, no pending needed
+      // pendingDetections intentionally omitted for server-synced tracks
       videoTiming: json.videoTiming,
     }
   }

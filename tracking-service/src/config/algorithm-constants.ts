@@ -390,18 +390,18 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
     maxCost: 1.2,  // Slightly relaxed for better track continuity
     associationBonus: 0.05,  // Even stronger binding for existing associations
     sameCameraPenalty: 1.8,  // Increased - stronger penalty against same-camera double assignments
-    velocityConsistencyWeight: 0.2,  // Increased for better motion consistency
+    velocityConsistencyWeight: 0.25,  // Increased from 0.2 - penalize impossible velocities (helps VCI)
     crossingProximityThreshold: 1.5,
     crossingMaxCostMultiplier: 0.35,  // Tighter for crossings
     directionConsistencyWeight: 0.25,  // Increased for better direction matching
     minSpeedForDirection: 0.15,  // Lowered - consider direction at lower speeds
-    crossCameraBonus: 0.5,  // Stronger bonus for cross-camera handoffs
-    crossCameraBonusWindowMs: 2500,  // Extended window
+    crossCameraBonus: 0.35,  // Increased bonus (lower = stronger) for cross-camera handoffs
+    crossCameraBonusWindowMs: 4000,  // Extended window from 2500ms for cross-camera association
     maxAccelerationMs2: 3.5,  // Slightly relaxed
     accelerationConsistencyWeight: 0.1,
-    embeddingWeight: 0.55,  // Increased from 0.45 - stronger appearance matching to reduce ID swaps
-    embeddingMinSimilarity: 0.60,  // Lowered from 0.65 for more embedding matches
-    embeddingMinQuality: 0.01,  // Lowered to 0.01 to use embeddings from preprocessor (quality bug outputs 0.02)
+    embeddingWeight: 0.70,  // Increased from 0.65 - stronger appearance matching for ID consistency
+    embeddingMinSimilarity: 0.55,  // Raised from 0.50 - reduce noise from poor matches
+    embeddingMinQuality: 0.15,  // Raised from 0.01 to 0.15 - filter garbage embeddings (helps VCI)
     trajectoryPredictionSteps: [200, 500, 800, 1000],
     trajectoryPredictionWindowMs: 1000,
     intersectionThresholdM: 0.8,
@@ -410,11 +410,11 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   trackLifecycle: {
     correlationDistanceM: 1.0,  // Standard correlation distance
     mergeWindowMs: 200,
-    trackExpiryMs: 5000,  // Balanced expiry
+    trackExpiryMs: 8000,  // Increased from 5000ms - longer timeout to reduce ID fragmentation
     maxTrailLength: 20,
     minDetectionsToConfirm: 3,  // Standard track confirmation
     maxVelocityMs: 8,
-    unconfirmedTrackExpiryMs: 2000,  // Standard expiry
+    unconfirmedTrackExpiryMs: 3000,  // Increased from 2000ms - give unconfirmed tracks more time
     minCreationConfidence: 0.7,  // Lower confidence - allow more track creation
     maxTracks: 200,
     minTrailMovementThreshold: 0.1,
@@ -428,58 +428,58 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   },
 
   trackMerger: {
-    mergeDistanceM: 0.4,  // Very small - only merge nearly identical tracks
-    mergeConfidenceThreshold: 0.7,  // High - require high confidence to merge
-    mergeVelocityThreshold: 1.0,  // Strict velocity matching
-    unconfirmedMergeDistanceM: 0.3,  // Very small - tight merge for unconfirmed
-    unconfirmedMergeConfidenceThreshold: 0.6,  // High confidence
-    crossCameraMergeDistanceM: 0.4,  // Very small for cross-camera
+    mergeDistanceM: 0.6,  // Extended from 0.4m - allow projection variance (~0.4m typical error)
+    mergeConfidenceThreshold: 0.65,  // Lowered from 0.7 - more permissive merging
+    mergeVelocityThreshold: 1.5,  // Relaxed from 1.0m/s - less strict velocity matching
+    unconfirmedMergeDistanceM: 0.5,  // Extended from 0.3m - more forgiving for unconfirmed
+    unconfirmedMergeConfidenceThreshold: 0.55,  // Lowered from 0.6 - more permissive
+    crossCameraMergeDistanceM: 0.7,  // Extended from 0.4m - account for projection error
     minDetectionsForVelocity: 3,
-    simultaneousDetectionBonus: 0.05,  // Small bonus
-    simultaneousWindowMs: 100,  // Tight window
+    simultaneousDetectionBonus: 0.1,  // Increased from 0.05 - stronger same-time bonus
+    simultaneousWindowMs: 150,  // Extended from 100ms - wider simultaneous window
     slowSpeedThreshold: 0.3,
     fastSpeedThreshold: 1.0,
-    slowSpeedDistanceMultiplier: 1.0,  // No multiplier
+    slowSpeedDistanceMultiplier: 1.2,  // Increased from 1.0 - expand radius for slow tracks
     fastSpeedDistanceMultiplier: 0.8,
     slowSpeedThresholdReduction: 0.05,  // Small reduction
   },
 
   occlusion: {
     missedFramesBeforeOcclusion: 10,  // Standard occlusion transition
-    occlusionCoastTimeMs: 5000,  // Moderate coasting time
+    occlusionCoastTimeMs: 8000,  // Increased from 5000ms - longer coasting to maintain track through occlusions
     detectionsToExitOcclusion: 2,  // Keep hysteresis (flicker protection)
-    reidentificationGateMultiplier: 4.5,  // Moderate gate for re-ID
-    fovExitTimeoutMs: 1500,  // Standard timeout
-    boundaryExitTimeoutMs: 1000,  // Standard timeout
-    maxPillarOcclusionMs: 2500,  // Standard pillar occlusion
-    maxNonPillarCoastMs: 1500,  // Standard non-pillar coast
-    coastingDampingFactor: 0.80,  // 20% velocity reduction per update
+    reidentificationGateMultiplier: 5.5,  // Increased from 4.5 - wider gate for re-ID after occlusion
+    fovExitTimeoutMs: 2500,  // Increased from 1500ms - longer FOV exit tolerance
+    boundaryExitTimeoutMs: 2000,  // Increased from 1000ms - longer boundary exit tolerance
+    maxPillarOcclusionMs: 6000,  // Extended from 4s to 6s - allow longer pillar occlusion recovery
+    maxNonPillarCoastMs: 4000,  // Extended from 2.5s to 4s - longer non-pillar coast for TCI
+    coastingDampingFactor: 0.88,  // Less aggressive damping (was 0.85) - maintain velocity better during coast
     maxOcclusionTrailLength: 50,
     minRecoveryTimeMs: 300,  // Minimum time before exiting occlusion (flicker protection)
-    partialPillarOcclusionMs: 2500,  // Standard partial pillar occlusion
+    partialPillarOcclusionMs: 4000,  // Increased from 2500ms - longer partial pillar occlusion
     // Quality-adaptive retention: timeout *= (1 + bonus * normalizedQuality)
-    qualityRetentionBonus: 0.5,  // quality=1.0 gives 1.5x timeout
-    maxRetentionMultiplier: 1.8,  // Cap to prevent excessive coasting
+    qualityRetentionBonus: 0.8,  // Increased from 0.5 - quality=1.0 gives 1.8x timeout
+    maxRetentionMultiplier: 2.5,  // Increased from 1.8 - allow longer retention for high-quality tracks
     minQualityForRetention: 0.01,  // Lowered to 0.01 to work with preprocessor quality bug (outputs 0.02)
   },
 
   stitching: {
-    maxGapMs: 5000,  // Increased - allow stitching over longer gaps
-    maxDistanceMultiplier: 3.0,  // Increased - allow stitching over larger distances
-    maxEntriesPerCamera: 100,  // Increased - remember more ended tracks
+    maxGapMs: 15000,  // Extended from 10s to 15s - allow stitching over longer gaps for occlusion recovery
+    maxDistanceMultiplier: 5.0,  // Extended from 4.0 to 5.0 - allow larger distance stitching
+    maxEntriesPerCamera: 200,  // Increased from 150 - remember more ended tracks for stitching
   },
 
   reid: {
-    minSimilarity: 0.70,  // Lowered from 0.75 for more matches
-    sameCameraBonus: 1.2,  // Increased for stronger same-camera binding
-    maxTrackAgeMs: 6000,  // Legacy - use adaptive window instead
+    minSimilarity: 0.55,  // Lowered from 0.70 - more permissive matching to reduce ID fragmentation
+    sameCameraBonus: 1.4,  // Increased from 1.2 - stronger same-camera binding
+    maxTrackAgeMs: 10000,  // Increased from 6000ms - legacy, use adaptive window instead
     minEmbeddingQuality: 0.01,  // Lowered to 0.01 for more embeddings (preprocessor outputs 0.02)
-    highSimilarityThreshold: 0.75,  // Lowered for more high-similarity overrides
-    highSimilarityDistanceOverride: 2.5,  // Increased distance override for high similarity matches
+    highSimilarityThreshold: 0.65,  // Lowered from 0.75 - more high-similarity overrides
+    highSimilarityDistanceOverride: 4.0,  // Increased from 2.5m - larger distance override for high similarity
     // Quality-adaptive re-ID window: timeout = baseAge * (1 + boostFactor * quality)
-    baseReidAgeMs: 4000,  // Reduced base window
-    qualityBoostFactor: 1.5,  // quality=1.0 gives 1.5x boost
-    adaptiveMaxReidAgeMs: 8000,  // Reduced cap to prevent stale matches
+    baseReidAgeMs: 8000,  // Extended from 6s to 8s - longer base window for re-ID (helps TCI)
+    qualityBoostFactor: 2.5,  // Increased from 2.0 - quality=1.0 gives 2.5x boost
+    adaptiveMaxReidAgeMs: 20000,  // Extended from 15s to 20s - allow re-ID over longer gaps
   },
 
   kalman: {
@@ -491,7 +491,7 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   },
 
   clustering: {
-    clusteringDistanceM: 0.9,  // Increased - account for projection error between cameras (~0.4m average)
+    clusteringDistanceM: 1.2,  // Increased from 0.9m - account for projection error between cameras (~0.4m average)
   },
 
   positionMerging: {
@@ -507,10 +507,10 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
 
   velocity: {
     impossibleVelocityMs: 50,
-    mahalanobisThreshold: 5.5,  // Relaxed from 4.0 - less strict gating for occluded track recovery
-    sameCameraMahalanobisThreshold: 7.0,  // Relaxed from 6.0 - better same-camera re-ID
+    mahalanobisThreshold: 7.0,  // Relaxed from 5.5 - less strict gating for cross-camera handoffs
+    sameCameraMahalanobisThreshold: 9.0,  // Relaxed from 7.0 - better same-camera re-ID
     minTimeDeltaMs: 50,
-    sameCameraReIDWindowMs: 500,
+    sameCameraReIDWindowMs: 1000,  // Increased from 500ms - longer window for same-camera re-ID
   },
 
   sync: {
@@ -534,10 +534,10 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
 
   // Predictive handoff zones - uses velocity toward boundary
   handoff: {
-    handoffZoneDistanceM: 1.5,  // Within 1.5m of FOV edge
-    minVelocityTowardBoundary: 0.3,  // Must be moving > 0.3 m/s toward edge
-    timeToBoundaryThresholdMs: 2000,  // Expected to exit within 2s
-    predictiveHandoffBonus: 0.7,  // 30% cost reduction for handoff candidates
-    predictiveGateExpansion: 1.3,  // 30% wider spatial gate
+    handoffZoneDistanceM: 2.5,  // Increased from 1.5m - wider handoff zone near FOV edge
+    minVelocityTowardBoundary: 0.2,  // Lowered from 0.3 - trigger handoff at slower speeds
+    timeToBoundaryThresholdMs: 3000,  // Increased from 2000ms - longer prediction window
+    predictiveHandoffBonus: 0.5,  // Increased bonus (was 0.7) - 50% cost reduction for handoff candidates
+    predictiveGateExpansion: 1.6,  // Increased from 1.3 - 60% wider spatial gate for handoffs
   },
 } as const

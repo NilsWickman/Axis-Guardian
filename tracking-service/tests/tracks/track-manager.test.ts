@@ -161,8 +161,9 @@ describe('TrackManager', () => {
       expect(track.isActive).toBe(true)
       expect(track.isConfirmed).toBe(true)
 
-      // Advance time past expiry (default 10000ms)
-      mockTime += 11000
+      // Advance time past expiry (8000ms from ALGORITHM_CONSTANTS.trackLifecycle.trackExpiryMs)
+      // but not past double expiry (16000ms) to avoid complete removal
+      mockTime += 9000
       tm.cleanupExpiredTracks()
 
       const expiredTrack = tm.getTrackById('expiry-1')
@@ -184,8 +185,8 @@ describe('TrackManager', () => {
       mockTime += 100
       tm.processDetection('camera1', 1, 5.2, 5.0, 0.9)
 
-      // Advance time past double expiry (default 10000ms * 2)
-      mockTime += 21000
+      // Advance time past double expiry (default 8000ms * 2 = 16000ms)
+      mockTime += 17000
       tm.cleanupExpiredTracks()
 
       const track = tm.getTrackById('remove-1')
@@ -318,7 +319,7 @@ describe('TrackManager', () => {
       trackManager.updateConfig({ correlationDistanceM: 999 })
       trackManager.resetConfig()
       const config = trackManager.getConfig()
-      expect(config.correlationDistanceM).toBe(1.2) // Default from ALGORITHM_CONSTANTS.trackLifecycle
+      expect(config.correlationDistanceM).toBe(1.0) // Default from ALGORITHM_CONSTANTS.trackLifecycle.correlationDistanceM
     })
   })
 

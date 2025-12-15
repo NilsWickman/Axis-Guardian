@@ -399,14 +399,17 @@ export class TrackManager {
             )
 
             // If track disappeared near a pillar, transition to occluded instead of deleting
-            // Also handle 'timeout' reason which may occur in sparse detection areas
-            if (exitResult.reason === 'pillar_occlusion' || exitResult.reason === 'timeout') {
+            // Also handle 'timeout' and 'partial_occlusion' reasons
+            if (exitResult.reason === 'pillar_occlusion' ||
+                exitResult.reason === 'partial_occlusion' ||
+                exitResult.reason === 'timeout') {
               track.state = 'occluded'
               track.occludedSince = track.lastSeen
               track.exitReason = exitResult.reason
 
-              // Set predicted position for pillar occlusions
-              if (exitResult.reason === 'pillar_occlusion' && exitResult.predictedExitPoint) {
+              // Set predicted position for pillar/partial occlusions
+              if ((exitResult.reason === 'pillar_occlusion' || exitResult.reason === 'partial_occlusion')
+                  && exitResult.predictedExitPoint) {
                 track.predictedPosition = exitResult.predictedExitPoint
               }
 
@@ -1983,15 +1986,17 @@ export class TrackManager {
     const detEmbedding = detection.attributes?.embedding
     const detQuality = detection.attributes?.embedding_quality ?? 0
 
-    if (detEmbedding && detEmbedding.length > 0 && detQuality >= 0.25) {
+    // Use low quality threshold (0.01) to match algorithm-constants.ts minEmbeddingQuality
+    // Preprocessor outputs quality around 0.02, so 0.25 was filtering out valid embeddings
+    if (detEmbedding && detEmbedding.length > 0 && detQuality >= 0.01) {
       let bestEmbeddingTrack: GlobalTrack | null = null
-      let bestSimilarity = 0.65  // Minimum similarity threshold for embedding re-ID
+      let bestSimilarity = 0.55  // Lowered from 0.65 to match reid.minSimilarity
 
       for (const track of occludedTracks) {
         const trackEmbedding = track.attributes?.embedding
         const trackQuality = track.attributes?.embedding_quality ?? 0
 
-        if (!trackEmbedding || trackEmbedding.length === 0 || trackQuality < 0.25) continue
+        if (!trackEmbedding || trackEmbedding.length === 0 || trackQuality < 0.01) continue
 
         // Use quality-adaptive re-ID window per track
         const maxReidAgeMs = this.getAdaptiveReidWindow(track)
@@ -2044,18 +2049,24 @@ export class TrackManager {
       const assoc = track.cameraAssociations.get(detection.cameraId)
       const hasExactSameCameraId = assoc?.trackIds.includes(detection.trackId) ?? false
 
-      // Tighten gate for weaker evidence:
+      // Gate multiplier logic:
+      // - Pillar/partial occlusions: use full gateMultiplier (ghost may have drifted)
       // - Exact same-camera trackId match: full gateMultiplier
       // - Same camera but different local trackId: smaller gate (local fragmentation case)
       // - Cross-camera re-id: medium gate (handoff case)
+      const isPillarOcclusion = track.exitReason === 'pillar_occlusion' ||
+                                track.exitReason === 'partial_occlusion'
+
       let effectiveMultiplier = gateMultiplier
-      if (assoc && !hasExactSameCameraId) {
+      if (isPillarOcclusion) {
+        // Pillar occlusions get full gate - ghost may have drifted significantly
+        effectiveMultiplier = gateMultiplier
+      } else if (assoc && !hasExactSameCameraId) {
         const exitReason = track.exitReason
         const safeForSameCameraReid =
           exitReason === undefined ||
           exitReason === null ||
-          exitReason === 'timeout' ||
-          exitReason === 'pillar_occlusion'
+          exitReason === 'timeout'
 
         // Allow a wider gate for same-camera re-ID when the track likely dropped out
         // rather than exited the FOV/room.

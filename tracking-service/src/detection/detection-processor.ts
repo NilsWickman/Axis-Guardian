@@ -69,8 +69,6 @@ export class DetectionProcessor implements IDetectionProcessor {
   private obstacleFilterCount: number = 0
   /** Counter for same-camera deduplicated detections */
   private sameCameraDeduplicatedCount: number = 0
-  /** Zone manager for clearing zone states on camera restart */
-  private zoneManager?: ZoneManager
 
   constructor(
     private trackManager: TrackManager,
@@ -78,10 +76,11 @@ export class DetectionProcessor implements IDetectionProcessor {
   ) {}
 
   /**
-   * Set zone manager for camera restart detection
+   * Set zone manager for camera restart detection (future use)
+   * @param _zoneManager - Zone manager instance (currently unused, placeholder for future feature)
    */
-  setZoneManager(zoneManager: ZoneManager): void {
-    this.zoneManager = zoneManager
+  setZoneManager(_zoneManager: ZoneManager): void {
+    // Future use: clear zone states on camera restart
   }
 
   /**
