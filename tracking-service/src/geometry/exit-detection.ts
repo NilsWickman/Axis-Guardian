@@ -81,13 +81,90 @@ function isRayBlockedByPillar(
 }
 
 /**
+ * Check if a point is in the shadow zone cast by a pillar from a camera's view
+ *
+ * Shadow zone = conical region behind pillar where person would be occluded.
+ * The shadow extends from pillar edges (tangent lines from camera) outward.
+ *
+ * @param cameraPos - Camera position
+ * @param targetPoint - Point to check (person position)
+ * @param pillar - Pillar obstacle
+ * @param shadowExtension - How far beyond the pillar center to extend shadow (meters)
+ * @returns true if point is in pillar's shadow from this camera
+ */
+function isPointInPillarShadow(
+  cameraPos: Point2D,
+  targetPoint: Point2D,
+  pillar: SiteMapObstacle,
+  shadowExtension: number = 3.0
+): boolean {
+  if (pillar.type !== 'circle' || pillar.radius === undefined) {
+    return false
+  }
+
+  // Vector from camera to pillar center
+  const toPillarX = pillar.position.x - cameraPos.x
+  const toPillarY = pillar.position.y - cameraPos.y
+  const distToPillar = Math.sqrt(toPillarX * toPillarX + toPillarY * toPillarY)
+
+  if (distToPillar < pillar.radius + 0.1) {
+    return false  // Camera is inside or too close to pillar
+  }
+
+  // Vector from camera to target point
+  const toTargetX = targetPoint.x - cameraPos.x
+  const toTargetY = targetPoint.y - cameraPos.y
+  const distToTarget = Math.sqrt(toTargetX * toTargetX + toTargetY * toTargetY)
+
+  if (distToTarget < 0.001) return false
+
+  // Project target onto camera-to-pillar line to check if beyond pillar
+  const projectionLength = (toTargetX * toPillarX + toTargetY * toPillarY) / distToPillar
+
+  // Target must be beyond the pillar's near edge to be in shadow
+  if (projectionLength < distToPillar - pillar.radius) {
+    return false  // Target is in front of pillar
+  }
+
+  // Shadow cone half-angle = arcsin(radius / distToPillar)
+  const shadowHalfAngle = Math.asin(Math.min(1, pillar.radius / distToPillar))
+
+  // Angle from camera to target
+  const angleToTarget = Math.atan2(toTargetY, toTargetX)
+  // Angle from camera to pillar center
+  const angleToPillar = Math.atan2(toPillarY, toPillarX)
+
+  // Normalize angle difference to [-PI, PI]
+  let angleDiff = angleToTarget - angleToPillar
+  while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI
+  while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI
+
+  // Check if within shadow cone
+  if (Math.abs(angleDiff) > shadowHalfAngle) {
+    return false  // Outside shadow cone
+  }
+
+  // Check if within shadow extension distance
+  const distBeyondPillar = projectionLength - distToPillar
+  if (distBeyondPillar > shadowExtension) {
+    return false  // Too far beyond pillar
+  }
+
+  // Additional check: person should not be too far laterally from shadow cone
+  const perpDist = distToTarget * Math.sin(Math.abs(angleDiff))
+  const maxLateralDist = pillar.radius + (distBeyondPillar > 0 ? distBeyondPillar * Math.tan(shadowHalfAngle) : 0)
+
+  return perpDist <= maxLateralDist + 0.5  // 0.5m tolerance for person width
+}
+
+/**
  * Result of partial occlusion check
  */
 interface PartialOcclusionResult {
   pillar: SiteMapObstacle | null
-  /** True if ALL cameras are blocked */
+  /** True if 50%+ cameras are blocked (triggers pillar occlusion handling) */
   isFullOcclusion: boolean
-  /** True if 50%+ cameras are blocked (but not all) */
+  /** True if 30-50% cameras are blocked */
   isPartialOcclusion: boolean
   /** Ratio of cameras blocked (0-1) */
   blockageRatio: number
@@ -95,7 +172,10 @@ interface PartialOcclusionResult {
 
 /**
  * Find which pillar (if any) is blocking the view from cameras to the point
- * Returns both full occlusion (all cameras blocked) and partial occlusion (50%+ blocked)
+ * Uses shadow zone detection to find occlusions beyond just the pillar's physical radius.
+ *
+ * With 2 cameras at opposite corners, a pillar rarely blocks all cameras simultaneously,
+ * so we use a 50% threshold for "full" occlusion (triggers pillar handling).
  */
 function findOccludingPillarWithPartial(
   point: Point2D,
@@ -113,7 +193,13 @@ function findOccludingPillarWithPartial(
     let blockedCount = 0
 
     for (const camera of cameras) {
-      if (isRayBlockedByPillar(camera.position, point, pillar)) {
+      // Use shadow zone detection for more accurate occlusion detection
+      // This catches cases where person is behind pillar but not directly overlapping
+      if (isPointInPillarShadow(camera.position, point, pillar)) {
+        blockedCount++
+      }
+      // Also check direct ray blocking for very close positions
+      else if (isRayBlockedByPillar(camera.position, point, pillar)) {
         blockedCount++
       }
     }
@@ -129,8 +215,10 @@ function findOccludingPillarWithPartial(
 
   return {
     pillar: bestPillar,
-    isFullOcclusion: bestBlockageRatio >= 1.0,
-    isPartialOcclusion: bestBlockageRatio >= 0.5 && bestBlockageRatio < 1.0,
+    // With 2 cameras, blocking one (50%) should trigger pillar handling
+    isFullOcclusion: bestBlockageRatio >= 0.5,
+    // Lower threshold for partial occlusion
+    isPartialOcclusion: bestBlockageRatio >= 0.3 && bestBlockageRatio < 0.5,
     blockageRatio: bestBlockageRatio,
   }
 }

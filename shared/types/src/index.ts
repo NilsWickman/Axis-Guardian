@@ -45,3 +45,7 @@ export type {
   GlobalTrackJSON,
   CameraFrameInfo,
 } from './track'
+
+// Config types - shared configuration interface
+export type { TrackingConfigBase } from './config'
+export { DEFAULT_TRACKING_CONFIG_BASE } from './config'

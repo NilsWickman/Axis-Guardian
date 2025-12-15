@@ -300,8 +300,8 @@ describe('globalTracks store', () => {
       store.updateConfig({ correlationDistanceM: 999, trackExpiryMs: 999 })
       store.resetConfig()
 
-      expect(store.config.correlationDistanceM).toBe(1.5) // DEFAULT_CORRELATION_DISTANCE_M
-      expect(store.config.trackExpiryMs).toBe(3000) // DEFAULT_TRACK_EXPIRY_MS
+      expect(store.config.correlationDistanceM).toBe(1.0) // DEFAULT_CORRELATION_DISTANCE_M (synced with backend)
+      expect(store.config.trackExpiryMs).toBe(5000) // DEFAULT_TRACK_EXPIRY_MS (synced with backend)
     })
   })
 

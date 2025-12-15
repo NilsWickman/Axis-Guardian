@@ -7,8 +7,35 @@ import {
   assignDetectionsToTracks,
   buildCostMatrix,
   compareAssignmentMethods,
+  type AssignmentConfig,
 } from '../../src/correlation/hungarian-assignment.js'
 import type { CameraDetection, GlobalTrack } from '../../src/types.js'
+
+// Test-specific config that disables optional cost components for isolated testing
+const TEST_CONFIG: AssignmentConfig = {
+  maxCost: 10.0,
+  useKalmanPrediction: false,
+  associationBonus: 1.0,
+  sameCameraPenalty: 1.5,
+  velocityConsistencyWeight: 0,  // Disable for basic tests
+  crossingProximityThreshold: 1.5,
+  crossingMaxCostMultiplier: 0.5,
+  directionConsistencyWeight: 0,  // Disable for basic tests
+  minSpeedForDirection: 0.2,
+  crossCameraBonus: 0.6,
+  crossCameraBonusWindowMs: 2000,
+  maxAccelerationMs2: 3.0,
+  accelerationConsistencyWeight: 0,  // Disable for basic tests
+  embeddingWeight: 0,  // Disable for basic tests
+  embeddingMinSimilarity: 0.65,
+  embeddingMinQuality: 0.25,
+  crossingMinSimilarity: 0.70,
+  crossingMismatchPenalty: 3.0,
+  crossingMinQuality: 0.35,
+  minConfidenceForTightGate: 5,
+  confidentTrackGateFactor: 0.7,
+  adaptiveMinQuality: 0.4,
+}
 
 function createMockDetection(
   cameraId: string,
@@ -186,14 +213,12 @@ describe('Hungarian Assignment', () => {
       })
 
       const { matrix: costMatrixWithBonus } = buildCostMatrix([detection], [track], {
-        maxCost: 10.0,
-        useKalmanPrediction: false,
+        ...TEST_CONFIG,
         associationBonus: 0.5,
       })
 
       const { matrix: costMatrixNoBonus } = buildCostMatrix([detection], [track], {
-        maxCost: 10.0,
-        useKalmanPrediction: false,
+        ...TEST_CONFIG,
         associationBonus: 1.0,  // No bonus (multiply by 1)
       })
 
@@ -227,7 +252,7 @@ describe('Hungarian Assignment', () => {
       const detections = [createMockDetection('cam1', 1, 0.0, 0.0)]
       const tracks = [createMockTrack('track-1', 1.0, 0.0)]  // 1m away
 
-      const { matrix: costMatrix } = buildCostMatrix(detections, tracks, { maxCost: 10.0, useKalmanPrediction: false, associationBonus: 1.0 })
+      const { matrix: costMatrix } = buildCostMatrix(detections, tracks, TEST_CONFIG)
 
       expect(costMatrix[0][0]).toBeCloseTo(1.0, 5)  // 1m distance
     })
