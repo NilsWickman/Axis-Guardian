@@ -122,6 +122,53 @@ describe('MultiCameraSyncBuffer', () => {
       expect(flushed[0].every((m) => m.frame_number === 1)).toBe(true)
       expect(flushed[1].every((m) => m.frame_number === 2)).toBe(true)
     })
+
+    it('should fall back to time-based bucketing when frame numbers are not aligned', () => {
+      // Default is time-based (useFrameNumberCorrelation=false via ALGORITHM_CONSTANTS)
+      syncBuffer = new MultiCameraSyncBuffer({
+        syncWindowMs: 200,
+      })
+
+      const flushed: DetectionMessage[][] = []
+      syncBuffer.onFlush((messages) => flushed.push(messages))
+
+      // Two cameras that report at the same video time but with different frame numbers.
+      // This happens when cameras have different internal frame counters or when feeds start at different offsets.
+      const msgA = createMessage('cameraA', 100)
+      const msgB = createMessage('cameraB', 105)
+      msgB.video_time_ms = msgA.video_time_ms // force same time bucket
+
+      syncBuffer.addMessage(msgA)
+      syncBuffer.addMessage(msgB)
+
+      // Should flush as a complete 2-camera batch immediately on the second message.
+      expect(flushed.length).toBe(1)
+      expect(flushed[0].length).toBe(2)
+    })
+
+    it('should still form complete batches when registered cameras differ from traffic camera IDs', () => {
+      syncBuffer = new MultiCameraSyncBuffer({
+        syncWindowMs: 200,
+      })
+
+      // Register sitemap cameras that never send data in this test (common in replay/mixed setups)
+      syncBuffer.registerCamera('camera1')
+      syncBuffer.registerCamera('camera2')
+
+      const flushed: DetectionMessage[][] = []
+      syncBuffer.onFlush((messages) => flushed.push(messages))
+
+      // Actual traffic uses different camera IDs
+      const msgA = createMessage('camera-HC3', 1)
+      const msgB = createMessage('camera-HC4', 1)
+
+      syncBuffer.addMessage(msgA)
+      syncBuffer.addMessage(msgB)
+
+      // Should still flush complete once both *active discovered* cameras report
+      expect(flushed.length).toBe(1)
+      expect(flushed[0].length).toBe(2)
+    })
   })
 
   describe('metrics', () => {

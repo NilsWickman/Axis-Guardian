@@ -60,7 +60,7 @@ interface DetectionFile {
   video_info: {
     fps: number
     total_frames: number
-    duration_seconds: number
+    duration_seconds?: number
   }
   frames: Frame[]
 }
@@ -99,12 +99,16 @@ program
     const fps = data.video_info.fps
     const frameInterval = (1000 / fps) / speed
     const totalFrames = data.frames.length
+    const durationSeconds =
+      typeof data.video_info.duration_seconds === 'number'
+        ? data.video_info.duration_seconds
+        : (data.video_info.total_frames / fps)
 
     console.log(`\nDetection file info:`)
     console.log(`  Format version: ${data.format_version}`)
     console.log(`  FPS: ${fps.toFixed(2)}`)
     console.log(`  Total frames: ${totalFrames}`)
-    console.log(`  Duration: ${data.video_info.duration_seconds.toFixed(2)}s`)
+    console.log(`  Duration: ${durationSeconds.toFixed(2)}s`)
     console.log(`\nPlayback settings:`)
     console.log(`  Camera ID: ${cameraId}`)
     console.log(`  Speed: ${speed}x`)

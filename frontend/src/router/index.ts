@@ -46,6 +46,14 @@ const routes: RouteRecordRaw[] = [
       title: 'Zone Management',
     },
   },
+  {
+    path: '/replay/:recordingId',
+    name: 'Replay',
+    component: () => import('@/views/replay/ReplayView.vue'),
+    meta: {
+      title: 'Replay',
+    },
+  },
   // Calibration
   {
     path: '/calibration/annotator',
@@ -92,7 +100,7 @@ const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true'
 
 // Routes allowed in demo mode (read-only deployment)
 const isRouteAllowedInDemoMode = (path: string): boolean => {
-  return path.startsWith('/cameras/') || path === '/site-tracking' || path === '/zones'
+  return path.startsWith('/cameras/') || path === '/site-tracking' || path === '/zones' || path.startsWith('/replay/')
 }
 
 // Global navigation guards

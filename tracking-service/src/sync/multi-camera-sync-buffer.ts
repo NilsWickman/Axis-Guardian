@@ -73,7 +73,12 @@ interface FrameBucket {
 export class MultiCameraSyncBuffer {
   private config: SyncBufferConfig
   private buckets: Map<string, FrameBucket> = new Map()
+  /** Cameras explicitly registered by the server (preferred for completion logic) */
+  private registeredCameras: Set<string> = new Set()
+  /** Cameras discovered from traffic (used when no cameras are registered) */
   private knownCameras: Set<string> = new Set()
+  /** Last time we saw a message from each camera (ms) */
+  private cameraLastSeenAt: Map<string, number> = new Map()
   private flushCallback: ((messages: DetectionMessage[]) => void) | null = null
   private flushTimer: ReturnType<typeof setInterval> | null = null
   private metrics: SyncMetrics
@@ -121,6 +126,7 @@ export class MultiCameraSyncBuffer {
    * Register a known camera (affects sync completion logic)
    */
   registerCamera(cameraId: string): void {
+    this.registeredCameras.add(cameraId)
     this.knownCameras.add(cameraId)
   }
 
@@ -128,6 +134,7 @@ export class MultiCameraSyncBuffer {
    * Unregister a camera
    */
   unregisterCamera(cameraId: string): void {
+    this.registeredCameras.delete(cameraId)
     this.knownCameras.delete(cameraId)
   }
 
@@ -135,7 +142,7 @@ export class MultiCameraSyncBuffer {
    * Get list of registered cameras
    */
   getRegisteredCameras(): string[] {
-    return Array.from(this.knownCameras)
+    return Array.from(this.registeredCameras)
   }
 
   /**
@@ -147,6 +154,7 @@ export class MultiCameraSyncBuffer {
 
     // Track known cameras
     this.knownCameras.add(cameraId)
+    this.cameraLastSeenAt.set(cameraId, receivedAt)
 
     // Calculate frame key for bucketing
     const frameKey = this.calculateFrameKey(message)
@@ -203,22 +211,70 @@ export class MultiCameraSyncBuffer {
    */
   private checkBucketCompletion(bucket: FrameBucket): void {
     const cameraCount = bucket.frames.size
-    const knownCameraCount = this.knownCameras.size
+    const now = Date.now()
 
-    // Complete if all known cameras have reported
-    if (knownCameraCount > 0 && cameraCount >= knownCameraCount) {
+    const expectedCameras = this.getExpectedCameras(now)
+    const expectedCount = expectedCameras.size
+
+    // Complete only when we have a *multi-camera* batch.
+    // If we only expect 0-1 cameras, rely on the timeout flush to avoid prematurely
+    // finalizing a bucket before another camera becomes active and starts contributing.
+    if (expectedCount >= 2 && cameraCount >= expectedCount) {
       this.flushBucket(bucket, 'complete')
       return
     }
 
-    // Complete if we have minimum cameras and it's been long enough
-    if (cameraCount >= this.config.minCamerasForSync) {
-      const age = Date.now() - bucket.createdAt
-      if (age >= this.config.syncWindowMs / 2) {
-        // Half the sync window with minimum cameras
-        this.flushBucket(bucket, 'partial')
+    // Do NOT flush early partial buckets here.
+    // The periodic flush timer will release buckets at syncWindowMs ('timeout'),
+    // which gives other camera(s) a chance to arrive and form a complete batch.
+  }
+
+  /**
+   * Determine which cameras we should wait for to declare a "complete" batch.
+   *
+   * - Prefer explicitly registered cameras (from sitemap/camera registry).
+   * - Only count cameras as "active" if they have sent a message recently.
+   *   This avoids waiting forever for offline/stale cameras.
+   */
+  private getExpectedCameras(now: number): Set<string> {
+    // Consider a camera active if it has sent a message within this window.
+    // 2s is long enough to survive brief jitters but short enough to ignore stale cameras.
+    const ACTIVE_CAMERA_WINDOW_MS = 2000
+
+    // If the server explicitly registered cameras, prefer them *when they are active*.
+    // However, in replay / mixed setups the traffic camera IDs may not match the sitemap IDs.
+    // In that case, falling back to active discovered cameras is critical to ever forming
+    // a multi-camera "complete" batch.
+    const activeRegistered: string[] = []
+    if (this.registeredCameras.size > 0) {
+      for (const cameraId of this.registeredCameras) {
+        const lastSeen = this.cameraLastSeenAt.get(cameraId)
+        if (lastSeen !== undefined && now - lastSeen <= ACTIVE_CAMERA_WINDOW_MS) {
+          activeRegistered.push(cameraId)
+        }
+      }
+      if (activeRegistered.length >= 2) {
+        return new Set(activeRegistered)
+      }
+      // Else: fall through to active discovered cameras.
+    }
+
+    // Discovered cameras: only wait for those that are active.
+    const activeDiscovered: string[] = []
+    for (const cameraId of this.knownCameras) {
+      const lastSeen = this.cameraLastSeenAt.get(cameraId)
+      if (lastSeen !== undefined && now - lastSeen <= ACTIVE_CAMERA_WINDOW_MS) {
+        activeDiscovered.push(cameraId)
       }
     }
+
+    // If we have 2+ active discovered cameras, use that as the expected set.
+    if (activeDiscovered.length >= 2) {
+      return new Set(activeDiscovered)
+    }
+
+    // Otherwise, return the most informative set we have (may be empty/1).
+    return activeRegistered.length > 0 ? new Set(activeRegistered) : new Set(activeDiscovered)
   }
 
   /**
@@ -434,6 +490,9 @@ export class MultiCameraSyncBuffer {
    */
   reset(): void {
     this.buckets.clear()
+    // Keep registered cameras (server configuration), but clear traffic-derived state.
+    this.knownCameras.clear()
+    this.cameraLastSeenAt.clear()
     this.metrics = {
       batchesProcessed: 0,
       timeoutFlushes: 0,
@@ -461,3 +520,4 @@ export class MultiCameraSyncBuffer {
     this.flushCallback = null
   }
 }
+

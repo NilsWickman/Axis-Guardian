@@ -134,6 +134,31 @@ describe('DetectionProcessor - Obstacle Filtering', () => {
       processor.resetFrameTracking()
       expect(processor.getLastProcessedFrame('test-camera')).toBe(-1)
     })
+
+    it('allows frame_number to restart/loop in processMultiCameraMessages (sync mode)', () => {
+      // Simulate a first run reaching a higher frame number
+      processor.processMultiCameraMessages([{
+        camera_id: 'test-camera',
+        frame_number: 50,
+        timestamp: Date.now() / 1000,
+        detection_count: 0,
+        detections: [],
+      }])
+      expect(processor.getLastProcessedFrame('test-camera')).toBe(50)
+
+      // Simulate video loop / restart: frame_number resets to 0
+      processor.processMultiCameraMessages([{
+        camera_id: 'test-camera',
+        frame_number: 0,
+        timestamp: Date.now() / 1000,
+        detection_count: 0,
+        detections: [],
+      }])
+
+      // After loop, the processor should accept the new frame and update tracking.
+      // Without restart detection in processMultiCameraMessages, this would stay at 50 forever.
+      expect(processor.getLastProcessedFrame('test-camera')).toBe(0)
+    })
   })
 
   describe('getCameraFrameInfo', () => {

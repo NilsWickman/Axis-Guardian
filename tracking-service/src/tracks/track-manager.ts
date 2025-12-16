@@ -376,6 +376,10 @@ export class TrackManager {
     const maxTracks = 200
     const unconfirmedExpiryMs = this.config.unconfirmedTrackExpiryMs ?? 2000
     const occlusionCoastTimeMs = this.config.occlusionCoastTimeMs ?? 2000
+    // Early occlusion check window for unconfirmed tracks.
+    // Purpose: if someone appears briefly and then immediately goes behind a pillar at video start,
+    // we should transition to occluded/coast mode instead of waiting until unconfirmed expiry.
+    const earlyUnconfirmedOcclusionMs = Math.min(800, Math.floor(unconfirmedExpiryMs * 0.5))
 
     // Clean up old ended local track entries
     this.localStitcher.cleanup(now)
@@ -385,6 +389,34 @@ export class TrackManager {
 
       // Handle unconfirmed tracks - check for pillar occlusion before expiring
       if (track.state === 'unconfirmed') {
+        // Early transition to occluded for likely pillar/partial occlusions.
+        // This prevents "new track created after pillar" when the initial track is still unconfirmed.
+        if (
+          this.siteMapGeometry &&
+          track.detectionCount >= 1 &&
+          timeSinceLastSeen > earlyUnconfirmedOcclusionMs
+        ) {
+          const velocity = this.getTrackVelocity(track)
+          const exitResult = classifyExitReason(
+            track.currentPosition,
+            velocity,
+            this.siteMapGeometry.cameras,
+            this.siteMapGeometry.obstacles,
+            this.siteMapGeometry.roomBounds
+          )
+
+          if (exitResult.reason === 'pillar_occlusion' || exitResult.reason === 'partial_occlusion') {
+            track.state = 'occluded'
+            track.occludedSince = track.lastSeen
+            track.exitReason = exitResult.reason
+            if (exitResult.predictedExitPoint) {
+              track.predictedPosition = exitResult.predictedExitPoint
+            }
+            getMetrics().recordOcclusionStart()
+            continue
+          }
+        }
+
         if (timeSinceLastSeen > unconfirmedExpiryMs) {
           // Before deleting, check if track might be behind a pillar
           // This prevents losing tracks of people who enter and quickly go behind obstacles
@@ -505,10 +537,10 @@ export class TrackManager {
           ? getQualityAdaptiveTimeout(track.exitReason ?? 'timeout', embeddingQuality, this.config)
           : occlusionCoastTimeMs
 
-        // Update predicted position ONLY for pillar occlusions (ghost tracks).
+        // Update predicted position for pillar/partial occlusions (ghost tracks).
         // For FOV/boundary exits, don't update position - track should freeze at last known location.
         // This prevents "bouncing" at edges when Kalman prediction drifts beyond boundaries.
-        if (track.isActive && track.exitReason === 'pillar_occlusion') {
+        if (track.isActive && (track.exitReason === 'pillar_occlusion' || track.exitReason === 'partial_occlusion')) {
           const predicted = this.getPredictedPosition(track, timeSinceOcclusion)
           if (predicted) {
             let clampedPos = predicted
@@ -519,20 +551,12 @@ export class TrackManager {
               const clampResult = clampPointToRoom(predicted, roomBounds, 0.1)
               clampedPos = clampResult.point
 
-              // If pillar coasting hits boundary, convert to boundary_exit and freeze
-              if (clampResult.clampedX || clampResult.clampedY) {
-                track.exitReason = 'boundary_exit'
-                // Zero velocity on clamped axes
-                if (track.kalmanState) {
-                  if (clampResult.clampedX) {
-                    track.kalmanState.mean[2][0] = 0
-                    track.kalmanState.mean[0][0] = clampResult.point.x
-                  }
-                  if (clampResult.clampedY) {
-                    track.kalmanState.mean[3][0] = 0
-                    track.kalmanState.mean[1][0] = clampResult.point.y
-                  }
-                }
+              // IMPORTANT: Do NOT convert pillar occlusions into boundary_exit on clamp.
+              // Near-edge noise can temporarily clamp positions; converting would shorten the
+              // timeout dramatically and cause premature disappearance near the top-right.
+              if (track.kalmanState) {
+                track.kalmanState.mean[0][0] = clampResult.point.x
+                track.kalmanState.mean[1][0] = clampResult.point.y
               }
             }
 
@@ -1226,9 +1250,28 @@ export class TrackManager {
 
     // Recover from occlusion with hysteresis (flicker protection)
     if (track.state === 'occluded') {
-      const detectionsRequired = this.config.detectionsToExitOcclusion ?? 2
-      const minRecoveryTimeMs = this.config.minRecoveryTimeMs ?? 300
+      let detectionsRequired = this.config.detectionsToExitOcclusion ?? 2
+      let minRecoveryTimeMs = this.config.minRecoveryTimeMs ?? 300
       const timeSinceOcclusion = detection.timestamp - (track.occludedSince ?? detection.timestamp)
+
+      // Fast recovery for pillar/partial occlusions when reacquisition is high-confidence.
+      // This prevents tracks staying as ghosts for ~1s after the person is clearly visible again.
+      const isPillarOrPartial =
+        track.exitReason === 'pillar_occlusion' || track.exitReason === 'partial_occlusion'
+      const assoc = track.cameraAssociations.get(detection.cameraId)
+      const isExactLocal = assoc?.trackIds.includes(detection.trackId) ?? false
+      let isStrongEmbeddingMatch = false
+      const detEmb = detection.attributes?.embedding
+      const trEmb = track.attributes?.embedding
+      const detQ = detection.attributes?.embedding_quality ?? 0
+      const trQ = track.attributes?.embedding_quality ?? 0
+      if (detEmb && trEmb && detEmb.length > 0 && trEmb.length === detEmb.length && detQ >= 0.15 && trQ >= 0.15) {
+        isStrongEmbeddingMatch = cosineSimilarity(detEmb, trEmb) >= 0.7
+      }
+      if (isPillarOrPartial && (isExactLocal || isStrongEmbeddingMatch)) {
+        detectionsRequired = 1
+        minRecoveryTimeMs = 0
+      }
 
       track.consecutiveDetections++
 
@@ -1357,9 +1400,27 @@ export class TrackManager {
 
     // Recover from occlusion with hysteresis (flicker protection)
     if (track.state === 'occluded') {
-      const detectionsRequired = this.config.detectionsToExitOcclusion ?? 2
-      const minRecoveryTimeMs = this.config.minRecoveryTimeMs ?? 300
+      let detectionsRequired = this.config.detectionsToExitOcclusion ?? 2
+      let minRecoveryTimeMs = this.config.minRecoveryTimeMs ?? 300
       const timeSinceOcclusion = detection.timestamp - (track.occludedSince ?? detection.timestamp)
+
+      // Fast recovery for pillar/partial occlusions when reacquisition is high-confidence.
+      const isPillarOrPartial =
+        track.exitReason === 'pillar_occlusion' || track.exitReason === 'partial_occlusion'
+      const assoc = track.cameraAssociations.get(detection.cameraId)
+      const isExactLocal = assoc?.trackIds.includes(detection.trackId) ?? false
+      let isStrongEmbeddingMatch = false
+      const detEmb = detection.attributes?.embedding
+      const trEmb = track.attributes?.embedding
+      const detQ = detection.attributes?.embedding_quality ?? 0
+      const trQ = track.attributes?.embedding_quality ?? 0
+      if (detEmb && trEmb && detEmb.length > 0 && trEmb.length === detEmb.length && detQ >= 0.15 && trQ >= 0.15) {
+        isStrongEmbeddingMatch = cosineSimilarity(detEmb, trEmb) >= 0.7
+      }
+      if (isPillarOrPartial && (isExactLocal || isStrongEmbeddingMatch)) {
+        detectionsRequired = 1
+        minRecoveryTimeMs = 0
+      }
 
       track.consecutiveDetections++
 
@@ -1417,13 +1478,47 @@ export class TrackManager {
       return
     }
 
-    const merged = mergeWorldPositions(recentDetections)
+    // Outlier-robust multi-camera fusion:
+    // When cameras disagree (common in the back of the room), use Kalman prediction as a reference
+    // and ignore clear outlier projections for POSITION UPDATE (association bookkeeping already happened).
+    let positionDetections = recentDetections
+    if (recentDetections.length > 1 && track.kalmanState) {
+      const dtMs = now - track.kalmanState.lastTimestamp
+      if (dtMs > 0) {
+        const predicted = this.kalmanFilter.predict(track.kalmanState, dtMs)
+        const scored = recentDetections.map((d) => {
+          const dpos = { x: d.worldX, y: d.worldY }
+          return { det: d, dist: calculateDistance(dpos, predicted) }
+        }).sort((a, b) => a.dist - b.dist)
+
+        // Keep at least the closest detection; optionally keep more if they're consistent.
+        const medianDist = scored.length % 2 === 1
+          ? scored[(scored.length - 1) / 2].dist
+          : (scored[scored.length / 2 - 1].dist + scored[scored.length / 2].dist) / 2
+
+        const baseGate = this.config.correlationDistanceM ?? 1.0
+        const maxAllowed = Math.max(baseGate * 1.8, medianDist * 2.0)
+        const kept = scored.filter((s) => s.dist <= maxAllowed)
+
+        positionDetections = (kept.length > 0 ? kept : scored.slice(0, 1)).map((s) => s.det)
+      }
+    }
+
+    const merged = mergeWorldPositions(positionDetections)
 
     // Validate merged position before Kalman update
     if (!Number.isFinite(merged.position.x) || !Number.isFinite(merged.position.y)) {
       // Skip this update if position is invalid
       track.pendingDetections = []
       return
+    }
+
+    // Clamp measurements to room bounds to prevent visible out-of-bounds jumps
+    // (edge projection noise is common near the top-right / door area).
+    const roomBounds = this.siteMapGeometry?.roomBounds
+    if (roomBounds) {
+      const clampResult = clampPointToRoom(merged.position, roomBounds, 0.05)
+      merged.position = clampResult.point
     }
 
     // Update Kalman filter state with merged position
@@ -1439,7 +1534,15 @@ export class TrackManager {
 
       // Validate Kalman output
       if (Number.isFinite(filteredPosition.x) && Number.isFinite(filteredPosition.y)) {
-        merged.position = filteredPosition
+        // Clamp filtered output as well (Kalman can overshoot slightly near boundaries)
+        if (roomBounds) {
+          merged.position = clampPointToRoom(filteredPosition, roomBounds, 0.05).point
+          // Keep Kalman internal state consistent with clamped output
+          track.kalmanState.mean[0][0] = merged.position.x
+          track.kalmanState.mean[1][0] = merged.position.y
+        } else {
+          merged.position = filteredPosition
+        }
       }
     }
 
@@ -1456,6 +1559,10 @@ export class TrackManager {
         }
       }
     }
+
+    // Note: avoid extra smoothing here. Early-stage smoothing can sometimes
+    // increase perceived jitter by introducing lag/overshoot when assignments
+    // are still settling; rely on Kalman + outlier rejection instead.
 
     const lastTrailPos = track.trail[0]
     const movedDistance = lastTrailPos
@@ -1518,6 +1625,17 @@ export class TrackManager {
     this.lastDetectionTimestamp = now
     const activeTracks = this.getAllActiveTracks()
 
+    // Build camera-local (cameraId, trackId) -> global track map.
+    // Used to anchor clusters to an existing track when the local tracker identity is known.
+    const localIdToTrack = new Map<string, GlobalTrack>()
+    for (const t of activeTracks) {
+      for (const [camId, assoc] of t.cameraAssociations) {
+        for (const localId of assoc.trackIds) {
+          localIdToTrack.set(`${camId}:${localId}`, t)
+        }
+      }
+    }
+
     // === CROSSING DETECTION ===
     // Detect tracks that are close to each other (crossing situation)
     // This affects pre-clustering and embedding weight
@@ -1535,9 +1653,37 @@ export class TrackManager {
     // Track mapping from virtual detection back to original cluster
     const virtualDetections: CameraDetection[] = []
     const clusterMap = new Map<number, DetectionCluster>()  // virtual index -> cluster
+    const anchoredTrackIds = new Set<string>()
 
     for (let i = 0; i < preClusters.length; i++) {
       const cluster = preClusters[i]
+
+      // === CLUSTER ANCHORING (STABILITY FIRST) ===
+      // If any detection in this cluster has a camera-local ID that already belongs to a global track,
+      // bind the entire cluster to that track and skip Hungarian assignment.
+      const anchors = new Map<string, GlobalTrack>()
+      for (const det of cluster.detections) {
+        if (det.trackId === 0) continue
+        const t = localIdToTrack.get(`${det.cameraId}:${det.trackId}`)
+        if (t && t.isActive) {
+          anchors.set(t.globalTrackId, t)
+        }
+      }
+
+      if (anchors.size === 1) {
+        const anchor = Array.from(anchors.values())[0]
+        let ok = false
+        for (const det of cluster.detections) {
+          const assoc = anchor.cameraAssociations.get(det.cameraId)
+          const isExactLocal = det.trackId !== 0 && (assoc?.trackIds.includes(det.trackId) ?? false)
+          ok = (isExactLocal ? this.forceAssociateWithTrack(anchor, det) : this.associateWithTrack(anchor, det)) || ok
+        }
+        if (ok) {
+          anchoredTrackIds.add(anchor.globalTrackId)
+        }
+        continue
+      }
+
       // Use the highest-confidence detection's metadata, but centroid position
       const primary = cluster.detections.reduce((a, b) =>
         a.confidence > b.confidence ? a : b
@@ -1555,7 +1701,7 @@ export class TrackManager {
         frameNumber: primary.frameNumber,
         attributes: bestAttributes,  // Pass through re-ID attributes for Hungarian assignment
       })
-      clusterMap.set(i, cluster)
+      clusterMap.set(virtualDetections.length - 1, cluster)
     }
 
     // Use Hungarian algorithm for optimal assignment with virtual detections
@@ -1750,6 +1896,17 @@ export class TrackManager {
     // This catches duplicates that slipped through initial clustering
     this.detectAndMergeDuplicates()
 
+    // Finalize anchored tracks (position update + trail).
+    for (const id of anchoredTrackIds) {
+      const t = this.tracks.get(id)
+      if (!t || !t.isActive) continue
+      this.processPendingMerge(t, now)
+      this.onTrackUpdated?.(t)
+      if (!results.includes(t)) {
+        results.push(t)
+      }
+    }
+
     // Record batch processing metrics
     const batchEndTime = performance.now()
     getMetrics().recordBatchProcessing(batchEndTime - batchStartTime, detections.length)
@@ -1781,7 +1938,10 @@ export class TrackManager {
     if (!unmatchedTracks || unmatchedTracks.length === 0) return
 
     const maxCoastMs = this.config.occlusionCoastTimeMs ?? 7000
-    const shortGapMs = 500
+    // NOTE: We intentionally do NOT advance positions for merely "unmatched" confirmed tracks anymore.
+    // Mutating track.currentPosition based on prediction during early-frame sync jitter can cause
+    // visible jumping and can also shift the association cost surface enough to induce ID swaps.
+    // We only coast tracks that are explicitly in occlusion state (ghost/coast behavior).
 
     const geometry = this.siteMapGeometry
     const roomBounds = geometry?.roomBounds
@@ -1795,11 +1955,22 @@ export class TrackManager {
       const dtMs = now - track.lastSeen
       if (dtMs <= 50 || dtMs > maxCoastMs) continue
 
-      const isPillarGhost = track.state === 'occluded' && track.exitReason === 'pillar_occlusion'
+      const isPillarGhost = track.state === 'occluded' &&
+        (track.exitReason === 'pillar_occlusion' || track.exitReason === 'partial_occlusion')
       const isFovOrBoundaryExit = track.exitReason === 'fov_exit' || track.exitReason === 'boundary_exit'
       const isOccluded = track.state === 'occluded'
       const timeSinceOcclusion = isOccluded ? now - (track.occludedSince ?? now) : 0
       const maxNonPillarCoastMs = 1500  // Coast non-pillar occlusions for up to 1.5s
+
+      // Only coast when the track is explicitly occluded.
+      // For confirmed-but-unmatched tracks, rely on Kalman prediction at association time
+      // rather than mutating the published position every missed frame.
+      if (!isOccluded) {
+        if (track.predictedPosition) {
+          track.predictedPosition = undefined
+        }
+        continue
+      }
 
       // Don't coast tracks that have exited via FOV or boundary - they've left the monitored area
       // Freeze them at their last known position instead of predicting further movement
@@ -1888,56 +2059,36 @@ export class TrackManager {
         // Use clamped position instead of original prediction
         predictedPos = clampResult.point
 
-        // If ANY axis hits boundary, mark as boundary exit and freeze
-        // IMPORTANT: Apply to ALL track states, not just occluded - fixes wall sliding bug
-        if (clampResult.clampedX || clampResult.clampedY) {
-          track.exitReason = 'boundary_exit'
-          if (track.kalmanState) {
-            track.kalmanState.mean[2][0] = 0
-            track.kalmanState.mean[3][0] = 0
-          }
-          track.predictedPosition = undefined
-          this.onTrackUpdated?.(track)
-          continue
-        }
+        // IMPORTANT: Do NOT convert to boundary_exit just because a prediction hit the edge.
+        // Near-boundary projection noise can cause brief clamping and would otherwise expire
+        // tracks early (especially in the top-right area). We simply clamp and keep coasting.
       }
 
-      // If prediction exits all FOVs, mark as FOV exit and freeze
-      // IMPORTANT: Apply to ALL track states, not just occluded - fixes wall sliding bug
+      // If prediction exits all FOVs, stop coasting for this tick.
+      // IMPORTANT: Do NOT set exitReason here; exitReason is decided at occlusion entry by geometry.
       if (fovPolygons && !isPointInAnyFOV(predictedPos, fovPolygons, 0)) {
-        track.exitReason = 'fov_exit'
-        // Zero velocity to prevent bouncing on re-emergence
-        if (track.kalmanState) {
-          track.kalmanState.mean[2][0] = 0
-          track.kalmanState.mean[3][0] = 0
-        }
         track.predictedPosition = undefined
-        // Notify frontend to freeze at current position (not the bad prediction)
         this.onTrackUpdated?.(track)
         continue
       }
 
       track.predictedPosition = predictedPos
-      // Advance position for all coasting occlusions (not just pillar), and for very short gaps
-      // on confirmed tracks to avoid flicker/teleport on the next detection.
-      const shouldAdvancePosition = isOccluded || (track.state === 'confirmed' && dtMs <= shortGapMs)
-      if (shouldAdvancePosition) {
-        track.currentPosition = predictedPos
+      // Advance position only for occlusion coasting.
+      track.currentPosition = predictedPos
 
-        const lastTrailPos = track.trail[0]
-        const movedDistance = lastTrailPos
-          ? calculateDistance(predictedPos, lastTrailPos)
-          : Infinity
+      const lastTrailPos = track.trail[0]
+      const movedDistance = lastTrailPos
+        ? calculateDistance(predictedPos, lastTrailPos)
+        : Infinity
 
-        if (movedDistance > 0.1 || track.trail.length === 0) {
-          track.trail.unshift({ x: predictedPos.x, y: predictedPos.y, timestamp: now })
-          if (track.trail.length > this.config.maxTrailLength) {
-            track.trail = track.trail.slice(0, this.config.maxTrailLength)
-          }
+      if (movedDistance > 0.1 || track.trail.length === 0) {
+        track.trail.unshift({ x: predictedPos.x, y: predictedPos.y, timestamp: now })
+        if (track.trail.length > this.config.maxTrailLength) {
+          track.trail = track.trail.slice(0, this.config.maxTrailLength)
         }
-
-        this.onTrackUpdated?.(track)
       }
+
+      this.onTrackUpdated?.(track)
     }
   }
 

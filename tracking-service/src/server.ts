@@ -9,6 +9,7 @@ import type { FastifyInstance } from 'fastify'
 import { TrackManager } from './tracks/track-manager.js'
 import { CameraRegistry } from './detection/camera-registry.js'
 import { DetectionProcessor } from './detection/detection-processor.js'
+import { SynchronizedDetectionProcessor } from './sync/synchronized-detection-processor.js'
 import { registerRoutes } from './api/routes.js'
 import { WebSocketBroadcaster, registerWebSocket } from './api/websocket.js'
 import { loadEnvironment } from './config/environment.js'
@@ -74,7 +75,14 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
     }
   }
 
-  const detectionProcessor = new DetectionProcessor(trackManager, cameraRegistry)
+  const baseDetectionProcessor = new DetectionProcessor(trackManager, cameraRegistry)
+  const detectionProcessor = new SynchronizedDetectionProcessor(baseDetectionProcessor)
+
+  // Seed the sync buffer with all known cameras up front so it can form complete batches
+  // (otherwise it may flush partial single-camera buckets before the second camera is discovered).
+  for (const cameraId of cameraRegistry.getCameraIds()) {
+    detectionProcessor.registerCamera(cameraId)
+  }
 
   // Load obstacles for detection filtering
   if (sitemapConfig.obstacles && sitemapConfig.obstacles.length > 0) {
@@ -82,7 +90,7 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
   }
 
   const broadcaster = new WebSocketBroadcaster(trackManager, {
-    getFrameInfo: () => detectionProcessor.getCameraFrameInfo(),
+    getFrameInfo: () => baseDetectionProcessor.getCameraFrameInfo(),
   })
 
   // Set up periodic cleanup (200ms for quick FOV/boundary exit detection)
@@ -91,7 +99,16 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
   }, 200)
 
   // Register routes
-  registerRoutes(app, trackManager, detectionProcessor, cameraRegistry)
+  registerRoutes(
+    app,
+    trackManager,
+    detectionProcessor,
+    cameraRegistry,
+    null,
+    null,
+    null,
+    detectionProcessor.getSyncBuffer()
+  )
   registerWebSocket(app, broadcaster)
 
   // Cleanup on shutdown
@@ -167,7 +184,14 @@ export async function createServerWithComponents(options: CreateServerOptions = 
   }
 
   // Create detection processor
-  const detectionProcessor = new DetectionProcessor(trackManager, cameraRegistry)
+  const baseDetectionProcessor = new DetectionProcessor(trackManager, cameraRegistry)
+  const detectionProcessor = new SynchronizedDetectionProcessor(baseDetectionProcessor)
+
+  // Seed the sync buffer with all known cameras up front so it can form complete batches
+  // (otherwise it may flush partial single-camera buckets before the second camera is discovered).
+  for (const cameraId of cameraRegistry.getCameraIds()) {
+    detectionProcessor.registerCamera(cameraId)
+  }
 
   // Load obstacles for detection filtering
   if (sitemapConfig.obstacles && sitemapConfig.obstacles.length > 0) {
@@ -176,7 +200,7 @@ export async function createServerWithComponents(options: CreateServerOptions = 
 
   // Create broadcaster
   const broadcaster = new WebSocketBroadcaster(trackManager, {
-    getFrameInfo: () => detectionProcessor.getCameraFrameInfo(),
+    getFrameInfo: () => baseDetectionProcessor.getCameraFrameInfo(),
   })
 
   // Initialize zone manager for restricted zone violation detection
@@ -220,7 +244,16 @@ export async function createServerWithComponents(options: CreateServerOptions = 
   }
 
   // Register routes
-  registerRoutes(app, trackManager, detectionProcessor, cameraRegistry, acapClient, zoneManager, broadcaster)
+  registerRoutes(
+    app,
+    trackManager,
+    detectionProcessor,
+    cameraRegistry,
+    acapClient,
+    zoneManager,
+    broadcaster,
+    detectionProcessor.getSyncBuffer()
+  )
   registerWebSocket(app, broadcaster)
 
   // Cleanup on shutdown
