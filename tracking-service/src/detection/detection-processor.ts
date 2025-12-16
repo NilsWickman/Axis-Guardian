@@ -17,6 +17,7 @@ import { logProjectionFailure } from '../api/routes.js'
 import { getPipelineLogger } from '../debug/pipeline-logger.js'
 import type { SiteMapObstacle } from '../config/sitemap-loader.js'
 import { isPointInsideAnyObstacle } from '../geometry/obstacles.js'
+import { isPointOccludedByAnyPillar } from '../geometry/pillar-shadow.js'
 import type { ZoneManager } from '../zones/zone-manager.js'
 import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
 import { BatchOptimizer, type BatchOptimizerConfig, type FrameAssignment } from '../optimization/batch-optimizer.js'
@@ -70,6 +71,8 @@ export class DetectionProcessor implements IDetectionProcessor {
   private obstacleFilterCount: number = 0
   /** Counter for same-camera deduplicated detections */
   private sameCameraDeduplicatedCount: number = 0
+  /** Counter for detections suppressed for being geometrically behind a pillar */
+  private pillarShadowSuppressedCount: number = 0
   /** Optional batch optimizer for multi-frame global assignment */
   private batchOptimizer: BatchOptimizer | null = null
   /** Callback for when batch optimizer emits a frame */
@@ -98,6 +101,31 @@ export class DetectionProcessor implements IDetectionProcessor {
       )
       console.log(`[DetectionProcessor] Batch optimization enabled: ${ALGORITHM_CONSTANTS.batch.emissionDelayFrames} frame delay, ${ALGORITHM_CONSTANTS.batch.optimizationWindowSize} optimization window, ${ALGORITHM_CONSTANTS.batch.maxBufferSize} max buffer`)
     }
+  }
+
+  /**
+   * Handle a camera restart / loop event where frame numbers jump backward.
+   *
+   * This is critical when running behind the sync buffer: synchronized processing
+   * uses `processMultiCameraMessages()`, so restart detection must exist there too.
+   *
+   * We clear tracks to avoid mixing sessions and reset per-camera frame tracking
+   * so new frames (starting near 0) are not treated as permanently out-of-order.
+   */
+  private handleCameraRestart(cameraId: string, lastFrame: number, newFrame: number): void {
+    console.log(
+      `[DetectionProcessor] Camera ${cameraId} appears to have restarted/looped ` +
+      `(frame ${newFrame} < ${lastFrame} - ${FRAME_JUMP_BACKWARD_THRESHOLD}). ` +
+      `Clearing all tracks and resetting frame tracking.`
+    )
+    this.trackManager.clearAllTracks()
+    // Reset per-camera frame tracking so frame numbers starting from ~0 are accepted.
+    this.lastProcessedFrames.delete(cameraId)
+    this.lastFrameTimestamps.delete(cameraId)
+
+    // If batch optimization is enabled, clear its internal buffer so it doesn't mix
+    // frames across video loops. (No-op if optimizer doesn't implement reset.)
+    this.batchOptimizer?.reset()
   }
 
   /**
@@ -241,12 +269,15 @@ export class DetectionProcessor implements IDetectionProcessor {
 
     // Detect camera restart: frame number jumped backward significantly
     if (lastFrame > 0 && message.frame_number < lastFrame - FRAME_JUMP_BACKWARD_THRESHOLD) {
-      console.log(`[DetectionProcessor] Camera ${cameraId} appears to have restarted (frame ${message.frame_number} < ${lastFrame}). Clearing all tracks.`)
-      this.trackManager.clearAllTracks()
+      this.handleCameraRestart(cameraId, lastFrame, message.frame_number)
     }
 
     // Skip if we've already processed this frame (unless camera restarted)
-    if (message.frame_number <= lastFrame && message.frame_number >= lastFrame - FRAME_JUMP_BACKWARD_THRESHOLD) {
+    const lastFrameAfterRestart = this.lastProcessedFrames.get(cameraId) ?? -1
+    if (
+      message.frame_number <= lastFrameAfterRestart &&
+      message.frame_number >= lastFrameAfterRestart - FRAME_JUMP_BACKWARD_THRESHOLD
+    ) {
       return []
     }
     this.lastProcessedFrames.set(cameraId, message.frame_number)
@@ -358,6 +389,26 @@ export class DetectionProcessor implements IDetectionProcessor {
         if (this.obstacleFilterCount <= 10 || this.obstacleFilterCount % 100 === 0) {
           console.log(
             `[DetectionProcessor] Filtered detection inside obstacle: (${worldPoint.x.toFixed(2)}, ${worldPoint.y.toFixed(2)}) [total filtered: ${this.obstacleFilterCount}]`
+          )
+        }
+        continue
+      }
+
+      // Filter detections that are geometrically behind pillars from THIS camera's viewpoint.
+      // This prevents duplicate global tracks when a camera spuriously reports a person "behind" a pillar.
+      if (
+        this.trackingBlockingObstacles.length > 0 &&
+        isPointOccludedByAnyPillar(
+          { x: camera.position.x, y: camera.position.y },
+          { x: worldPoint.x, y: worldPoint.y },
+          this.trackingBlockingObstacles
+        )
+      ) {
+        this.pillarShadowSuppressedCount++
+        if (this.pillarShadowSuppressedCount <= 10 || this.pillarShadowSuppressedCount % 200 === 0) {
+          console.log(
+            `[DetectionProcessor] Suppressed detection behind pillar (camera=${cameraId}) ` +
+            `(${worldPoint.x.toFixed(2)}, ${worldPoint.y.toFixed(2)}) [total: ${this.pillarShadowSuppressedCount}]`
           )
         }
         continue
@@ -530,9 +581,17 @@ export class DetectionProcessor implements IDetectionProcessor {
     for (const message of messages) {
       const cameraId = this.cameraRegistry.normalizeCameraId(message.camera_id)
 
-      // Skip if we've already processed this frame
+      // Detect camera restart / loop: frame number jumped backward significantly.
+      // This path is used by the sync buffer, so without this check we'd permanently
+      // ignore all frames after a video loop (frame_number resets to 0).
       const lastFrame = this.lastProcessedFrames.get(cameraId) ?? -1
-      if (message.frame_number <= lastFrame) {
+      if (lastFrame > 0 && message.frame_number < lastFrame - FRAME_JUMP_BACKWARD_THRESHOLD) {
+        this.handleCameraRestart(cameraId, lastFrame, message.frame_number)
+      }
+
+      // Skip if we've already processed this frame (after possible restart reset)
+      const lastFrameAfterRestart = this.lastProcessedFrames.get(cameraId) ?? -1
+      if (message.frame_number <= lastFrameAfterRestart) {
         continue
       }
       this.lastProcessedFrames.set(cameraId, message.frame_number)
@@ -629,6 +688,19 @@ export class DetectionProcessor implements IDetectionProcessor {
         // Filter detections that project inside obstacles
         if (this.isInsideObstacle(worldPoint.x, worldPoint.y)) {
           this.obstacleFilterCount++
+          continue
+        }
+
+        // Filter detections that are geometrically behind pillars from THIS camera's viewpoint.
+        if (
+          this.trackingBlockingObstacles.length > 0 &&
+          isPointOccludedByAnyPillar(
+            { x: camera.position.x, y: camera.position.y },
+            { x: worldPoint.x, y: worldPoint.y },
+            this.trackingBlockingObstacles
+          )
+        ) {
+          this.pillarShadowSuppressedCount++
           continue
         }
 

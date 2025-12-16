@@ -145,6 +145,22 @@ export class BatchOptimizer {
   }
 
   /**
+   * Reset optimizer state (used when an upstream video/camera loops and frame numbers restart).
+   *
+   * This prevents mixing frames across loops inside the rolling buffer.
+   */
+  reset(): void {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer)
+      this.flushTimer = null
+    }
+    this.rollingBuffer = []
+    this.windowCounter = 0
+    this.totalFramesEmitted = 0
+    this.isInitialBuffering = true
+  }
+
+  /**
    * Check if batch optimization is enabled
    */
   get isEnabled(): boolean {

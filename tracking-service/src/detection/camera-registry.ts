@@ -43,15 +43,15 @@ const CAMERA1_WORLD_TRANSFORM = {
   ],
   translation: [-4.145655, 7.232865],
   scale: 1.0,
-  // Cubic polynomial transform (Degree 3, IRLS Huber)
-  // Reduced from degree 5 to minimize overfitting (CV: 56.3% vs 62.5% train-only at deg 5)
-  // Model: c0 + c1*x + c2*y + c3*x^2 + c4*y^2 + c5*x*y + c6*x^3 + c7*y^3 + c8*x^2*y + c9*x*y^2
+  // Cubic polynomial (Degree 3, IRLS + Ridge λ=0.01, outlier filtered)
+  // CV pass rate: 62.4%, mean error: 0.454m
+  // Joint optimized with camera2 for cross-camera consistency
   polynomial: {
     degree: 3 as const,
-    coeffsX: [22.32593204, 4.63729893, -4.44547204, 0.10955637, 0.38193721, -0.48243390,
-              -0.00323602, -0.00863815, -0.00458418, 0.01411668],
-    coeffsY: [33.73112634, -0.82079720, -5.29428069, -0.03439330, 0.30184404, 0.35386261,
-              -0.00095459, -0.00613755, 0.00896840, -0.01668283],
+    coeffsX: [0.91892405, 3.27104513, -0.27790634, 0.22072677, 0.11318064, -0.28978615,
+              -0.00726981, -0.00291038, -0.01106634, 0.00776505],
+    coeffsY: [11.78496064, -0.50705540, -0.94383915, 0.01901654, 0.01775988, 0.30441243,
+              -0.00418223, -0.00003657, 0.00658078, -0.01481308],
   },
 }
 
@@ -63,14 +63,17 @@ const CAMERA2_WORLD_TRANSFORM = {
   ],
   translation: [-1.599807, 11.586605],
   scale: 1.0,
-  // Linear (affine) polynomial transform (Degree 1, IRLS Huber)
-  // Reduced from degree 5 to minimize overfitting (CV: 38.8% vs severe overfit at deg 5)
-  // Camera2's K/R/T matrices are placeholder data, so higher-degree polynomials don't help
-  // Model: c0 + c1*x + c2*y
+  // Quartic polynomial (Degree 4, IRLS + Ridge λ=0.1, outlier filtered)
+  // CV pass rate: 65.5%, mean error: 0.436m
+  // Joint optimized with camera1 for cross-camera consistency
   polynomial: {
-    degree: 1 as const,
-    coeffsX: [-1.47934501, 0.80544563, 0.93488186],
-    coeffsY: [11.47235862, 0.96358997, -0.66733292],
+    degree: 4 as const,
+    coeffsX: [1.64803471, -1.31100788, -0.13431030, 1.62550464, 0.11270215, 0.42699729,
+              0.08269888, -0.00517666, -0.35509015, -0.00586804,
+              0.01694579, 0.00010593, -0.01346027, -0.00093404, 0.01716980],
+    coeffsY: [11.32299982, 1.59070288, 0.14884978, -0.57506294, -0.17817716, -0.29825832,
+              0.06894811, 0.01185195, 0.08182519, 0.03649617,
+              0.00015376, -0.00023932, -0.00632516, -0.00132674, -0.00215036],
   },
 }
 

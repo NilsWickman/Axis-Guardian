@@ -487,14 +487,17 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
     occlusionCoastTimeMs: 3000,  // Reduced from 8000ms - faster ghost track cleanup
     detectionsToExitOcclusion: 2,  // Keep hysteresis (flicker protection)
     reidentificationGateMultiplier: 5.5,  // Increased from 4.5 - wider gate for re-ID after occlusion
-    fovExitTimeoutMs: 1500,  // Reduced from 2500ms - faster FOV exit cleanup
+    fovExitTimeoutMs: 3000,  // Allow cross-camera handoff gaps before expiring FOV-exit tracks
     boundaryExitTimeoutMs: 1000,  // Reduced from 2000ms - faster boundary exit cleanup
-    maxPillarOcclusionMs: 3000,  // Reduced from 6000ms - shorter pillar occlusion recovery
+    // Pillar occlusions can involve multi-second detection gaps (camera sync jitter + brief dropout).
+    // Keep this conservative to prevent track fragmentation at the start of videos.
+    maxPillarOcclusionMs: 6000,
     maxNonPillarCoastMs: 2000,  // Reduced from 4000ms - shorter non-pillar coast
     coastingDampingFactor: 0.5,  // Reduced from 0.88 - much faster velocity decay during coast
     maxOcclusionTrailLength: 50,
     minRecoveryTimeMs: 300,  // Minimum time before exiting occlusion (flicker protection)
-    partialPillarOcclusionMs: 2000,  // Reduced from 4000ms - shorter partial pillar timeout
+    // Partial pillar occlusions flicker; allow enough time to recover without respawning.
+    partialPillarOcclusionMs: 4000,
     // Quality-adaptive retention: timeout *= (1 + bonus * normalizedQuality)
     qualityRetentionBonus: 0.3,  // Reduced from 0.8 - less timeout extension for quality
     maxRetentionMultiplier: 1.5,  // Reduced from 2.5 - cap timeout extension
@@ -552,11 +555,15 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   },
 
   sync: {
-    syncWindowMs: 66,               // Tightened from 100ms (2 frames at 30fps)
+    // Increased to tolerate real-world camera / HTTP jitter so multi-camera batches can complete.
+    // (66ms was frequently too tight, leading to single-camera timeout flushes and poor handoffs.)
+    syncWindowMs: 200,
     minCamerasForSync: 1,           // Minimum cameras before partial flush
     maxBufferedDetections: 500,     // Emergency flush if buffer gets too large
     frameBucketMs: 33,              // ~30fps frame buckets
-    useFrameNumberCorrelation: true, // Use frame numbers for emulator sync
+    // Time-based bucketing is more robust for real multi-camera feeds (different videos / imperfect frame alignment).
+    // Frame-number correlation can be enabled per-deployment when cameras are known to share an identical frame clock.
+    useFrameNumberCorrelation: false,
     enabled: true,                  // Enable sync buffer by default
     staleFrameMultiplier: 2,        // Drop frames older than 2x sync window
   },

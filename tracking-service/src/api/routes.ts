@@ -6,6 +6,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { z } from 'zod'
 import { appendFileSync } from 'fs'
 import { TrackManager, trackToJSON } from '../tracks/track-manager.js'
+import type { GlobalTrack } from '../types.js'
 import type { IDetectionProcessor } from '../detection/detection-processor.js'
 import { CameraRegistry } from '../detection/camera-registry.js'
 import {
@@ -23,6 +24,7 @@ import type { ZoneManager } from '../zones/zone-manager.js'
 import type { WebSocketBroadcaster } from './websocket.js'
 import { getMetrics } from '../metrics/index.js'
 import type { MultiCameraSyncBuffer } from '../sync/multi-camera-sync-buffer.js'
+import { ReplayManager } from '../replay/manager.js'
 
 // Read-only mode for demo deployment (disables write endpoints except emulator-detections)
 const isReadOnlyMode = process.env.READ_ONLY_MODE === 'true'
@@ -185,6 +187,12 @@ export function registerRoutes(
   broadcaster: WebSocketBroadcaster | null = null,
   syncBuffer: MultiCameraSyncBuffer | null = null
 ): void {
+
+  const replayManager = new ReplayManager({
+    trackManager,
+    zoneManager,
+    broadcaster,
+  })
   // Log read-only mode status
   if (isReadOnlyMode) {
     console.log('[API] Running in READ-ONLY mode - write endpoints disabled (except emulator-detections)')
@@ -293,6 +301,7 @@ export function registerRoutes(
     }
 
     const data = parseResult.data
+    const normalizedCameraId = cameraRegistry.normalizeCameraId(data.camera_id)
 
     // Record timing if dispatch_time is present
     if (data.dispatch_time) {
@@ -306,7 +315,7 @@ export function registerRoutes(
     const rawTimestampSec = data.timestamp ?? Date.now() / 1000
     const timestampSec = rawTimestampSec > 1e9 ? rawTimestampSec : Date.now() / 1000
     const detectionMessage = {
-      camera_id: data.camera_id,
+      camera_id: normalizedCameraId,
       frame_number: data.frame_number ?? 0,
       timestamp: timestampSec,
       detection_count: data.detections.length,
@@ -335,13 +344,26 @@ export function registerRoutes(
       }),
     }
 
-    // Use batch processing path (Hungarian algorithm + video timing)
-    const tracks = detectionProcessor.processMessage(detectionMessage)
+    // Use processing path (optionally synchronized multi-camera batching)
+    const syncCapable = detectionProcessor as unknown as {
+      processMessageAwaitFlush?: (m: unknown, timeoutMs?: number) => Promise<{ tracks: GlobalTrack[]; timedOut: boolean }>
+    }
+
+    let tracks: GlobalTrack[] = []
+    let syncTimedOut: boolean | undefined
+    if (typeof syncCapable.processMessageAwaitFlush === 'function') {
+      const result = await syncCapable.processMessageAwaitFlush(detectionMessage, 250)
+      tracks = result.tracks
+      syncTimedOut = result.timedOut
+    } else {
+      tracks = detectionProcessor.processMessage(detectionMessage)
+    }
 
     return {
       processed: detectionMessage.detections.length,
-      cameraId: data.camera_id,
+      cameraId: normalizedCameraId,
       tracksUpdated: tracks.length,
+      ...(syncTimedOut !== undefined ? { sync: { enabled: true, timedOut: syncTimedOut } } : {}),
       results: tracks.map(track => ({
         track: trackToJSON(track),
         worldPoint: { x: track.currentPosition.x, y: track.currentPosition.y },
@@ -370,9 +392,10 @@ export function registerRoutes(
     const messages = detections.map(data => {
       const rawTimestampSec = data.timestamp ?? Date.now() / 1000
       const timestampSec = rawTimestampSec > 1e9 ? rawTimestampSec : Date.now() / 1000
+      const normalizedCameraId = cameraRegistry.normalizeCameraId(data.camera_id)
 
       return {
-        camera_id: data.camera_id,
+        camera_id: normalizedCameraId,
         frame_number: data.frame_number ?? 0,
         timestamp: timestampSec,
         detection_count: data.detections.length,
@@ -447,6 +470,7 @@ export function registerRoutes(
     }
 
     const { camera_id, client_time, server_time } = parseResult.data
+    const normalizedCameraId = cameraRegistry.normalizeCameraId(camera_id)
     const serverNow = Date.now()
     const referenceTime = server_time ?? serverNow
 
@@ -454,16 +478,16 @@ export function registerRoutes(
     const offset = client_time - referenceTime
 
     // Record in sync buffer if available
-    syncBuffer?.recordClockOffset(camera_id, offset)
+    syncBuffer?.recordClockOffset(normalizedCameraId, offset)
 
     // Also record in global metrics
-    getMetrics().recordCameraClockOffset(camera_id, offset)
+    getMetrics().recordCameraClockOffset(normalizedCameraId, offset)
 
     return {
-      camera_id,
+      camera_id: normalizedCameraId,
       offset_ms: offset,
       server_time: serverNow,
-      message: `Camera ${camera_id} clock offset: ${offset}ms`,
+      message: `Camera ${normalizedCameraId} clock offset: ${offset}ms`,
     }
   })
 
@@ -962,5 +986,90 @@ export function registerRoutes(
   app.post('/api/zones/reset', { preHandler: readOnlyGuard }, async () => {
     zoneManager?.resetAllStates()
     return { success: true, message: 'Zone alarm states reset' }
+  })
+
+  // ============================================================================
+  // Replay / Recording APIs (filesystem-based)
+  // ============================================================================
+
+  app.get('/api/recordings', async () => {
+    return { recordings: replayManager.list() }
+  })
+
+  app.get('/api/recordings/:id/manifest', async (request: FastifyRequest, reply: FastifyReply) => {
+    const id = (request.params as { id: string }).id
+    const manifest = replayManager.getManifest(id)
+    if (!manifest) {
+      return reply.status(404).send({ error: 'Recording not found' })
+    }
+    return manifest
+  })
+
+  app.get('/api/recordings/:id/snapshot', async (request: FastifyRequest, reply: FastifyReply) => {
+    const id = (request.params as { id: string }).id
+    const timeMs = Number((request.query as { timeMs?: string }).timeMs ?? NaN)
+    if (!Number.isFinite(timeMs)) {
+      return reply.status(400).send({ error: 'Missing or invalid timeMs' })
+    }
+    const snap = await replayManager.getSnapshotAtOrBefore(id, timeMs)
+    if (!snap) {
+      return reply.status(404).send({ error: 'Snapshot not found' })
+    }
+    return snap
+  })
+
+  app.get('/api/recordings/:id/events', async (request: FastifyRequest, reply: FastifyReply) => {
+    const id = (request.params as { id: string }).id
+    const q = request.query as { fromMs?: string; toMs?: string; limit?: string }
+    const fromMs = Number(q.fromMs ?? '0')
+    const toMs = Number(q.toMs ?? String(Number.MAX_SAFE_INTEGER))
+    const limit = Math.min(Math.max(Number(q.limit ?? '5000'), 1), 20000)
+    if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
+      return reply.status(400).send({ error: 'Invalid fromMs/toMs' })
+    }
+    const events = await replayManager.getEvents(id, fromMs, toMs, limit)
+    return { events }
+  })
+
+  // Start a recording (write endpoint)
+  app.post('/api/recordings/start', { preHandler: readOnlyGuard }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const schema = z.object({
+      recordingId: z.string().min(1),
+      snapshotIntervalMs: z.number().int().positive().optional(),
+      durationMs: z.number().int().positive().optional(),
+      siteMapConfig: z.unknown().optional(),
+      cameras: z.array(z.object({
+        cameraId: z.string().min(1),
+        label: z.string().min(1),
+        videoUrl: z.string().min(1),
+        sourcePath: z.string().optional(),
+      })).min(1),
+    })
+    const parsed = schema.safeParse(request.body)
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid request body', details: parsed.error.issues })
+    }
+
+    const result = replayManager.start(parsed.data)
+    if (!result.ok) {
+      return reply.status(409).send({ error: result.error })
+    }
+    return { ok: true }
+  })
+
+  // Stop a recording (write endpoint)
+  app.post('/api/recordings/:id/stop', { preHandler: readOnlyGuard }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const id = (request.params as { id: string }).id
+    const schema = z.object({ durationMs: z.number().int().positive().optional() })
+    const parsed = schema.safeParse(request.body ?? {})
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid request body', details: parsed.error.issues })
+    }
+
+    const result = replayManager.stop(id, parsed.data.durationMs)
+    if (!result.ok) {
+      return reply.status(409).send({ error: result.error })
+    }
+    return { ok: true }
   })
 }

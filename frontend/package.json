@@ -15,10 +15,10 @@
     "format:check": "prettier --config config/lint/.prettierrc.json --check \"src/**/*.{js,ts,tsx,vue,css}\"",
     "storybook": "NODE_NO_WARNINGS=1 storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "test": "vitest --config config/test/vitest.config.ts",
+    "test": "vitest run --config config/test/vitest.config.ts",
     "test:ui": "vitest --config config/test/vitest.config.ts --ui",
     "test:watch": "vitest --config config/test/vitest.config.ts --watch",
-    "test:coverage": "vitest --config config/test/vitest.config.ts --coverage",
+    "test:coverage": "vitest run --config config/test/vitest.config.ts --coverage",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed"

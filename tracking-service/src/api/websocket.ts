@@ -14,6 +14,7 @@ export interface WebSocketBroadcasterOptions {
 
 export class WebSocketBroadcaster {
   private clients: Set<WebSocket> = new Set()
+  private sinks: Set<(message: WebSocketMessage) => void> = new Set()
   private getFrameInfo?: () => CameraFrameInfo[]
   private zoneManager?: ZoneManager
 
@@ -109,6 +110,18 @@ export class WebSocketBroadcaster {
   }
 
   /**
+   * Add a message sink (e.g. for recording/replay capture).
+   * Sinks receive the same messages that are broadcast to WS clients.
+   */
+  addSink(sink: (message: WebSocketMessage) => void): void {
+    this.sinks.add(sink)
+  }
+
+  removeSink(sink: (message: WebSocketMessage) => void): void {
+    this.sinks.delete(sink)
+  }
+
+  /**
    * Broadcast a message to all connected clients
    */
   broadcast(message: WebSocketMessage): void {
@@ -116,6 +129,17 @@ export class WebSocketBroadcaster {
     for (const client of this.clients) {
       if (client.readyState === 1) { // WebSocket.OPEN
         client.send(data)
+      }
+    }
+
+    // Notify sinks (never throw)
+    if (this.sinks.size > 0) {
+      for (const sink of this.sinks) {
+        try {
+          sink(message)
+        } catch (err) {
+          console.warn('[WebSocketBroadcaster] Sink error:', err)
+        }
       }
     }
   }

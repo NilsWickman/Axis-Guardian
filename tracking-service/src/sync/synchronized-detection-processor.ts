@@ -14,6 +14,7 @@ import { MultiCameraSyncBuffer, type SyncBufferConfig } from './multi-camera-syn
 import type { SiteMapObstacle } from '../config/sitemap-loader.js'
 import type { ZoneManager } from '../zones/zone-manager.js'
 import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
+import { randomUUID } from 'node:crypto'
 
 export interface SynchronizedProcessorConfig extends Partial<SyncBufferConfig> {
   /** Enable synchronization buffer (default: from ALGORITHM_CONSTANTS) */
@@ -31,6 +32,7 @@ export class SynchronizedDetectionProcessor implements IDetectionProcessor {
   private syncBuffer: MultiCameraSyncBuffer | null = null
   private enabled: boolean
   private lastResults: GlobalTrack[] = []
+  private waiters: Map<string, { resolve: (r: FlushAwaitResult) => void; timeout: ReturnType<typeof setTimeout> }> = new Map()
 
   constructor(
     processor: IDetectionProcessor,
@@ -44,7 +46,20 @@ export class SynchronizedDetectionProcessor implements IDetectionProcessor {
 
       // Set up the flush callback to process synchronized batches
       this.syncBuffer.onFlush((messages) => {
-        this.lastResults = this.processor.processMultiCameraMessages(messages)
+        const tracks = this.processor.processMultiCameraMessages(messages)
+        this.lastResults = tracks
+
+        // Resolve any callers waiting for *their* message to be included in this flush.
+        // We match by an internal request id attached to the DetectionMessage object.
+        for (const msg of messages) {
+          const id = (msg as unknown as { __requestId?: string }).__requestId
+          if (!id) continue
+          const waiter = this.waiters.get(id)
+          if (!waiter) continue
+          clearTimeout(waiter.timeout)
+          this.waiters.delete(id)
+          waiter.resolve({ tracks, timedOut: false })
+        }
       })
 
       console.log('[SyncProcessor] Multi-camera synchronization enabled')
@@ -85,6 +100,42 @@ export class SynchronizedDetectionProcessor implements IDetectionProcessor {
 
     // No sync buffer - process immediately
     return this.processor.processMessage(message)
+  }
+
+  /**
+   * Process a detection message and (best-effort) wait for the sync buffer flush
+   * that contains this message, so HTTP callers can get a coherent per-request result.
+   *
+   * If the flush doesn't happen within timeoutMs, returns the latest known results.
+   */
+  async processMessageAwaitFlush(
+    message: DetectionMessage,
+    timeoutMs: number = Math.max(250, (ALGORITHM_CONSTANTS.sync.syncWindowMs ?? 66) * 3)
+  ): Promise<FlushAwaitResult> {
+    if (!this.syncBuffer) {
+      return { tracks: this.processor.processMessage(message), timedOut: false }
+    }
+
+    const msgWithId = message as unknown as { __requestId?: string }
+    const requestId = msgWithId.__requestId ?? randomUUID()
+    msgWithId.__requestId = requestId
+
+    // Avoid leaking waiters if a duplicate id somehow occurs.
+    const existing = this.waiters.get(requestId)
+    if (existing) {
+      clearTimeout(existing.timeout)
+      this.waiters.delete(requestId)
+    }
+
+    return await new Promise<FlushAwaitResult>((resolve) => {
+      const timeout = setTimeout(() => {
+        this.waiters.delete(requestId)
+        resolve({ tracks: this.lastResults, timedOut: true })
+      }, timeoutMs)
+
+      this.waiters.set(requestId, { resolve, timeout })
+      this.syncBuffer!.addMessage(message)
+    })
   }
 
   /**
@@ -140,6 +191,12 @@ export class SynchronizedDetectionProcessor implements IDetectionProcessor {
     this.processor.resetFrameTracking()
     this.syncBuffer?.reset()
     this.lastResults = []
+    // Clear any pending waiters (return empty results rather than hanging).
+    for (const waiter of this.waiters.values()) {
+      clearTimeout(waiter.timeout)
+      waiter.resolve({ tracks: [], timedOut: true })
+    }
+    this.waiters.clear()
   }
 
   processInjection(
@@ -174,5 +231,15 @@ export class SynchronizedDetectionProcessor implements IDetectionProcessor {
   destroy(): void {
     this.syncBuffer?.destroy()
     this.syncBuffer = null
+    for (const waiter of this.waiters.values()) {
+      clearTimeout(waiter.timeout)
+      waiter.resolve({ tracks: [], timedOut: true })
+    }
+    this.waiters.clear()
   }
+}
+
+export interface FlushAwaitResult {
+  tracks: GlobalTrack[]
+  timedOut: boolean
 }
