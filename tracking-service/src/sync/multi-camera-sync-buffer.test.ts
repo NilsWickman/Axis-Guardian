@@ -169,6 +169,28 @@ describe('MultiCameraSyncBuffer', () => {
       expect(flushed.length).toBe(1)
       expect(flushed[0].length).toBe(2)
     })
+
+    it('should align cameras with different video_time_ms start offsets (1-3s skew)', () => {
+      syncBuffer = new MultiCameraSyncBuffer({
+        syncWindowMs: 200,
+      })
+
+      const flushed: DetectionMessage[][] = []
+      syncBuffer.onFlush((messages) => flushed.push(messages))
+
+      // Camera B has a +2000ms start offset relative to camera A.
+      const msgA = createMessage('cameraA', 1)
+      const msgB = createMessage('cameraB', 1)
+      msgA.video_time_ms = 1000
+      msgB.video_time_ms = 3000
+
+      syncBuffer.addMessage(msgA)
+      syncBuffer.addMessage(msgB)
+
+      // After normalization, both should land in the same time bucket and flush as a complete batch.
+      expect(flushed.length).toBe(1)
+      expect(flushed[0].length).toBe(2)
+    })
   })
 
   describe('metrics', () => {

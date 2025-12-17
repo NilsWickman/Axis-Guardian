@@ -119,7 +119,7 @@ describe('Hungarian Assignment', () => {
       const detections = [createMockDetection('cam1', 1, 5.0, 5.0)]
       const tracks = [
         createMockTrack('track-1', 10.0, 10.0),  // Far
-        createMockTrack('track-2', 5.5, 5.0),    // Close
+        createMockTrack('track-2', 5.3, 5.0),    // Close (0.3m away, within maxCost)
         createMockTrack('track-3', 20.0, 20.0),  // Very far
       ]
 

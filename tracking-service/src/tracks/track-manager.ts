@@ -557,6 +557,9 @@ export class TrackManager {
               if (track.kalmanState) {
                 track.kalmanState.mean[0][0] = clampResult.point.x
                 track.kalmanState.mean[1][0] = clampResult.point.y
+                // Also zero velocity into clamped axes to prevent edge “bounce”.
+                if (clampResult.clampedX) track.kalmanState.mean[2][0] = 0
+                if (clampResult.clampedY) track.kalmanState.mean[3][0] = 0
               }
             }
 
@@ -862,7 +865,17 @@ export class TrackManager {
    */
   private meetsCreationConfidence(detection: CameraDetection): boolean {
     const minConfidence = this.config.minCreationConfidence ?? 0.7
-    return detection.confidence >= minConfidence
+    if (detection.confidence >= minConfidence) return true
+
+    // Table-occluded people are often legitimately detected at slightly lower confidence
+    // (only upper body visible). If the local tracker has assigned a real ID, allow a
+    // small relaxation so the second person behind a table can spawn a track at startup.
+    if (detection.isTableOccluded && detection.trackId !== 0) {
+      const relaxed = Math.max(0.55, minConfidence - 0.15)
+      return detection.confidence >= relaxed
+    }
+
+    return false
   }
 
   /**
@@ -1516,9 +1529,13 @@ export class TrackManager {
     // Clamp measurements to room bounds to prevent visible out-of-bounds jumps
     // (edge projection noise is common near the top-right / door area).
     const roomBounds = this.siteMapGeometry?.roomBounds
+    let measurementClampedX = false
+    let measurementClampedY = false
     if (roomBounds) {
       const clampResult = clampPointToRoom(merged.position, roomBounds, 0.05)
       merged.position = clampResult.point
+      measurementClampedX = clampResult.clampedX
+      measurementClampedY = clampResult.clampedY
     }
 
     // Update Kalman filter state with merged position
@@ -1536,14 +1553,24 @@ export class TrackManager {
       if (Number.isFinite(filteredPosition.x) && Number.isFinite(filteredPosition.y)) {
         // Clamp filtered output as well (Kalman can overshoot slightly near boundaries)
         if (roomBounds) {
-          merged.position = clampPointToRoom(filteredPosition, roomBounds, 0.05).point
+          const clampResult = clampPointToRoom(filteredPosition, roomBounds, 0.05)
+          merged.position = clampResult.point
           // Keep Kalman internal state consistent with clamped output
           track.kalmanState.mean[0][0] = merged.position.x
           track.kalmanState.mean[1][0] = merged.position.y
+          // If we had to clamp, zero velocity into the boundary to prevent “wall bounce”.
+          if (clampResult.clampedX) track.kalmanState.mean[2][0] = 0
+          if (clampResult.clampedY) track.kalmanState.mean[3][0] = 0
         } else {
           merged.position = filteredPosition
         }
       }
+    }
+
+    // If the measurement itself was clamped, also damp velocity on that axis to avoid oscillation.
+    if (track.kalmanState) {
+      if (measurementClampedX) track.kalmanState.mean[2][0] = 0
+      if (measurementClampedY) track.kalmanState.mean[3][0] = 0
     }
 
     // Clamp unrealistically large position jumps to reduce visible teleporting.
@@ -1560,9 +1587,24 @@ export class TrackManager {
       }
     }
 
-    // Note: avoid extra smoothing here. Early-stage smoothing can sometimes
-    // increase perceived jitter by introducing lag/overshoot when assignments
-    // are still settling; rely on Kalman + outlier rejection instead.
+    // Startup stabilization (first ~1s after creation):
+    // In the first seconds of the video, a couple tracks can still wobble due to
+    // projection noise and incomplete motion estimates. Apply a light low-pass
+    // filter only during this short window.
+    const creationTime = track.trail[track.trail.length - 1]?.timestamp ?? track.lastSeen
+    const ageMs = now - creationTime
+    if (ageMs >= 0 && ageMs < 1200 && track.detectionCount < 10) {
+      const alpha = 0.35 // 35% new, 65% previous (strong damping, short duration)
+      merged.position = {
+        x: previousPosition.x + (merged.position.x - previousPosition.x) * alpha,
+        y: previousPosition.y + (merged.position.y - previousPosition.y) * alpha,
+      }
+      // Keep Kalman state consistent with the stabilized output to avoid “snap back”.
+      if (track.kalmanState) {
+        track.kalmanState.mean[0][0] = merged.position.x
+        track.kalmanState.mean[1][0] = merged.position.y
+      }
+    }
 
     const lastTrailPos = track.trail[0]
     const movedDistance = lastTrailPos
@@ -1667,6 +1709,47 @@ export class TrackManager {
         const t = localIdToTrack.get(`${det.cameraId}:${det.trackId}`)
         if (t && t.isActive) {
           anchors.set(t.globalTrackId, t)
+        }
+      }
+
+      // If no exact local-ID anchor exists, try SAME-CAMERA re-acquire for occluded tracks:
+      // When a person re-emerges after a pillar, the per-camera tracker can reset trackId.
+      // If the track was occluded and recently seen by this same camera, prefer reattaching
+      // rather than creating a new global track.
+      if (anchors.size === 0) {
+        const candidates = new Map<string, { track: GlobalTrack; bestDist: number }>()
+        for (const det of cluster.detections) {
+          if (!det.cameraId) continue
+          const detPos = { x: det.worldX, y: det.worldY }
+          for (const t of activeTracks) {
+            if (!t.isActive) continue
+            if (t.state !== 'occluded') continue
+            if (t.exitReason !== 'pillar_occlusion' && t.exitReason !== 'partial_occlusion') continue
+            const assoc = t.cameraAssociations.get(det.cameraId)
+            if (!assoc) continue
+            // Only for the “local ID changed” case
+            if (assoc.trackIds.includes(det.trackId)) continue
+            const timeSinceSeenOnThisCam = det.timestamp - assoc.lastSeen
+            if (timeSinceSeenOnThisCam < 0 || timeSinceSeenOnThisCam > 2500) continue
+
+            // Compare against Kalman-predicted position if possible; otherwise currentPosition.
+            const predicted = t.kalmanState
+              ? this.kalmanFilter.predict(t.kalmanState, det.timestamp - t.lastSeen)
+              : t.currentPosition
+            const dist = calculateDistance(detPos, predicted)
+            const maxDist = Math.max(0.8, (this.config.correlationDistanceM ?? 1.0) * 0.9)
+            if (dist > maxDist) continue
+
+            const existing = candidates.get(t.globalTrackId)
+            if (!existing || dist < existing.bestDist) {
+              candidates.set(t.globalTrackId, { track: t, bestDist: dist })
+            }
+          }
+        }
+
+        if (candidates.size === 1) {
+          const anchor = Array.from(candidates.values())[0].track
+          anchors.set(anchor.globalTrackId, anchor)
         }
       }
 

@@ -19,8 +19,10 @@ import {
   getBBoxBottomCenter,
   projectDetectionToGround,
   siteMapConfigToCamera,
+  estimateBBoxHeightExtension,
 } from '../../src/projection/ground-plane.js'
 import type { CameraParams } from '../../src/types.js'
+import type { SiteMapObstacle } from '../../src/config/sitemap-loader.js'
 
 describe('Basic Math Functions', () => {
   describe('calculateFocalLength', () => {
@@ -255,6 +257,48 @@ describe('projectDetectionToGround', () => {
     const result = projectDetectionToGround(bbox, camera, [], true)
     expect(result.isValid).toBe(true)
     expect(result.worldPoint.x).toBeCloseTo(camera.position.x, 0) // Near center
+  })
+})
+
+describe('Table occlusion height extension', () => {
+  it('uses a stronger extension when occluded bboxes are heavily cropped (prevents “wall projections”)', () => {
+    const camera: CameraParams = {
+      position: { x: 0, y: 0, z: 2.5 },
+      azimuth: 0, // looking +Y
+      elevation: 35,
+      fov: 60,
+    }
+
+    const table: SiteMapObstacle = {
+      id: 'table-1',
+      type: 'rectangle',
+      position: { x: 0, y: 3.0 },
+      dimensions: { width: 2.0, height: 1.2 },
+      rotation: 0,
+      height: 1.0,
+      blocksView: true,
+      blocksTracking: false,
+    }
+
+    // Find a bbox bottom position that is considered table-occluded for this camera/table geometry.
+    // We scan a few plausible y positions (normalized coordinates) and pick the first that triggers.
+    let occludedBBox: { x: number; y: number; width: number; height: number } | null = null
+    for (const bottomY of [0.55, 0.6, 0.65, 0.7, 0.75, 0.8]) {
+      const bbox = { x: 0.47, y: bottomY - 0.1, width: 0.08, height: 0.1 } // short bbox, bottom at bottomY
+      const ext = estimateBBoxHeightExtension(bbox, camera, [table], true, 1920, 1080)
+      if (ext > 1.05) {
+        occludedBBox = bbox
+        break
+      }
+    }
+
+    expect(occludedBBox).not.toBeNull()
+
+    const ext = estimateBBoxHeightExtension(occludedBBox!, camera, [table], true, 1920, 1080)
+
+    // With the width-based heuristic, heavily cropped occluded boxes should extend meaningfully.
+    // This is intentionally a loose threshold: we just want to ensure it's materially > 1.0.
+    expect(ext).toBeGreaterThan(1.4)
   })
 })
 

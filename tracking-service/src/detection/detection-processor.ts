@@ -8,6 +8,7 @@
 import type { DetectionMessage, RawDetection, GlobalTrack, CameraDetection, CameraFrameInfo } from '../types.js'
 import {
   projectDetectionWithKRT,
+  estimateBBoxHeightExtension,
   radToDeg,
   angleDifference,
 } from '../projection/ground-plane.js'
@@ -16,7 +17,7 @@ import { CameraRegistry } from './camera-registry.js'
 import { logProjectionFailure } from '../api/routes.js'
 import { getPipelineLogger } from '../debug/pipeline-logger.js'
 import type { SiteMapObstacle } from '../config/sitemap-loader.js'
-import { isPointInsideAnyObstacle } from '../geometry/obstacles.js'
+import { isPointInsideAnyObstacle, clampBehindOccludingTable2D } from '../geometry/obstacles.js'
 import { isPointOccludedByAnyPillar } from '../geometry/pillar-shadow.js'
 import type { ZoneManager } from '../zones/zone-manager.js'
 import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
@@ -57,6 +58,9 @@ const IMAGE_HEIGHT = ALGORITHM_CONSTANTS.detection.imageHeight
 const FRAME_JUMP_BACKWARD_THRESHOLD = ALGORITHM_CONSTANTS.detection.frameJumpBackwardThreshold
 // Same-camera deduplication distance (removes duplicate YOLO detections for same person)
 const SAME_CAMERA_DEDUP_DISTANCE = ALGORITHM_CONSTANTS.detection.sameCameraDeduplicationDistanceM
+// Only deduplicate same-camera detections if they're close in BOTH world and image space.
+// This prevents accidentally dropping distinct people when projections collapse (common behind tables).
+const SAME_CAMERA_DEDUP_MAX_IMAGE_DISTANCE_PX = 90
 
 export class DetectionProcessor implements IDetectionProcessor {
   private lastProcessedFrames: Map<string, number> = new Map()
@@ -71,8 +75,8 @@ export class DetectionProcessor implements IDetectionProcessor {
   private obstacleFilterCount: number = 0
   /** Counter for same-camera deduplicated detections */
   private sameCameraDeduplicatedCount: number = 0
-  /** Counter for detections suppressed for being geometrically behind a pillar */
-  private pillarShadowSuppressedCount: number = 0
+  /** Counter for detections downweighted for being geometrically behind a pillar */
+  private pillarShadowDownweightedCount: number = 0
   /** Optional batch optimizer for multi-frame global assignment */
   private batchOptimizer: BatchOptimizer | null = null
   /** Callback for when batch optimizer emits a frame */
@@ -238,6 +242,18 @@ export class DetectionProcessor implements IDetectionProcessor {
           const distance = Math.sqrt(dx * dx + dy * dy)
 
           if (distance < SAME_CAMERA_DEDUP_DISTANCE) {
+            // If both have image centers, require them to also be close in image space.
+            // Otherwise, keep both: two distinct people can project very close in world
+            // when table occlusion correction is imperfect.
+            if (current.imageCenter && other.imageCenter) {
+              const ix = current.imageCenter.x - other.imageCenter.x
+              const iy = current.imageCenter.y - other.imageCenter.y
+              const imageDist = Math.sqrt(ix * ix + iy * iy)
+              if (imageDist > SAME_CAMERA_DEDUP_MAX_IMAGE_DISTANCE_PX) {
+                continue
+              }
+            }
+
             suppressed.add(j)
             this.sameCameraDeduplicatedCount++
             if (this.sameCameraDeduplicatedCount <= 5 || this.sameCameraDeduplicatedCount % 500 === 0) {
@@ -301,14 +317,38 @@ export class DetectionProcessor implements IDetectionProcessor {
     const logger = getPipelineLogger()
 
     for (const detection of message.detections) {
-      // Filter for person detections with sufficient confidence
-      if (detection.class_name !== 'person' || detection.confidence < MIN_CONFIDENCE) {
+      // Filter for person detections
+      if (detection.class_name !== 'person') {
         continue
       }
 
       // Convert bbox array to object format
       const bbox = this.parseBBox(detection)
       if (!bbox) continue
+
+      // Estimate table occlusion (feet hidden) BEFORE confidence filtering.
+      // This lets us keep slightly lower-confidence detections that are still stable (local track_id)
+      // and would otherwise be dropped — a common case for people behind tables.
+      const tableExtension = estimateBBoxHeightExtension(
+        bbox,
+        camera,
+        this.viewBlockingObstacles,
+        true,
+        IMAGE_WIDTH,
+        IMAGE_HEIGHT
+      )
+      const isTableOccluded = tableExtension > 1.05
+
+      // Allow lower confidence for table-occluded detections when the local tracker has an ID.
+      // (Creation is still guarded later; this just prevents early pipeline drop.)
+      const localTrackId = detection.track_id ?? 0
+      const relaxedMinConfidence = Math.max(0.55, MIN_CONFIDENCE - 0.15)
+      if (
+        detection.confidence < MIN_CONFIDENCE &&
+        !(isTableOccluded && localTrackId !== 0 && detection.confidence >= relaxedMinConfidence)
+      ) {
+        continue
+      }
 
       // Log raw detection
       const rawDetectionKey = logger.logRawDetection(cameraId, detection, message.frame_number)
@@ -367,6 +407,27 @@ export class DetectionProcessor implements IDetectionProcessor {
         y: rawWorldPoint.y + biasCorrection.y,
       }
 
+      // If this detection is table-occluded, clamp the world projection so it can't land
+      // arbitrarily far behind the table (which often manifests as "snapping to the wall").
+      // This uses only sitemap geometry (no camera-specific tuning) and works for both cameras.
+      if (isTableOccluded && this.viewBlockingObstacles.length > 0) {
+        // Clamp into a narrow band just behind the occluding table edge.
+        // This handles BOTH failure modes:
+        // - Over-extension: projection snaps near a wall behind the table.
+        // - Under-extension: projection lands in front of the table (too close to camera),
+        //   which shows up as "too high up" on the site map for HC3.
+        const MAX_BEHIND_TABLE_M = 0.9
+        const MIN_BEHIND_TABLE_M = 0.2
+        const clamped = clampBehindOccludingTable2D(
+          { x: camera.position.x, y: camera.position.y },
+          { x: worldPoint.x, y: worldPoint.y },
+          this.viewBlockingObstacles,
+          MAX_BEHIND_TABLE_M,
+          MIN_BEHIND_TABLE_M
+        )
+        worldPoint = clamped.point
+      }
+
       // Log projected position (key available for linking in future)
       logger.logProjectedPosition(
         cameraId,
@@ -395,7 +456,9 @@ export class DetectionProcessor implements IDetectionProcessor {
       }
 
       // Filter detections that are geometrically behind pillars from THIS camera's viewpoint.
-      // This prevents duplicate global tracks when a camera spuriously reports a person "behind" a pillar.
+      // Instead of dropping them (which can prevent reconnection after a pillar),
+      // downweight their confidence so they can't spawn NEW tracks, but can still be used
+      // to re-associate to existing tracks (especially when local trackId matches).
       if (
         this.trackingBlockingObstacles.length > 0 &&
         isPointOccludedByAnyPillar(
@@ -404,20 +467,30 @@ export class DetectionProcessor implements IDetectionProcessor {
           this.trackingBlockingObstacles
         )
       ) {
-        this.pillarShadowSuppressedCount++
-        if (this.pillarShadowSuppressedCount <= 10 || this.pillarShadowSuppressedCount % 200 === 0) {
-          console.log(
-            `[DetectionProcessor] Suppressed detection behind pillar (camera=${cameraId}) ` +
-            `(${worldPoint.x.toFixed(2)}, ${worldPoint.y.toFixed(2)}) [total: ${this.pillarShadowSuppressedCount}]`
+        const hasKnownLocalAssociation =
+          detection.track_id !== undefined &&
+          detection.track_id !== 0 &&
+          this.trackManager.getAllActiveTracks().some(t =>
+            (t.cameraAssociations.get(cameraId)?.trackIds.includes(detection.track_id ?? 0)) === true
           )
+
+        if (!hasKnownLocalAssociation) {
+          // Cap confidence below minCreationConfidence so unmatched detections can't create new global tracks.
+          detection.confidence = Math.min(detection.confidence, 0.69)
+          this.pillarShadowDownweightedCount++
+          if (this.pillarShadowDownweightedCount <= 10 || this.pillarShadowDownweightedCount % 200 === 0) {
+            console.log(
+              `[DetectionProcessor] Downweighted detection behind pillar (camera=${cameraId}) ` +
+              `(${worldPoint.x.toFixed(2)}, ${worldPoint.y.toFixed(2)}) [total: ${this.pillarShadowDownweightedCount}]`
+            )
+          }
         }
-        continue
       }
 
       // Add to batch for Hungarian assignment
       projectedDetections.push({
         cameraId,
-        trackId: detection.track_id ?? 0,
+        trackId: localTrackId,
         worldX: worldPoint.x,
         worldY: worldPoint.y,
         confidence: detection.confidence,
@@ -427,6 +500,11 @@ export class DetectionProcessor implements IDetectionProcessor {
         rtpTimestamp: message.rtp_timestamp,
         attributes: detection.attributes,  // Pass through re-ID attributes
         cameraPosition: { x: camera.position.x, y: camera.position.y },  // For distance-based weighting
+        imageCenter: {
+          x: (bbox.x + bbox.width / 2) * IMAGE_WIDTH,
+          y: (bbox.y + bbox.height / 2) * IMAGE_HEIGHT,
+        },
+        isTableOccluded,
       })
     }
 
@@ -700,8 +778,16 @@ export class DetectionProcessor implements IDetectionProcessor {
             this.trackingBlockingObstacles
           )
         ) {
-          this.pillarShadowSuppressedCount++
-          continue
+        const hasKnownLocalAssociation =
+          detection.track_id !== undefined &&
+          detection.track_id !== 0 &&
+          this.trackManager.getAllActiveTracks().some(t =>
+            (t.cameraAssociations.get(cameraId)?.trackIds.includes(detection.track_id ?? 0)) === true
+          )
+        if (!hasKnownLocalAssociation) {
+          detection.confidence = Math.min(detection.confidence, 0.69)
+          this.pillarShadowDownweightedCount++
+        }
         }
 
         // Add to combined batch for all cameras

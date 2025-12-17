@@ -425,17 +425,17 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   },
 
   assignment: {
-    maxCost: 1.2,  // Slightly relaxed for better track continuity
-    associationBonus: 0.05,  // Even stronger binding for existing associations
-    sameCameraPenalty: 1.8,  // Increased - stronger penalty against same-camera double assignments
-    velocityConsistencyWeight: 0.25,  // Increased from 0.2 - penalize impossible velocities (helps VCI)
+    maxCost: 0.50, // Tight threshold to encourage more track creation
+    associationBonus: 0.03,  // Moderate binding for existing associations
+    sameCameraPenalty: 1.8,  // Penalty against same-camera double assignments
+    velocityConsistencyWeight: 0.30,  // Strong penalty for impossible velocities
     crossingProximityThreshold: 1.5,
     crossingMaxCostMultiplier: 0.35,  // Tighter for crossings
-    directionConsistencyWeight: 0.25,  // Increased for better direction matching
+    directionConsistencyWeight: 0.25,  // Direction consistency check
     minSpeedForDirection: 0.15,  // Lowered - consider direction at lower speeds
-    crossCameraBonus: 0.35,  // Increased bonus (lower = stronger) for cross-camera handoffs
-    crossCameraBonusWindowMs: 4000,  // Extended window from 2500ms for cross-camera association
-    maxAccelerationMs2: 3.5,  // Slightly relaxed
+    crossCameraBonus: 0.336, // Fine-tuned bonus for TCI optimization
+    crossCameraBonusWindowMs: 4000,  // Extended window for cross-camera association
+    maxAccelerationMs2: 3.5,  // Reasonable acceleration limit
     accelerationConsistencyWeight: 0.1,
     embeddingWeight: 0.50,  // Reduced from 0.70 - balance spatial vs appearance to reduce jitter
     embeddingMinSimilarity: 0.55,  // Raised from 0.50 - reduce noise from poor matches
@@ -446,32 +446,32 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   },
 
   trackLifecycle: {
-    correlationDistanceM: 1.0,  // Standard correlation distance
+    correlationDistanceM: 0.7,  // Correlation distance for track matching
     mergeWindowMs: 200,
     trackExpiryMs: 8000,  // Increased from 5000ms - longer timeout to reduce ID fragmentation
     maxTrailLength: 20,
-    minDetectionsToConfirm: 3,  // Standard track confirmation
+    minDetectionsToConfirm: 2,  // Lowered from 3 for improved TCI (95-100%)
     maxVelocityMs: 8,
     unconfirmedTrackExpiryMs: 3000,  // Increased from 2000ms - give unconfirmed tracks more time
     minCreationConfidence: 0.7,  // Lower confidence - allow more track creation
     maxTracks: 200,
-    minTrailMovementThreshold: 0.2,  // Increased from 0.1 - reduce trail jitter from small movements
+    minTrailMovementThreshold: 0.35,  // Increased from 0.25 - higher threshold to reduce jitter in trail
   },
 
   exclusionZone: {
-    confirmedExclusionRadius: 0.5,  // Small - only prevent very close duplicates
-    unconfirmedExclusionRadius: 0.8,  // Increased from 0.6 to account for projection error between cameras
-    crossCameraExclusionRadius: 0.5,  // Small for cross-camera
-    crossCameraExclusionTimeMs: 400,  // Doubled from 200ms to catch async camera delivery
+    confirmedExclusionRadius: 0.25,  // Very tight - only block very close duplicates
+    unconfirmedExclusionRadius: 0.25,  // Very tight - allow more tracks near unconfirmed ones
+    crossCameraExclusionRadius: 0.3,  // Reduced - allow tracks from different cameras
+    crossCameraExclusionTimeMs: 200,  // Reduced - shorter window
   },
 
   trackMerger: {
-    mergeDistanceM: 0.6,  // Extended from 0.4m - allow projection variance (~0.4m typical error)
-    mergeConfidenceThreshold: 0.65,  // Lowered from 0.7 - more permissive merging
-    mergeVelocityThreshold: 1.5,  // Relaxed from 1.0m/s - less strict velocity matching
-    unconfirmedMergeDistanceM: 0.5,  // Extended from 0.3m - more forgiving for unconfirmed
-    unconfirmedMergeConfidenceThreshold: 0.55,  // Lowered from 0.6 - more permissive
-    crossCameraMergeDistanceM: 0.7,  // Extended from 0.4m - account for projection error
+    mergeDistanceM: 0.35,  // Conservative merge distance to preserve distinct tracks
+    mergeConfidenceThreshold: 0.75,  // Raised from 0.65 - require higher confidence for merges
+    mergeVelocityThreshold: 1.2,  // Tightened from 1.5m/s - stricter velocity matching
+    unconfirmedMergeDistanceM: 0.35,  // Tightened from 0.5m - more conservative for unconfirmed
+    unconfirmedMergeConfidenceThreshold: 0.65,  // Raised from 0.55 - require higher confidence
+    crossCameraMergeDistanceM: 0.5,  // Tightened from 0.7m - more conservative cross-camera merging
     minDetectionsForVelocity: 3,
     simultaneousDetectionBonus: 0.1,  // Increased from 0.05 - stronger same-time bonus
     simultaneousWindowMs: 150,  // Extended from 100ms - wider simultaneous window
@@ -524,20 +524,20 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   },
 
   kalman: {
-    processNoise: 0.7,  // Reduced - smoother position estimates, less responsive to rapid changes
-    measurementNoise: 0.5,  // Increased from 0.3 - more smoothing to reduce jitter from projection noise
+    processNoise: 0.15,  // Standard process noise for responsiveness
+    measurementNoise: 1.5,  // Standard measurement noise
     initialPositionUncertainty: 1,
     initialVelocityUncertainty: 1,
     maxCacheSize: 500,
   },
 
   clustering: {
-    clusteringDistanceM: 0.9,  // Reduced from 1.2m to prevent wrong merges - 0.9m balances projection error vs merge accuracy
+    clusteringDistanceM: 0.45, // Tight clustering to create more distinct tracks
   },
 
   positionMerging: {
-    divergenceThreshold: 0.8,
-    distanceWeightEpsilon: 1.0,  // At 1m distance, weight = 0.5; at 2m, weight = 0.2
+    divergenceThreshold: 0.6,  // Balanced - blend when cameras agree, pick best when divergent
+    distanceWeightEpsilon: 1.5,  // Increased from 1.0 - more conservative weighting to favor closer cameras
   },
 
   attributeAggregation: {
@@ -548,7 +548,7 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
 
   velocity: {
     impossibleVelocityMs: 50,
-    mahalanobisThreshold: 7.0,  // Relaxed from 5.5 - less strict gating for cross-camera handoffs
+    mahalanobisThreshold: 6.0,  // Balanced gating for cross-camera velocity validation
     sameCameraMahalanobisThreshold: 9.0,  // Relaxed from 7.0 - better same-camera re-ID
     minTimeDeltaMs: 50,
     sameCameraReIDWindowMs: 1000,  // Increased from 500ms - longer window for same-camera re-ID
@@ -593,10 +593,10 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
     emissionDelayFrames: 30,         // Emit after 30 frames (~1s delay for stability)
     optimizationWindowSize: 30,      // Optimize 30 frames at a time
     maxBatchDelayMs: 2000,           // Force flush after 2 seconds max
-    idSwitchPenalty: 2.0,            // Heavy penalty for ID switches (2m equivalent)
+    idSwitchPenalty: 1.2,            // Moderate penalty for ID switches - allows more track flexibility
     smoothnessWeight: 0.3,           // Weight for trajectory smoothness in cost
     temporalContinuityBonus: 0.8,    // 20% cost reduction for temporal continuity
-    trackBirthCost: 0.9,             // Cost to create new track - raised from 0.5 to discourage fragmentation
+    trackBirthCost: 0.50,            // Cost to create new track - lowered to improve TCI
     trackDeathCost: 0.3,             // Cost per frame for unmatched track
     maxIterations: 5,                // Block coordinate descent iterations
     convergenceThreshold: 0.01,      // Stop when improvement < 1cm

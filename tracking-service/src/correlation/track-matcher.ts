@@ -113,6 +113,35 @@ function calculateCameraDistanceWeight(
 }
 
 /**
+ * Image-space reliability weight.
+ *
+ * Projection error tends to increase near the image edges/corners (lens distortion, calibration error,
+ * quantization). When we have image centers for detections, softly downweight edge detections so they
+ * don't pull the fused world position too aggressively.
+ */
+function calculateImageReliabilityWeight(det: CameraDetection): number {
+  if (!det.imageCenter) return 1.0
+
+  const w = ALGORITHM_CONSTANTS.detection.imageWidth
+  const h = ALGORITHM_CONSTANTS.detection.imageHeight
+  const cx = w / 2
+  const cy = h / 2
+  const dx = det.imageCenter.x - cx
+  const dy = det.imageCenter.y - cy
+  const dist = Math.sqrt(dx * dx + dy * dy)
+  const maxDist = Math.sqrt(cx * cx + cy * cy) // corner distance
+  const norm = maxDist > 0 ? dist / maxDist : 0
+
+  // Linear falloff with floor.
+  const edgeWeight = Math.max(0.35, 1.0 - norm * 0.7)
+
+  // Table-occluded detections are more likely to have foot estimation error.
+  const tableFactor = det.isTableOccluded ? 0.85 : 1.0
+
+  return edgeWeight * tableFactor
+}
+
+/**
  * Merge multiple world positions using distance-based camera weighting
  *
  * Strategy:
@@ -163,10 +192,13 @@ export function mergeWorldPositions(
   if (maxDistance > DIVERGENCE_THRESHOLD) {
     // Find detection with highest distance weight (camera closest to centroid)
     let bestDet = detections[0]
-    let bestWeight = calculateCameraDistanceWeight(centroid, bestDet.cameraPosition)
+    let bestWeight = calculateCameraDistanceWeight(centroid, bestDet.cameraPosition) * calculateImageReliabilityWeight(bestDet) * bestDet.confidence
 
     for (let i = 1; i < detections.length; i++) {
-      const weight = calculateCameraDistanceWeight(centroid, detections[i].cameraPosition)
+      const weight =
+        calculateCameraDistanceWeight(centroid, detections[i].cameraPosition) *
+        calculateImageReliabilityWeight(detections[i]) *
+        detections[i].confidence
       if (weight > bestWeight) {
         bestWeight = weight
         bestDet = detections[i]
@@ -187,7 +219,8 @@ export function mergeWorldPositions(
 
   for (const det of detections) {
     const distanceWeight = calculateCameraDistanceWeight(centroid, det.cameraPosition)
-    const weight = det.confidence * distanceWeight
+    const imageWeight = calculateImageReliabilityWeight(det)
+    const weight = det.confidence * distanceWeight * imageWeight
     totalWeight += weight
     weightedX += det.worldX * weight
     weightedY += det.worldY * weight

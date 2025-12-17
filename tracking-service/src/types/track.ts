@@ -120,6 +120,10 @@ export interface CameraDetection {
   worldY: number
   confidence: number
   timestamp: number // Unix timestamp in ms
+  /** Image-space center (pixels) for same-camera deduplication sanity checks */
+  imageCenter?: Point2D
+  /** True if the feet are likely occluded by a table (used for relaxed creation/dedup heuristics) */
+  isTableOccluded?: boolean
   /** Frame number from source camera (for frame-based missed detection) */
   frameNumber?: number
   /** Video time in milliseconds (position within video, for sync) */

@@ -380,3 +380,122 @@ export function findOccludingTables(
   // Sort by distance (closest first)
   return intersections.sort((a, b) => a.distance - b.distance)
 }
+
+// ============================================================================
+// 2D Table Occlusion Utilities (used for clamping “behind table” projections)
+// ============================================================================
+
+function rotate2D(point: Point2D, degrees: number): Point2D {
+  if (degrees === 0) return point
+  const radians = (degrees * Math.PI) / 180
+  const cos = Math.cos(radians)
+  const sin = Math.sin(radians)
+  return {
+    x: point.x * cos - point.y * sin,
+    y: point.x * sin + point.y * cos,
+  }
+}
+
+/**
+ * Ray-rectangle intersection in 2D (with rotation support).
+ * Returns enter/exit distances t along the ray: origin + t * dir, t >= 0.
+ */
+export function intersectRayWithRectangle2D(
+  origin: Point2D,
+  dir: Point2D,
+  rect: SiteMapObstacle
+): { tEnter: number; tExit: number } | null {
+  if (rect.type !== 'rectangle' || !rect.dimensions) return null
+
+  const rot = rect.rotation ?? 0
+
+  // Transform into rectangle local space
+  const oLocal = rotate2D({ x: origin.x - rect.position.x, y: origin.y - rect.position.y }, -rot)
+  const dLocal = rotate2D(dir, -rot)
+
+  const halfW = rect.dimensions.width / 2
+  const halfH = rect.dimensions.height / 2
+
+  const slab = (o: number, d: number, min: number, max: number): { t0: number; t1: number } | null => {
+    if (Math.abs(d) < 1e-9) {
+      if (o < min || o > max) return null
+      return { t0: -Infinity, t1: Infinity }
+    }
+    const t0 = (min - o) / d
+    const t1 = (max - o) / d
+    return t0 < t1 ? { t0, t1 } : { t0: t1, t1: t0 }
+  }
+
+  const sx = slab(oLocal.x, dLocal.x, -halfW, halfW)
+  if (!sx) return null
+  const sy = slab(oLocal.y, dLocal.y, -halfH, halfH)
+  if (!sy) return null
+
+  const tEnter = Math.max(sx.t0, sy.t0)
+  const tExit = Math.min(sx.t1, sy.t1)
+
+  if (!Number.isFinite(tExit) || tExit < 0) return null
+  if (tExit < Math.max(tEnter, 0)) return null
+
+  return { tEnter: Math.max(tEnter, 0), tExit }
+}
+
+/**
+ * Clamp a table-occluded projected world point so it cannot lie arbitrarily far behind
+ * the occluding table. This prevents “snapping to the wall” when foot estimation overshoots.
+ *
+ * We find the nearest table intersected by the camera->point ray, then clamp the point to be
+ * at most `maxBehindM` beyond the *far* edge of that table along the ray direction.
+ */
+export function clampBehindOccludingTable2D(
+  cameraPos: Point2D,
+  worldPoint: Point2D,
+  tables: SiteMapObstacle[],
+  maxBehindM: number,
+  minBehindM: number = 0
+): { point: Point2D; clamped: boolean } {
+  if (tables.length === 0) return { point: worldPoint, clamped: false }
+
+  const vx = worldPoint.x - cameraPos.x
+  const vy = worldPoint.y - cameraPos.y
+  const len = Math.sqrt(vx * vx + vy * vy)
+  if (len < 1e-6) return { point: worldPoint, clamped: false }
+  const dir = { x: vx / len, y: vy / len }
+
+  // Find closest intersected table (smallest tEnter)
+  let best: { tEnter: number; tExit: number } | null = null
+  for (const t of tables) {
+    const hit = intersectRayWithRectangle2D(cameraPos, dir, t)
+    if (!hit) continue
+    if (!best || hit.tEnter < best.tEnter) best = hit
+  }
+
+  if (!best) return { point: worldPoint, clamped: false }
+
+  // If the person is table-occluded, the feet must lie BEYOND the table along this ray.
+  // Some projections under-extend (placing the point in front of the table), while others
+  // over-extend (placing it far behind, often near a wall). Clamp to a small band behind
+  // the far table edge: [tExit + minBehindM, tExit + maxBehindM].
+  const minT = best.tExit + Math.max(0, minBehindM)
+  const maxT = best.tExit + Math.max(Math.max(0, maxBehindM), Math.max(0, minBehindM))
+
+  let targetT = len
+  let clamped = false
+  if (len < minT) {
+    targetT = minT
+    clamped = true
+  } else if (len > maxT) {
+    targetT = maxT
+    clamped = true
+  } else {
+    return { point: worldPoint, clamped: false }
+  }
+
+  return {
+    point: {
+      x: cameraPos.x + dir.x * targetT,
+      y: cameraPos.y + dir.y * targetT,
+    },
+    clamped,
+  }
+}

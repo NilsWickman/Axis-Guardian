@@ -97,14 +97,19 @@
         >
           <div class="mb-1.5 flex justify-between items-center">
             <span class="text-xs font-semibold text-foreground flex-1 truncate">{{ camera.name }}</span>
-            <div
-              :class="[
-                'w-2 h-2 rounded-full flex-shrink-0 transition-all duration-200 ml-1',
-                connectionStatuses[camera.id]
-                  ? 'bg-green-500'
-                  : 'bg-destructive'
-              ]"
-            />
+            <div class="flex items-center gap-1.5 ml-1 flex-shrink-0">
+              <div
+                :class="[
+                  'w-2 h-2 rounded-full transition-all duration-200',
+                  connectionStatuses[camera.id]
+                    ? 'bg-green-500'
+                    : 'bg-destructive'
+                ]"
+              />
+              <span class="text-[10px] font-mono text-muted-foreground tabular-nums">
+                {{ getTrackingDelayLabel(camera.id) }}
+              </span>
+            </div>
           </div>
           <div class="bg-background rounded-md overflow-hidden aspect-video relative border border-border/30">
             <video
@@ -210,6 +215,38 @@ const {
 const selectedCamera = ref<Camera | null>(null)
 const thumbnailVideoRefs = ref<Record<string, HTMLVideoElement | null>>({})
 const showDebugMode = ref(false)
+
+// Tracking delay display (rolling average age of latest tracking-service frame per camera)
+const nowMs = ref(Date.now())
+let nowInterval: number | null = null
+const TRACKING_DELAY_AVG_WINDOW_MS = 5000
+const delaySamplesByCamera = ref(new Map<string, Array<{ t: number; v: number }>>())
+
+function recordDelaySamples(now: number) {
+  for (const camera of cameras.value) {
+    const frame = globalTrackStore.getFrameInfoForCamera(camera.id)
+    if (!frame?.timestamp) continue
+
+    const delay = Math.max(0, now - frame.timestamp)
+    const existing = delaySamplesByCamera.value.get(camera.id) ?? []
+    existing.push({ t: now, v: delay })
+
+    // Prune samples outside rolling window
+    const cutoff = now - TRACKING_DELAY_AVG_WINDOW_MS
+    while (existing.length > 0 && existing[0].t < cutoff) {
+      existing.shift()
+    }
+
+    delaySamplesByCamera.value.set(camera.id, existing)
+  }
+}
+
+function getTrackingDelayLabel(cameraId: string): string {
+  const samples = delaySamplesByCamera.value.get(cameraId)
+  if (!samples || samples.length === 0) return '--ms'
+  const avg = samples.reduce((sum, s) => sum + s.v, 0) / samples.length
+  return `${Math.round(avg)}ms`
+}
 
 // Mouse position tracking
 const mousePosition = ref<{ x: number; y: number } | null>(null)
@@ -411,6 +448,12 @@ const handleResize = () => {
 onMounted(async () => {
   if (!canvas.initCanvas()) return
 
+  nowInterval = window.setInterval(() => {
+    const now = Date.now()
+    nowMs.value = now
+    recordDelaySamples(now)
+  }, 250)
+
   // Load site map configuration
   await loadSiteMap()
 
@@ -454,5 +497,9 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   trackingWs.disconnect()
+  if (nowInterval) {
+    clearInterval(nowInterval)
+    nowInterval = null
+  }
 })
 </script>
