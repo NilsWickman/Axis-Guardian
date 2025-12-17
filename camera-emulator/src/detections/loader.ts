@@ -25,7 +25,25 @@ export async function loadDetections(
   console.log(`Loading detections from ${filePath}`)
 
   const isGzipped = filePath.endsWith('.gz')
-  const fileBuffer = fs.readFileSync(filePath)
+
+  let fileBuffer: Buffer
+  try {
+    fileBuffer = fs.readFileSync(filePath)
+  } catch (err: any) {
+    if (err?.code === 'ENOENT') {
+      throw new Error(
+        [
+          `Detections file not found: ${filePath}`,
+          `If you're running on the VPS, make sure you've copied detections to your VIDEO_PATH (often /opt/axis-guardian/videos).`,
+          `Expected filenames commonly include:`,
+          `  - view-HC3-preprocessed.detections.json.gz`,
+          `  - view-HC4-preprocessed.detections.json.gz`,
+          `Optionally, you can set DETECTIONS_VARIANT=preprocessed|reid|auto (default: auto).`,
+        ].join('\n')
+      )
+    }
+    throw err
+  }
 
   let jsonString: string
   if (isGzipped) {
