@@ -58,8 +58,8 @@ const NEW_CONSTANTS = {
     maxPillarOcclusionMs: 4000,
   },
   stitching: {
-    maxGapMs: 10000,
-    maxDistanceMultiplier: 4.0,
+    maxGapMs: 15000,
+    maxDistanceMultiplier: 5.0,
   },
   reid: {
     minSimilarity: 0.55,
@@ -270,7 +270,7 @@ describe('Algorithm Comparison: Old vs New Constants', () => {
     // Verify current constants are the new values
     expect(ALGORITHM_CONSTANTS.trackLifecycle.trackExpiryMs).toBe(8000)
     expect(ALGORITHM_CONSTANTS.reid.minSimilarity).toBe(0.55)
-    expect(ALGORITHM_CONSTANTS.stitching.maxGapMs).toBe(10000)
-    expect(ALGORITHM_CONSTANTS.assignment.crossCameraBonus).toBe(0.35)
+    expect(ALGORITHM_CONSTANTS.stitching.maxGapMs).toBe(15000)
+    expect(ALGORITHM_CONSTANTS.assignment.crossCameraBonus).toBe(0.336)
   })
 })

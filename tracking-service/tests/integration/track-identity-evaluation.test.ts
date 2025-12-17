@@ -170,6 +170,47 @@ function loadCameraDetections(): Map<string, CameraDetectionData> {
   return cameras
 }
 
+/**
+ * Filter TrackTruths annotations to only include those with valid camera track IDs
+ * that actually exist in the detection files.
+ */
+function filterValidAnnotations(
+  trackTruths: TrackTruthsDataset,
+  cameraDetections: Map<string, CameraDetectionData>
+): TrackTruthsDataset {
+  // Build set of valid camera track IDs
+  const validCameraTracks = new Set<string>()
+
+  for (const [cameraId, data] of cameraDetections) {
+    for (const trackId of data.trackFrameIndex.keys()) {
+      if (trackId !== null) {
+        validCameraTracks.add(`${cameraId}-${trackId}`)
+      }
+    }
+  }
+
+  // Filter annotations to only include valid camera tracks
+  const validAnnotations = trackTruths.annotations.filter(ann => {
+    return validCameraTracks.has(ann.globalTrackId)
+  })
+
+  const invalidCount = trackTruths.annotations.length - validAnnotations.length
+  if (invalidCount > 0) {
+    console.log(`  [TrackTruths] Filtered ${invalidCount} invalid annotations (referencing non-existent camera tracks)`)
+    console.log(`  [TrackTruths] Valid annotations: ${validAnnotations.length}/${trackTruths.annotations.length}`)
+  }
+
+  // Rebuild persons list to only include those with valid annotations
+  const validPersonIds = new Set(validAnnotations.map(a => a.personId))
+  const validPersons = trackTruths.persons.filter(p => validPersonIds.has(p.id))
+
+  return {
+    ...trackTruths,
+    annotations: validAnnotations,
+    persons: validPersons,
+  }
+}
+
 // ============================================================================
 // Tracking Simulation
 // ============================================================================
@@ -273,7 +314,8 @@ function simulateTracking(
     detectionProcessor.processMultiCameraMessages(messages)
 
     // Update mappings for annotated tracks (iterate all frames at this timestamp)
-    const activeTracks = trackManager.getActiveTracks()
+    // Use getAllTracks() to include inactive/expired tracks that still have associations
+    const activeTracks = trackManager.getAllTracks()
 
     for (const { cameraId, frame } of framesWithDetections) {
       for (const det of frame.detections) {
@@ -303,7 +345,7 @@ function simulateTracking(
   return {
     cameraTrackToGlobal,
     globalToCameraTracks,
-    globalTracks: trackManager.getActiveTracks(),
+    globalTracks: trackManager.getAllTracks(),
   }
 }
 
@@ -552,11 +594,15 @@ describe('Track Identity Evaluation', () => {
     console.log('='.repeat(70))
 
     // Load data
-    trackTruths = loadTrackTruths()
     cameraDetections = loadCameraDetections()
+    let rawTrackTruths = loadTrackTruths()
 
-    console.log(`\nLoaded ${trackTruths.annotations.length} track annotations`)
-    console.log(`Unique persons: ${new Set(trackTruths.annotations.map(a => a.personId)).size}`)
+    console.log(`\nLoaded ${rawTrackTruths.annotations.length} track annotations (raw)`)
+
+    // Filter to only valid annotations (camera tracks that exist in detection files)
+    trackTruths = filterValidAnnotations(rawTrackTruths, cameraDetections)
+
+    console.log(`Valid persons: ${trackTruths.persons.length}`)
     console.log(`Cameras with detections: ${cameraDetections.size}`)
 
     // Run tracking simulation

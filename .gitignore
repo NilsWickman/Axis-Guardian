@@ -198,3 +198,7 @@ simulation/mediamtx/mediamtx.custom.yml
 tracking-service/calibration-*
 tracking-service/visualization-output/
 tracking-service/snapshots/
+
+# Large recording / replay datasets (do not commit)
+tracking-service/recordings/
+frontend/public/recordings/

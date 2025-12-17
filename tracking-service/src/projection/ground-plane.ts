@@ -403,8 +403,38 @@ function detectTableOcclusion(
     return { isOccluded: false, occludingTable: null, extensionFactor: 1.0 }
   }
 
-  // Cap at 2.5x for safety (person can't be infinitely extended)
-  const extensionFactor = Math.min(extensionRatio, 2.5)
+  // The pure geometric ratio is a good baseline, but when a person is heavily cropped by a table,
+  // multiplying the (already short) bbox height by ~1.5–1.8 is often not enough to reach the
+  // true foot pixel. In those cases, the projected ground point ends up too far (often near the wall).
+  //
+  // Add a second, image-based heuristic: estimate expected standing height from bbox width and take
+  // the larger extension. This only activates meaningfully when the bbox is "too short for its width".
+  let bboxHeightPx: number
+  let bboxWidthPx: number
+  if (isNormalized) {
+    bboxHeightPx = bbox.height * imageHeight
+    bboxWidthPx = bbox.width * imageWidth
+  } else {
+    bboxHeightPx = bbox.height
+    bboxWidthPx = bbox.width
+  }
+
+  const EXPECTED_STANDING_ASPECT = 2.3 // typical person bbox height/width when standing
+  const aspect = bboxWidthPx > 1 ? (bboxHeightPx / bboxWidthPx) : Infinity
+
+  // Only trust width-based extrapolation when the box is clearly cropped (too short for its width).
+  // This avoids over-extending normal full-body boxes.
+  const shouldUseWidthHeuristic = isFinite(aspect) && aspect < 1.6
+
+  const widthBasedFactor =
+    shouldUseWidthHeuristic && bboxHeightPx > 1 && bboxWidthPx > 1
+      ? Math.max(1.0, (bboxWidthPx * EXPECTED_STANDING_ASPECT) / bboxHeightPx)
+      : 1.0
+
+  // Table-occluded boxes can be *very* short; allow a higher cap here, while still being bounded
+  // by the later "keep bottom within image" cap in getBBoxBottomCenter().
+  const MAX_TABLE_EXTENSION_FACTOR = 5.0
+  const extensionFactor = Math.min(Math.max(extensionRatio, widthBasedFactor), MAX_TABLE_EXTENSION_FACTOR)
 
   // Only apply if extension is meaningful (>1.05x)
   if (extensionFactor < 1.05) {
@@ -512,6 +542,19 @@ export function getBBoxBottomCenter(
       imageHeight
     )
     effectiveHeight = bbox.height * extension
+
+    // IMPORTANT: avoid “hard clamp to bottom of image”.
+    // If the extension pushes the bbox bottom past the image boundary, we end up clamping
+    // to y=1.0 (or y=imageHeight), which creates unstable world projections and can cause
+    // tracks behind tables to drop out. Instead, cap the effectiveHeight so the bottom stays
+    // within bounds without hitting the clamp.
+    if (isNormalized) {
+      const maxHeight = Math.max(0, 1.0 - bbox.y)
+      effectiveHeight = Math.min(effectiveHeight, maxHeight)
+    } else {
+      const maxHeightPx = Math.max(0, imageHeight - bbox.y)
+      effectiveHeight = Math.min(effectiveHeight, maxHeightPx)
+    }
   }
 
   if (isNormalized) {

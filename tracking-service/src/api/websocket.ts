@@ -27,17 +27,25 @@ export class WebSocketBroadcaster {
    * Set up hooks for track event broadcasting
    */
   private setupHooks(): void {
-    this.trackManager.onTrackCreated = (track) => this.broadcast({
-      type: 'track_created',
-      track: trackToJSON(track),
-      frames: this.getFrameInfo?.(),
-    })
+    // Only broadcast confirmed tracks. Unconfirmed tracks are often short-lived
+    // (especially in the first second of a replay) and show up as “weird tracks”.
+    this.trackManager.onTrackCreated = (track) => {
+      if (!track.isConfirmed) return
+      this.broadcast({
+        type: 'track_created',
+        track: trackToJSON(track),
+        frames: this.getFrameInfo?.(),
+      })
+    }
 
-    this.trackManager.onTrackUpdated = (track) => this.broadcast({
-      type: 'track_updated',
-      track: trackToJSON(track),
-      frames: this.getFrameInfo?.(),
-    })
+    this.trackManager.onTrackUpdated = (track) => {
+      if (!track.isConfirmed) return
+      this.broadcast({
+        type: 'track_updated',
+        track: trackToJSON(track),
+        frames: this.getFrameInfo?.(),
+      })
+    }
 
     this.trackManager.onTrackExpired = (track) => this.broadcast({
       type: 'track_expired',

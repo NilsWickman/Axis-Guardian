@@ -19,9 +19,13 @@ interface Camera {
 interface CameraConnection {
   connection: ReturnType<typeof useMediasoupDetection>
   videoElement: HTMLVideoElement | null
+  /** Video elements that are currently displaying this camera stream (thumbnails/primary views) */
+  attachedVideoElements: Set<HTMLVideoElement>
   isConnected: boolean
   latestMetadata: DetectionMetadata | null
   stateWatchStop: (() => void) | null  // Store watch cleanup function
+  /** True if we paused this element as part of live sync (non-seekable streams) */
+  pausedBySync?: boolean
   // Health monitoring state
   stuckStateCount: number
   lastHealthCheckTime: number
@@ -101,7 +105,7 @@ function getWebRTCUrl(camera: Camera): string | undefined {
 
 // Video synchronization state
 let syncMonitorInterval: number | null = null
-const SYNC_CHECK_INTERVAL = 2000 // Check sync every 2 seconds for tighter sync
+const SYNC_CHECK_INTERVAL = 500 // Check sync twice per second so 1s offsets converge quickly
 const MAX_SYNC_DRIFT = 0.2 // Maximum allowed drift in seconds before correction (tightened from 0.5)
 const SYNC_ENABLED = true // Enable/disable sync monitoring
 let syncCorrectionCount = 0 // Track number of corrections for debugging
@@ -211,6 +215,7 @@ async function initializeConnections() {
       cameraConnections[camera.id] = {
         connection,
         videoElement,
+        attachedVideoElements: new Set<HTMLVideoElement>(),
         isConnected: false,
         latestMetadata: null,
         stateWatchStop: null,
@@ -310,6 +315,37 @@ function attachToVideoElement(cameraId: string, videoElement: HTMLVideoElement):
   videoElement.play().catch(e =>
     console.error(`[ConnectionManager] Error playing video for ${cameraId}:`, e)
   )
+
+  // Track attached elements so sync monitoring can affect what the user actually sees.
+  const conn = cameraConnections[cameraId]
+  if (conn) {
+    conn.attachedVideoElements.add(videoElement)
+    // Best-effort cleanup: remove the element from the set if it gets detached/reset.
+    const cleanupKey = '__axis_guardian_camera_attach_cleanup__'
+    const existingCleanup = (videoElement as any)[cleanupKey] as (() => void) | undefined
+    if (!existingCleanup) {
+      const cleanup = () => {
+        try {
+          conn.attachedVideoElements.delete(videoElement)
+        } catch {
+          // ignore
+        }
+        try {
+          videoElement.removeEventListener('emptied', cleanup)
+          videoElement.removeEventListener('abort', cleanup)
+          videoElement.removeEventListener('ended', cleanup)
+        } catch {
+          // ignore
+        }
+        ;(videoElement as any)[cleanupKey] = undefined
+      }
+      ;(videoElement as any)[cleanupKey] = cleanup
+      videoElement.addEventListener('emptied', cleanup)
+      videoElement.addEventListener('abort', cleanup)
+      videoElement.addEventListener('ended', cleanup)
+    }
+  }
+
   return true
 }
 
@@ -367,14 +403,17 @@ function synchronizeVideos() {
 
   // Collect all video elements with their current playback positions
   for (const [id, conn] of Object.entries(cameraConnections)) {
-    if (!conn.videoElement || !conn.isConnected) {
+    if (!conn.isConnected) {
       continue
     }
 
-    const video = conn.videoElement
+    // Prefer a currently attached (visible) element; fall back to the hidden pooled element.
+    const attached = Array.from(conn.attachedVideoElements.values())
+    const video = attached.length > 0 ? attached[0] : conn.videoElement
+    if (!video) continue
 
-    // Skip if video is not playing or doesn't have valid time
-    if (video.paused || video.readyState < 2 || isNaN(video.currentTime)) {
+    // Skip if we don't have a decodable frame/time yet
+    if (video.readyState < 2 || isNaN(video.currentTime)) {
       continue
     }
 
@@ -390,8 +429,11 @@ function synchronizeVideos() {
     return
   }
 
-  // Find the video that's furthest ahead (reference point)
-  // We sync all videos to the most advanced one to avoid rewinding
+  // For non-seekable streams (MediaStream/WebRTC), we can't seek currentTime.
+  // Instead, we pause streams that are ahead until the lagging stream catches up.
+  const minTime = videoElements.reduce((min, v) => Math.min(min, v.currentTime), Infinity)
+
+  // For seekable sources (e.g., VOD), we can still use the old "sync to most advanced" logic.
   const referenceVideo = videoElements.reduce((max, current) =>
     current.currentTime > max.currentTime ? current : max
   )
@@ -404,27 +446,65 @@ function synchronizeVideos() {
     console.log(`[ConnectionManager] Sync check - Times: ${drifts}`)
   }
 
-  // Check each video against the reference
-  for (const video of videoElements) {
-    if (video.id === referenceVideo.id) {
-      continue // Skip the reference video
-    }
+  // Determine if any elements are seekable; if so, do a simple seek-to-reference.
+  // Otherwise do live pause/resume based on the slowest stream (minTime).
+  const anySeekable = videoElements.some(v =>
+    Number.isFinite(v.element.duration) && v.element.seekable && v.element.seekable.length > 0
+  )
 
-    const drift = referenceVideo.currentTime - video.currentTime
+  if (anySeekable) {
+    // Seek lagging elements up to the most advanced time.
+    for (const video of videoElements) {
+      const drift = referenceVideo.currentTime - video.currentTime
+      if (Math.abs(drift) <= MAX_SYNC_DRIFT) continue
 
-    // If drift exceeds threshold, adjust the lagging video
-    if (Math.abs(drift) > MAX_SYNC_DRIFT) {
+      const isSeekable =
+        Number.isFinite(video.element.duration) &&
+        video.element.seekable &&
+        video.element.seekable.length > 0
+      if (!isSeekable) continue
+
       syncCorrectionCount++
       console.warn(
-        `[ConnectionManager] ⚠️ Sync drift #${syncCorrectionCount}: ${video.id} is ${drift.toFixed(2)}s ${drift > 0 ? 'behind' : 'ahead of'} ${referenceVideo.id}, correcting...`
+        `[ConnectionManager] ⚠️ Sync drift #${syncCorrectionCount}: ${video.id} is ${drift.toFixed(2)}s behind, seeking...`
       )
-
-      // Jump to the reference time (seek to live edge)
       try {
         video.element.currentTime = referenceVideo.currentTime
-        console.log(`[ConnectionManager] ✓ Synced ${video.id} to ${referenceVideo.currentTime.toFixed(2)}s`)
       } catch (error) {
-        console.error(`[ConnectionManager] ✗ Failed to sync ${video.id}:`, error)
+        console.error(`[ConnectionManager] ✗ Failed to seek-sync ${video.id}:`, error)
+      }
+    }
+    return
+  }
+
+  // Live WebRTC MediaStream: pause any camera that is ahead of the slowest stream.
+  for (const video of videoElements) {
+    const conn = cameraConnections[video.id]
+    const aheadBy = video.currentTime - minTime
+
+    if (aheadBy > MAX_SYNC_DRIFT) {
+      syncCorrectionCount++
+      if (!conn?.pausedBySync) {
+        console.warn(
+          `[ConnectionManager] ⚠️ Live sync drift #${syncCorrectionCount}: pausing ${video.id} (ahead by ${aheadBy.toFixed(2)}s)`
+        )
+      }
+      if (conn) conn.pausedBySync = true
+      const toPause = conn
+        ? [conn.videoElement, ...Array.from(conn.attachedVideoElements.values())].filter(Boolean) as HTMLVideoElement[]
+        : [video.element]
+      for (const el of toPause) {
+        try { el.pause() } catch { /* ignore */ }
+      }
+      continue
+    }
+
+    // Resume when within tighter tolerance
+    if (conn?.pausedBySync && aheadBy <= MAX_SYNC_DRIFT / 2) {
+      conn.pausedBySync = false
+      const toPlay = [conn.videoElement, ...Array.from(conn.attachedVideoElements.values())].filter(Boolean) as HTMLVideoElement[]
+      for (const el of toPlay) {
+        el.play().catch(() => {})
       }
     }
   }

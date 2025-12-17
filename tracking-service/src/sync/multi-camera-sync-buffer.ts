@@ -87,6 +87,10 @@ export class MultiCameraSyncBuffer {
   private syncWaitTimes: number[] = []
   private frameSkews: number[] = []
   private cameraClockOffsets: Map<string, number> = new Map()
+  /** Per-camera baseline for video_time_ms so different stream start offsets can be aligned */
+  private cameraVideoTimeBaseMs: Map<string, number> = new Map()
+  /** Reference baseline used to compute relative offsets */
+  private referenceVideoTimeBaseMs: number | null = null
 
   constructor(config?: Partial<SyncBufferConfig>) {
     const defaults = ALGORITHM_CONSTANTS.sync
@@ -201,7 +205,26 @@ export class MultiCameraSyncBuffer {
     }
 
     // Time-based bucketing
-    const videoTimeMs = message.video_time_ms ?? (message.timestamp * 1000)
+    const cameraId = message.camera_id
+    const rawVideoTimeMs = message.video_time_ms ?? (message.timestamp * 1000)
+
+    // Learn per-camera base time on first sight.
+    // If two recordings start with a constant offset (1–3s), subtracting each camera's base
+    // aligns them to a shared “time since start” timeline, allowing proper multi-camera batching.
+    if (!this.cameraVideoTimeBaseMs.has(cameraId)) {
+      this.cameraVideoTimeBaseMs.set(cameraId, rawVideoTimeMs)
+      if (this.referenceVideoTimeBaseMs === null) {
+        this.referenceVideoTimeBaseMs = rawVideoTimeMs
+      }
+      const ref = this.referenceVideoTimeBaseMs ?? rawVideoTimeMs
+      const offset = rawVideoTimeMs - ref
+      this.cameraClockOffsets.set(cameraId, offset)
+      this.metrics.cameraClockOffsets = new Map(this.cameraClockOffsets)
+    }
+
+    const base = this.cameraVideoTimeBaseMs.get(cameraId) ?? rawVideoTimeMs
+    const normalizedVideoTimeMs = rawVideoTimeMs - base
+    const videoTimeMs = normalizedVideoTimeMs
     const bucketIndex = Math.floor(videoTimeMs / this.config.frameBucketMs)
     return `time-${bucketIndex}`
   }
