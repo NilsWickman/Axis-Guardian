@@ -1,83 +1,141 @@
 <template>
   <div class="h-full w-full bg-background flex flex-col overflow-hidden">
     <!-- Header -->
-    <div class="border-b border-border px-4 py-3 flex items-center justify-between">
-      <div class="flex items-center gap-3">
+    <div class="border-b border-border px-4 py-3 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
         <div class="font-semibold">Replay</div>
-        <div v-if="recordingId" class="text-xs font-mono text-muted-foreground">
+        <div v-if="recordingId" class="text-xs font-mono text-muted-foreground truncate">
           {{ recordingId }}
         </div>
       </div>
-      <div v-if="replay.isLoading.value" class="text-xs text-muted-foreground">Loading…</div>
-      <div v-else-if="replay.error.value" class="text-xs text-destructive">{{ replay.error.value }}</div>
+
+      <div class="flex items-center gap-2">
+        <button
+          v-if="isDebugMode"
+          class="px-2 py-1.5 text-xs font-semibold rounded border border-border hover:bg-accent"
+          :class="showDetectionBoxes ? 'bg-accent' : ''"
+          title="Show detection bounding boxes on video"
+          @click="showDetectionBoxes = !showDetectionBoxes"
+        >
+          Boxes
+        </button>
+
+        <select
+          v-if="replay.manifest.value?.cameras?.length"
+          v-model="selectedCameraId"
+          class="px-2 py-1.5 rounded border border-border bg-background text-xs"
+        >
+          <option
+            v-for="c in replay.manifest.value.cameras"
+            :key="c.cameraId"
+            :value="c.cameraId"
+          >
+            {{ c.label }}
+          </option>
+        </select>
+
+        <div class="flex items-center rounded border border-border overflow-hidden">
+          <button
+            class="px-2 py-1.5 text-xs font-semibold hover:bg-accent"
+            :class="viewMode === 'camera' ? 'bg-accent' : ''"
+            @click="viewMode = 'camera'"
+          >
+            Camera
+          </button>
+          <button
+            class="px-2 py-1.5 text-xs font-semibold hover:bg-accent border-l border-border"
+            :class="viewMode === 'split' ? 'bg-accent' : ''"
+            @click="viewMode = 'split'"
+          >
+            Split
+          </button>
+          <button
+            class="px-2 py-1.5 text-xs font-semibold hover:bg-accent border-l border-border"
+            :class="viewMode === 'map' ? 'bg-accent' : ''"
+            @click="viewMode = 'map'"
+          >
+            Map
+          </button>
+        </div>
+
+        <div v-if="replay.isLoading.value" class="text-xs text-muted-foreground">Loading…</div>
+        <div v-else-if="replay.error.value" class="text-xs text-destructive">{{ replay.error.value }}</div>
+      </div>
     </div>
 
-    <!-- Main 3-pane area -->
-    <div class="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-2 p-2 overflow-hidden">
-      <!-- Camera 1 -->
-      <div class="rounded-lg border border-border bg-card overflow-hidden flex flex-col">
-        <div class="px-3 py-2 border-b border-border text-xs font-semibold text-foreground">
-          {{ cam1Label }}
-        </div>
-        <div class="flex-1 bg-black overflow-hidden">
-          <video
-            ref="cam1Video"
-            :src="cam1Src"
-            class="w-full h-full object-contain"
-            playsinline
-            preload="auto"
-            @loadedmetadata="onLoadedMetadata"
-            @play="syncPlay"
-            @pause="syncPause"
-            @seeking="onSeeking"
-          />
-        </div>
-      </div>
+    <!-- Main area -->
+    <div class="flex-1 p-2 overflow-hidden">
+      <div
+        class="h-full grid gap-2 overflow-hidden"
+        :class="viewMode === 'split' ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'"
+      >
+        <!-- Camera -->
+        <div
+          v-show="viewMode !== 'map'"
+          class="rounded-lg border border-border bg-card overflow-hidden flex flex-col"
+        >
+          <div class="px-3 py-2 border-b border-border text-xs font-semibold text-foreground">
+            {{ selectedCameraLabel }}
+          </div>
+          <div class="flex-1 bg-black overflow-hidden relative">
+            <video
+              ref="masterVideo"
+              :src="selectedCameraSrc"
+              class="w-full h-full object-contain"
+              playsinline
+              preload="auto"
+              @loadedmetadata="onLoadedMetadata"
+              @play="onPlay"
+              @pause="onPause"
+              @seeking="onSeeking"
+            />
 
-      <!-- Camera 2 -->
-      <div class="rounded-lg border border-border bg-card overflow-hidden flex flex-col">
-        <div class="px-3 py-2 border-b border-border text-xs font-semibold text-foreground">
-          {{ cam2Label }}
+            <div v-if="isDebugMode && showDetectionBoxes" class="absolute inset-0 pointer-events-none">
+              <div
+                v-for="b in visibleDetectionBoxes"
+                :key="b.id"
+                class="absolute border-2 bg-black/0"
+                :style="detectionBoxStyle(b)"
+              >
+                <div class="absolute -top-5 left-0 px-1.5 py-0.5 rounded bg-black/60 text-white text-[10px] font-mono">
+                  {{ b.label }}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="flex-1 bg-black overflow-hidden">
-          <video
-            ref="cam2Video"
-            :src="cam2Src"
-            class="w-full h-full object-contain"
-            playsinline
-            preload="auto"
-            muted
-          />
-        </div>
-      </div>
 
-      <!-- Global map -->
-      <div class="rounded-lg border border-border bg-card overflow-hidden flex flex-col">
-        <div class="px-3 py-2 border-b border-border text-xs font-semibold text-foreground">
-          Global Map
-        </div>
-        <div class="flex-1 relative overflow-hidden" style="background-color: var(--canvas-background)">
-          <canvas ref="mapCanvas" class="absolute inset-0" />
-          <PersonPositionOverlay
-            v-if="currentMap"
-            :site-map="currentMap"
-            :canvas-width="metersToPixels(extractValue(currentMap.width))"
-            :canvas-height="metersToPixels(extractValue(currentMap.height))"
-            :show-trails="true"
-            :show-confidence="true"
-            :show-person-icon="false"
-            :show-stats="false"
-            :show-heatmap="false"
-            :show-debug-mode="false"
-            :marker-radius="8"
-            :max-trail-length="20"
-            :style="{
-              position: 'absolute',
-              left: '0px',
-              top: '0px',
-              pointerEvents: 'none',
-            }"
-          />
+        <!-- Global map -->
+        <div
+          v-show="viewMode !== 'camera'"
+          class="rounded-lg border border-border bg-card overflow-hidden flex flex-col"
+        >
+          <div class="px-3 py-2 border-b border-border text-xs font-semibold text-foreground">
+            Global Map
+          </div>
+          <div class="flex-1 relative overflow-hidden" style="background-color: var(--canvas-background)">
+            <canvas ref="mapCanvas" class="absolute inset-0" />
+            <PersonPositionOverlay
+              v-if="replayMap"
+              :site-map="replayMap"
+              :canvas-width="metersToPixels(extractValue(replayMap.width))"
+              :canvas-height="metersToPixels(extractValue(replayMap.height))"
+              :show-trails="true"
+              :show-confidence="true"
+              :show-person-icon="false"
+              :show-stats="false"
+              :show-heatmap="false"
+              :show-debug-mode="false"
+              :marker-radius="8"
+              :max-trail-length="20"
+              :style="{
+                position: 'absolute',
+                left: '0px',
+                top: '0px',
+                pointerEvents: 'none',
+              }"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -113,17 +171,19 @@ import { computed, onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useReplay } from '@/composables/useReplay'
 import { useSiteMapCanvas, type CanvasRenderOptions } from '@/composables/useSiteMapCanvas'
-import { useSiteMapConfig } from '@/composables/useSiteMapConfig'
+import { useSiteMapConfig, tryCreateSiteMapFromUnknown, type SiteMap } from '@/composables/useSiteMapConfig'
+import { useDemoMode } from '@/composables/useDemoMode'
+import { useGlobalTrackStore } from '@/stores/globalTracks'
 import PersonPositionOverlay from '@/components/features/site-map/PersonPositionOverlay.vue'
 import { extractValue, metersToPixels, RENDER_SCALE } from '@/utils/siteMapConversion'
 
 const route = useRoute()
 const recordingId = computed(() => String(route.params.recordingId || ''))
 
-const cam1Video = ref<HTMLVideoElement | null>(null)
-const cam2Video = ref<HTMLVideoElement | null>(null)
+const masterVideo = ref<HTMLVideoElement | null>(null)
 
-const { siteMap: currentMap, loadSiteMap } = useSiteMapConfig()
+const { loadSiteMap } = useSiteMapConfig()
+const replayMap = ref<SiteMap | null>(null)
 const mapCanvas = ref<HTMLCanvasElement | null>(null)
 const canvasOptions = ref<CanvasRenderOptions>({
   showGrid: false,
@@ -133,114 +193,249 @@ const canvasOptions = ref<CanvasRenderOptions>({
 })
 const canvas = useSiteMapCanvas(mapCanvas, canvasOptions)
 
-const replay = useReplay({ masterVideo: cam1Video })
+const replay = useReplay({ masterVideo })
 
 const durationSec = ref(0)
 const currentSec = ref(0)
 const isPlaying = ref(false)
 
-const cam1Src = computed(() => replay.manifest.value?.cameras?.[0]?.videoUrl ?? '')
-const cam2Src = computed(() => replay.manifest.value?.cameras?.[1]?.videoUrl ?? '')
-const cam1Label = computed(() => replay.manifest.value?.cameras?.[0]?.label ?? 'Camera 1')
-const cam2Label = computed(() => replay.manifest.value?.cameras?.[1]?.label ?? 'Camera 2')
+const selectedCameraId = ref('')
+const selectedCamera = computed(() => {
+  const m = replay.manifest.value
+  if (!m?.cameras?.length) return null
+  return m.cameras.find(c => c.cameraId === selectedCameraId.value) ?? m.cameras[0] ?? null
+})
+const selectedCameraSrc = computed(() => selectedCamera.value?.videoUrl ?? '')
+const selectedCameraLabel = computed(() => selectedCamera.value?.label ?? selectedCamera.value?.cameraId ?? 'Camera')
+const viewMode = ref<'camera' | 'split' | 'map'>('split')
+
+const { isDemoMode } = useDemoMode()
+const isDebugMode = computed(() => !isDemoMode.value)
+const showDetectionBoxes = ref(false)
+
+const globalTrackStore = useGlobalTrackStore()
+
+const videoLayout = ref({ offsetX: 0, offsetY: 0, drawW: 0, drawH: 0 })
+
+function refreshOverlayRect(): void {
+  const v = masterVideo.value
+  if (!v) return
+  const containerW = v.clientWidth
+  const containerH = v.clientHeight
+  const videoW = v.videoWidth
+  const videoH = v.videoHeight
+  if (!containerW || !containerH) return
+
+  if (!videoW || !videoH) {
+    videoLayout.value = { offsetX: 0, offsetY: 0, drawW: containerW, drawH: containerH }
+    return
+  }
+
+  const scale = Math.min(containerW / videoW, containerH / videoH)
+  const drawW = videoW * scale
+  const drawH = videoH * scale
+  videoLayout.value = {
+    offsetX: (containerW - drawW) / 2,
+    offsetY: (containerH - drawH) / 2,
+    drawW,
+    drawH,
+  }
+}
+
+interface VisibleDetectionBox {
+  id: string
+  label: string
+  color: string
+  bbox: { x: number; y: number; width: number; height: number }
+}
+
+const currentVideoTimeMs = computed(() => {
+  const v = masterVideo.value
+  return v ? Math.round(v.currentTime * 1000) : 0
+})
+
+const visibleDetectionBoxes = computed<VisibleDetectionBox[]>(() => {
+  const camId = selectedCameraId.value
+  if (!camId) return []
+  const nowMs = currentVideoTimeMs.value
+
+  return globalTrackStore.activeTracks
+    .map((t) => {
+      const det = t.cameraDetections?.[camId]
+      const bbox = det?.bbox
+      if (!bbox) return null
+      if (typeof det.videoTimeMs === 'number' && Math.abs(det.videoTimeMs - nowMs) > 140) return null
+      return {
+        id: `${t.globalTrackId}:${camId}`,
+        label: t.globalTrackId.replace('global-', '#'),
+        color: t.color,
+        bbox,
+      }
+    })
+    .filter((x): x is VisibleDetectionBox => x !== null)
+})
+
+function detectionBoxStyle(b: VisibleDetectionBox): Record<string, string> {
+  const { offsetX, offsetY, drawW, drawH } = videoLayout.value
+  const left = offsetX + b.bbox.x * drawW
+  const top = offsetY + b.bbox.y * drawH
+  const width = b.bbox.width * drawW
+  const height = b.bbox.height * drawH
+  return {
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${width}px`,
+    height: `${height}px`,
+    borderColor: b.color,
+  }
+}
+
+const pendingSeekSec = ref<number | null>(null)
+const resumeAfterSwitch = ref(false)
 
 function drawMap(): void {
-  if (!currentMap.value) return
+  if (!replayMap.value) return
+  const w = metersToPixels(extractValue(replayMap.value.width))
+  const h = metersToPixels(extractValue(replayMap.value.height))
+  canvas.resizeCanvas(w, h)
   canvas.clearCanvas()
   canvas.drawGrid()
   canvas.drawScaleReference()
-  canvas.drawObstacles(currentMap.value.obstacles)
-  canvas.drawWalls(currentMap.value.walls)
-  const allCameraFOVs = currentMap.value.cameras.map(camera =>
-    canvas.getCameraFOVPolygon(camera, currentMap.value!.walls, currentMap.value!.obstacles)
+  canvas.drawObstacles(replayMap.value.obstacles)
+  canvas.drawWalls(replayMap.value.walls)
+  const allCameraFOVs = replayMap.value.cameras.map(camera =>
+    canvas.getCameraFOVPolygon(camera, replayMap.value!.walls, replayMap.value!.obstacles)
   )
-  currentMap.value.cameras.forEach((camera, idx) => {
+  replayMap.value.cameras.forEach((camera, idx) => {
     const other = allCameraFOVs.filter((_, i) => i !== idx)
-    canvas.drawCamera(camera, (id) => id, false, false, currentMap.value!.walls, currentMap.value!.obstacles, other)
+    canvas.drawCamera(camera, (id) => id, false, false, replayMap.value!.walls, replayMap.value!.obstacles, other)
   })
 }
 
 function onLoadedMetadata(): void {
-  const v = cam1Video.value
+  const v = masterVideo.value
   if (!v) return
-  if (Number.isFinite(v.duration)) durationSec.value = v.duration
-}
+  refreshOverlayRect()
+  const manifestDurationMs = replay.manifest.value?.durationMs
+  if (manifestDurationMs && Number.isFinite(manifestDurationMs)) {
+    durationSec.value = Math.max(0, manifestDurationMs / 1000)
+  } else if (Number.isFinite(v.duration)) {
+    durationSec.value = v.duration
+  }
 
-function syncPlay(): void {
-  isPlaying.value = true
-  const v1 = cam1Video.value
-  const v2 = cam2Video.value
-  if (!v1 || !v2) return
-  // Keep cam2 near cam1; allow slight drift during playback.
-  try {
-    v2.currentTime = v1.currentTime
-    void v2.play()
-  } catch {
-    // ignore
+  if (pendingSeekSec.value !== null) {
+    try {
+      v.currentTime = pendingSeekSec.value
+    } catch {
+      // ignore
+    }
+    pendingSeekSec.value = null
+    if (resumeAfterSwitch.value) {
+      try {
+        void v.play()
+      } catch {
+        // ignore
+      }
+    }
+    resumeAfterSwitch.value = false
   }
 }
 
-function syncPause(): void {
+function onPlay(): void {
+  isPlaying.value = true
+}
+
+function onPause(): void {
   isPlaying.value = false
-  cam2Video.value?.pause()
 }
 
 async function onSeeking(): Promise<void> {
-  const v1 = cam1Video.value
-  const v2 = cam2Video.value
-  if (!v1 || !v2) return
-  v2.currentTime = v1.currentTime
-  await replay.seekTo(Math.round(v1.currentTime * 1000))
+  const v = masterVideo.value
+  if (!v) return
+  await replay.seekTo(Math.round(v.currentTime * 1000))
 }
 
 async function onScrub(e: Event): Promise<void> {
   const value = Number((e.target as HTMLInputElement).value)
-  const v1 = cam1Video.value
-  const v2 = cam2Video.value
-  if (!v1 || !v2) return
-  v1.pause()
-  v2.pause()
+  const v = masterVideo.value
+  if (!v) return
+  v.pause()
   isPlaying.value = false
-  v1.currentTime = value
-  v2.currentTime = value
+  v.currentTime = value
   currentSec.value = value
   await replay.seekTo(Math.round(value * 1000))
 }
 
 function togglePlay(): void {
-  const v1 = cam1Video.value
-  const v2 = cam2Video.value
-  if (!v1 || !v2) return
-  if (v1.paused) {
-    void v1.play()
+  const v = masterVideo.value
+  if (!v) return
+  if (v.paused) {
+    void v.play()
   } else {
-    v1.pause()
-    v2.pause()
+    v.pause()
   }
 }
 
 onMounted(async () => {
-  await loadSiteMap()
   await nextTick()
-  drawMap()
+  refreshOverlayRect()
   await replay.openRecording(recordingId.value)
+  window.addEventListener('resize', refreshOverlayRect)
 })
 
 watch(recordingId, async (id) => {
   if (!id) return
+  refreshOverlayRect()
   await replay.openRecording(id)
+})
+
+watch(() => replay.manifest.value, async (m) => {
+  if (!m) return
+
+  if (!selectedCameraId.value || !m.cameras.some(c => c.cameraId === selectedCameraId.value)) {
+    selectedCameraId.value = m.cameras[0]?.cameraId ?? ''
+  }
+
+  const mapFromRecording = tryCreateSiteMapFromUnknown(m.siteMapConfig)
+  if (mapFromRecording) {
+    replayMap.value = mapFromRecording
+  } else {
+    const fallback = await loadSiteMap()
+    replayMap.value = fallback
+  }
+
+  await nextTick()
+  drawMap()
+}, { immediate: true })
+
+watch(selectedCameraSrc, (newSrc, oldSrc) => {
+  if (!newSrc || newSrc === oldSrc) return
+  const v = masterVideo.value
+  if (!v) return
+  pendingSeekSec.value = v.currentTime
+  resumeAfterSwitch.value = !v.paused
+  v.pause()
+})
+
+watch(viewMode, async (mode) => {
+  await nextTick()
+  refreshOverlayRect()
+  if (mode !== 'camera') drawMap()
 })
 
 // Keep current time display in sync
 const clockInterval = window.setInterval(() => {
-  const v = cam1Video.value
+  const v = masterVideo.value
   if (!v) return
   currentSec.value = v.currentTime
 }, 100)
 
+watch(isDebugMode, (v) => {
+  if (!v) showDetectionBoxes.value = false
+}, { immediate: true })
+
 onUnmounted(() => {
   window.clearInterval(clockInterval)
+  window.removeEventListener('resize', refreshOverlayRect)
 })
 </script>
-
-

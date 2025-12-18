@@ -3,6 +3,7 @@
   "description": "AXIS Surveillance System Frontend",
   "private": true,
   "version": "1.0.0",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite --config config/build/vite.config.ts",

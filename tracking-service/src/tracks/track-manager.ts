@@ -12,6 +12,7 @@ import type {
   GlobalTrack,
   GlobalTrackJSON,
   CameraDetection,
+  CameraImageDetection,
   TrackingConfig,
   TrailPosition,
   CameraTrackAssociation,
@@ -85,9 +86,15 @@ export function trackToJSON(track: GlobalTrack): GlobalTrackJSON {
     associations[key] = value
   })
 
+  const cameraDetections: Record<string, CameraImageDetection> = {}
+  track.cameraDetections.forEach((value, key) => {
+    cameraDetections[key] = value
+  })
+
   return {
     globalTrackId: track.globalTrackId,
     cameraAssociations: associations,
+    cameraDetections: Object.keys(cameraDetections).length > 0 ? cameraDetections : undefined,
     currentPosition: track.currentPosition,
     trail: track.trail,
     color: track.color,
@@ -414,6 +421,7 @@ export class TrackManager {
     const track: GlobalTrack = {
       globalTrackId,
       cameraAssociations: new Map(),
+      cameraDetections: new Map(),
       currentPosition: { x: detection.worldX, y: detection.worldY },
       trail: [{ x: detection.worldX, y: detection.worldY, timestamp: detection.timestamp }],
       color,
@@ -430,6 +438,8 @@ export class TrackManager {
       videoTiming,
       // Preserve archived embedding information
       attributes: {
+        upper_clothing: { dominant_colors: [] },
+        lower_clothing: { dominant_colors: [] },
         embedding: archived.embedding,
         embedding_quality: archived.quality,
         sample_count: archived.sampleCount,
@@ -442,6 +452,17 @@ export class TrackManager {
       lastSeen: detection.timestamp,
       lastFrameNumber: detection.frameNumber,
     })
+
+    if (detection.bbox) {
+      track.cameraDetections.set(detection.cameraId, {
+        cameraId: detection.cameraId,
+        bbox: detection.bbox,
+        confidence: detection.confidence,
+        timestamp: detection.timestamp,
+        frameNumber: detection.frameNumber,
+        videoTimeMs: detection.videoTimeMs,
+      })
+    }
 
     // Store track first so ensureCameraTrackExclusivity can find it
     this.tracks.set(globalTrackId, track)
@@ -1328,6 +1349,7 @@ export class TrackManager {
     const track: GlobalTrack = {
       globalTrackId,
       cameraAssociations: new Map(),
+      cameraDetections: new Map(),
       currentPosition: merged.position,
       trail: [{ x: merged.position.x, y: merged.position.y, timestamp: primaryDetection.timestamp }],
       color,
@@ -1367,6 +1389,17 @@ export class TrackManager {
       if (det.frameNumber !== undefined) {
         this.frameTracker.updateFrame(det.cameraId, det.frameNumber, det.timestamp)
       }
+
+      if (det.bbox) {
+        track.cameraDetections.set(det.cameraId, {
+          cameraId: det.cameraId,
+          bbox: det.bbox,
+          confidence: det.confidence,
+          timestamp: det.timestamp,
+          frameNumber: det.frameNumber,
+          videoTimeMs: det.videoTimeMs,
+        })
+      }
     }
 
     // Confirm immediately if seen by multiple cameras
@@ -1403,6 +1436,7 @@ export class TrackManager {
     const track: GlobalTrack = {
       globalTrackId,
       cameraAssociations: new Map(),
+      cameraDetections: new Map(),
       currentPosition: { x: detection.worldX, y: detection.worldY },
       trail: [{ x: detection.worldX, y: detection.worldY, timestamp: detection.timestamp }],
       color,
@@ -1425,6 +1459,17 @@ export class TrackManager {
       lastSeen: detection.timestamp,
       lastFrameNumber: detection.frameNumber,
     })
+
+    if (detection.bbox) {
+      track.cameraDetections.set(detection.cameraId, {
+        cameraId: detection.cameraId,
+        bbox: detection.bbox,
+        confidence: detection.confidence,
+        timestamp: detection.timestamp,
+        frameNumber: detection.frameNumber,
+        videoTimeMs: detection.videoTimeMs,
+      })
+    }
 
     // Store track first so ensureCameraTrackExclusivity can find it
     this.tracks.set(globalTrackId, track)
@@ -1572,6 +1617,16 @@ export class TrackManager {
     track.pendingDetections.push(detection)
     if (track.pendingDetections.length > 50) {
       track.pendingDetections = track.pendingDetections.slice(-20)
+    }
+    if (detection.bbox) {
+      track.cameraDetections.set(detection.cameraId, {
+        cameraId: detection.cameraId,
+        bbox: detection.bbox,
+        confidence: detection.confidence,
+        timestamp: detection.timestamp,
+        frameNumber: detection.frameNumber,
+        videoTimeMs: detection.videoTimeMs,
+      })
     }
     track.lastSeen = detection.timestamp
     return true
@@ -1770,6 +1825,16 @@ export class TrackManager {
     track.pendingDetections.push(detection)
     if (track.pendingDetections.length > 50) {
       track.pendingDetections = track.pendingDetections.slice(-20)
+    }
+    if (detection.bbox) {
+      track.cameraDetections.set(detection.cameraId, {
+        cameraId: detection.cameraId,
+        bbox: detection.bbox,
+        confidence: detection.confidence,
+        timestamp: detection.timestamp,
+        frameNumber: detection.frameNumber,
+        videoTimeMs: detection.videoTimeMs,
+      })
     }
     track.lastSeen = detection.timestamp
     return true

@@ -120,6 +120,8 @@ export interface CameraDetection {
   worldY: number
   confidence: number
   timestamp: number // Unix timestamp in ms
+  /** Image-space detection bounding box (normalized 0..1), if available */
+  bbox?: { x: number; y: number; width: number; height: number }
   /** Image-space center (pixels) for same-camera deduplication sanity checks */
   imageCenter?: Point2D
   /** True if the feet are likely occluded by a table (used for relaxed creation/dedup heuristics) */
@@ -162,6 +164,8 @@ export interface KalmanState {
 export interface GlobalTrack {
   globalTrackId: string
   cameraAssociations: Map<string, CameraTrackAssociation>
+  /** Latest image-space detections per camera (used for video box overlays) */
+  cameraDetections: Map<string, CameraImageDetection>
   currentPosition: Point2D
   trail: TrailPosition[]
   color: string
@@ -200,6 +204,11 @@ export interface GlobalTrack {
 export interface GlobalTrackJSON {
   globalTrackId: string
   cameraAssociations: Record<string, CameraTrackAssociation>
+  /**
+   * Latest per-camera image-space detections (normalized bbox), used for drawing boxes on video.
+   * Optional for backwards compatibility.
+   */
+  cameraDetections?: Record<string, CameraImageDetection>
   currentPosition: Point2D
   trail: TrailPosition[]
   color: string
@@ -217,4 +226,20 @@ export interface GlobalTrackJSON {
   videoTiming?: VideoTimingInfo
   /** Aggregated person attributes for re-ID and display (optional) */
   attributes?: TrackAttributes
+}
+
+export interface DetectionBBox {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface CameraImageDetection {
+  cameraId: string
+  bbox: DetectionBBox
+  confidence: number
+  timestamp: number
+  frameNumber?: number
+  videoTimeMs?: number
 }

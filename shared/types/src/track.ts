@@ -165,6 +165,28 @@ export interface DetectionAttributes {
 // ============================================================================
 
 /**
+ * Detection bounding box in normalized coordinates (0..1).
+ */
+export interface DetectionBBox {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/**
+ * Latest image-space detection info per camera (for drawing overlays).
+ */
+export interface CameraImageDetection {
+  cameraId: string
+  bbox: DetectionBBox
+  confidence: number
+  timestamp: number
+  frameNumber?: number
+  videoTimeMs?: number
+}
+
+/**
  * Global track JSON representation for API and WebSocket messages
  * This is the format sent between tracking-service and frontend
  */
@@ -186,6 +208,11 @@ export interface GlobalTrackJSON {
   predictedPosition?: Position2D
   /** Video timing from the most recent detection (for frontend sync) */
   videoTiming?: VideoTimingInfo
+  /**
+   * Latest per-camera image-space detections (normalized bbox), used for drawing boxes on video.
+   * Optional for backwards compatibility.
+   */
+  cameraDetections?: Record<string, CameraImageDetection>
   /** Aggregated person attributes for re-ID and display (optional) */
   attributes?: TrackAttributes
 }

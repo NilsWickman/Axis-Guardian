@@ -1,11 +1,12 @@
 <script setup lang="ts">
-  import { ref, computed } from 'vue'
+  import { ref, computed, type Component } from 'vue'
   import { useRoute } from 'vue-router'
   import {
     Sun,
     Moon,
     ChevronDown,
     MapPinned,
+    Film,
     ShieldAlert,
     Code,
     Crosshair,
@@ -37,7 +38,7 @@
   interface NavigationItem {
     name: string
     path?: string
-    icon: any
+    icon: Component
     children?: NavigationItem[]
   }
 
@@ -46,6 +47,11 @@
       name: 'Tracking',
       path: '/tracking',
       icon: MapPinned,
+    },
+    {
+      name: 'Recordings',
+      path: '/recordings',
+      icon: Film,
     },
     {
       name: 'Zones',

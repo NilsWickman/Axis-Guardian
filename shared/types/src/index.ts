@@ -34,6 +34,8 @@ export type {
   TrackState,
   ExitReason,
   CameraDetection,
+  DetectionBBox,
+  CameraImageDetection,
   CameraTrackAssociation,
   TrailPosition,
   VideoTimingInfo,

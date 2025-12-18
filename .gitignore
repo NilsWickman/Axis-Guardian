@@ -158,8 +158,6 @@ pids/
 .parcel-cache/
 
 # Personal Tools
-CLAUDE.md
-AGENTS.md
 GEMINI.md
 .claude/
 .cursor/
