@@ -1,6 +1,6 @@
 # Axis-Guardian
 
-Monorepo for the Multi object tracking system developed solo in paralell to a course project where 24 created the same system. Frontend in vue with standard Shadcn and tailwind, Backend with REST and mediasoup for MOT, and a camera emulator serving preprocessed mp4 files with detections metadata.
+Monorepo for the Multi object tracking system developed solo in paralell to a course project where 24 created the same system. Frontend in vue with standard Shadcn and tailwind, Fastify Backend with REST and mediasoup for MOT, and a camera emulator serving preprocessed mp4 files with detections metadata.
 
 Available on https://pummenc2.win
 
@@ -33,6 +33,8 @@ Services (defaults):
 ## Helpful commands
 
 ```bash
+make dev # Runs the following commands concurrently in same terminal
+
 make dev-frontend
 make dev-camera
 make dev-backend

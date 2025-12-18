@@ -153,6 +153,12 @@ pids/
 *.seed
 *.pid.lock
 
+# SQLite runtime files (do not commit)
+backend/data/*.db
+backend/data/*.db-*
+backend/data/*.sqlite
+backend/data/*.sqlite-*
+
 # Cache
 .cache/
 .parcel-cache/
@@ -163,11 +169,11 @@ GEMINI.md
 .cursor/
 .playwright-mcp/
 
-# Video files (large, can be regenerated or stored elsewhere)
+# Video files (large)
 shared/cameras/*.mp4
 shared/cameras/**/*.mp4
-# Ignore preprocessed videos (can be regenerated)
-shared/cameras/preprocessed/*/*.mp4
+# Preprocessed videos are stored in Git LFS (see .gitattributes)
+!shared/cameras/preprocessed/**/*.mp4
 # Ignore large uncompressed detection JSON files (use .json.gz instead)
 shared/cameras/preprocessed/*/*.json
 # Keep only compressed detection metadata

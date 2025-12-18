@@ -802,11 +802,16 @@ export class DetectionProcessor implements IDetectionProcessor {
           worldY: worldPoint.y,
           confidence: detection.confidence,
           timestamp: timestampMs,
+          bbox,
           frameNumber: message.frame_number,
           videoTimeMs: message.video_time_ms,
           rtpTimestamp: message.rtp_timestamp,
           attributes: detection.attributes,  // Pass through re-ID attributes
           cameraPosition: { x: camera.position.x, y: camera.position.y },  // For distance-based weighting
+          imageCenter: {
+            x: (bbox.x + bbox.width / 2) * IMAGE_WIDTH,
+            y: (bbox.y + bbox.height / 2) * IMAGE_HEIGHT,
+          },
         })
       }
     }
