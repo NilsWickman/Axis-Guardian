@@ -44,7 +44,6 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useGlobalTrackStore, type GlobalTrack } from '../../../stores/globalTracks'
 import type { SiteMap } from '../../../composables/useSiteMapConfig'
 import { calculateVelocity } from '../../../utils/trackCorrelation'
-import { extractValue } from '../../../utils/siteMapConversion'
 
 export interface PersonPositionOverlayProps {
   siteMap: SiteMap
@@ -206,20 +205,6 @@ function getGhostInterpolatedPosition(track: GlobalTrack, now: number): { x: num
   let x = state.ghostStartPosition.x + state.velocity.x * cappedElapsed
   let y = state.ghostStartPosition.y + state.velocity.y * cappedElapsed
 
-  // Clamp to room boundaries
-  const origin = props.siteMap.origin ?? { x: 0, y: 0 }
-  const mapWidth = extractValue(props.siteMap.width)
-  const mapHeight = extractValue(props.siteMap.height)
-  if (mapWidth && mapHeight) {
-    const minX = origin.x
-    const maxX = origin.x + mapWidth
-    const minY = origin.y
-    const maxY = origin.y + mapHeight
-
-    x = Math.max(minX, Math.min(maxX, x))
-    y = Math.max(minY, Math.min(maxY, y))
-  }
-
   // Update the state's position for trail drawing continuity
   state.position = { x, y }
 
@@ -250,7 +235,8 @@ function updateInterpolationState(track: GlobalTrack, now: number): void {
       state.ghostStartTime = undefined
       state.ghostStartPosition = undefined
       state.wasGhost = false
-      // Update target to actual position for smooth blend-back
+      // Snap back to the actual position so we don't "bounce" from a clamped/extrapolated edge.
+      state.position = { ...track.currentPosition }
       state.targetPosition = { ...track.currentPosition }
     } else if (!isGhost) {
       // Normal track update
