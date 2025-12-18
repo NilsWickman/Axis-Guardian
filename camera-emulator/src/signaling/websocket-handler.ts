@@ -8,6 +8,12 @@ import type { WebSocket } from 'ws'
 import type { ClientSession } from '../types.js'
 import { createWebRtcTransport, createConsumerAndDataConsumer } from '../mediasoup/transports.js'
 import type { DetectionSync } from '../detections/sync.js'
+import {
+  WS_ALLOWED_ORIGINS,
+  WS_ALLOW_NO_ORIGIN,
+  WS_MAX_CONNECTIONS_PER_IP,
+  WS_PING_INTERVAL_MS,
+} from '../config.js'
 
 interface SignalingMessage {
   type: string
@@ -25,11 +31,28 @@ export function registerWebSocketSignaling(
   detectionSync: DetectionSync
 ): void {
   const sessions = new Map<WebSocket, ClientSession>()
+  const connectionsPerIp = new Map<string, number>()
 
   app.get('/ws/webrtc', { websocket: true }, (socket, req) => {
     const ws = socket as unknown as WebSocket
+    const origin = req.headers.origin
+    if (!isAllowedOrigin(origin, WS_ALLOWED_ORIGINS, WS_ALLOW_NO_ORIGIN)) {
+      ws.close(1008, 'Origin not allowed')
+      return
+    }
+
+    const ip = req.ip
+    const current = connectionsPerIp.get(ip) ?? 0
+    if (current >= WS_MAX_CONNECTIONS_PER_IP) {
+      ws.close(1013, 'Too many connections')
+      return
+    }
+    connectionsPerIp.set(ip, current + 1)
+
     const sessionId = Math.random().toString(36).substring(7)
     console.log(`WebSocket client connected: ${sessionId}`)
+
+    const keepAlive = setupKeepAlive(ws, WS_PING_INTERVAL_MS)
 
     ws.on('message', async (message: Buffer) => {
       try {
@@ -43,6 +66,11 @@ export function registerWebSocketSignaling(
 
     ws.on('close', () => {
       console.log(`WebSocket client disconnected: ${sessionId}`)
+      keepAlive()
+      const next = (connectionsPerIp.get(ip) ?? 1) - 1
+      if (next <= 0) connectionsPerIp.delete(ip)
+      else connectionsPerIp.set(ip, next)
+
       const session = sessions.get(ws)
       if (session) {
         session.transport.close()
@@ -54,6 +82,45 @@ export function registerWebSocketSignaling(
       console.error(`WebSocket error for ${sessionId}:`, error)
     })
   })
+}
+
+function isAllowedOrigin(
+  origin: string | undefined,
+  allowedOrigins: string[],
+  allowNoOrigin: boolean
+): boolean {
+  if (!origin) return allowNoOrigin
+  return allowedOrigins.includes(origin)
+}
+
+function setupKeepAlive(ws: WebSocket, pingIntervalMs: number): () => void {
+  let lastPong = Date.now()
+
+  const onPong = () => {
+    lastPong = Date.now()
+  }
+
+  ws.on('pong', onPong)
+
+  const timer = setInterval(() => {
+    if (ws.readyState !== 1) return
+
+    if (Date.now() - lastPong > pingIntervalMs * 2) {
+      ws.terminate()
+      return
+    }
+
+    try {
+      ws.ping()
+    } catch {
+      ws.terminate()
+    }
+  }, pingIntervalMs)
+
+  return () => {
+    clearInterval(timer)
+    ws.off('pong', onPong)
+  }
 }
 
 async function handleMessage(

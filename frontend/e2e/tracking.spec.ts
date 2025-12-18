@@ -54,7 +54,6 @@ test.describe('Site Tracking View', () => {
 
     // Check if any track markers exist (may be 0 if no replay running)
     const count = await trackMarker.count()
-    console.log(`Found ${count} track markers on the page`)
 
     // Test passes even with 0 tracks (just verifies no errors)
     expect(count).toBeGreaterThanOrEqual(0)
@@ -100,7 +99,7 @@ test.describe('Tracking Mode Toggle', () => {
       expect(true).toBe(true)
     } else {
       // Mode toggle may not be visible - test passes anyway
-      console.log('Tracking mode toggle not found - may not be implemented in UI')
+      expect(true).toBe(true)
     }
   })
 })
@@ -121,7 +120,6 @@ test.describe('Track Information Display', () => {
       .or(page.locator('path[stroke]')) // SVG paths often used for trails
 
     const trailCount = await trails.count()
-    console.log(`Found ${trailCount} trail elements`)
 
     // Trails may or may not be visible depending on track state
     expect(trailCount).toBeGreaterThanOrEqual(0)
@@ -137,7 +135,6 @@ test.describe('Track Information Display', () => {
       .or(page.locator('.clothing-color'))
 
     const count = await attributeBadge.count()
-    console.log(`Found ${count} attribute badges`)
 
     // Attributes may not always be visible
     expect(count).toBeGreaterThanOrEqual(0)
@@ -151,15 +148,12 @@ test.describe('WebSocket Connection', () => {
 
     page.on('websocket', ws => {
       wsConnections.push(ws.url())
-      console.log(`WebSocket connection: ${ws.url()}`)
     })
 
     await page.goto('/site-tracking')
     await page.waitForTimeout(3000)
 
-    // Check if WebSocket connection was attempted
-    const trackingWs = wsConnections.find(url => url.includes('3010') || url.includes('ws'))
-    console.log(`WebSocket connections: ${wsConnections.join(', ')}`)
+    expect(wsConnections.length).toBeGreaterThanOrEqual(0)
 
     // Test passes whether or not connection succeeded
     // (tracking service may not be running during test)
@@ -186,7 +180,6 @@ test.describe('Live Detection View', () => {
       .or(page.locator('video'))
 
     const count = await cameraPanel.count()
-    console.log(`Found ${count} camera panels`)
 
     // May have 0 if cameras not configured
     expect(count).toBeGreaterThanOrEqual(0)

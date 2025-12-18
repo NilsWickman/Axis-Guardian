@@ -35,8 +35,6 @@ export const useDetectionStore = defineStore('detections', () => {
   function startMockDetectionGenerator() {
     if (mockDetectionInterval) return
 
-    console.log('[DetectionStore] Starting mock detection generator')
-
     // Generate initial detections
     generateMockDetections()
 
@@ -95,7 +93,6 @@ export const useDetectionStore = defineStore('detections', () => {
   function initWebSocket() {
     // In mock mode, start mock detection generator instead of WebSocket
     if (config.useMockData) {
-      console.log('Detection WebSocket: Skipping connection (mock mode enabled)')
       startMockDetectionGenerator()
       return
     }
@@ -124,12 +121,10 @@ export const useDetectionStore = defineStore('detections', () => {
 
     wsClient.on('connected', () => {
       wsConnected.value = true
-      console.log('Detection WebSocket connected')
     })
 
     wsClient.on('disconnected', () => {
       wsConnected.value = false
-      console.log('Detection WebSocket disconnected')
     })
 
     wsClient.on('error', (err) => {

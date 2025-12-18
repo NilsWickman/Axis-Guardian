@@ -4,7 +4,15 @@ import type { RouteRecordRaw } from 'vue-router'
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
-    redirect: '/cameras/focus',
+    redirect: '/tracking',
+  },
+  {
+    path: '/tracking',
+    name: 'Tracking',
+    component: () => import('@/views/tracking/TrackingView.vue'),
+    meta: {
+      title: 'Tracking',
+    },
   },
   {
     path: '/cameras/live-detection',
@@ -24,19 +32,11 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/cameras/focus',
-    name: 'FocusView',
-    component: () => import('@/views/camera-views/FocusView.vue'),
-    meta: {
-      title: 'Camera View',
-    },
+    redirect: { path: '/tracking', query: { view: 'camera' } },
   },
   {
     path: '/site-tracking',
-    name: 'SiteTracking',
-    component: () => import('@/views/site-tracking/SiteTrackingView.vue'),
-    meta: {
-      title: 'Site Tracking',
-    },
+    redirect: { path: '/tracking', query: { view: 'map' } },
   },
   {
     path: '/zones',
@@ -100,15 +100,14 @@ const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true'
 
 // Routes allowed in demo mode (read-only deployment)
 const isRouteAllowedInDemoMode = (path: string): boolean => {
-  return path.startsWith('/cameras/') || path === '/site-tracking' || path === '/zones' || path.startsWith('/replay/')
+  return path === '/tracking' || path.startsWith('/cameras/') || path === '/site-tracking' || path === '/zones' || path.startsWith('/replay/')
 }
 
 // Global navigation guards
 router.beforeEach((to, _from, next) => {
-  // Demo mode: restrict to cameras and site-tracking only
+  // Demo mode: restrict to tracking/cameras/zones/replay only
   if (isDemoMode && !isRouteAllowedInDemoMode(to.path)) {
-    console.log(`[Demo Mode] Redirecting ${to.path} to /cameras/focus`)
-    return next('/cameras/focus')
+    return next('/tracking')
   }
 
   // Set document title based on route meta

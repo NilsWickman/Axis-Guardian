@@ -114,7 +114,6 @@ const visibleGlobalTracks = computed(() => {
   return globalTracks.value.filter(track => {
     // Skip tracks with invalid positions
     if (!isFinite(track.currentPosition.x) || !isFinite(track.currentPosition.y)) {
-      console.warn(`[PersonPositionOverlay] Track ${track.globalTrackId} has invalid position:`, track.currentPosition)
       return false
     }
     const x = worldToCanvasX(track.currentPosition.x)

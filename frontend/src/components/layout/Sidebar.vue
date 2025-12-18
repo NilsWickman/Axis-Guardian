@@ -5,7 +5,6 @@
     Sun,
     Moon,
     ChevronDown,
-    Focus,
     MapPinned,
     ShieldAlert,
     Code,
@@ -44,13 +43,8 @@
 
   const navigationItems: NavigationItem[] = [
     {
-      name: 'Video',
-      path: '/cameras/focus',
-      icon: Focus,
-    },
-    {
-      name: 'Site Tracking',
-      path: '/site-tracking',
+      name: 'Tracking',
+      path: '/tracking',
       icon: MapPinned,
     },
     {

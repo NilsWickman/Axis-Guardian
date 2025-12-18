@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3-vite'
+import { action } from '@storybook/addon-actions'
 import {
   TagsInput,
   TagsInputInput,
@@ -264,8 +265,8 @@ export const FormIntegration: Story = {
       }
 
       const handleSubmit = () => {
-        console.log('Form submitted:', formData.value)
-        alert('Form data logged to console')
+        action('form submitted')(formData.value)
+        alert('Form submitted!')
       }
 
       const resetForm = () => {

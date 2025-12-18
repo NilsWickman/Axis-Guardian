@@ -85,6 +85,16 @@ jobs:
           target: '/opt/axis-guardian/camera-emulator'
           strip_components: 1
 
+      - name: Deploy nginx config
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: 'deploy/nginx-site.conf'
+          target: '/opt/axis-guardian/deploy'
+          strip_components: 1
+
       - name: Install and restart services
         uses: appleboy/ssh-action@master
         with:
@@ -94,6 +104,12 @@ jobs:
           script: |
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+            # Update nginx config (includes WebSocket hardening)
+            sed "s/GUARDIAN_DOMAIN_PLACEHOLDER/${{ secrets.GUARDIAN_DOMAIN }}/g" /opt/axis-guardian/deploy/nginx-site.conf | sudo tee /etc/nginx/sites-available/axis-guardian > /dev/null
+            sudo ln -sf /etc/nginx/sites-available/axis-guardian /etc/nginx/sites-enabled/
+            sudo nginx -t
+            sudo systemctl reload nginx
 
             mkdir -p /opt/axis-guardian/frontend/public
             cp /opt/axis-guardian/frontend/sitemap-rectangular-room.json /opt/axis-guardian/frontend/public/

@@ -88,7 +88,6 @@ export const useCameraStore = defineStore('cameras', () => {
     try {
       const config = await loadSiteMapConfig()
       cameras.value = config.cameras.map(transformConfigToCamera)
-      console.log('[CameraStore] Initialized from config:', cameras.value.length, 'cameras')
     } catch (err) {
       console.error('[CameraStore] Failed to initialize from config:', err)
       error.value = err as ApiError

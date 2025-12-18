@@ -11,6 +11,33 @@ const BASE_PATH = process.env.VIDEO_PATH || '/home/nilwi971/projects/Axis-Guardi
 
 export const TRACKING_SERVICE_URL = process.env.TRACKING_SERVICE_URL || 'http://localhost:3010'
 
+function parseCsv(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(',')
+    .map(v => v.trim())
+    .filter(Boolean)
+}
+
+const nodeEnv = process.env.NODE_ENV ?? 'development'
+const isProd = nodeEnv === 'production'
+
+const defaultAllowedOrigins = [
+  'https://pummenc2.win',
+  'https://www.pummenc2.win',
+  ...(isProd ? [] : [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+  ]),
+]
+
+const allowedOrigins = parseCsv(process.env.WS_ALLOWED_ORIGINS)
+
+export const WS_ALLOWED_ORIGINS = allowedOrigins.length > 0 ? allowedOrigins : defaultAllowedOrigins
+export const WS_ALLOW_NO_ORIGIN = process.env.WS_ALLOW_NO_ORIGIN === 'true' || !isProd
+export const WS_MAX_PAYLOAD_BYTES = parseInt(process.env.WS_MAX_PAYLOAD_BYTES ?? '1048576', 10)
+export const WS_MAX_CONNECTIONS_PER_IP = parseInt(process.env.WS_MAX_CONNECTIONS_PER_IP ?? '20', 10)
+export const WS_PING_INTERVAL_MS = parseInt(process.env.WS_PING_INTERVAL_MS ?? '30000', 10)
+
 /**
  * Which detections variant to use:
  * - auto (default): use first existing of [reid(.gz|.json), preprocessed(.gz|.json)]

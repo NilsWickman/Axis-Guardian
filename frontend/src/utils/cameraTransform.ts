@@ -384,15 +384,6 @@ export function detectionToWorldCoordinatesWithValidation(
   // Validate within FOV
   const isInFOV = isPointInCameraFOV(worldMeters, camera)
   if (!isInFOV) {
-    console.log('[FOV-REJECT]', detection.cameraId, {
-      reason: 'outside_fov',
-      ...debugInfo,
-      evaluation: {
-        distanceCheck: distance >= 0.1 && distance <= viewDistance ? 'PASS' : 'FAIL',
-        angleCheck: Math.abs(angleDiff) <= cameraFov / 2 ? 'PASS' : 'FAIL'
-      }
-    })
-
     return {
       point: worldPixels,
       isValid: false,
@@ -403,12 +394,6 @@ export function detectionToWorldCoordinatesWithValidation(
 
   // Check for reasonable bounds (not too close)
   if (distance < 0.5) {
-    console.log('[FOV-REJECT]', detection.cameraId, {
-      reason: 'too_close',
-      distance: distance.toFixed(2),
-      threshold: 0.5
-    })
-
     return {
       point: worldPixels,
       isValid: false,
@@ -416,12 +401,6 @@ export function detectionToWorldCoordinatesWithValidation(
       debug: debugInfo
     }
   }
-
-  console.log('[FOV-ACCEPT]', detection.cameraId, {
-    worldMeters: { x: worldMeters.x.toFixed(2), y: worldMeters.y.toFixed(2) },
-    distance: distance.toFixed(2),
-    angleDiff: angleDiff.toFixed(1)
-  })
 
   return {
     point: worldPixels,

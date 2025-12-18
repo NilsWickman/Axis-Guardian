@@ -8,5 +8,3 @@
 // export { default as StepperSeparator } from './StepperSeparator.vue'
 // export { default as StepperTitle } from './StepperTitle.vue'
 // export { default as StepperTrigger } from './StepperTrigger.vue'
-
-console.warn('Stepper components are not yet implemented. Please create the Vue component files.')

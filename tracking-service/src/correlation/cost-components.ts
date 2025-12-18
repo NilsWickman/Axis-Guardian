@@ -46,6 +46,11 @@ export function calculateAssociationMultiplier(
 ): number {
   const assoc = track.cameraAssociations.get(detection.cameraId)
 
+  // Debug: log all camera1-18 association checks
+  if (detection.trackId === 18 && detection.cameraId === 'camera1') {
+    console.error(`[AssocEntry] ${detection.cameraId}-${detection.trackId} vs ${track.globalTrackId}: assoc=${assoc ? `cam1:[${assoc.trackIds}]` : 'none'}`)
+  }
+
   // Case 1: Same camera + same trackId = strong bonus
   if (assoc?.trackIds.includes(detection.trackId)) {
     return config.associationBonus
@@ -60,11 +65,30 @@ export function calculateAssociationMultiplier(
       baseDistance < config.maxCost * 0.25 && timeSinceSameCam < 250
     const isVeryClose = baseDistance < config.maxCost * 0.2
 
-    if (isRecentAndClose || isVeryClose) {
+    // Check embedding similarity if available - prevents merging different people
+    // who happen to be spatially close (common during handoffs)
+    const detEmb = detection.attributes?.embedding
+    const trackEmb = track.attributes?.embedding
+    let embeddingMismatch = false
+    let similarity = -1
+    if (detEmb && trackEmb && detEmb.length > 0 && trackEmb.length === detEmb.length) {
+      similarity = cosineSimilarity(detEmb, trackEmb)
+      // If similarity is low (<0.5), this is likely a different person
+      // Don't give fragmentation bonus even if spatially close
+      if (similarity < 0.5) {
+        embeddingMismatch = true
+      }
+    }
+    // Debug: log same-camera different-trackId decisions for camera1 trackId 18
+    if (detection.trackId === 18 && detection.cameraId === 'camera1') {
+      console.error(`[Assoc] ${detection.cameraId}-${detection.trackId} -> ${track.globalTrackId} (has cam1:[${assoc.trackIds}]): dist=${baseDistance.toFixed(2)}, timeSince=${timeSinceSameCam}ms, isClose=${isRecentAndClose || isVeryClose}, sim=${similarity.toFixed(2)}, mismatch=${embeddingMismatch}, result=${(isRecentAndClose || isVeryClose) && !embeddingMismatch ? 'BONUS' : 'PENALTY'}`)
+    }
+
+    if ((isRecentAndClose || isVeryClose) && !embeddingMismatch) {
       // Likely local tracker fragmentation - give bonus
       return 0.5
     } else {
-      // Older or farther - probably different person, apply penalty
+      // Older or farther or embedding mismatch - probably different person, apply penalty
       return config.sameCameraPenalty
     }
   }

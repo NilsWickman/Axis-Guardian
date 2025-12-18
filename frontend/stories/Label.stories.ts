@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3-vite'
+import { action } from '@storybook/addon-actions'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -225,7 +226,7 @@ export const RequiredFieldsForm: Story = {
       })
 
       const handleSubmit = () => {
-        console.log('Form submitted:', form.value)
+        action('form submitted')(form.value)
       }
 
       return { form, handleSubmit }

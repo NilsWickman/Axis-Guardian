@@ -76,7 +76,6 @@ export function useTrackIdentityAnnotation() {
           return
         }
       } catch (e) {
-        console.warn('Failed to load saved track identity dataset:', e)
       }
     }
 

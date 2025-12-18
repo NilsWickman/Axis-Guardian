@@ -479,9 +479,7 @@ async function setupDetections() {
 async function setupAdaptiveSync() {
   try {
     await connectSync()
-    console.log('Adaptive sync initialized')
   } catch (err) {
-    console.warn('Adaptive sync not available:', err)
     // Continue without adaptive sync
   }
 }

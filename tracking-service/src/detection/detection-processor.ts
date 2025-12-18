@@ -5,7 +5,7 @@
  * coordinates, and feeds them into the TrackManager.
  */
 
-import type { DetectionMessage, RawDetection, GlobalTrack, CameraDetection, CameraFrameInfo } from '../types.js'
+import type { DetectionMessage, RawDetection, GlobalTrack, CameraDetection, CameraFrameInfo, DetectionAttributes } from '../types.js'
 import {
   projectDetectionWithKRT,
   estimateBBoxHeightExtension,
@@ -40,7 +40,8 @@ export interface IDetectionProcessor {
     cameraId: string,
     bbox: { x: number; y: number; width: number; height: number },
     confidence: number,
-    trackId?: number
+    trackId?: number,
+    attributes?: DetectionAttributes
   ): GlobalTrack | null
   processWorldPosition(
     cameraId: string,
@@ -540,7 +541,8 @@ export class DetectionProcessor implements IDetectionProcessor {
     cameraId: string,
     bbox: { x: number; y: number; width: number; height: number },
     confidence: number,
-    trackId: number = 0
+    trackId: number = 0,
+    attributes?: DetectionAttributes
   ): GlobalTrack | null {
     const normalizedCameraId = this.cameraRegistry.normalizeCameraId(cameraId)
 
@@ -580,7 +582,8 @@ export class DetectionProcessor implements IDetectionProcessor {
       trackId,
       correctedX,
       correctedY,
-      confidence
+      confidence,
+      attributes
     )
   }
 

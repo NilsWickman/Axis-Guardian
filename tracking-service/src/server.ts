@@ -43,13 +43,19 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
   const host = options.host ?? env.host
 
   const app = Fastify({
+    trustProxy: true,
     logger: {
       level: env.logLevel,
     },
   })
 
   // Register WebSocket plugin
-  await app.register(websocket)
+  await app.register(websocket, {
+    options: {
+      maxPayload: env.wsMaxPayloadBytes,
+      perMessageDeflate: false,
+    },
+  })
 
   // Create core components
   const trackManager = new TrackManager()
@@ -91,6 +97,7 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
 
   const broadcaster = new WebSocketBroadcaster(trackManager, {
     getFrameInfo: () => baseDetectionProcessor.getCameraFrameInfo(),
+    pingIntervalMs: env.wsPingIntervalMs,
   })
 
   // Set up periodic cleanup (200ms for quick FOV/boundary exit detection)
@@ -109,7 +116,11 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
     null,
     detectionProcessor.getSyncBuffer()
   )
-  registerWebSocket(app, broadcaster)
+  registerWebSocket(app, broadcaster, {
+    allowedOrigins: env.wsAllowedOrigins,
+    allowNoOrigin: env.wsAllowNoOrigin,
+    maxConnectionsPerIp: env.wsMaxConnectionsPerIp,
+  })
 
   // Cleanup on shutdown
   app.addHook('onClose', () => {
@@ -145,6 +156,7 @@ export async function createServerWithComponents(options: CreateServerOptions = 
   const host = options.host ?? env.host
 
   const app = Fastify({
+    trustProxy: true,
     logger: false,  // Disable fastify logging for clean visual display
   })
 
@@ -154,7 +166,12 @@ export async function createServerWithComponents(options: CreateServerOptions = 
   })
 
   // Register WebSocket plugin
-  await app.register(websocket)
+  await app.register(websocket, {
+    options: {
+      maxPayload: env.wsMaxPayloadBytes,
+      perMessageDeflate: false,
+    },
+  })
 
   // Create camera registry
   const cameraRegistry = new CameraRegistry()
@@ -201,6 +218,7 @@ export async function createServerWithComponents(options: CreateServerOptions = 
   // Create broadcaster
   const broadcaster = new WebSocketBroadcaster(trackManager, {
     getFrameInfo: () => baseDetectionProcessor.getCameraFrameInfo(),
+    pingIntervalMs: env.wsPingIntervalMs,
   })
 
   // Initialize zone manager for restricted zone violation detection
@@ -216,6 +234,12 @@ export async function createServerWithComponents(options: CreateServerOptions = 
   trackManager.setZoneManager(zoneManager)
   detectionProcessor.setZoneManager(zoneManager)
   broadcaster.setZoneManager(zoneManager)
+
+  registerWebSocket(app, broadcaster, {
+    allowedOrigins: env.wsAllowedOrigins,
+    allowNoOrigin: env.wsAllowNoOrigin,
+    maxConnectionsPerIp: env.wsMaxConnectionsPerIp,
+  })
 
   // Set up periodic cleanup (200ms for quick FOV/boundary exit detection)
   const cleanupInterval = setInterval(() => {
@@ -254,7 +278,6 @@ export async function createServerWithComponents(options: CreateServerOptions = 
     broadcaster,
     detectionProcessor.getSyncBuffer()
   )
-  registerWebSocket(app, broadcaster)
 
   // Cleanup on shutdown
   app.addHook('onClose', async () => {

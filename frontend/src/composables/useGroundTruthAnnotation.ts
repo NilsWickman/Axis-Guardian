@@ -71,10 +71,8 @@ export function useGroundTruthAnnotation() {
           isModified: false,
           lastSavedAt: parsed.updatedAt
         }
-        console.log(`Loaded ${parsed.stats.annotatedDetections} existing annotations for ${videoId}`)
         return
-      } catch (e) {
-        console.warn('Failed to parse saved annotations, starting fresh:', e)
+      } catch {
       }
     }
 
@@ -258,7 +256,6 @@ export function useGroundTruthAnnotation() {
     localStorage.setItem(storageKey, JSON.stringify(dataset.value))
     session.value.lastSavedAt = new Date().toISOString()
     session.value.isModified = false
-    console.log(`Saved annotations for ${session.value.videoId}`)
   }
 
   /**

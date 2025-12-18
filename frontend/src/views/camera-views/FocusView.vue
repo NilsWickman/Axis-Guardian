@@ -214,11 +214,8 @@ function drawDetections() {
 
 // Attach thumbnail videos to global connections with robust retry logic
 async function attachThumbnailVideos() {
-  console.log('[FocusView] Starting video attachment process')
-
   // If connections aren't initialized yet, wait (only happens on first load)
   if (!isInitialized.value) {
-    console.log('[FocusView] Waiting for connections to initialize...')
     const maxWait = 10000 // 10 seconds
     const startTime = Date.now()
     while (!isInitialized.value && Date.now() - startTime < maxWait) {
@@ -229,7 +226,6 @@ async function attachThumbnailVideos() {
       console.error('[FocusView] Timeout waiting for connections to initialize')
       return
     }
-    console.log('[FocusView] Connections initialized successfully')
   }
 
   // Robust retry logic for DOM element availability
@@ -246,7 +242,6 @@ async function attachThumbnailVideos() {
       videoElement = thumbnailVideoRefs.value[camera.id]
       if (!videoElement) {
         retries++
-        console.log(`[FocusView] Waiting for ${camera.id} video element (attempt ${retries}/${maxRetries})`)
         await new Promise(resolve => setTimeout(resolve, retryDelay))
       }
     }
@@ -256,12 +251,10 @@ async function attachThumbnailVideos() {
       continue
     }
 
-    console.log(`[FocusView] Attaching stream to ${camera.id} thumbnail`)
-
     // Attach to global connection (stream already flowing!)
     const attached = attachToVideoElement(camera.id, videoElement)
     if (!attached) {
-      console.warn(`[FocusView] Failed to attach stream to ${camera.id}`)
+      console.error(`[FocusView] Failed to attach stream to ${camera.id}`)
     }
 
     // Set up detection callback for this camera (idempotent - safe to call multiple times)
@@ -284,8 +277,6 @@ async function attachThumbnailVideos() {
     }
   }
 
-  console.log('[FocusView] All thumbnails attached successfully')
-
   // Monitor connection state for selected camera
   setInterval(() => {
     if (selectedCamera.value) {
@@ -299,8 +290,6 @@ async function attachThumbnailVideos() {
 
 // Select camera (instant switch - no reconnection needed)
 function selectCamera(camera: Camera) {
-  console.log(`[FocusView] Selecting camera: ${camera.id}`)
-
   selectedCamera.value = camera
   videoDimensions.value = null
 
@@ -314,17 +303,12 @@ function selectCamera(camera: Camera) {
   // Attach stream to main video with retry logic
   if (primaryVideoRef.value) {
     const attached = attachToVideoElement(camera.id, primaryVideoRef.value)
-    if (attached) {
-      console.log(`[FocusView] Successfully attached ${camera.id} to primary video`)
-    } else {
-      console.warn(`[FocusView] Failed to attach ${camera.id} to primary video, will retry...`)
+    if (!attached) {
       // Retry after a short delay
       setTimeout(() => {
         if (primaryVideoRef.value && selectedCamera.value?.id === camera.id) {
           const retryAttached = attachToVideoElement(camera.id, primaryVideoRef.value)
-          if (retryAttached) {
-            console.log(`[FocusView] Retry successful for ${camera.id}`)
-          } else {
+          if (!retryAttached) {
             console.error(`[FocusView] Retry failed for ${camera.id}`)
           }
         }
@@ -349,10 +333,8 @@ onMounted(async () => {
 
   // Auto-select first camera
   if (cameras.value.length > 0 && primaryVideoRef.value) {
-    console.log('[FocusView] Auto-selecting first camera on mount')
     selectCamera(cameras.value[0])
   } else if (!primaryVideoRef.value) {
-    console.warn('[FocusView] Primary video ref not ready, retrying...')
     // Retry after a short delay
     setTimeout(() => {
       if (cameras.value.length > 0 && primaryVideoRef.value) {

@@ -62,14 +62,12 @@ export function useVideoSync() {
         const clientId = 'sync-monitor-' + Math.random().toString(16).substr(2, 8)
         mqttClient = new Paho.MQTT.Client('localhost', 9001, clientId)
 
-        mqttClient.onConnectionLost = (response: any) => {
-          console.warn('MQTT sync connection lost:', response.errorMessage)
+        mqttClient.onConnectionLost = (_response: any) => {
           isConnected.value = false
         }
 
         mqttClient.connect({
           onSuccess: () => {
-            console.log('Connected to MQTT broker for sync feedback')
             isConnected.value = true
             resolve()
           },
@@ -165,12 +163,6 @@ export function useVideoSync() {
       message.retained = false
 
       mqttClient.send(message)
-
-      console.debug(`Sync feedback sent for ${feedback.camera_id}:`, {
-        latency: `${feedback.hls_latency_ms.toFixed(0)}ms`,
-        offset: `${feedback.suggested_offset_ms.toFixed(0)}ms`,
-        quality: feedback.measurement_quality
-      })
     } catch (err) {
       console.error('Error publishing sync feedback:', err)
     }
@@ -248,8 +240,6 @@ export function useVideoSync() {
 
     monitoringIntervals.set(cameraId, intervalId)
     isMonitoring.value = true
-
-    console.log(`Started sync monitoring for ${cameraId}`)
   }
 
   /**
@@ -260,7 +250,6 @@ export function useVideoSync() {
     if (intervalId) {
       window.clearInterval(intervalId)
       monitoringIntervals.delete(cameraId)
-      console.log(`Stopped sync monitoring for ${cameraId}`)
     }
 
     if (monitoringIntervals.size === 0) {
@@ -286,7 +275,6 @@ export function useVideoSync() {
     if (mqttClient && isConnected.value) {
       try {
         mqttClient.disconnect()
-        console.log('Disconnected from MQTT sync broker')
       } catch (err) {
         console.error('Error disconnecting from MQTT:', err)
       }

@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3-vite'
+import { action } from '@storybook/addon-actions'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -252,7 +253,7 @@ export const FormIntegration: Story = {
       })
 
       const handleSubmit = () => {
-        console.log('Form data:', formData.value)
+        action('form submitted')(formData.value)
         alert(`Form submitted with: ${JSON.stringify(formData.value, null, 2)}`)
       }
 

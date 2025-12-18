@@ -20,8 +20,6 @@ const VIEW_ID_MAP: Record<string, string> = {
  */
 export async function loadAuditoriumCalibration(): Promise<CameraCalibration[]> {
   try {
-    console.log('[CalibrationLoader] Loading Auditorium calibration from XML...')
-
     // Fetch XML file
     const response = await fetch('/shared/cameras/Auditorium/scene_metadata.xml')
     if (!response.ok) {
@@ -46,10 +44,7 @@ export async function loadAuditoriumCalibration(): Promise<CameraCalibration[]> 
       throw new Error('No Metadata element found in XML')
     }
 
-    const dataset = metadata.getAttribute('dataset') || 'unknown'
-    const scene = metadata.getAttribute('scene') || 'unknown'
-
-    console.log('[CalibrationLoader] Parsing scene:', dataset, scene)
+    // dataset/scene are available in the XML but not currently used by the UI
 
     // Parse camera views
     const cameras: CameraCalibration[] = []
@@ -58,14 +53,12 @@ export async function loadAuditoriumCalibration(): Promise<CameraCalibration[]> 
     for (const viewId of Object.keys(VIEW_ID_MAP)) {
       const viewElement = xmlDoc.querySelector(viewId)
       if (!viewElement) {
-        console.warn(`[CalibrationLoader] View ${viewId} not found in XML, skipping`)
         continue
       }
 
       // Extract sensor position
       const positionElement = viewElement.querySelector('SensorPosition > CartesianMetricPoint')
       if (!positionElement) {
-        console.warn(`[CalibrationLoader] No position data for ${viewId}, skipping`)
         continue
       }
 
@@ -74,7 +67,6 @@ export async function loadAuditoriumCalibration(): Promise<CameraCalibration[]> 
       const zElement = positionElement.querySelector('z')
 
       if (!xElement || !yElement || !zElement) {
-        console.warn(`[CalibrationLoader] Incomplete position data for ${viewId}, skipping`)
         continue
       }
 
@@ -85,7 +77,6 @@ export async function loadAuditoriumCalibration(): Promise<CameraCalibration[]> 
       // Extract sensor orientation
       const orientationElement = viewElement.querySelector('SensorOrientation')
       if (!orientationElement) {
-        console.warn(`[CalibrationLoader] No orientation data for ${viewId}, skipping`)
         continue
       }
 
@@ -93,7 +84,6 @@ export async function loadAuditoriumCalibration(): Promise<CameraCalibration[]> 
       const elevationElement = orientationElement.querySelector('Elevation')
 
       if (!azimuthElement || !elevationElement) {
-        console.warn(`[CalibrationLoader] Incomplete orientation data for ${viewId}, skipping`)
         continue
       }
 
@@ -110,19 +100,11 @@ export async function loadAuditoriumCalibration(): Promise<CameraCalibration[]> 
       }
 
       cameras.push(calibration)
-
-      console.log(`[CalibrationLoader] Loaded ${viewId} -> ${calibration.cameraId}:`, {
-        position: `(${x.toFixed(2)}m, ${y.toFixed(2)}m, ${z.toFixed(2)}m)`,
-        azimuth: `${azimuth}°`,
-        elevation: `${elevation}°`
-      })
     }
 
     if (cameras.length === 0) {
       throw new Error('No cameras loaded from XML')
     }
-
-    console.log(`[CalibrationLoader] Successfully loaded ${cameras.length} cameras`)
 
     return cameras
   } catch (error) {

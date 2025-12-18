@@ -10,6 +10,7 @@ import type { ZoneManager } from '../zones/zone-manager.js'
 
 export interface WebSocketBroadcasterOptions {
   getFrameInfo?: () => CameraFrameInfo[]
+  pingIntervalMs?: number
 }
 
 export class WebSocketBroadcaster {
@@ -17,9 +18,13 @@ export class WebSocketBroadcaster {
   private sinks: Set<(message: WebSocketMessage) => void> = new Set()
   private getFrameInfo?: () => CameraFrameInfo[]
   private zoneManager?: ZoneManager
+  private pingIntervalMs: number
+  private pingTimers: Map<WebSocket, NodeJS.Timeout> = new Map()
+  private lastPongAt: Map<WebSocket, number> = new Map()
 
   constructor(private trackManager: TrackManager, options?: WebSocketBroadcasterOptions) {
     this.getFrameInfo = options?.getFrameInfo
+    this.pingIntervalMs = options?.pingIntervalMs ?? 30000
     this.setupHooks()
   }
 
@@ -93,14 +98,70 @@ export class WebSocketBroadcaster {
     // Send current state snapshot
     this.sendSnapshot(socket)
 
+    // Clients should be receive-only for this endpoint
+    socket.on('message', () => {
+      try {
+        socket.close(1008, 'Client messages not supported')
+      } catch {
+        socket.terminate()
+      }
+    })
+
+    this.setupKeepAlive(socket)
+
     // Handle disconnection
     socket.on('close', () => {
       this.clients.delete(socket)
+      this.cleanupKeepAlive(socket)
     })
 
     socket.on('error', () => {
       this.clients.delete(socket)
+      this.cleanupKeepAlive(socket)
     })
+  }
+
+  private setupKeepAlive(socket: WebSocket): void {
+    this.lastPongAt.set(socket, Date.now())
+    socket.on('pong', () => {
+      this.lastPongAt.set(socket, Date.now())
+    })
+
+    const timer = setInterval(() => {
+      if (socket.readyState !== 1) {
+        this.cleanupKeepAlive(socket)
+        return
+      }
+
+      const lastPong = this.lastPongAt.get(socket) ?? 0
+      if (Date.now() - lastPong > this.pingIntervalMs * 2) {
+        try {
+          socket.terminate()
+        } finally {
+          this.cleanupKeepAlive(socket)
+        }
+        return
+      }
+
+      try {
+        socket.ping()
+      } catch {
+        try {
+          socket.terminate()
+        } finally {
+          this.cleanupKeepAlive(socket)
+        }
+      }
+    }, this.pingIntervalMs)
+
+    this.pingTimers.set(socket, timer)
+  }
+
+  private cleanupKeepAlive(socket: WebSocket): void {
+    const timer = this.pingTimers.get(socket)
+    if (timer) clearInterval(timer)
+    this.pingTimers.delete(socket)
+    this.lastPongAt.delete(socket)
   }
 
   /**
@@ -171,10 +232,46 @@ export class WebSocketBroadcaster {
 
 export function registerWebSocket(
   app: FastifyInstance,
-  broadcaster: WebSocketBroadcaster
+  broadcaster: WebSocketBroadcaster,
+  options: {
+    allowedOrigins: string[]
+    allowNoOrigin?: boolean
+    maxConnectionsPerIp: number
+  }
 ): void {
-  app.get('/ws', { websocket: true }, (socket) => {
+  const connectionsPerIp = new Map<string, number>()
+
+  app.get('/ws', { websocket: true }, (socket, req) => {
+    const origin = req.headers.origin
+    if (!isAllowedOrigin(origin, options.allowedOrigins, options.allowNoOrigin ?? false)) {
+      socket.close(1008, 'Origin not allowed')
+      return
+    }
+
+    const ip = req.ip
+    const current = connectionsPerIp.get(ip) ?? 0
+    if (current >= options.maxConnectionsPerIp) {
+      socket.close(1013, 'Too many connections')
+      return
+    }
+
+    connectionsPerIp.set(ip, current + 1)
+    socket.on('close', () => {
+      const next = (connectionsPerIp.get(ip) ?? 1) - 1
+      if (next <= 0) connectionsPerIp.delete(ip)
+      else connectionsPerIp.set(ip, next)
+    })
+
     console.log('WebSocket client connected')
     broadcaster.addClient(socket)
   })
+}
+
+function isAllowedOrigin(
+  origin: string | undefined,
+  allowedOrigins: string[],
+  allowNoOrigin: boolean
+): boolean {
+  if (!origin) return allowNoOrigin
+  return allowedOrigins.includes(origin)
 }

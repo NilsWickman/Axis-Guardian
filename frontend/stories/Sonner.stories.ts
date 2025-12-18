@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3-vite'
+import { action } from '@storybook/addon-actions'
 import { Toaster } from '@/components/ui/sonner'
 import { Button } from '@/components/ui/button'
 import { toast } from 'vue-sonner'
@@ -87,7 +88,7 @@ export const Default: Story = {
           description: 'Sunday, December 03, 2023 at 9:00 AM',
           action: {
             label: 'Undo',
-            onClick: () => console.log('Undo'),
+            onClick: action('undo'),
           },
         })
       }
@@ -136,7 +137,7 @@ export const WithAction: Story = {
           description: 'Your event has been scheduled.',
           action: {
             label: 'Undo',
-            onClick: () => console.log('Undo clicked'),
+            onClick: action('undo clicked'),
           },
         })
       }
@@ -269,7 +270,7 @@ export const AutoShow: Story = {
           description: 'This one was triggered by clicking the button',
           action: {
             label: 'Got it',
-            onClick: () => console.log('Manual toast action clicked'),
+            onClick: action('manual toast action clicked'),
           },
         })
       }

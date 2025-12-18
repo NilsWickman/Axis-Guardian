@@ -36,7 +36,6 @@ const webrtcDetectionHandlers = new Set<(metadata: DetectionMetadata) => void>()
 export function registerWebRTCDetectionHandler(handler: (metadata: DetectionMetadata) => void) {
   // Prevent duplicate registrations
   if (webrtcDetectionHandlers.has(handler)) {
-    console.warn('[PersonPositionTracking] Handler already registered, skipping duplicate')
     return () => {
       webrtcDetectionHandlers.delete(handler)
     }

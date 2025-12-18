@@ -146,7 +146,6 @@ export function useMultiCameraAnnotation() {
           lastSavedAt.value = parsed.updatedAt
         }
       } catch (e) {
-        console.warn('Failed to load saved cross-camera dataset:', e)
       }
     }
 
