@@ -30,6 +30,10 @@ interface CameraConnection {
   stuckStateCount: number
   lastHealthCheckTime: number
   frozenCheckCount: number
+  // Decode/advance monitoring (more reliable than video.currentTime for MediaStream)
+  lastFramesDecoded: number
+  lastFrameDecodedAt: number
+  stallMs: number
 }
 
 // Camera ID mapping (emulator uses camera-HC3/HC4, frontend uses camera1/camera2)
@@ -107,7 +111,9 @@ function getWebRTCUrl(camera: Camera): string | undefined {
 let syncMonitorInterval: number | null = null
 const SYNC_CHECK_INTERVAL = 500 // Check sync twice per second so 1s offsets converge quickly
 const MAX_SYNC_DRIFT = 0.2 // Maximum allowed drift in seconds before correction (tightened from 0.5)
-const SYNC_ENABLED = true // Enable/disable sync monitoring
+// NOTE: For WebRTC MediaStreams, pausing to "sync" cameras causes visible stutter/freeze,
+// especially when one stream is naturally slower. Keep this OFF by default.
+const SYNC_ENABLED = false // Enable/disable sync monitoring
 let syncCorrectionCount = 0 // Track number of corrections for debugging
 
 // Connection health monitoring
@@ -134,7 +140,15 @@ function getPooledVideoElement(): HTMLVideoElement {
   element.autoplay = true
   element.muted = true
   element.playsInline = true
-  element.style.display = 'none'
+  // Avoid `display:none` — some browsers throttle/stop decoding for hidden video,
+  // which makes the shared MediaStream appear frozen and can trigger reconnection loops.
+  element.style.position = 'fixed'
+  element.style.left = '-9999px'
+  element.style.top = '0'
+  element.style.width = '1px'
+  element.style.height = '1px'
+  element.style.opacity = '0'
+  element.style.pointerEvents = 'none'
   document.body.appendChild(element)
   return element
 }
@@ -222,7 +236,11 @@ async function initializeConnections() {
         // Health monitoring state
         stuckStateCount: 0,
         lastHealthCheckTime: 0,
-        frozenCheckCount: 0
+        frozenCheckCount: 0,
+        // Decode/advance monitoring
+        lastFramesDecoded: 0,
+        lastFrameDecodedAt: Date.now(),
+        stallMs: 0
       }
 
       // Initialize metadata map entry
@@ -477,37 +495,10 @@ function synchronizeVideos() {
     return
   }
 
-  // Live WebRTC MediaStream: pause any camera that is ahead of the slowest stream.
-  for (const video of videoElements) {
-    const conn = cameraConnections[video.id]
-    const aheadBy = video.currentTime - minTime
-
-    if (aheadBy > MAX_SYNC_DRIFT) {
-      syncCorrectionCount++
-      if (!conn?.pausedBySync) {
-        console.warn(
-          `[ConnectionManager] ⚠️ Live sync drift #${syncCorrectionCount}: pausing ${video.id} (ahead by ${aheadBy.toFixed(2)}s)`
-        )
-      }
-      if (conn) conn.pausedBySync = true
-      const toPause = conn
-        ? [conn.videoElement, ...Array.from(conn.attachedVideoElements.values())].filter(Boolean) as HTMLVideoElement[]
-        : [video.element]
-      for (const el of toPause) {
-        try { el.pause() } catch { /* ignore */ }
-      }
-      continue
-    }
-
-    // Resume when within tighter tolerance
-    if (conn?.pausedBySync && aheadBy <= MAX_SYNC_DRIFT / 2) {
-      conn.pausedBySync = false
-      const toPlay = [conn.videoElement, ...Array.from(conn.attachedVideoElements.values())].filter(Boolean) as HTMLVideoElement[]
-      for (const el of toPlay) {
-        el.play().catch(() => {})
-      }
-    }
-  }
+  // Live WebRTC MediaStream:
+  // Do NOT pause/resume to "sync" — it creates stutter and makes one stream appear frozen.
+  // We only *observe* drift for logging/diagnostics.
+  return
 }
 
 /**
@@ -545,7 +536,9 @@ function checkConnectionHealth() {
   for (const [id, conn] of Object.entries(cameraConnections)) {
     const connectionState = conn.connection.connectionState.value
     const isConnected = conn.connection.isConnected.value
-    const videoElement = conn.videoElement
+    // Prefer a visible element for health checks; hidden elements may be throttled.
+    const attached = Array.from(conn.attachedVideoElements.values()).filter(Boolean) as HTMLVideoElement[]
+    const videoElement = attached.length > 0 ? attached[0] : conn.videoElement
 
     // Check for failed or disconnected connections
     if (connectionState === 'failed' || connectionState === 'disconnected') {
@@ -571,34 +564,27 @@ function checkConnectionHealth() {
       conn.stuckStateCount = 0
     }
 
-    // Check for frozen video streams
-    if (videoElement && connectionState === 'connected') {
-      // Check if video is playing but time isn't advancing (frozen stream)
-      const currentTime = videoElement.currentTime
-      const readyState = videoElement.readyState
+    // Check for frozen video streams using decoded-frame progression (more reliable than currentTime).
+    if (connectionState === 'connected') {
+      const q = conn.connection.connectionQuality.value
+      const framesDecoded = q?.framesDecoded ?? 0
+      const now = Date.now()
 
-      // Store last known time for drift detection
-      if (!conn.lastHealthCheckTime) {
-        conn.lastHealthCheckTime = currentTime
-        continue
+      if (framesDecoded > conn.lastFramesDecoded) {
+        conn.lastFramesDecoded = framesDecoded
+        conn.lastFrameDecodedAt = now
       }
 
-      const timeDelta = currentTime - conn.lastHealthCheckTime
-      conn.lastHealthCheckTime = currentTime
+      conn.stallMs = now - (conn.lastFrameDecodedAt || now)
 
-      // If video claims to be ready but time hasn't advanced in 5 seconds, it's frozen
-      if (readyState >= 2 && timeDelta === 0 && !videoElement.paused) {
-        conn.frozenCheckCount = (conn.frozenCheckCount || 0) + 1
-
-        // If frozen for 2 consecutive checks (10 seconds), attempt recovery
-        if (conn.frozenCheckCount >= 2) {
-          console.warn(`[ConnectionManager] Video stream for ${id} appears frozen, attempting recovery...`)
-          attemptStreamRecovery(id)
-          conn.frozenCheckCount = 0
-        }
-      } else {
-        // Stream is healthy, reset counter
-        conn.frozenCheckCount = 0
+      // If we haven't decoded a new frame for a while, treat as frozen and recover.
+      // (Threshold intentionally low to reflect UX; recovery is still rate-limited by HEALTH_CHECK_INTERVAL.)
+      const FREEZE_THRESHOLD_MS = 3000
+      if (conn.stallMs > FREEZE_THRESHOLD_MS) {
+        console.warn(`[ConnectionManager] Video stream for ${id} stalled for ${conn.stallMs}ms, attempting recovery...`)
+        attemptStreamRecovery(id)
+        // Reset baseline so we don't immediately re-trigger on the next health tick.
+        conn.lastFrameDecodedAt = now
       }
     }
   }
@@ -734,6 +720,17 @@ export function useCameraConnectionManager() {
     isInitializing: computed(() => isInitializing.value),
     connections: computed(() => getAllConnections()),
     connectionStatuses: computed(() => getConnectionStatuses()),
+    // Video health for UI (freeze/stall detection)
+    videoHealthByCamera: computed(() => {
+      const out: Record<string, { fps: number; stallMs: number; framesDecoded: number } | null> = {}
+      for (const [id, conn] of Object.entries(cameraConnections)) {
+        const q = conn.connection.connectionQuality.value
+        out[id] = q
+          ? { fps: q.fps || 0, stallMs: conn.stallMs || 0, framesDecoded: q.framesDecoded || 0 }
+          : null
+      }
+      return out
+    }),
     // Reactive metadata map - use this for detection display (better reactivity)
     cameraMetadataMap,
 

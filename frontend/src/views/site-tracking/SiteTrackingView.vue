@@ -206,6 +206,7 @@ const {
   cameras,
   isInitialized,
   connectionStatuses,
+  videoHealthByCamera,
   cameraMetadataMap,
   attachToVideoElement,
   setLoopForCamera,
@@ -242,6 +243,13 @@ function recordDelaySamples(now: number) {
 }
 
 function getTrackingDelayLabel(cameraId: string): string {
+  // If the video decode stalls, show that instead of tracking-service frame age.
+  // The previous label only reflected JSON timing and could look "fine" even when video is frozen.
+  const vh = videoHealthByCamera.value[cameraId]
+  if (connectionStatuses.value[cameraId] && vh && vh.stallMs > 1500) {
+    return `FROZEN ${Math.round(vh.stallMs)}ms`
+  }
+
   const samples = delaySamplesByCamera.value.get(cameraId)
   if (!samples || samples.length === 0) return '--ms'
   const avg = samples.reduce((sum, s) => sum + s.v, 0) / samples.length
