@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Axis-Guardian is a multi-camera person tracking system with real-time surveillance visualization. It consists of:
 
 - **Frontend** - Vue 3 + TypeScript surveillance UI with WebRTC video streaming
-- **Tracking Service** - Node.js/Fastify backend with Kalman filtering and Hungarian algorithm for track correlation
+- **Backend** - Node.js/Fastify service with Kalman filtering and Hungarian algorithm for track correlation
 - **Camera Emulator** - Simulates camera input using pre-recorded video and detection data via mediasoup WebRTC
 
 ## Commands
@@ -22,7 +22,7 @@ pnpm test         # Vitest unit tests
 pnpm storybook    # Component library (port 6006)
 ```
 
-### Tracking Service (`cd tracking-service`)
+### Backend (`cd backend`)
 ```bash
 pnpm dev          # tsx watch development (port 3010)
 pnpm build        # TypeScript compilation
@@ -48,7 +48,7 @@ pnpm build        # TypeScript compilation
 
 ### Data Flow
 ```
-Camera Emulator → Tracking Service → Frontend
+Camera Emulator → Backend → Frontend
      (detections)    (process/track)   (visualize)
 ```
 
@@ -62,7 +62,7 @@ Detections flow: Camera Emulator posts to `/api/emulator-detections` → Detecti
 
 ### Key Directories
 
-**Tracking Service Core:**
+**Backend Core:**
 - `tracks/` - TrackManager - global track lifecycle
 - `detection/` - DetectionProcessor, CameraRegistry
 - `correlation/` - Hungarian assignment algorithm
@@ -76,13 +76,13 @@ Detections flow: Camera Emulator posts to `/api/emulator-detections` → Detecti
 
 ### Configuration
 
-Single source of truth: `frontend/public/sitemap-rectangular-room.json` - defines camera positions, orientations, FOV. Loaded by both frontend and tracking service.
+Single source of truth: `frontend/public/sitemap-rectangular-room.json` - defines camera positions, orientations, FOV. Loaded by both frontend and backend.
 
 Gold Standard.json defines annotated tracks for frames - giving  ground positions on the site map based on bounding boxes.
 
 ### Algorithm Tuning Constants
 
-All algorithm tuning parameters are centralized in `tracking-service/src/config/algorithm-constants.ts`. This is the single source of truth for:
+All algorithm tuning parameters are centralized in `backend/src/config/algorithm-constants.ts`. This is the single source of truth for:
 
 | Group | Purpose | Key Parameters |
 |-------|---------|----------------|
@@ -101,12 +101,12 @@ Module-specific configs (e.g., `DEFAULT_ASSIGNMENT_CONFIG` in hungarian-assignme
 
 ## Headless Development Workflow
 
-For developers without frontend access, the tracking service provides CLI tools for full iteration:
+For developers without frontend access, the backend provides CLI tools for full iteration:
 
 ### Quick Start (No Frontend Required)
 ```bash
-# Terminal 1: Start tracking service
-cd tracking-service && pnpm cli:start --sitemap ../frontend/public/sitemap-rectangular-room.json
+# Terminal 1: Start backend
+cd backend && pnpm cli:start --sitemap ../frontend/public/sitemap-rectangular-room.json
 
 # Terminal 2: Monitor tracks in real-time (ASCII visualization)
 pnpm cli:sitemap --watch --trails
@@ -144,13 +144,13 @@ pnpm cli:batch-visualize --output ./report --markdown
 ## Tech Stack
 
 - **Frontend:** Vue 3, Vite, Pinia, Tailwind CSS, Three.js, mediasoup-client
-- **Tracking Service:** Fastify, SQLite/Drizzle ORM, kalman-filter, munkres (Hungarian)
+- **Backend:** Fastify, SQLite/Drizzle ORM, kalman-filter, munkres (Hungarian)
 - **Camera Emulator:** Fastify, mediasoup, FFmpeg, msgpack-lite
 - **Package Manager:** pnpm 10.23.0
 
 ## Re-ID System
 
-The tracking service uses re-identification (ReID) embeddings for improved cross-camera person tracking. Embedding similarity is incorporated into the Hungarian assignment cost matrix to improve track continuity and reduce ID switches.
+The backend uses re-identification (ReID) embeddings for improved cross-camera person tracking. Embedding similarity is incorporated into the Hungarian assignment cost matrix to improve track continuity and reduce ID switches.
 
 ### Detection Files
 
@@ -167,7 +167,7 @@ pnpm cli:replay -f ../shared/cameras/preprocessed/1080p/view-HC3-reid.detections
 
 ### ReID Metrics
 
-The tracking service exposes re-ID metrics via the `/api/metrics` endpoint:
+The backend exposes re-ID metrics via the `/api/metrics` endpoint:
 - `reid.reidMatchAttempts` - Re-ID match attempts
 - `reid.reidMatchSuccessRate` - Re-ID match success rate
 - `reid.avgMatchSimilarity` - Average embedding similarity for matches

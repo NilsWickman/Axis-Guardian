@@ -171,13 +171,13 @@ Add support for static objects (tables, pillars, desks, etc.) to the Axis-Guardi
 ## Phase 3: Tracking Service Integration ✅ COMPLETED (Core)
 
 ### 3.1 Load Obstacles
-- [x] Extend `tracking-service/src/config/sitemap-loader.ts`
+- [x] Extend `backend/src/config/sitemap-loader.ts`
 - [x] Parse obstacles from sitemap JSON
 - [x] Added `SiteMapObstacle` interface
 - [x] Added `loadObstaclesFromSiteMap()` and `loadFullSiteMapConfig()`
 
 ### 3.2 Geometry Utilities
-- [x] Create `tracking-service/src/geometry/obstacles.ts`
+- [x] Create `backend/src/geometry/obstacles.ts`
 - [x] Implement `isPointInsideObstacle(point, obstacle)` for each type
 - [x] Implement `distanceToObstacle(point, obstacle)`
 - [x] Implement `doesPathIntersectObstacle()` for path blocking
@@ -225,9 +225,9 @@ Add support for static objects (tables, pillars, desks, etc.) to the Axis-Guardi
 - [x] Tracking filter tests (13 tests)
 
 **Test Files Created:**
-- `tracking-service/src/geometry/obstacles.test.ts` - Point-in-obstacle, distance, path intersection
-- `tracking-service/src/detection/detection-processor.test.ts` - Obstacle filtering integration
-- `tracking-service/tests/config/sitemap-schema.test.ts` - JSON schema validation
+- `backend/src/geometry/obstacles.test.ts` - Point-in-obstacle, distance, path intersection
+- `backend/src/detection/detection-processor.test.ts` - Obstacle filtering integration
+- `backend/tests/config/sitemap-schema.test.ts` - JSON schema validation
 
 ### 4.2 Integration Tests
 - [x] End-to-end: Add obstacle, verify rendering (manual)
@@ -257,10 +257,10 @@ Add support for static objects (tables, pillars, desks, etc.) to the Axis-Guardi
 | `frontend/src/composables/useGeometry.ts` | Extend FOV occlusion |
 | `frontend/src/components/features/site-map/MiniMap.vue` | Render obstacles |
 | `frontend/src/stores/sitemap.ts` | Add obstacles state |
-| `tracking-service/src/config/sitemap-loader.ts` | Load obstacles |
-| `tracking-service/src/geometry/obstacles.ts` | NEW: Geometry utilities |
-| `tracking-service/src/detection/detection-processor.ts` | Filter by obstacles |
-| `tracking-service/src/tracks/track-manager.ts` | Path blocking checks |
+| `backend/src/config/sitemap-loader.ts` | Load obstacles |
+| `backend/src/geometry/obstacles.ts` | NEW: Geometry utilities |
+| `backend/src/detection/detection-processor.ts` | Filter by obstacles |
+| `backend/src/tracks/track-manager.ts` | Path blocking checks |
 
 ---
 

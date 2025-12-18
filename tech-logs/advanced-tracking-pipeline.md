@@ -266,7 +266,7 @@ interface CameraCalibration {
 trackingServiceWsUrl: import.meta.env.VITE_TRACKING_WS_URL || 'ws://localhost:3010/ws'
 ```
 
-### Tracking Config (`tracking-service/src/types.ts`)
+### Tracking Config (`backend/src/types.ts`)
 ```typescript
 DEFAULT_TRACKING_CONFIG = {
   correlationDistanceM: 1.5,  // Max distance for track association

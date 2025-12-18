@@ -183,7 +183,7 @@ The `/api/emulator-detections` endpoint converts this to the internal format wit
 ### 1. Start the Tracking Service
 
 ```bash
-cd tracking-service
+cd backend
 npx tsx src/cli/start-with-sitemap.ts \
   --sitemap ../frontend/public/sitemap-rectangular-room.json
 ```

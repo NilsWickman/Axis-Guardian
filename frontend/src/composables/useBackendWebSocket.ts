@@ -1,7 +1,7 @@
 /**
- * Tracking Service WebSocket Client
+ * Backend WebSocket Client
  *
- * Connects to the tracking-service WebSocket endpoint to receive
+ * Connects to the backend WebSocket endpoint to receive
  * real-time global track updates with accurate K/R/T projection.
  *
  * Supports video-synchronized track updates by buffering updates with
@@ -13,7 +13,7 @@ import { useGlobalTrackStore, type VideoTimingInfo } from '@/stores/globalTracks
 import { useZoneStore } from '@/stores/zones'
 import { config } from '@/config/environment'
 
-export interface TrackingServiceOptions {
+export interface BackendWebSocketOptions {
   autoReconnect?: boolean
   reconnectIntervalMs?: number
   maxReconnectAttempts?: number
@@ -31,7 +31,7 @@ export interface TrackingServiceOptions {
   staleThresholdMs?: number
 }
 
-const DEFAULT_OPTIONS: Required<Omit<TrackingServiceOptions, 'videoElement' | 'syncCameraId'>> = {
+const DEFAULT_OPTIONS: Required<Omit<BackendWebSocketOptions, 'videoElement' | 'syncCameraId'>> = {
   autoReconnect: true,
   reconnectIntervalMs: 3000,
   maxReconnectAttempts: 10,
@@ -51,7 +51,7 @@ interface BufferedTrackUpdate {
 // RTP tolerance for frame matching (~1.5 frames at 30fps, 90kHz clock)
 const RTP_TOLERANCE = 4500
 
-export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}) {
+export function useBackendWebSocket(options: BackendWebSocketOptions = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...options }
 
   const globalTrackStore = useGlobalTrackStore()
@@ -89,7 +89,7 @@ export function useTrackingServiceWebSocket(options: TrackingServiceOptions = {}
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
   /**
-   * Connect to the tracking service WebSocket
+   * Connect to the backend WebSocket
    */
   function connect(): void {
     if (socket.value?.readyState === WebSocket.OPEN) {

@@ -1,6 +1,6 @@
 [Unit]
 Description=Axis Guardian Camera Emulator
-After=network.target tracking-service.service
+After=network.target backend.service
 
 [Service]
 Type=simple

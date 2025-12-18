@@ -24,7 +24,7 @@ echo ""
 
 # Create directories
 echo "Creating directories..."
-sudo mkdir -p /opt/axis-guardian/{frontend,tracking-service,camera-emulator,videos,config,data}
+sudo mkdir -p /opt/axis-guardian/{frontend,backend,camera-emulator,videos,config,data}
 sudo chown -R $USER:$USER /opt/axis-guardian
 
 # Create emulator.env with public IP
@@ -35,15 +35,15 @@ echo "Public IP: $PUBLIC_IP"
 
 # Install systemd services
 echo "Installing systemd services..."
-sudo cp deploy/tracking-service.service /etc/systemd/system/
+sudo cp deploy/backend.service /etc/systemd/system/
 sudo cp deploy/camera-emulator.service /etc/systemd/system/
 
 # Update user in service files (replace www-data with current user)
-sudo sed -i "s/User=www-data/User=$USER/" /etc/systemd/system/tracking-service.service
+sudo sed -i "s/User=www-data/User=$USER/" /etc/systemd/system/backend.service
 sudo sed -i "s/User=www-data/User=$USER/" /etc/systemd/system/camera-emulator.service
 
 sudo systemctl daemon-reload
-sudo systemctl enable tracking-service camera-emulator
+sudo systemctl enable backend camera-emulator
 
 # Install nginx config
 echo "Installing nginx config..."
@@ -69,5 +69,5 @@ echo ""
 echo "3. Push to main branch to trigger first deployment"
 echo ""
 echo "4. After first deploy, start services:"
-echo "   sudo systemctl start tracking-service camera-emulator"
+echo "   sudo systemctl start backend camera-emulator"
 echo "   sudo systemctl reload nginx"

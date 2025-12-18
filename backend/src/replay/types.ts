@@ -25,7 +25,7 @@ export interface ReplayManifest {
   durationMs?: number
   /**
    * Snapshot of the sitemap config used during recording (frontend JSON format).
-   * Stored as unknown to avoid coupling tracking-service replay to frontend types.
+   * Stored as unknown to avoid coupling backend replay to frontend types.
    */
   siteMapConfig?: unknown
   cameras: ReplayCameraManifest[]
@@ -67,6 +67,5 @@ export interface ReplaySnapshot {
   videoTimeMs: number
   state: ReplaySnapshotState
 }
-
 
 

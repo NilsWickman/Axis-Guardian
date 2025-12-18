@@ -825,7 +825,7 @@ program
     // Determine project root
     let projectRoot = options.projectRoot
     if (!projectRoot) {
-      // Navigate up from tracking-service/src/cli to project root
+      // Navigate up from backend/src/cli to project root
       projectRoot = join(dirname(new URL(import.meta.url).pathname), '../../..')
     }
 

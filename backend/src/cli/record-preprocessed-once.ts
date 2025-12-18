@@ -3,7 +3,7 @@
  * CLI Tool: Record a Replay from Preprocessed Assets (one iteration)
  *
  * This is an end-to-end "one shot" command:
- * - starts an in-process tracking-service on an ephemeral port
+ * - starts an in-process backend on an ephemeral port
  * - starts replay recording (NDJSON events + snapshots)
  * - replays 2-camera preprocessed detection metadata exactly once (no looping)
  * - stops recording and shuts down the server
@@ -156,13 +156,13 @@ program
     const hc3Video = options.hc3Video ?? `${basePath}/view-HC3-preprocessed.mp4`
     const hc4Video = options.hc4Video ?? `${basePath}/view-HC4-preprocessed.mp4`
 
-    // Start tracking-service in-process on an ephemeral port.
+    // Start backend in-process on an ephemeral port.
     const { app } = await createServerWithComponents({ host: '127.0.0.1', port: 0 })
     const address = app.server.address()
     const port = typeof address === 'object' && address ? address.port : null
     if (!port) {
       await app.close()
-      throw new Error('Failed to determine tracking-service port')
+      throw new Error('Failed to determine backend port')
     }
     const baseUrl = `http://127.0.0.1:${port}`
 
@@ -280,6 +280,5 @@ program
   })
 
 program.parse(process.argv)
-
 
 

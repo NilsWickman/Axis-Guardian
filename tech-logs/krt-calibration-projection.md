@@ -120,11 +120,11 @@ mat = scipy.io.loadmat('cam_param.mat')
 
 ## Files Modified
 
-1. `tracking-service/src/types.ts` - Added `CameraCalibration` interface
-2. `tracking-service/src/projection/ground-plane.ts` - Added `projectWithKRT()`, `projectDetectionWithKRT()`, and matrix math functions
-3. `tracking-service/src/detection/camera-registry.ts` - Added `CAMERA_CALIBRATIONS`, `getCalibration()`, `hasCalibration()`
-4. `tracking-service/src/detection/detection-processor.ts` - Updated to use K/R/T projection first
-5. `tracking-service/src/server.ts` - Adjusted grid bounds for scene
+1. `backend/src/types.ts` - Added `CameraCalibration` interface
+2. `backend/src/projection/ground-plane.ts` - Added `projectWithKRT()`, `projectDetectionWithKRT()`, and matrix math functions
+3. `backend/src/detection/camera-registry.ts` - Added `CAMERA_CALIBRATIONS`, `getCalibration()`, `hasCalibration()`
+4. `backend/src/detection/detection-processor.ts` - Updated to use K/R/T projection first
+5. `backend/src/server.ts` - Adjusted grid bounds for scene
 
 ## Comparison: Before vs After
 

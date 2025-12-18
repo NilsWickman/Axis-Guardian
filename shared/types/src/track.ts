@@ -2,7 +2,7 @@
  * Shared Track Types for Axis Guardian
  *
  * Canonical type definitions for global tracks, camera detections,
- * and track attributes. Used by both tracking-service and frontend.
+ * and track attributes. Used by both backend and frontend.
  */
 
 import type { Position2D } from './geometry'
@@ -188,7 +188,7 @@ export interface CameraImageDetection {
 
 /**
  * Global track JSON representation for API and WebSocket messages
- * This is the format sent between tracking-service and frontend
+ * This is the format sent between backend and frontend
  */
 export interface GlobalTrackJSON {
   globalTrackId: string

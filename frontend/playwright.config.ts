@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test'
 
 /**
  * Playwright E2E test configuration
- * Tests the full tracking pipeline from tracking-service to frontend display
+ * Tests the full tracking pipeline from backend to frontend display
  */
 export default defineConfig({
   testDir: './e2e',

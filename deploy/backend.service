@@ -1,12 +1,12 @@
 [Unit]
-Description=Axis Guardian Tracking Service
+Description=Axis Guardian Backend
 After=network.target
 
 [Service]
 Type=simple
 User=www-data
-WorkingDirectory=/opt/axis-guardian/tracking-service
-ExecStart=/opt/axis-guardian/tracking-service/node_modules/.bin/tsx src/index.ts
+WorkingDirectory=/opt/axis-guardian/backend
+ExecStart=/opt/axis-guardian/backend/node_modules/.bin/tsx src/index.ts
 Environment=NODE_ENV=production
 Environment=PORT=3010
 Environment=HOST=127.0.0.1

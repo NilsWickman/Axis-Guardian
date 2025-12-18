@@ -59,8 +59,8 @@ READ: TRACKING-ITERATION.md for full context.
 FOCUS: Fix camera-to-ground projection (currently failing with no_ground_intersection).
 
 KEY FILES:
-- tracking-service/src/projection/ground-plane.ts
-- tracking-service/tests/projection/ground-plane.test.ts
+- backend/src/projection/ground-plane.ts
+- backend/tests/projection/ground-plane.test.ts
 - shared/config/sitemap-rectangular-room.json (camera params)
 
 CURRENT PROBLEM: groundIntersectionT: -1 means ray points AWAY from floor.
@@ -68,7 +68,7 @@ Check: azimuth/elevation sign conventions, coordinate system (Y-up vs Z-up).
 
 WORKFLOW:
 1. Read ground-plane.ts and understand the math
-2. Run: cd tracking-service && pnpm test -- --run tests/projection/ground-plane.test.ts
+2. Run: cd backend && pnpm test -- --run tests/projection/ground-plane.test.ts
 3. Debug why rays don't intersect ground plane
 4. Fix the projection math
 5. Verify tests pass
@@ -91,11 +91,11 @@ READ: TRACKING-ITERATION.md for full context.
 FOCUS: Validate multi-camera position agreement using ground truth.
 
 KEY FILES:
-- tracking-service/src/correlation/hungarian-assignment.ts
+- backend/src/correlation/hungarian-assignment.ts
 - cross-camera-ground-truth-*.json (annotations with dual-camera links)
 
 TASK:
-1. Create tracking-service/src/evaluation/correlation-evaluator.ts
+1. Create backend/src/evaluation/correlation-evaluator.ts
 2. Load ground truth annotations that have linkedDetections from BOTH cameras
 3. For each dual-camera annotation:
    - Project camera1 bbox to world coords
@@ -128,12 +128,12 @@ READ: TRACKING-ITERATION.md for full context.
 FOCUS: Evaluate Hungarian assignment using ground truth trajectories.
 
 KEY FILES:
-- tracking-service/src/correlation/hungarian-assignment.ts
-- tracking-service/src/tracks/track-manager.ts
+- backend/src/correlation/hungarian-assignment.ts
+- backend/src/tracks/track-manager.ts
 - cross-camera-ground-truth-*.json
 
 TASK:
-1. Create tracking-service/src/evaluation/track-evaluator.ts
+1. Create backend/src/evaluation/track-evaluator.ts
 2. Extract trajectories from ground truth:
    - Group annotations by trackId
    - Track 229/483 appears multiple times - verify positions form consistent path
@@ -163,11 +163,11 @@ READ: TRACKING-ITERATION.md for full context.
 FOCUS: Motion model accuracy and prediction quality.
 
 KEY FILES:
-- tracking-service/src/filters/kalman-track-filter.ts
-- tracking-service/tests/filters/kalman-track-filter.test.ts
+- backend/src/filters/kalman-track-filter.ts
+- backend/tests/filters/kalman-track-filter.test.ts
 
 TASK:
-1. Create tracking-service/src/evaluation/motion-evaluator.ts
+1. Create backend/src/evaluation/motion-evaluator.ts
 2. Reconstruct trajectories from ground truth (timestamps 170.87s to 181.01s)
 3. For sequential annotations of same person:
    - Feed position N to Kalman filter
@@ -197,8 +197,8 @@ READ: TRACKING-ITERATION.md for full context.
 FOCUS: Track continuity through occlusions.
 
 KEY FILES:
-- tracking-service/src/geometry/obstacles.ts
-- tracking-service/src/tracks/track-manager.ts
+- backend/src/geometry/obstacles.ts
+- backend/src/tracks/track-manager.ts
 - shared/config/sitemap-rectangular-room.json (obstacle positions)
 
 OBSTACLES:
@@ -206,7 +206,7 @@ OBSTACLES:
 - Table at (14, 1.8) - 1.0m x 0.5m
 
 TASK:
-1. Create tracking-service/src/evaluation/occlusion-evaluator.ts
+1. Create backend/src/evaluation/occlusion-evaluator.ts
 2. Map which ground truth annotations are near obstacles (<1m)
 3. Analyze track behavior when person passes near pillar
 4. Evaluate track timeout (5s) vs typical occlusion duration
@@ -235,19 +235,19 @@ Save as `launch-agents.sh` in the repo root:
 SESSION="ralph-tracking"
 
 tmux new-session -d -s $SESSION -n "dev1"
-tmux send-keys -t $SESSION:dev1 "cd ../Axis-Guardian-dev1-projection && claude --dangerously-skip-permissions '/ralph-wiggum:ralph-loop \"You are Developer 1: Projection/Calibration. READ: TRACKING-ITERATION.md for full context. FOCUS: Fix camera-to-ground projection (currently failing with no_ground_intersection). KEY FILES: tracking-service/src/projection/ground-plane.ts, tracking-service/tests/projection/ground-plane.test.ts, shared/config/sitemap-rectangular-room.json. CURRENT PROBLEM: groundIntersectionT: -1 means ray points AWAY from floor. Check azimuth/elevation sign conventions, coordinate system. WORKFLOW: 1. Read ground-plane.ts 2. Run tests 3. Debug ray intersection 4. Fix projection math 5. Verify tests pass. SUCCESS: Projection tests pass. Output <promise>PROJECTION_FIXED</promise> when done.\" --max-iterations 15 --completion-promise \"PROJECTION_FIXED\"'" C-m
+tmux send-keys -t $SESSION:dev1 "cd ../Axis-Guardian-dev1-projection && claude --dangerously-skip-permissions '/ralph-wiggum:ralph-loop \"You are Developer 1: Projection/Calibration. READ: TRACKING-ITERATION.md for full context. FOCUS: Fix camera-to-ground projection (currently failing with no_ground_intersection). KEY FILES: backend/src/projection/ground-plane.ts, backend/tests/projection/ground-plane.test.ts, shared/config/sitemap-rectangular-room.json. CURRENT PROBLEM: groundIntersectionT: -1 means ray points AWAY from floor. Check azimuth/elevation sign conventions, coordinate system. WORKFLOW: 1. Read ground-plane.ts 2. Run tests 3. Debug ray intersection 4. Fix projection math 5. Verify tests pass. SUCCESS: Projection tests pass. Output <promise>PROJECTION_FIXED</promise> when done.\" --max-iterations 15 --completion-promise \"PROJECTION_FIXED\"'" C-m
 
 tmux new-window -t $SESSION -n "dev2"
-tmux send-keys -t $SESSION:dev2 "cd ../Axis-Guardian-dev2-correlation && claude --dangerously-skip-permissions '/ralph-wiggum:ralph-loop \"You are Developer 2: Cross-Camera Correlation. READ: TRACKING-ITERATION.md. FOCUS: Validate multi-camera position agreement. Create tracking-service/src/evaluation/correlation-evaluator.ts. Load dual-camera annotations, project both cameras, measure agreement. Report % within 0.5m/1m/2m. Output <promise>CORRELATION_EVALUATED</promise> when done.\" --max-iterations 15 --completion-promise \"CORRELATION_EVALUATED\"'" C-m
+tmux send-keys -t $SESSION:dev2 "cd ../Axis-Guardian-dev2-correlation && claude --dangerously-skip-permissions '/ralph-wiggum:ralph-loop \"You are Developer 2: Cross-Camera Correlation. READ: TRACKING-ITERATION.md. FOCUS: Validate multi-camera position agreement. Create backend/src/evaluation/correlation-evaluator.ts. Load dual-camera annotations, project both cameras, measure agreement. Report % within 0.5m/1m/2m. Output <promise>CORRELATION_EVALUATED</promise> when done.\" --max-iterations 15 --completion-promise \"CORRELATION_EVALUATED\"'" C-m
 
 tmux new-window -t $SESSION -n "dev3"
-tmux send-keys -t $SESSION:dev3 "cd ../Axis-Guardian-dev3-tracking && claude --dangerously-skip-permissions '/ralph-wiggum:ralph-loop \"You are Developer 3: Track Association Quality. READ: TRACKING-ITERATION.md. FOCUS: Evaluate Hungarian assignment using ground truth. Create tracking-service/src/evaluation/track-evaluator.ts. Measure fragmentation rate, ID switches. Output <promise>TRACKING_EVALUATED</promise> when done.\" --max-iterations 15 --completion-promise \"TRACKING_EVALUATED\"'" C-m
+tmux send-keys -t $SESSION:dev3 "cd ../Axis-Guardian-dev3-tracking && claude --dangerously-skip-permissions '/ralph-wiggum:ralph-loop \"You are Developer 3: Track Association Quality. READ: TRACKING-ITERATION.md. FOCUS: Evaluate Hungarian assignment using ground truth. Create backend/src/evaluation/track-evaluator.ts. Measure fragmentation rate, ID switches. Output <promise>TRACKING_EVALUATED</promise> when done.\" --max-iterations 15 --completion-promise \"TRACKING_EVALUATED\"'" C-m
 
 tmux new-window -t $SESSION -n "dev4"
-tmux send-keys -t $SESSION:dev4 "cd ../Axis-Guardian-dev4-kalman && claude --dangerously-skip-permissions '/ralph-wiggum:ralph-loop \"You are Developer 4: Kalman Filter Tuning. READ: TRACKING-ITERATION.md. FOCUS: Motion model accuracy. Create tracking-service/src/evaluation/motion-evaluator.ts. Calculate prediction error, recommend Q/R values. Output <promise>KALMAN_TUNED</promise> when done.\" --max-iterations 15 --completion-promise \"KALMAN_TUNED\"'" C-m
+tmux send-keys -t $SESSION:dev4 "cd ../Axis-Guardian-dev4-kalman && claude --dangerously-skip-permissions '/ralph-wiggum:ralph-loop \"You are Developer 4: Kalman Filter Tuning. READ: TRACKING-ITERATION.md. FOCUS: Motion model accuracy. Create backend/src/evaluation/motion-evaluator.ts. Calculate prediction error, recommend Q/R values. Output <promise>KALMAN_TUNED</promise> when done.\" --max-iterations 15 --completion-promise \"KALMAN_TUNED\"'" C-m
 
 tmux new-window -t $SESSION -n "dev5"
-tmux send-keys -t $SESSION:dev5 "cd ../Axis-Guardian-dev5-occlusion && claude --dangerously-skip-permissions '/ralph-wiggum:ralph-loop \"You are Developer 5: Obstacle/Occlusion Handling. READ: TRACKING-ITERATION.md. FOCUS: Track continuity through occlusions. Create tracking-service/src/evaluation/occlusion-evaluator.ts. Analyze near-obstacle annotations, recommend timeout values. Output <promise>OCCLUSION_ANALYZED</promise> when done.\" --max-iterations 15 --completion-promise \"OCCLUSION_ANALYZED\"'" C-m
+tmux send-keys -t $SESSION:dev5 "cd ../Axis-Guardian-dev5-occlusion && claude --dangerously-skip-permissions '/ralph-wiggum:ralph-loop \"You are Developer 5: Obstacle/Occlusion Handling. READ: TRACKING-ITERATION.md. FOCUS: Track continuity through occlusions. Create backend/src/evaluation/occlusion-evaluator.ts. Analyze near-obstacle annotations, recommend timeout values. Output <promise>OCCLUSION_ANALYZED</promise> when done.\" --max-iterations 15 --completion-promise \"OCCLUSION_ANALYZED\"'" C-m
 
 tmux attach -t $SESSION
 ```

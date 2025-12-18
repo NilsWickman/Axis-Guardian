@@ -193,10 +193,10 @@ simulation/mediamtx/recordings/
 simulation/mediamtx/mediamtx.custom.yml
 
 # Camera calibration files
-tracking-service/calibration-*
-tracking-service/visualization-output/
-tracking-service/snapshots/
+backend/calibration-*
+backend/visualization-output/
+backend/snapshots/
 
 # Large recording / replay datasets (do not commit)
-tracking-service/recordings/
+backend/recordings/
 frontend/public/recordings/

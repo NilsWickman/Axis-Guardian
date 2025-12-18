@@ -314,7 +314,7 @@ import { Plus, Trash2, ShieldAlert, Pencil } from 'lucide-vue-next'
 import { useZoneStore, type ZoneConfig, type ZoneType, type ZoneSeverity } from '@/stores/zones'
 import { useSiteMapCanvas, type CanvasRenderOptions } from '@/composables/useSiteMapCanvas'
 import { useSiteMapConfig } from '@/composables/useSiteMapConfig'
-import { useTrackingServiceWebSocket } from '@/composables/useTrackingServiceWebSocket'
+import { useBackendWebSocket } from '@/composables/useBackendWebSocket'
 import { useTheme } from '@/composables/useTheme'
 import { extractValue, metersToPixels, RENDER_SCALE } from '@/utils/siteMapConversion'
 
@@ -338,7 +338,7 @@ const canvasOptions = reactive<CanvasRenderOptions>({
 const canvas = useSiteMapCanvas(mapCanvas, ref(canvasOptions))
 
 // WebSocket connection
-const trackingWs = useTrackingServiceWebSocket({
+const trackingWs = useBackendWebSocket({
   autoReconnect: true,
   reconnectIntervalMs: 3000,
 })
