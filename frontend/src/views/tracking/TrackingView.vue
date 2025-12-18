@@ -129,6 +129,26 @@
               ref="mapPreviewCanvas"
               class="absolute inset-0 w-full h-full pointer-events-none"
             />
+            <PersonPositionOverlay
+              v-if="currentMap"
+              :site-map="{ ...currentMap, renderScale: previewPixelsPerMeter }"
+              :canvas-width="previewMapWidthPx"
+              :canvas-height="previewMapHeightPx"
+              :show-trails="true"
+              :show-confidence="false"
+              :show-person-icon="false"
+              :show-stats="false"
+              :show-debug-mode="false"
+              :marker-radius="previewMarkerRadius"
+              :max-trail-length="12"
+              :style="{
+                position: 'absolute',
+                left: `${previewOffsetX}px`,
+                top: `${previewOffsetY}px`,
+                pointerEvents: 'none',
+                zIndex: 10,
+              }"
+            />
             <span v-if="!currentMap" class="text-[11px] font-medium text-muted-foreground">Map</span>
           </div>
         </div>
@@ -317,6 +337,18 @@ function cardClasses(isActive: boolean) {
 const scale = ref(1)
 const offsetX = ref(0)
 const offsetY = ref(0)
+
+// Card preview transform state (computed to fit card)
+const previewPixelsPerMeter = ref(RENDER_SCALE)
+const previewOffsetX = ref(0)
+const previewOffsetY = ref(0)
+const previewMapWidthPx = ref(0)
+const previewMapHeightPx = ref(0)
+const previewMarkerRadius = computed(() => {
+  const baseMarkerRadiusPx = 8 // matches the full-size map overlay's marker radius
+  const radius = (previewPixelsPerMeter.value * baseMarkerRadiusPx) / RENDER_SCALE
+  return Math.max(2, Math.round(radius))
+})
 
 const canvasStyle = computed(() => ({
   position: 'absolute' as const,
@@ -716,9 +748,15 @@ async function renderSiteMapPreview(): Promise<void> {
   )
   if (!Number.isFinite(ppm) || ppm <= 0) return
 
+  previewPixelsPerMeter.value = ppm
+  previewMapWidthPx.value = Math.max(1, Math.round(mapWidthM * ppm))
+  previewMapHeightPx.value = Math.max(1, Math.round(mapHeightM * ppm))
+  previewOffsetX.value = (containerWidth - previewMapWidthPx.value) / 2
+  previewOffsetY.value = (containerHeight - previewMapHeightPx.value) / 2
+
   const scaleFactor = ppm / RENDER_SCALE
-  const offsetX = (containerWidth - mapWidthM * ppm) / 2
-  const offsetY = (containerHeight - mapHeightM * ppm) / 2
+  const offsetX = previewOffsetX.value
+  const offsetY = previewOffsetY.value
 
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   ctx.clearRect(0, 0, canvasEl.width, canvasEl.height)
