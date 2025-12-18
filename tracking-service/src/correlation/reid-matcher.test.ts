@@ -38,6 +38,7 @@ describe('ReIDMatcher', () => {
   ): GlobalTrack => ({
     globalTrackId: id,
     cameraAssociations: new Map([[cameraId, { cameraId, trackIds: [1], lastSeen }]]),
+    cameraDetections: new Map(),
     currentPosition: { x: 0, y: 0 },
     trail: [],
     color: '#ff0000',

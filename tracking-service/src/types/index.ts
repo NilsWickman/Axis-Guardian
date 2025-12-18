@@ -44,6 +44,7 @@ export type {
   KalmanState,
   AggregatedClothingAttributes,
   TrackAttributes,
+  CameraImageDetection,
   GlobalTrack,
   GlobalTrackJSON,
 } from './track.js'

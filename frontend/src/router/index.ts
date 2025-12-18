@@ -7,6 +7,18 @@ const routes: RouteRecordRaw[] = [
     redirect: '/tracking',
   },
   {
+    path: '/recordings',
+    name: 'Recordings',
+    component: () => import('@/views/replay/RecordingsView.vue'),
+    meta: {
+      title: 'Recordings',
+    },
+  },
+  {
+    path: '/replay',
+    redirect: '/recordings',
+  },
+  {
     path: '/tracking',
     name: 'Tracking',
     component: () => import('@/views/tracking/TrackingView.vue'),
@@ -100,7 +112,12 @@ const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true'
 
 // Routes allowed in demo mode (read-only deployment)
 const isRouteAllowedInDemoMode = (path: string): boolean => {
-  return path === '/tracking' || path.startsWith('/cameras/') || path === '/site-tracking' || path === '/zones' || path.startsWith('/replay/')
+  return path === '/tracking'
+    || path.startsWith('/cameras/')
+    || path === '/site-tracking'
+    || path === '/zones'
+    || path === '/recordings'
+    || path.startsWith('/replay/')
 }
 
 // Global navigation guards

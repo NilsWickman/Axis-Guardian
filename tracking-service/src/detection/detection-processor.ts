@@ -496,6 +496,7 @@ export class DetectionProcessor implements IDetectionProcessor {
         worldY: worldPoint.y,
         confidence: detection.confidence,
         timestamp: timestampMs,
+        bbox,
         frameNumber: message.frame_number,
         videoTimeMs: message.video_time_ms,
         rtpTimestamp: message.rtp_timestamp,
@@ -896,4 +897,3 @@ export class DetectionProcessor implements IDetectionProcessor {
     }
   }
 }
-

@@ -24,6 +24,7 @@ import type {
   AggregatedClothingAttributes,
   TrackAttributes,
   GlobalTrackJSON,
+  CameraImageDetection,
   CameraFrameInfo,
   TrackingConfigBase,
 } from '@axis-guardian/types'
@@ -85,7 +86,7 @@ export const DEFAULT_MAX_VELOCITY_MS = DEFAULT_TRACKING_CONFIG_BASE.maxVelocityM
  *
  * For server-synced mode, use the tracking-service REST API to query/modify config.
  */
-export interface LocalTrackingConfig extends TrackingConfigBase {}
+export type LocalTrackingConfig = TrackingConfigBase
 
 /**
  * @deprecated Use LocalTrackingConfig instead. This alias is kept for backwards compatibility.
@@ -138,6 +139,7 @@ export interface CameraDetection {
 export interface GlobalTrack {
   globalTrackId: string
   cameraAssociations: Map<string, CameraTrackAssociation>
+  cameraDetections?: Record<string, CameraImageDetection>
   currentPosition: { x: number; y: number }
   trail: TrailPosition[]
   color: string
@@ -441,7 +443,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     }
 
     // Update or add camera association
-    let assoc = track.cameraAssociations.get(detection.cameraId)
+    const assoc = track.cameraAssociations.get(detection.cameraId)
     if (assoc) {
       if (!assoc.trackIds.includes(detection.trackId)) {
         assoc.trackIds.push(detection.trackId)

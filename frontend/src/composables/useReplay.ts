@@ -29,6 +29,12 @@ interface BufferedEvent {
   payload: any
 }
 
+interface ReplayFrameInfo {
+  cameraId: string
+  frameNumber: number
+  timestamp: number
+}
+
 export function useReplay(options: UseReplayOptions) {
   const globalTrackStore = useGlobalTrackStore()
   const zoneStore = useZoneStore()
@@ -56,6 +62,9 @@ export function useReplay(options: UseReplayOptions) {
     switch (evt.type) {
       case 'track_created':
       case 'track_updated':
+        if (Array.isArray(evt.payload?.frames)) {
+          globalTrackStore.updateFrameInfo(evt.payload.frames as ReplayFrameInfo[])
+        }
         globalTrackStore.upsertTrackFromServer(evt.payload.track)
         break
       case 'track_expired':
@@ -221,6 +230,5 @@ export function useReplay(options: UseReplayOptions) {
     stop: stopSyncLoop,
   }
 }
-
 
 
