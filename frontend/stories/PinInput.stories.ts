@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3-vite'
+import { action } from '@storybook/addon-actions'
 import { PinInput, PinInputGroup, PinInputSlot, PinInputSeparator } from '@/components/ui/pin-input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -123,12 +124,12 @@ export const FormExample: Story = {
         isVerifying.value = true
         setTimeout(() => {
           isVerifying.value = false
-          console.log('Verification completed with code:', verificationCode.value.join(''))
+          action('verification completed')(verificationCode.value.join(''))
         }, 2000)
       }
 
       const handleResend = () => {
-        console.log('Resending verification code...')
+        action('resend verification code')()
         verificationCode.value = []
         isComplete.value = false
       }

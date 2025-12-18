@@ -46,10 +46,16 @@ interface DetectionFrame {
   frame_number: number
   timestamp: number
   detections: Array<{
-    bbox: { left: number; top: number; right: number; bottom: number }
+    bbox: { left: number; top: number; right: number; bottom: number } | [number, number, number, number]
     confidence: number
     class_name: string
     track_id: number
+    attributes?: {
+      embedding?: number[]
+      embedding_quality?: number
+      upper_clothing?: { colors: Array<{ name: string; score: number }> }
+      lower_clothing?: { colors: Array<{ name: string; score: number }> }
+    }
   }>
 }
 
@@ -277,8 +283,17 @@ describe('MOT Challenge Standard Metrics', () => {
       const sampledFrames = allFrames.filter((_, i) => i % 10 === 0)
       console.log(`Processing ${sampledFrames.length} sampled frames...`)
 
+      let lastCleanupTime = 0
       for (const { cameraId, frame } of sampledFrames) {
         mockTime = Math.floor(frame.timestamp * 1000) + 1000
+
+        // Cleanup expired tracks periodically (every 500ms of video time)
+        // This is critical for proper FP counting - without cleanup, old tracks
+        // stay "active" forever and accumulate associations to the same person
+        if (mockTime - lastCleanupTime > 500) {
+          trackManager.cleanupExpiredTracks()
+          lastCleanupTime = mockTime
+        }
 
         // Get ground truth persons visible in this frame (only annotated detections)
         const gtPersonsInFrame = new Set<number>()
@@ -297,13 +312,21 @@ describe('MOT Challenge Standard Metrics', () => {
         // Only process ANNOTATED detections to avoid false positive inflation
         // from unannotated track IDs in the detection file
         for (const det of annotatedDetections) {
-          const bbox = {
-            x: det.bbox.left,
-            y: det.bbox.top,
-            width: det.bbox.right - det.bbox.left,
-            height: det.bbox.bottom - det.bbox.top,
+          // Handle both array [x, y, w, h] and object {left, top, right, bottom} bbox formats
+          let bbox: { x: number; y: number; width: number; height: number }
+          if (Array.isArray(det.bbox)) {
+            const [x, y, width, height] = det.bbox
+            bbox = { x, y, width, height }
+          } else {
+            bbox = {
+              x: det.bbox.left,
+              y: det.bbox.top,
+              width: det.bbox.right - det.bbox.left,
+              height: det.bbox.bottom - det.bbox.top,
+            }
           }
-          detectionProcessor.processInjection(cameraId, bbox, det.confidence, det.track_id)
+          // Pass attributes (including embeddings) for ReID matching
+          detectionProcessor.processInjection(cameraId, bbox, det.confidence, det.track_id, det.attributes)
         }
 
         // Get active tracks
@@ -329,6 +352,7 @@ describe('MOT Challenge Standard Metrics', () => {
         }
 
         // For each person, pick the track with most recent update and check for ID switch
+        const idswInFrame: Array<{ personId: number; from: string; to: string }> = []
         for (const [personId, claims] of framePersonClaims) {
           // Sort by recency (most recent first) and pick the best
           claims.sort((a, b) => b.recency - a.recency)
@@ -338,12 +362,51 @@ describe('MOT Challenge Standard Metrics', () => {
           const lastTrack = lastAssignment.get(personId)
           if (lastTrack && lastTrack !== bestTrackId) {
             totalIDSW++
+            idswInFrame.push({ personId, from: lastTrack, to: bestTrackId })
           }
           lastAssignment.set(personId, bestTrackId)
 
           trackedPersons.add(personId)
           matchedTrackIds.add(bestTrackId)
           totalMatches++
+        }
+
+
+        // Debug: print ID switches when they occur
+        if (idswInFrame.length > 0) {
+          console.log(`  IDSW at frame ${frame.timestamp.toFixed(2)}s:`, idswInFrame)
+          // Debug: show what tracks exist for this person
+          for (const idsw of idswInFrame) {
+            const oldTrack = trackManager.getAllTracks().find(t => t.globalTrackId === idsw.from)
+            const newTrack = trackManager.getAllTracks().find(t => t.globalTrackId === idsw.to)
+            const nowMs = Math.floor(frame.timestamp * 1000) + 1000
+
+            // Get person's camera track IDs
+            const personTrackIds = Array.from(trackTruths!.annotations)
+              .filter(ann => ann.personId === idsw.personId)
+              .map(ann => ann.globalTrackId)
+            console.log(`    Person ${idsw.personId} camera tracks: ${personTrackIds.join(', ')}`)
+
+            if (oldTrack) {
+              const timeSinceOld = (nowMs - oldTrack.lastSeen) / 1000
+              const oldTrackAssocs = Array.from(oldTrack.cameraAssociations.entries())
+                .map(([cam, assoc]) => `${cam}:[${assoc.trackIds.join(',')}]`)
+                .join(', ')
+              console.log(`    Old track ${idsw.from}: lastSeen=${timeSinceOld.toFixed(1)}s ago, active=${oldTrack.isActive}, state=${oldTrack.state}`)
+              console.log(`      Position: (${oldTrack.currentPosition.x.toFixed(2)}, ${oldTrack.currentPosition.y.toFixed(2)})`)
+              console.log(`      Associations: ${oldTrackAssocs}`)
+            } else {
+              console.log(`    Old track ${idsw.from}: DELETED (person ${idsw.personId} gap too long)`)
+            }
+            if (newTrack) {
+              const newTrackAssocs = Array.from(newTrack.cameraAssociations.entries())
+                .map(([cam, assoc]) => `${cam}:[${assoc.trackIds.join(',')}]`)
+                .join(', ')
+              console.log(`    New track ${idsw.to}: active=${newTrack.isActive}, state=${newTrack.state}`)
+              console.log(`      Position: (${newTrack.currentPosition.x.toFixed(2)}, ${newTrack.currentPosition.y.toFixed(2)})`)
+              console.log(`      Associations: ${newTrackAssocs}`)
+            }
+          }
         }
 
         // Count FN (GT persons not tracked)

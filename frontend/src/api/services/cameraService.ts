@@ -161,7 +161,6 @@ export class CameraService {
   async sendPTZCommand(cameraId: string, command: PTZCommand): Promise<void> {
     if (this.client.isMockMode()) {
       await this.delay(100)
-      console.log(`Mock PTZ command for ${cameraId}:`, command)
       return
     }
 

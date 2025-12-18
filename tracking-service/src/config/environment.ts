@@ -7,6 +7,11 @@ export interface EnvironmentConfig {
   host: string
   cameraEmulatorUrls: string[]
   logLevel: 'debug' | 'info' | 'warn' | 'error'
+  wsMaxPayloadBytes: number
+  wsMaxConnectionsPerIp: number
+  wsAllowedOrigins: string[]
+  wsAllowNoOrigin: boolean
+  wsPingIntervalMs: number
   // ACAP client configuration
   acapEnabled: boolean
   acapBrokerHost: string
@@ -16,7 +21,29 @@ export interface EnvironmentConfig {
   acapPassword?: string
 }
 
+function parseCsv(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(',')
+    .map(v => v.trim())
+    .filter(Boolean)
+}
+
 export function loadEnvironment(): EnvironmentConfig {
+  const nodeEnv = process.env.NODE_ENV ?? 'development'
+  const isProd = nodeEnv === 'production'
+
+  const defaultAllowedOrigins = [
+    'https://pummenc2.win',
+    'https://www.pummenc2.win',
+    ...(isProd ? [] : [
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+    ]),
+  ]
+
+  const allowedOrigins = parseCsv(process.env.WS_ALLOWED_ORIGINS)
+  const wsAllowedOrigins = allowedOrigins.length > 0 ? allowedOrigins : defaultAllowedOrigins
+
   return {
     port: parseInt(process.env.PORT ?? '3010', 10),
     host: process.env.HOST ?? '0.0.0.0',
@@ -24,6 +51,11 @@ export function loadEnvironment(): EnvironmentConfig {
       .split(',')
       .map(url => url.trim()),
     logLevel: (process.env.LOG_LEVEL ?? 'info') as EnvironmentConfig['logLevel'],
+    wsMaxPayloadBytes: parseInt(process.env.WS_MAX_PAYLOAD_BYTES ?? '1048576', 10),
+    wsMaxConnectionsPerIp: parseInt(process.env.WS_MAX_CONNECTIONS_PER_IP ?? '20', 10),
+    wsAllowedOrigins,
+    wsAllowNoOrigin: process.env.WS_ALLOW_NO_ORIGIN === 'true' || !isProd,
+    wsPingIntervalMs: parseInt(process.env.WS_PING_INTERVAL_MS ?? '30000', 10),
     // ACAP client configuration
     acapEnabled: process.env.ACAP_ENABLED === 'true',
     acapBrokerHost: process.env.ACAP_BROKER_HOST ?? 'localhost',

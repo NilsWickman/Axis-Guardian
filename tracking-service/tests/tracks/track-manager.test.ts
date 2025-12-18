@@ -185,8 +185,9 @@ describe('TrackManager', () => {
       mockTime += 100
       tm.processDetection('camera1', 1, 5.2, 5.0, 0.9)
 
-      // Advance time past double expiry (default 8000ms * 2 = 16000ms)
-      mockTime += 17000
+      // Advance time past 5x expiry (trackExpiryMs = 10000ms from algorithm-constants)
+      // Track is deleted after 5x expiry = 50000ms
+      mockTime += 55000
       tm.cleanupExpiredTracks()
 
       const track = tm.getTrackById('remove-1')
@@ -319,7 +320,7 @@ describe('TrackManager', () => {
       trackManager.updateConfig({ correlationDistanceM: 999 })
       trackManager.resetConfig()
       const config = trackManager.getConfig()
-      expect(config.correlationDistanceM).toBe(0.7) // Default from ALGORITHM_CONSTANTS.trackLifecycle.correlationDistanceM
+      expect(config.correlationDistanceM).toBe(1.2) // Default from ALGORITHM_CONSTANTS.trackLifecycle.correlationDistanceM (increased for IDSW reduction)
     })
   })
 

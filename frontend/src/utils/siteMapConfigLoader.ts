@@ -74,7 +74,7 @@ export interface SiteMapConfig {
   obstacles?: SiteMapConfigObstacle[]
 }
 
-const STATIC_CONFIG_PATH = '/sitemap-rectangular-room.json'
+const STATIC_CONFIG_PATH = `${import.meta.env.BASE_URL}sitemap-rectangular-room.json`
 
 let cachedConfig: SiteMapConfig | null = null
 let configSource: 'api' | 'static' | null = null
@@ -96,19 +96,12 @@ async function loadFromApi(): Promise<SiteMapConfig | null> {
     clearTimeout(timeoutId)
 
     if (!response.ok) {
-      console.warn(`[SiteMapConfigLoader] API returned ${response.status}`)
       return null
     }
 
     const data = await response.json()
-    console.log('[SiteMapConfigLoader] Loaded from API:', apiUrl)
     return data
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      console.warn('[SiteMapConfigLoader] API request timed out')
-    } else {
-      console.warn('[SiteMapConfigLoader] API unavailable:', error instanceof Error ? error.message : error)
-    }
+  } catch {
     return null
   }
 }
@@ -117,9 +110,11 @@ async function loadFromApi(): Promise<SiteMapConfig | null> {
  * Load config from static JSON file
  */
 async function loadFromStatic(): Promise<SiteMapConfig> {
-  console.log('[SiteMapConfigLoader] Loading from static file:', STATIC_CONFIG_PATH)
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
 
-  const response = await fetch(STATIC_CONFIG_PATH)
+  const response = await fetch(STATIC_CONFIG_PATH, { signal: controller.signal })
+  clearTimeout(timeoutId)
   if (!response.ok) {
     throw new Error(`Failed to load site map config: ${response.status} ${response.statusText}`)
   }
@@ -134,11 +129,8 @@ async function loadFromStatic(): Promise<SiteMapConfig> {
  */
 export async function loadSiteMapConfig(): Promise<SiteMapConfig> {
   if (cachedConfig) {
-    console.log(`[SiteMapConfigLoader] Returning cached configuration (source: ${configSource})`)
     return cachedConfig
   }
-
-  console.log('[SiteMapConfigLoader] Loading configuration...')
 
   // Try API first (unless in explicit mock mode)
   if (!config.useMockData) {
@@ -146,7 +138,6 @@ export async function loadSiteMapConfig(): Promise<SiteMapConfig> {
     if (apiConfig) {
       cachedConfig = apiConfig
       configSource = 'api'
-      logConfigSummary(apiConfig)
       return apiConfig
     }
   }
@@ -155,18 +146,7 @@ export async function loadSiteMapConfig(): Promise<SiteMapConfig> {
   const staticConfig = await loadFromStatic()
   cachedConfig = staticConfig
   configSource = 'static'
-  logConfigSummary(staticConfig)
   return staticConfig
-}
-
-function logConfigSummary(cfg: SiteMapConfig): void {
-  console.log('[SiteMapConfigLoader] Configuration loaded:', {
-    source: configSource,
-    dimensions: `${cfg.dimensions.width}m x ${cfg.dimensions.height}m`,
-    cameras: cfg.cameras.length,
-    walls: cfg.walls.length,
-    obstacles: cfg.obstacles?.length ?? 0
-  })
 }
 
 /**

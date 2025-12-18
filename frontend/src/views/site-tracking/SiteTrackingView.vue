@@ -67,13 +67,15 @@
 
         <!-- Loading State -->
         <div
-          v-if="!currentMap"
+          v-if="showMapLoadingOverlay"
           class="absolute inset-0 flex items-center justify-center"
           style="background-color: var(--canvas-background)"
         >
           <div class="text-center text-muted-foreground">
             <div class="w-12 h-12 border-4 border-muted border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
-            <p>Loading site map...</p>
+            <p v-if="siteMapError">{{ siteMapError }}</p>
+            <p v-else-if="!currentMap">{{ isSiteMapLoading ? 'Loading site map...' : 'Loading site map...' }}</p>
+            <p v-else>Restarting…</p>
           </div>
         </div>
       </div>
@@ -119,6 +121,15 @@
               playsinline
               class="w-full h-full object-cover block"
             />
+            <div
+              v-if="showVideoLoadingOverlay"
+              class="absolute inset-0 flex items-center justify-center bg-black/70"
+            >
+              <div class="text-center text-muted-foreground">
+                <div class="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin mx-auto mb-2"></div>
+                <p class="text-xs">{{ isRestarting ? 'Restarting…' : 'Loading…' }}</p>
+              </div>
+            </div>
           </div>
 
           <!-- Detection Metadata Panel -->
@@ -134,7 +145,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, reactive, onMounted, onUnmounted, watch, nextTick, onActivated, onDeactivated } from 'vue'
 import { useCameraStore } from '@/stores/cameras'
 import { useGlobalTrackStore } from '@/stores/globalTracks'
 import { useZoneStore } from '@/stores/zones'
@@ -158,7 +169,7 @@ interface Camera {
 const cameraStore = useCameraStore()
 const globalTrackStore = useGlobalTrackStore()
 const zoneStore = useZoneStore()
-const { siteMap: currentMap, loadSiteMap } = useSiteMapConfig()
+const { siteMap: currentMap, loadSiteMap, isLoading: isSiteMapLoading, error: siteMapError } = useSiteMapConfig()
 const { isDemoMode } = useDemoMode()
 const { currentTheme } = useTheme()
 
@@ -191,10 +202,14 @@ const trackingWs = useTrackingServiceWebSocket({
 const scale = ref(1)
 const offsetX = ref(0)
 const offsetY = ref(0)
+const canvasWidthPx = ref(0)
+const canvasHeightPx = ref(0)
 
 // Canvas style (no rotation - coordinates are pre-rotated in config)
 const canvasStyle = computed(() => ({
   position: 'absolute' as const,
+  width: `${canvasWidthPx.value}px`,
+  height: `${canvasHeightPx.value}px`,
   left: `${offsetX.value}px`,
   top: `${offsetY.value}px`,
   transform: `scale(${scale.value})`,
@@ -216,6 +231,123 @@ const {
 const selectedCamera = ref<Camera | null>(null)
 const thumbnailVideoRefs = ref<Record<string, HTMLVideoElement | null>>({})
 const showDebugMode = ref(false)
+const isRestarting = ref(false)
+const isBootLoading = ref(true)
+let restartTimer: number | null = null
+let bootLoadingTimer: number | null = null
+const isViewActive = ref(true)
+const pendingRestartWhileInactive = ref(false)
+let redrawHeartbeatInterval: number | null = null
+let redrawHeartbeatStopTimer: number | null = null
+
+const RESTART_LOADING_MS = 2000
+
+function startBootLoading(): void {
+  isBootLoading.value = true
+  if (bootLoadingTimer) {
+    window.clearTimeout(bootLoadingTimer)
+  }
+  bootLoadingTimer = window.setTimeout(() => {
+    isBootLoading.value = false
+    bootLoadingTimer = null
+    // If anything cleared the base canvas while the overlay was up,
+    // redraw once the overlay is removed.
+    void renderSiteMap()
+  }, RESTART_LOADING_MS)
+}
+
+function scheduleRenderBurst(): void {
+  void renderSiteMap()
+  window.requestAnimationFrame(() => {
+    void renderSiteMap()
+  })
+  window.setTimeout(() => {
+    void renderSiteMap()
+  }, 350)
+  window.setTimeout(() => {
+    void renderSiteMap()
+  }, 1000)
+}
+
+function startRedrawHeartbeat(): void {
+  if (redrawHeartbeatInterval) {
+    window.clearInterval(redrawHeartbeatInterval)
+    redrawHeartbeatInterval = null
+  }
+  if (redrawHeartbeatStopTimer) {
+    window.clearTimeout(redrawHeartbeatStopTimer)
+    redrawHeartbeatStopTimer = null
+  }
+
+  // Redraw a few times after mount/activation to survive late layout/resize clears.
+  redrawHeartbeatInterval = window.setInterval(() => {
+    if (!isViewActive.value) return
+    drawMap()
+  }, 250)
+
+  redrawHeartbeatStopTimer = window.setTimeout(() => {
+    if (redrawHeartbeatInterval) {
+      window.clearInterval(redrawHeartbeatInterval)
+      redrawHeartbeatInterval = null
+    }
+    redrawHeartbeatStopTimer = null
+  }, 3000)
+}
+
+async function renderSiteMap(): Promise<void> {
+  if (!currentMap.value) {
+    await loadSiteMap()
+  }
+  if (!currentMap.value) return
+
+  // When navigating back (keep-alive), template refs can be temporarily null.
+  // Only resize/redraw after the canvas element + 2D context are actually ready,
+  // otherwise setting canvas.width/height will clear it to a blank bitmap.
+  for (let i = 0; i < 30; i++) {
+    await nextTick()
+    if (canvas.initCanvas()) break
+    await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()))
+  }
+  if (!canvas.initCanvas()) return
+
+  fitToView()
+  resizeCanvas()
+}
+
+function triggerRestartLoading(): void {
+  if (!isViewActive.value) {
+    pendingRestartWhileInactive.value = true
+    return
+  }
+
+  isRestarting.value = true
+  canvas.clearCanvas()
+
+  if (restartTimer) {
+    window.clearTimeout(restartTimer)
+  }
+
+  restartTimer = window.setTimeout(() => {
+    isRestarting.value = false
+    restartTimer = null
+    void renderSiteMap()
+  }, RESTART_LOADING_MS)
+}
+
+const showMapLoadingOverlay = computed(() => !currentMap.value || isBootLoading.value || isRestarting.value)
+const showVideoLoadingOverlay = computed(() => isBootLoading.value || isRestarting.value)
+
+// Ensure we always attempt to load the site map if it's missing.
+watch([currentMap, isSiteMapLoading, siteMapError], ([map, loading, err]) => {
+  if (map || loading || err) return
+  void loadSiteMap()
+}, { immediate: true })
+
+// When the canvas element appears (mount/activation), redraw the base map.
+watch(mapCanvas, (el) => {
+  if (!el) return
+  void renderSiteMap()
+}, { flush: 'post' })
 
 // Tracking delay display (rolling average age of latest tracking-service frame per camera)
 const nowMs = ref(Date.now())
@@ -307,6 +439,7 @@ const handleMouseLeave = () => {
 // Draw map
 const drawMap = () => {
   if (!currentMap.value) return
+  if (!canvas.initCanvas()) return
 
   canvas.clearCanvas()
   canvas.drawGrid()
@@ -338,10 +471,13 @@ const drawMap = () => {
 // Resize canvas
 const resizeCanvas = () => {
   if (!currentMap.value) return
+  if (!canvas.initCanvas()) return
 
   const widthPixels = metersToPixels(extractValue(currentMap.value.width))
   const heightPixels = metersToPixels(extractValue(currentMap.value.height))
 
+  canvasWidthPx.value = widthPixels
+  canvasHeightPx.value = heightPixels
   canvas.resizeCanvas(widthPixels, heightPixels)
   drawMap()
 }
@@ -454,7 +590,9 @@ const handleResize = () => {
 }
 
 onMounted(async () => {
-  if (!canvas.initCanvas()) return
+  isViewActive.value = true
+  startBootLoading()
+  startRedrawHeartbeat()
 
   nowInterval = window.setInterval(() => {
     const now = Date.now()
@@ -463,14 +601,7 @@ onMounted(async () => {
   }, 250)
 
   // Load site map configuration
-  await loadSiteMap()
-
-  if (currentMap.value) {
-    // Calculate fit-to-view scale FIRST to avoid layout shift
-    fitToView()
-    resizeCanvas()
-    drawMap()
-  }
+  scheduleRenderBurst()
 
   window.addEventListener('resize', handleResize)
 
@@ -483,11 +614,11 @@ onMounted(async () => {
     TRACKED_CAMERA_ID,
     LOOP_DURATION_SECONDS,
     () => {
+      triggerRestartLoading()
       globalTrackStore.clearAllTracks()
     }
   )
   if (!loopConfigured) {
-    console.warn(`[SiteTracking] Could not configure loop for ${TRACKED_CAMERA_ID} - camera not connected`)
   }
 
   // Auto-select first camera (HC3)
@@ -502,9 +633,59 @@ onMounted(async () => {
   trackingWs.connect()
 })
 
+onActivated(async () => {
+  isViewActive.value = true
+  startBootLoading()
+  startRedrawHeartbeat()
+  scheduleRenderBurst()
+  await attachThumbnailVideos()
+  if (pendingRestartWhileInactive.value) {
+    pendingRestartWhileInactive.value = false
+    triggerRestartLoading()
+  }
+})
+
+onDeactivated(() => {
+  isViewActive.value = false
+  if (redrawHeartbeatInterval) {
+    window.clearInterval(redrawHeartbeatInterval)
+    redrawHeartbeatInterval = null
+  }
+  if (redrawHeartbeatStopTimer) {
+    window.clearTimeout(redrawHeartbeatStopTimer)
+    redrawHeartbeatStopTimer = null
+  }
+  if (restartTimer) {
+    window.clearTimeout(restartTimer)
+    restartTimer = null
+  }
+  if (bootLoadingTimer) {
+    window.clearTimeout(bootLoadingTimer)
+    bootLoadingTimer = null
+  }
+  isRestarting.value = false
+  isBootLoading.value = false
+})
+
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   trackingWs.disconnect()
+  if (restartTimer) {
+    window.clearTimeout(restartTimer)
+    restartTimer = null
+  }
+  if (bootLoadingTimer) {
+    window.clearTimeout(bootLoadingTimer)
+    bootLoadingTimer = null
+  }
+  if (redrawHeartbeatInterval) {
+    window.clearInterval(redrawHeartbeatInterval)
+    redrawHeartbeatInterval = null
+  }
+  if (redrawHeartbeatStopTimer) {
+    window.clearTimeout(redrawHeartbeatStopTimer)
+    redrawHeartbeatStopTimer = null
+  }
   if (nowInterval) {
     clearInterval(nowInterval)
     nowInterval = null

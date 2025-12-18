@@ -77,7 +77,6 @@ export function useTrackThumbnails() {
       for (const [cameraId, videoId] of Object.entries(CAMERA_VIDEO_MAP)) {
         const videoOption = AVAILABLE_VIDEOS.find(v => v.id === videoId)
         if (!videoOption) {
-          console.warn(`Video not found for camera ${cameraId}: ${videoId}`)
           continue
         }
 

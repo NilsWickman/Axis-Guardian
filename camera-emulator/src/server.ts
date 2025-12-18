@@ -14,6 +14,7 @@ import { loadDetections } from './detections/loader.js'
 import { DetectionSync } from './detections/sync.js'
 import { TrackingClient } from './detections/tracking-client.js'
 import { registerWebSocketSignaling } from './signaling/websocket-handler.js'
+import { WS_MAX_PAYLOAD_BYTES } from './config.js'
 
 export interface CameraEmulatorServer {
   start(): Promise<void>
@@ -21,11 +22,16 @@ export interface CameraEmulatorServer {
 }
 
 export async function createCameraEmulator(config: CameraConfig): Promise<CameraEmulatorServer> {
-  const app = Fastify({ logger: false })
+  const app = Fastify({ logger: false, trustProxy: true })
 
   // Register plugins
   await app.register(cors, { origin: true })
-  await app.register(websocket)
+  await app.register(websocket, {
+    options: {
+      maxPayload: WS_MAX_PAYLOAD_BYTES,
+      perMessageDeflate: false,
+    },
+  })
 
   // Load detection data
   const detectionData = await loadDetections(config.detectionsPath)

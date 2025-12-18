@@ -116,7 +116,7 @@ export function validateConfig(): void {
   const missing = required.filter(key => !config[key as keyof typeof config])
 
   if (missing.length > 0) {
-    console.warn('Missing environment variables:', missing)
+    console.error('Missing environment variables:', missing)
   }
 }
 

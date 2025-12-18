@@ -12,6 +12,7 @@ import type { Detection } from '@/types/detection.types'
 import { useToast } from '@/composables/useToast'
 import { emitWebRTCDetection } from './usePersonPositionTracking'
 import { config } from '@/config/environment'
+import { sleep } from '@/utils/sleep'
 
 export interface DetectionMetadata {
   camera_id: string
@@ -31,6 +32,7 @@ export interface WebRTCDetectionOptions {
   reconnectDelay?: number
   loopDuration?: number | null  // Loop video after N seconds (null = no loop)
   onLoop?: () => void  // Callback when video loops
+  loopRestartDelayMs?: number // Delay before restarting playback (ms)
 }
 
 const DEFAULT_OPTIONS: WebRTCDetectionOptions = {
@@ -40,7 +42,8 @@ const DEFAULT_OPTIONS: WebRTCDetectionOptions = {
   autoReconnect: true,
   reconnectDelay: 3000,
   loopDuration: null,
-  onLoop: undefined
+  onLoop: undefined,
+  loopRestartDelayMs: 2000,
 }
 
 export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOptions = {}) {
@@ -65,7 +68,8 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
       'LiveDetectionView',
       'WebRTCDetectionView',
       'SnapshotView',
-      'FocusView'
+      'FocusView',
+      'Tracking'
     ]
     return router.currentRoute.value.name && cameraRoutes.includes(router.currentRoute.value.name as string)
   }
@@ -83,6 +87,7 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
   const reconnectTimer = ref<number | null>(null)
   const reconnectAttempts = ref(0)
   const maxReconnectAttempts = 10
+  const loopRestartDelayMs = ref<number>(opts.loopRestartDelayMs ?? 2000)
 
   // Detection data
   const currentDetections = ref<Detection[]>([])
@@ -138,6 +143,7 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
   // Event listener references for cleanup
   let timeupdateHandler: (() => void) | null = null
   let loopTimeupdateHandler: (() => void) | null = null
+  let loopInProgress = false
 
   // Loop control state
   const loopDuration = ref<number | null>(opts.loopDuration ?? null)
@@ -177,11 +183,8 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
       // Handle connection state changes
       pc.onconnectionstatechange = () => {
-        const prevState = connectionState.value
         connectionState.value = pc.connectionState
         isConnected.value = pc.connectionState === 'connected'
-
-        console.log(`[WebRTC] ${cameraId}: Connection state changed: ${prevState} → ${pc.connectionState}`)
 
         // Toast notifications for connection state changes
         if (pc.connectionState === 'connected') {
@@ -189,13 +192,11 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
             toast.success(`Camera ${cameraId} connected`, 3000)
           }
         } else if (pc.connectionState === 'failed') {
-          console.warn(`[WebRTC] ${cameraId}: Connection FAILED, triggering handleDisconnect()`)
           if (shouldShowToast()) {
             toast.error(`Camera ${cameraId} connection failed`, 5000)
           }
           handleDisconnect()
         } else if (pc.connectionState === 'closed') {
-          console.warn(`[WebRTC] ${cameraId}: Connection CLOSED, triggering handleDisconnect()`)
           if (shouldShowToast()) {
             toast.warning(`Camera ${cameraId} disconnected`, 4000)
           }
@@ -205,12 +206,10 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
       // Handle ICE connection state changes for debugging
       pc.oniceconnectionstatechange = () => {
-        console.log(`[WebRTC] ${cameraId}: ICE connection state: ${pc.iceConnectionState}`)
       }
 
       // Handle ICE gathering state changes for debugging
       pc.onicegatheringstatechange = () => {
-        console.log(`[WebRTC] ${cameraId}: ICE gathering state: ${pc.iceGatheringState}`)
       }
 
       // ICE candidate handler will be set up after WebSocket connection
@@ -246,11 +245,23 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
           // Loop control: restart video when reaching loop duration
           loopTimeupdateHandler = () => {
+            if (loopInProgress) return
             if (loopDuration.value !== null && videoEl.currentTime >= loopDuration.value) {
-              console.log(`[WebRTC] ${cameraId}: Video reached ${loopDuration.value}s, looping...`)
-              videoEl.currentTime = 0
-              videoEl.play().catch(e => console.error('Error restarting video:', e))
+              loopInProgress = true
+
               onLoopCallback?.()
+
+              videoEl.pause()
+
+              void (async () => {
+                if (loopRestartDelayMs.value > 0) {
+                  await sleep(loopRestartDelayMs.value)
+                }
+                videoEl.currentTime = 0
+                await videoEl.play()
+              })().catch(e => console.error('Error restarting video:', e)).finally(() => {
+                loopInProgress = false
+              })
             }
           }
           videoEl.addEventListener('timeupdate', loopTimeupdateHandler)
@@ -346,12 +357,10 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
 
       // Set local description FIRST (this triggers ICE gathering)
       await pc.setLocalDescription(offer)
-      console.log(`[WebRTC] ${cameraId}: Local description set`)
 
       // HTTP WHEP signaling: send offer via HTTP POST and receive answer
       // Camera emulators (ports 9101, 9102) use this simple HTTP-based protocol
       const offerUrl = `${opts.signalingUrl}/offer`
-      console.log(`[WebRTC] ${cameraId}: Sending offer to ${offerUrl}`)
 
       const response = await fetch(offerUrl, {
         method: 'POST',
@@ -369,21 +378,9 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
       }
 
       const answerData = await response.json() as RTCSessionDescriptionInit
-      console.log(`[WebRTC] ${cameraId}: Received answer from server`)
 
       // Set remote description (answer)
-      console.log(`[WebRTC] ${cameraId}: Setting remote description`)
       await pc.setRemoteDescription(new RTCSessionDescription(answerData))
-      console.log(`[WebRTC] ${cameraId}: Remote description set successfully`)
-
-      // Log remote candidates that were embedded in SDP
-      const remoteCandidates = answerData.sdp?.match(/a=candidate:.+/g) || []
-      if (remoteCandidates.length > 0) {
-        console.log(`[WebRTC] ${cameraId}: Found ${remoteCandidates.length} remote candidates in SDP:`)
-        remoteCandidates.forEach(c => console.log(`[WebRTC] ${cameraId}:   ${c}`))
-      } else {
-        console.warn(`[WebRTC] ${cameraId}: No remote candidates found in SDP answer!`)
-      }
 
       // Reset reconnect attempts and external reconnect flag on successful connection
       reconnectAttempts.value = 0
@@ -628,12 +625,10 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
       const loopFrameThreshold = loopDuration.value * 30 // Assume 30fps
       // Only trigger once when crossing threshold, and reset when frame goes back to near 0 (video looped)
       if (metadata.frame_number >= loopFrameThreshold && !loopTriggeredThisCycle) {
-        console.log(`[WebRTC] ${cameraId}: Frame ${metadata.frame_number} reached loop threshold (${loopFrameThreshold}), triggering loop callback`)
         loopTriggeredThisCycle = true
         onLoopCallback?.()
       } else if (metadata.frame_number < loopFrameThreshold / 2 && loopTriggeredThisCycle) {
         // Reset when frame number goes back to low values (video looped on backend)
-        console.log(`[WebRTC] ${cameraId}: Frame ${metadata.frame_number} detected video loop reset`)
         loopTriggeredThisCycle = false
       }
     }
@@ -648,8 +643,6 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
    * Handle disconnection and cleanup
    */
   function handleDisconnect(skipAutoReconnect = false): void {
-    console.log(`[WebRTC] ${cameraId}: handleDisconnect called (skipAutoReconnect=${skipAutoReconnect}, isExternalReconnecting=${isExternalReconnecting.value})`)
-
     isConnected.value = false
     isDataChannelOpen.value = false
 
@@ -698,10 +691,6 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
       // Exponential backoff: delay = baseDelay * 2^(attempts-1), capped at 30 seconds
       const baseDelay = opts.reconnectDelay || 3000
       const exponentialDelay = Math.min(baseDelay * Math.pow(2, reconnectAttempts.value - 1), 30000)
-
-      console.log(
-        `[WebRTC] Reconnecting in ${exponentialDelay}ms... (attempt ${reconnectAttempts.value}/${maxReconnectAttempts})`
-      )
 
       if (shouldShowToast()) {
         toast.info(
@@ -871,7 +860,6 @@ export function useWebRTCDetection(cameraId: string, options: WebRTCDetectionOpt
   function setLoopDuration(seconds: number | null, callback?: () => void): void {
     loopDuration.value = seconds
     onLoopCallback = callback
-    console.log(`[WebRTC] ${cameraId}: Loop duration set to ${seconds}s`)
   }
 
   /**

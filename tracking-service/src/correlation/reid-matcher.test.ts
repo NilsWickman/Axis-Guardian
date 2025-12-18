@@ -138,7 +138,7 @@ describe('ReIDMatcher', () => {
 
     it('should skip tracks that are too old', () => {
       const detection = createDetection('camera1', [1, 0, 0])
-      const oldTrack = createTrack('track1', 'camera1', [1, 0, 0], 0.9, Date.now() - 25000) // 25s old (beyond adaptiveMaxReidAgeMs: 20000)
+      const oldTrack = createTrack('track1', 'camera1', [1, 0, 0], 0.9, Date.now() - 65000) // 65s old (beyond adaptiveMaxReidAgeMs: 60000)
       const newTrack = createTrack('track2', 'camera1', [0.9, 0.1, 0], 0.9, Date.now())
 
       const result = matcher.findBestMatch(detection, [oldTrack, newTrack], Date.now())
@@ -304,7 +304,7 @@ describe('ReIDMatcher', () => {
 
     it('should skip old tracks', () => {
       const detection = createDetection('camera1', [1, 0, 0])
-      const oldTrack = createTrack('track1', 'camera1', [1, 0, 0], 0.9, Date.now() - 25000) // 25s old (beyond adaptiveMaxReidAgeMs: 20000)
+      const oldTrack = createTrack('track1', 'camera1', [1, 0, 0], 0.9, Date.now() - 65000) // 65s old (beyond adaptiveMaxReidAgeMs: 60000)
       const newTrack = createTrack('track2', 'camera1', [0.9, 0.1, 0])
 
       const ranked = matcher.rankByEmbeddingSimilarity(detection, [oldTrack, newTrack], Date.now())

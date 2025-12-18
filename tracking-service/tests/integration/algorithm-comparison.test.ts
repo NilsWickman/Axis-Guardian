@@ -45,11 +45,11 @@ const OLD_CONSTANTS = {
   },
 }
 
-// New constants (after optimization)
+// New constants (after optimization) - updated to match current algorithm-constants.ts
 const NEW_CONSTANTS = {
   trackLifecycle: {
-    trackExpiryMs: 8000,
-    unconfirmedTrackExpiryMs: 3000,
+    trackExpiryMs: 10000,  // Extended for IDSW reduction
+    unconfirmedTrackExpiryMs: 6000,
   },
   occlusion: {
     occlusionCoastTimeMs: 8000,
@@ -58,17 +58,17 @@ const NEW_CONSTANTS = {
     maxPillarOcclusionMs: 4000,
   },
   stitching: {
-    maxGapMs: 15000,
+    maxGapMs: 30000,  // Extended to 30s for long gaps
     maxDistanceMultiplier: 5.0,
   },
   reid: {
-    minSimilarity: 0.55,
+    minSimilarity: 0.50,  // Lowered for more permissive matching
     adaptiveMaxReidAgeMs: 15000,
     highSimilarityDistanceOverride: 4.0,
   },
   assignment: {
-    crossCameraBonus: 0.35,
-    crossCameraBonusWindowMs: 4000,
+    crossCameraBonus: 0.30,  // Lower = stronger bonus
+    crossCameraBonusWindowMs: 5000,  // Extended
     embeddingMinSimilarity: 0.50,
   },
   clustering: {
@@ -267,10 +267,10 @@ describe('Algorithm Comparison: Old vs New Constants', () => {
     console.log(`assignment.crossCameraBonusWindowMs| ${OLD_CONSTANTS.assignment.crossCameraBonusWindowMs}    | ${NEW_CONSTANTS.assignment.crossCameraBonusWindowMs}    | +60%`)
     console.log(`clustering.clusteringDistanceM     | ${OLD_CONSTANTS.clustering.clusteringDistanceM}     | ${NEW_CONSTANTS.clustering.clusteringDistanceM}     | +33%`)
 
-    // Verify current constants are the new values
-    expect(ALGORITHM_CONSTANTS.trackLifecycle.trackExpiryMs).toBe(8000)
-    expect(ALGORITHM_CONSTANTS.reid.minSimilarity).toBe(0.55)
-    expect(ALGORITHM_CONSTANTS.stitching.maxGapMs).toBe(15000)
-    expect(ALGORITHM_CONSTANTS.assignment.crossCameraBonus).toBe(0.336)
+    // Verify current constants are the new values (updated after IDSW optimization)
+    expect(ALGORITHM_CONSTANTS.trackLifecycle.trackExpiryMs).toBe(10000)
+    expect(ALGORITHM_CONSTANTS.reid.minSimilarity).toBe(0.50)
+    expect(ALGORITHM_CONSTANTS.stitching.maxGapMs).toBe(30000)
+    expect(ALGORITHM_CONSTANTS.assignment.crossCameraBonus).toBe(0.30)
   })
 })

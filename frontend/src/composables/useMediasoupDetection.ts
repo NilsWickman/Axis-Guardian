@@ -74,7 +74,8 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
       'LiveDetectionView',
       'WebRTCDetectionView',
       'SnapshotView',
-      'FocusView'
+      'FocusView',
+      'Tracking'
     ]
     return router.currentRoute.value.name && cameraRoutes.includes(router.currentRoute.value.name as string)
   }
@@ -114,7 +115,7 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
   const maxVideoSyncBufferSize = 60  // ~2 seconds at 30fps
   let videoSyncInterval: number | null = null
   let lastVideoTime = 0
-  let videoSyncOffset = 0  // Calibrated offset between detection time and video time
+  let videoSyncOffset = 0  // Fallback offset (ms) derived from first metadata with video_time_ms
   let videoSyncCalibrated = false
   const VIDEO_SYNC_TOLERANCE_MS = 50  // Release detection if within 50ms of video time
 
@@ -198,11 +199,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
   const MAX_LATENCY_SAMPLES = 100
   const LATENCY_WINDOW_MS = 1000
   let latencyWindowStart = Date.now()
-
-  // WebRTC path timing stats (using dispatch_time for accurate measurement)
-  const webrtcTimingSamples: number[] = []
-  const MAX_TIMING_SAMPLES = 100
-  let timingLogCounter = 0
 
   // Pending timeouts
   const pendingTimeouts = new Set<number>()
@@ -294,7 +290,7 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
   function getEffectiveOffset(): number {
     const baseOffset = syncCalibration.confidenceLevel > 0.5
       ? syncCalibration.adaptiveOffset
-      : 0
+      : (videoSyncCalibrated ? videoSyncOffset : 0)
 
     // Compensate for drift since last calibration
     let driftCompensation = 0
@@ -310,8 +306,8 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
    * Force recalibration by resetting calibration state
    */
   function forceRecalibration(): void {
-    console.log('[VideoSync] Periodic recalibration triggered')
     videoSyncCalibrated = false
+    videoSyncOffset = 0
     syncCalibration.measuredOffsets = []
     // Don't reset adaptiveOffset - let EMA smooth it
     // Don't reset drift history - keep tracking drift
@@ -416,15 +412,12 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
         wsUrl = wsUrl + '/ws/webrtc'
       }
 
-      console.log(`[Mediasoup] ${cameraId}: Connecting to ${wsUrl}`)
-
       // Create WebSocket connection
       const ws = new WebSocket(wsUrl)
       websocket.value = ws
 
       await new Promise<void>((resolve, reject) => {
         ws.onopen = () => {
-          console.log(`[Mediasoup] ${cameraId}: WebSocket connected`)
           resolve()
         }
         ws.onerror = (error) => {
@@ -444,7 +437,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
       }
 
       ws.onclose = () => {
-        console.log(`[Mediasoup] ${cameraId}: WebSocket closed`)
         handleDisconnect()
       }
 
@@ -454,13 +446,11 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
 
       // Step 1: Get router RTP capabilities
       const rtpCapabilities = await sendRequest<mediasoupTypes.RtpCapabilities>('getRouterRtpCapabilities')
-      console.log(`[Mediasoup] ${cameraId}: Got router RTP capabilities`)
 
       // Step 2: Create mediasoup Device
       const newDevice = new Device()
       await newDevice.load({ routerRtpCapabilities: rtpCapabilities })
       device.value = newDevice
-      console.log(`[Mediasoup] ${cameraId}: Device loaded`)
 
       // Step 3: Create recv transport
       const transportParams = await sendRequest<{
@@ -470,7 +460,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
         dtlsParameters: mediasoupTypes.DtlsParameters
         sctpParameters: mediasoupTypes.SctpParameters
       }>('createTransport')
-      console.log(`[Mediasoup] ${cameraId}: Transport created (id: ${transportParams.id})`)
 
       const recvTransport = newDevice.createRecvTransport({
         id: transportParams.id,
@@ -492,7 +481,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
       })
 
       recvTransport.on('connectionstatechange', (state) => {
-        console.log(`[Mediasoup] ${cameraId}: Transport state: ${state}`)
         connectionState.value = state
         isConnected.value = state === 'connected'
 
@@ -504,7 +492,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
           // Start periodic recalibration timer
           if (recalibrationTimer) clearInterval(recalibrationTimer)
           recalibrationTimer = setInterval(() => {
-            console.log('[VideoSync] Periodic recalibration triggered')
             forceRecalibration()
           }, RECALIBRATION_INTERVAL_MS)
           lastCalibrationTime = Date.now()
@@ -536,7 +523,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
           label: string
         }
       }>('consume', { rtpCapabilities: newDevice.rtpCapabilities })
-      console.log(`[Mediasoup] ${cameraId}: Consumer params received`)
 
       // Create video consumer
       const videoConsumer = await recvTransport.consume({
@@ -558,7 +544,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
 
       // Data channel is open once created
       isDataChannelOpen.value = true
-      console.log(`[Mediasoup] ${cameraId}: Data consumer created`)
       if (shouldShowToast()) {
         toast.success(`Data channel for ${cameraId} ready`, 2000)
       }
@@ -577,9 +562,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
           }
 
           messageCount++
-          if (messageCount <= 3 || messageCount % 100 === 0) {
-            console.log(`[Mediasoup] ${cameraId}: Received detection #${messageCount}, frame=${metadata.frame_number}, video_time_ms=${metadata.video_time_ms?.toFixed(0)}, detections=${metadata.detection_count}`)
-          }
           processMetadata(metadata)
         } catch (error) {
           console.error(`[Mediasoup] ${cameraId}: Error parsing detection:`, error)
@@ -587,7 +569,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
       })
 
       detectionConsumer.on('close', () => {
-        console.log(`[Mediasoup] ${cameraId}: Data consumer closed`)
         isDataChannelOpen.value = false
       })
 
@@ -609,7 +590,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
 
       // Resume consumer
       await sendRequest('resumeConsumer')
-      console.log(`[Mediasoup] ${cameraId}: Consumer resumed`)
 
       // Reset reconnect state
       reconnectAttempts.value = 0
@@ -712,7 +692,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
     }
 
     fallbackAnimationId = requestAnimationFrame(pollFrame)
-    console.log('[VideoSync] Started fallback sync (requestAnimationFrame + currentTime) for iOS/Safari compatibility')
     return true
   }
 
@@ -728,7 +707,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
 
     // Check if requestVideoFrameCallback is supported
     if (!('requestVideoFrameCallback' in video)) {
-      console.warn('[VideoSync] requestVideoFrameCallback not supported, using fallback sync')
       return startVideoFrameTrackingFallback()
     }
 
@@ -747,7 +725,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
         lastVideoRtpTimestamp = rtpTs
         if (!rtpTimestampAvailable) {
           rtpTimestampAvailable = true
-          console.log('[VideoSync] RTP timestamp available from browser, enabling frame-perfect sync')
         }
       }
 
@@ -768,7 +745,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
     }
 
     videoFrameCallbackId = (video as HTMLVideoElement & { requestVideoFrameCallback: (cb: VideoFrameRequestCallback) => number }).requestVideoFrameCallback(frameCallback)
-    console.log('[VideoSync] Started requestVideoFrameCallback tracking')
     return true
   }
 
@@ -805,11 +781,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
 
       const videoTimeMs = videoElement.value.currentTime * 1000
 
-      // Debug: log sync loop state occasionally
-      if (stats.value.framesReceived % 100 === 0) {
-        console.log(`[VideoSync] ${cameraId}: Loop tick - videoTime=${videoTimeMs.toFixed(0)}ms, buffer=${videoSyncBuffer.length}, calibrated=${videoSyncCalibrated}, confidence=${(syncCalibration.confidenceLevel * 100).toFixed(0)}%`)
-      }
-
       // Calibrate offset on first detection with video_time_ms
       if (!videoSyncCalibrated && videoSyncBuffer.length > 0) {
         const firstDetection = videoSyncBuffer[0]
@@ -822,19 +793,16 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
           // If offset is too large (> 10s), assume join-time desync and release immediately.
           const MAX_REASONABLE_OFFSET_MS = 10000  // 10 seconds
           if (Math.abs(rawOffset) > MAX_REASONABLE_OFFSET_MS) {
-            console.log(`[VideoSync] Join-time desync detected (offset ${rawOffset.toFixed(0)}ms > ${MAX_REASONABLE_OFFSET_MS}ms), using immediate release`)
             rawOffset = 0  // Release detections immediately - they match the displayed frame
           }
 
           videoSyncOffset = rawOffset
           videoSyncCalibrated = true
-          console.log(`[VideoSync] Calibrated offset: ${videoSyncOffset.toFixed(0)}ms (detection ahead of video)`)
         }
       }
 
       // Detect video loop/seek (large backward OR forward jump)
       if (videoTimeMs < lastVideoTime - 500 || videoTimeMs > lastVideoTime + 2000) {
-        console.log(`[VideoSync] Video discontinuity (${lastVideoTime.toFixed(0)}ms -> ${videoTimeMs.toFixed(0)}ms), resetting sync`)
         videoSyncBuffer.length = 0
         videoSyncCalibrated = false
         syncCalibration.measuredOffsets = []
@@ -932,14 +900,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
       } else {
         stats.value.videoSyncDelayMs = 0
       }
-
-      // Log sync status periodically
-      if (releasedCount > 0 && stats.value.framesReceived % 100 === 0) {
-        const bufferDepthMs = videoSyncBuffer.length > 0
-          ? (videoSyncBuffer[videoSyncBuffer.length - 1].video_time_ms ?? 0) - videoTimeMs
-          : 0
-        console.log(`[VideoSync] Released ${releasedCount}, buffer: ${videoSyncBuffer.length} items, depth: ${bufferDepthMs.toFixed(0)}ms`)
-      }
     }, 16)  // ~60fps polling for smooth sync
   }
 
@@ -966,7 +926,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
    * Release a detection for processing (called when video catches up)
    */
   function releaseDetection(metadata: DetectionMetadata) {
-    console.log(`[VideoSync] ${cameraId}: Releasing detection frame ${metadata.frame_number} with ${metadata.detection_count} detections`)
     // Emit for person position tracking
     emitWebRTCDetection(metadata)
 
@@ -980,23 +939,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
    */
   function processMetadata(metadata: DetectionMetadata) {
     const now = Date.now()
-
-    // Record WebRTC path timing if dispatch_time is present
-    if (metadata.dispatch_time) {
-      const webrtcLatency = now - metadata.dispatch_time
-      webrtcTimingSamples.push(webrtcLatency)
-      if (webrtcTimingSamples.length > MAX_TIMING_SAMPLES) {
-        webrtcTimingSamples.shift()
-      }
-      // Log every 50 samples
-      timingLogCounter++
-      if (timingLogCounter % 50 === 0) {
-        const avg = webrtcTimingSamples.reduce((a, b) => a + b, 0) / webrtcTimingSamples.length
-        const min = Math.min(...webrtcTimingSamples)
-        const max = Math.max(...webrtcTimingSamples)
-        console.log(`[TIMING] WebRTC path latency - avg: ${avg.toFixed(1)}ms, min: ${min}ms, max: ${max}ms (n=${webrtcTimingSamples.length})`)
-      }
-    }
 
     // Calculate latency for stats
     const latency = now - (metadata.timestamp * 1000)
@@ -1065,10 +1007,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
             syncCalibration.confidenceLevel = Math.min(1, 1000 / (variance + 100))
           }
 
-          // Log calibration status periodically (every 30 samples or first 10)
-          if (syncCalibration.measuredOffsets.length === 10 || syncCalibration.measuredOffsets.length % 30 === 0) {
-            console.log(`[VideoSync] EMA offset: ${syncCalibration.adaptiveOffset.toFixed(0)}ms (drift: ${(detectedDriftRate * 1000).toFixed(2)}ms/s, confidence: ${(syncCalibration.confidenceLevel * 100).toFixed(0)}%)`)
-          }
         }
       }
     }
@@ -1089,7 +1027,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
         currentVideoTimeMs < 200 &&
         metadata.video_time_ms > 500
       ) {
-        console.warn(`[VideoSync] ${cameraId}: Video time not progressing, disabling video-sync buffering`)
         videoSyncDisabled = true
         // Stop the sync loop to avoid buffering/CPU churn
         stopVideoSyncLoop()
@@ -1106,7 +1043,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
         // The detection time needs to be shifted by how much the video has progressed
         const currentVideoTimeMs = videoElement.value.currentTime * 1000
         detectionTimeBaseOffset = currentVideoTimeMs - metadata.video_time_ms
-        console.log(`[VideoSync] Detection loop detected (${lastDetectionVideoTimeMs.toFixed(0)}ms -> ${metadata.video_time_ms.toFixed(0)}ms), new base offset: ${detectionTimeBaseOffset.toFixed(0)}ms`)
 
         // Clear buffers but keep calibration since the relationship should be consistent
         videoSyncBuffer.length = 0
@@ -1123,9 +1059,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
 
       // Add to video sync buffer (sorted by video_time_ms)
       videoSyncBuffer.push(metadata)
-      if (videoSyncBuffer.length % 30 === 1) {
-        console.log(`[VideoSync] ${cameraId}: Buffered detection frame ${metadata.frame_number}, video_time_ms=${metadata.video_time_ms?.toFixed(0)}, buffer size=${videoSyncBuffer.length}`)
-      }
 
       // Trim buffer if too large (drop oldest)
       while (videoSyncBuffer.length > maxVideoSyncBufferSize) {
@@ -1167,7 +1100,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
 
     if (frameDiff < -maxFrameAge) {
       stats.value.droppedStaleDetections++
-      console.log(`[Mediasoup] ${cameraId}: Dropped stale detection frame ${metadata.frame_number} (current: ${currentFrame}, diff: ${frameDiff})`)
       return
     }
 
@@ -1181,7 +1113,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
     if (loopDuration.value !== null) {
       const loopFrameThreshold = loopDuration.value * 30
       if (metadata.frame_number >= loopFrameThreshold && !loopTriggeredThisCycle) {
-        console.log(`[Mediasoup] ${cameraId}: Loop triggered at frame ${metadata.frame_number}`)
         loopTriggeredThisCycle = true
         onLoopCallback?.()
       } else if (metadata.frame_number < loopFrameThreshold / 2 && loopTriggeredThisCycle) {
@@ -1193,8 +1124,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
       for (const callback of onDetectionUpdateCallbacks) {
         callback(metadata)
       }
-    } else {
-      console.warn(`[Mediasoup] ${cameraId}: No detection callbacks registered, detection not propagated to UI`)
     }
   }
 
@@ -1202,8 +1131,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
    * Handle disconnection
    */
   function handleDisconnect(skipAutoReconnect = false) {
-    console.log(`[Mediasoup] ${cameraId}: handleDisconnect`)
-
     isConnected.value = false
     isDataChannelOpen.value = false
 
@@ -1258,8 +1185,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
 
       const baseDelay = opts.reconnectDelay || 3000
       const exponentialDelay = Math.min(baseDelay * Math.pow(2, reconnectAttempts.value - 1), 30000)
-
-      console.log(`[Mediasoup] ${cameraId}: Reconnecting in ${exponentialDelay}ms (attempt ${reconnectAttempts.value})`)
 
       if (shouldShowToast()) {
         toast.info(`Reconnecting ${cameraId} (${reconnectAttempts.value}/${maxReconnectAttempts})...`, Math.min(exponentialDelay, 5000))
@@ -1416,7 +1341,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
    */
   function setVideoSyncOffset(offsetMs: number) {
     manualSyncOffsetMs.value = offsetMs
-    console.log(`[VideoSync] Manual offset set to ${offsetMs}ms`)
   }
 
   /**

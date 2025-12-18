@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3-vite'
+import { action } from '@storybook/addon-actions'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -300,7 +301,7 @@ export const RegistrationForm: Story = {
 
       const handleSubmit = () => {
         if (canSubmit.value) {
-          console.log('Form submitted:', formData.value)
+          action('form submitted')(formData.value)
           alert('Registration form submitted successfully!')
         }
       }

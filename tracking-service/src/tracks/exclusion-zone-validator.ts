@@ -121,8 +121,22 @@ export class ExclusionZoneValidator {
       const sameCamera = cameraId ? trackCameras.includes(cameraId) : false
 
       if (sameCamera) {
-        // Same camera seeing two things close together = two different people
-        // Don't block (they're different people)
+        // Same camera - but check if embeddings suggest same person
+        // This catches local tracker fragmentation (same person, new local ID)
+        if (embedding && embedding.length > 0 && track.attributes?.embedding) {
+          const similarity = cosineSimilarity(embedding, track.attributes.embedding)
+          // If high similarity (>0.6), likely same person - block duplicate track
+          if (similarity > 0.6 && distance < this.config.unconfirmedExclusionRadius) {
+            this.metricsRecorder?.recordExclusionZoneBlock()
+            return {
+              excluded: true,
+              reason: 'unconfirmed_track',
+              blockingTrack: track,
+              distance,
+            }
+          }
+        }
+        // Different people or no embedding to check - don't block
         continue
       }
 

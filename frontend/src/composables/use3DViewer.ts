@@ -172,8 +172,6 @@ export function use3DViewer() {
               // Categorize objects by name
               const name = child.name.toLowerCase()
 
-              console.log(`Found object: ${child.name} (type: ${child.type})`)
-
               if (name.includes('floor')) {
                 sceneObjects.floor.push(child)
               } else if (name.includes('wall')) {
@@ -202,10 +200,7 @@ export function use3DViewer() {
             points: pointCount
           })
         },
-        (progress) => {
-          const percent = (progress.loaded / progress.total) * 100
-          console.log(`Loading: ${percent.toFixed(0)}%`)
-        },
+        () => {},
         (error) => {
           console.error('Error loading GLTF:', error)
           reject(error)

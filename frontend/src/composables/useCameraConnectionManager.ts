@@ -114,7 +114,6 @@ const MAX_SYNC_DRIFT = 0.2 // Maximum allowed drift in seconds before correction
 // NOTE: For WebRTC MediaStreams, pausing to "sync" cameras causes visible stutter/freeze,
 // especially when one stream is naturally slower. Keep this OFF by default.
 const SYNC_ENABLED = false // Enable/disable sync monitoring
-let syncCorrectionCount = 0 // Track number of corrections for debugging
 
 // Connection health monitoring
 let healthMonitorInterval: number | null = null
@@ -195,11 +194,9 @@ async function initializeConnections() {
     // Filter to single camera if in single camera mode
     if (SINGLE_CAMERA_MODE !== null) {
       loadedCameras = loadedCameras.filter(cam => cam.id === SINGLE_CAMERA_MODE)
-      console.log(`[ConnectionManager] Single camera mode: only connecting to ${SINGLE_CAMERA_MODE}`)
     }
 
     cameras.value = loadedCameras
-    console.log('[ConnectionManager] Loaded cameras from config:', cameras.value.length)
 
     // Create connections for all cameras sequentially
     // Sequential connection avoids WebRTC/mediasoup race conditions that can occur
@@ -260,7 +257,6 @@ async function initializeConnections() {
         () => connection.connectionState.value,
         (newState) => {
           cameraConnections[camera.id].isConnected = newState === 'connected'
-          console.log(`[ConnectionManager] ${camera.id} connection state: ${newState}`)
         },
         { immediate: true }
       )
@@ -288,8 +284,6 @@ async function initializeConnections() {
 
     // Start connection health monitoring
     startHealthMonitoring()
-
-    console.log('[ConnectionManager] All connections initialized and monitoring started')
   } catch (error) {
     console.error('[ConnectionManager] Failed to initialize connections:', error)
   } finally {
@@ -395,8 +389,6 @@ function startSyncMonitoring() {
     syncMonitorInterval = null
   }
 
-  console.log('[ConnectionManager] Starting video synchronization monitoring')
-
   syncMonitorInterval = window.setInterval(() => {
     synchronizeVideos()
   }, SYNC_CHECK_INTERVAL)
@@ -409,7 +401,6 @@ function stopSyncMonitoring() {
   if (syncMonitorInterval !== null) {
     clearInterval(syncMonitorInterval)
     syncMonitorInterval = null
-    console.log('[ConnectionManager] Stopped video synchronization monitoring')
   }
 }
 
@@ -449,20 +440,11 @@ function synchronizeVideos() {
 
   // For non-seekable streams (MediaStream/WebRTC), we can't seek currentTime.
   // Instead, we pause streams that are ahead until the lagging stream catches up.
-  const minTime = videoElements.reduce((min, v) => Math.min(min, v.currentTime), Infinity)
 
   // For seekable sources (e.g., VOD), we can still use the old "sync to most advanced" logic.
   const referenceVideo = videoElements.reduce((max, current) =>
     current.currentTime > max.currentTime ? current : max
   )
-
-  // Log sync status every 10 checks (every 20 seconds)
-  if (syncCorrectionCount % 10 === 0) {
-    const drifts = videoElements
-      .map(v => `${v.id}=${v.currentTime.toFixed(2)}s`)
-      .join(', ')
-    console.log(`[ConnectionManager] Sync check - Times: ${drifts}`)
-  }
 
   // Determine if any elements are seekable; if so, do a simple seek-to-reference.
   // Otherwise do live pause/resume based on the slowest stream (minTime).
@@ -482,10 +464,6 @@ function synchronizeVideos() {
         video.element.seekable.length > 0
       if (!isSeekable) continue
 
-      syncCorrectionCount++
-      console.warn(
-        `[ConnectionManager] ⚠️ Sync drift #${syncCorrectionCount}: ${video.id} is ${drift.toFixed(2)}s behind, seeking...`
-      )
       try {
         video.element.currentTime = referenceVideo.currentTime
       } catch (error) {
@@ -511,8 +489,6 @@ function startHealthMonitoring() {
     healthMonitorInterval = null
   }
 
-  console.log('[ConnectionManager] Starting connection health monitoring')
-
   healthMonitorInterval = window.setInterval(() => {
     checkConnectionHealth()
   }, HEALTH_CHECK_INTERVAL)
@@ -525,7 +501,6 @@ function stopHealthMonitoring() {
   if (healthMonitorInterval !== null) {
     clearInterval(healthMonitorInterval)
     healthMonitorInterval = null
-    console.log('[ConnectionManager] Stopped connection health monitoring')
   }
 }
 
@@ -536,13 +511,9 @@ function checkConnectionHealth() {
   for (const [id, conn] of Object.entries(cameraConnections)) {
     const connectionState = conn.connection.connectionState.value
     const isConnected = conn.connection.isConnected.value
-    // Prefer a visible element for health checks; hidden elements may be throttled.
-    const attached = Array.from(conn.attachedVideoElements.values()).filter(Boolean) as HTMLVideoElement[]
-    const videoElement = attached.length > 0 ? attached[0] : conn.videoElement
 
     // Check for failed or disconnected connections
     if (connectionState === 'failed' || connectionState === 'disconnected') {
-      console.warn(`[ConnectionManager] Connection to ${id} is ${connectionState}, attempting recovery...`)
       attemptReconnection(id)
       continue
     }
@@ -555,7 +526,6 @@ function checkConnectionHealth() {
 
       // If stuck for 3 consecutive checks (30 seconds), attempt reconnection
       if (conn.stuckStateCount >= 3) {
-        console.warn(`[ConnectionManager] Connection to ${id} stuck in '${connectionState}' state, attempting recovery...`)
         attemptReconnection(id)
         conn.stuckStateCount = 0
       }
@@ -581,7 +551,6 @@ function checkConnectionHealth() {
       // (Threshold intentionally low to reflect UX; recovery is still rate-limited by HEALTH_CHECK_INTERVAL.)
       const FREEZE_THRESHOLD_MS = 3000
       if (conn.stallMs > FREEZE_THRESHOLD_MS) {
-        console.warn(`[ConnectionManager] Video stream for ${id} stalled for ${conn.stallMs}ms, attempting recovery...`)
         attemptStreamRecovery(id)
         // Reset baseline so we don't immediately re-trigger on the next health tick.
         conn.lastFrameDecodedAt = now
@@ -596,8 +565,6 @@ function checkConnectionHealth() {
 async function attemptReconnection(cameraId: string) {
   const conn = cameraConnections[cameraId]
   if (!conn) return
-
-  console.log(`[ConnectionManager] Reconnecting ${cameraId}...`)
 
   try {
     // Wait a bit before reconnecting
@@ -620,7 +587,6 @@ async function attemptReconnection(cameraId: string) {
 
     // Reconnect
     await conn.connection.connect(videoElement)
-    console.log(`[ConnectionManager] Successfully reconnected ${cameraId}`)
 
     // Re-attach to any visible video elements
     // This will be handled by the views automatically via their attachment logic
@@ -639,15 +605,11 @@ async function attemptStreamRecovery(cameraId: string) {
   const conn = cameraConnections[cameraId]
   if (!conn?.videoElement) return
 
-  console.log(`[ConnectionManager] Attempting stream recovery for ${cameraId}`)
-
   try {
     // Try to restart playback
     await conn.videoElement.play()
-    console.log(`[ConnectionManager] Stream recovery successful for ${cameraId}`)
   } catch (error) {
     // If playback restart fails, attempt full reconnection
-    console.warn(`[ConnectionManager] Playback restart failed, attempting full reconnection for ${cameraId}`)
     await attemptReconnection(cameraId)
   }
 }
@@ -665,12 +627,10 @@ function setLoopForCamera(
 ): boolean {
   const conn = cameraConnections[cameraId]
   if (!conn) {
-    console.warn(`[ConnectionManager] Cannot set loop for unknown camera: ${cameraId}`)
     return false
   }
 
   conn.connection.setLoopDuration(durationSeconds, onLoop)
-  console.log(`[ConnectionManager] Loop set for ${cameraId}: ${durationSeconds}s`)
   return true
 }
 
@@ -703,7 +663,6 @@ function cleanup() {
   })
 
   isInitialized.value = false
-  console.log('[ConnectionManager] All connections cleaned up')
 }
 
 /**

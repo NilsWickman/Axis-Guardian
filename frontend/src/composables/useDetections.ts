@@ -88,13 +88,11 @@ export function useDetections() {
         const client = new Paho.MQTT.Client('localhost', 9001, clientId)
         mqttClient = client
 
-        client.onConnectionLost = (response: any) => {
-          console.warn('MQTT connection lost:', response.errorMessage)
+        client.onConnectionLost = (_response: any) => {
           isConnected.value = false
 
           // Attempt to reconnect after 5 seconds
           setTimeout(() => {
-            console.log('Attempting to reconnect to MQTT...')
             connect().catch(err => console.error('Reconnection failed:', err))
           }, 5000)
         }
@@ -110,7 +108,6 @@ export function useDetections() {
 
         client.connect({
           onSuccess: () => {
-            console.log('Connected to MQTT broker')
             isConnected.value = true
             isConnecting.value = false
 
@@ -174,9 +171,7 @@ export function useDetections() {
 
     try {
       mqttClient.subscribe(topic, {
-        onSuccess: () => {
-          console.log(`Subscribed to detection topic: ${topic}`)
-        },
+        onSuccess: () => {},
         onFailure: (error: any) => {
           console.error(`Failed to subscribe to ${topic}:`, error)
         }
@@ -196,7 +191,6 @@ export function useDetections() {
       const topic = `surveillance/detections/${cameraId}`
       try {
         mqttClient.unsubscribe(topic)
-        console.log(`Unsubscribed from ${topic}`)
       } catch (err) {
         console.error(`Error unsubscribing from ${topic}:`, err)
       }
@@ -262,7 +256,6 @@ export function useDetections() {
     if (mqttClient && isConnected.value) {
       try {
         mqttClient.disconnect()
-        console.log('Disconnected from MQTT broker')
       } catch (err) {
         console.error('Error disconnecting from MQTT:', err)
       }

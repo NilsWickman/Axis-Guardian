@@ -112,17 +112,32 @@ export function useSiteMapCanvas(
   options: Ref<CanvasRenderOptions>
 ) {
   const ctx = ref<CanvasRenderingContext2D | null>(null)
+  let lastCanvas: HTMLCanvasElement | null = null
   const hoveredCameraId = ref<string | null>(null)
   const animationFrameId = ref<number | null>(null)
   const backgroundImage = ref<HTMLImageElement | null>(null)
   const imageLoaded = ref(false)
 
-  const initCanvas = () => {
+  const getCanvasContext = (): CanvasRenderingContext2D | null => {
     const canvas = canvasRef.value
-    if (!canvas) return false
+    if (!canvas) {
+      ctx.value = null
+      lastCanvas = null
+      return null
+    }
 
-    ctx.value = canvas.getContext('2d')
-    return !!ctx.value
+    if (lastCanvas !== canvas) {
+      lastCanvas = canvas
+      ctx.value = canvas.getContext('2d')
+    } else if (!ctx.value) {
+      ctx.value = canvas.getContext('2d')
+    }
+
+    return ctx.value
+  }
+
+  const initCanvas = () => {
+    return !!getCanvasContext()
   }
 
   const resizeCanvas = (width: number, height: number) => {
@@ -135,9 +150,10 @@ export function useSiteMapCanvas(
 
   const clearCanvas = () => {
     const canvas = canvasRef.value
-    if (!canvas || !ctx.value) return
+    const context = getCanvasContext()
+    if (!canvas || !context) return
 
-    ctx.value.clearRect(0, 0, canvas.width, canvas.height)
+    context.clearRect(0, 0, canvas.width, canvas.height)
   }
 
   const loadBackgroundImage = (imagePath?: string): Promise<void> => {
@@ -167,9 +183,8 @@ export function useSiteMapCanvas(
 
   const drawBackgroundImage = () => {
     const canvas = canvasRef.value
-    if (!canvas || !ctx.value || !backgroundImage.value || !imageLoaded.value) return
-
-    const context = ctx.value
+    const context = getCanvasContext()
+    if (!canvas || !context || !backgroundImage.value || !imageLoaded.value) return
 
     // Draw the background image to fit the canvas
     context.save()
@@ -180,11 +195,11 @@ export function useSiteMapCanvas(
 
   const drawGrid = () => {
     const canvas = canvasRef.value
-    if (!canvas || !ctx.value || !options.value.showGrid) return
+    const context = getCanvasContext()
+    if (!canvas || !context || !options.value.showGrid) return
 
     // Always use RENDER_SCALE for grid rendering
     const pixelsPerMeter = RENDER_SCALE
-    const context = ctx.value
     const colors = getCanvasColors()
 
     context.save()
@@ -192,8 +207,6 @@ export function useSiteMapCanvas(
     // Calculate actual canvas dimensions in meters
     const widthInMeters = Math.ceil(canvas.width / pixelsPerMeter)
     const heightInMeters = Math.ceil(canvas.height / pixelsPerMeter)
-
-    console.log(`Drawing grid: ${widthInMeters}m × ${heightInMeters}m (${canvas.width}px × ${canvas.height}px) at ${RENDER_SCALE}px/m`)
 
     // Draw vertical lines - every meter
     for (let meters = 0; meters <= widthInMeters; meters++) {
@@ -298,9 +311,8 @@ export function useSiteMapCanvas(
 
   const drawScaleReference = () => {
     const canvas = canvasRef.value
-    if (!canvas || !ctx.value || !options.value.showScaleReference) return
-
-    const context = ctx.value
+    const context = getCanvasContext()
+    if (!canvas || !context || !options.value.showScaleReference) return
     const { pixelsPerMeter } = options.value
     const colors = getCanvasColors()
 
@@ -364,9 +376,8 @@ export function useSiteMapCanvas(
     hoveredWallId?: string | null,
     hoveredPart?: 'start' | 'end' | 'body' | null
   ) => {
-    if (!ctx.value || !walls || walls.length === 0) return
-
-    const context = ctx.value
+    const context = getCanvasContext()
+    if (!context || !walls || walls.length === 0) return
     const colors = getCanvasColors()
 
     context.save()
@@ -560,9 +571,8 @@ export function useSiteMapCanvas(
     hoveredObstacleId?: string | null,
     selectedObstacleId?: string | null
   ) => {
-    if (!ctx.value || !obstacles || obstacles.length === 0) return
-
-    const context = ctx.value
+    const context = getCanvasContext()
+    if (!context || !obstacles || obstacles.length === 0) return
 
     context.save()
 
@@ -795,9 +805,8 @@ export function useSiteMapCanvas(
     zoneMetrics?: Map<string, ZoneMetricsData>,
     minimal: boolean = false
   ) => {
-    if (!ctx.value || !zones || zones.length === 0) return
-
-    const context = ctx.value
+    const context = getCanvasContext()
+    if (!context || !zones || zones.length === 0) return
 
     context.save()
 
@@ -1277,12 +1286,11 @@ export function useSiteMapCanvas(
     obstacles: Obstacle[] = [],
     otherCameraFOVs: Point[][] = [] // FOV polygons from other cameras for overlap detection
   ) => {
-    if (!ctx.value) return
-
     const canvas = canvasRef.value
     if (!canvas) return
 
-    const context = ctx.value
+    const context = getCanvasContext()
+    if (!context) return
 
     // Extract values from unit objects
     const x = metersToPixels(extractValue(placement.position.x))

@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3-vite'
+import { action } from '@storybook/addon-actions'
 import { ref, computed } from 'vue'
 import {
   User,
@@ -127,7 +128,7 @@ export const Default: Story = {
       })
 
       const onSubmit = form.handleSubmit((values) => {
-        console.log('Login successful!', values)
+        action('login successful')(values)
         alert('Login successful!')
       })
 
@@ -227,7 +228,7 @@ export const RegistrationForm: Story = {
       })
 
       const onSubmit = form.handleSubmit((values) => {
-        console.log('Registration data:', values)
+        action('registration data')(values)
         alert('Registration successful!')
       })
 
@@ -411,7 +412,7 @@ export const ContactForm: Story = {
       })
 
       const onSubmit = form.handleSubmit((values) => {
-        console.log('Contact form:', values)
+        action('contact form')(values)
         alert('Message sent successfully!')
       })
 
@@ -555,7 +556,7 @@ export const SettingsForm: Story = {
       })
 
       const onSubmit = form.handleSubmit((values) => {
-        console.log('Settings:', values)
+        action('settings')(values)
         alert('Settings saved successfully!')
       })
 
@@ -761,7 +762,7 @@ export const PaymentForm: Story = {
       })
 
       const onSubmit = form.handleSubmit((values) => {
-        console.log('Payment data:', values)
+        action('payment data')(values)
         alert('Payment processed successfully!')
       })
 
@@ -1012,7 +1013,7 @@ export const MultiStepForm: Story = {
       }
 
       const onSubmit = form.handleSubmit((values) => {
-        console.log('Form data:', values)
+        action('form data')(values)
         alert('Form submitted successfully!')
       })
 
@@ -1357,7 +1358,7 @@ export const ComprehensiveForm: Story = {
       })
 
       const onSubmit = form.handleSubmit((values) => {
-        console.log('Form data:', values)
+        action('form data')(values)
         alert('Form submitted with all field types!')
       })
 

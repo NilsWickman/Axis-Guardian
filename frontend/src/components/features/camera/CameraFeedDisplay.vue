@@ -82,13 +82,10 @@ const setupVideoStream = async () => {
       // Format: rtsp://host:8554/camera1 -> <hlsBaseUrl>/camera1/index.m3u8
       const streamName = videoSrc.split('/').pop()
       videoSrc = `${config.hlsBaseUrl}/${streamName}/index.m3u8`
-      console.log(`Converted RTSP to HLS: ${props.camera.rtspUrl} -> ${videoSrc}`)
     }
 
     // Check if HLS.js is supported
     if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-      console.log('Using HLS.js for video playback')
-
       // Destroy previous HLS instance if it exists
       if (hls) {
         hls.destroy()
@@ -107,16 +104,10 @@ const setupVideoStream = async () => {
 
       // Handle HLS events
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        console.log('✅ HLS manifest parsed, starting playback')
-        videoRef.value?.play().then(() => {
-          console.log('▶️  Video playback started successfully')
-        }).catch((err: any) => {
-          console.warn('⚠️ Auto-play prevented:', err)
-        })
+        videoRef.value?.play().catch(() => {})
       })
 
       hls.on(Hls.Events.FRAG_LOADED, () => {
-        console.log('📦 HLS fragment loaded')
       })
 
       hls.on(Hls.Events.ERROR, (_event: any, data: any) => {
@@ -124,11 +115,9 @@ const setupVideoStream = async () => {
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              console.log('Network error, attempting to recover...')
               hls.startLoad()
               break
             case Hls.ErrorTypes.MEDIA_ERROR:
-              console.log('Media error, attempting to recover...')
               hls.recoverMediaError()
               break
             default:
@@ -142,11 +131,8 @@ const setupVideoStream = async () => {
 
     } else if (videoRef.value.canPlayType('application/vnd.apple.mpegurl')) {
       // Safari native HLS support
-      console.log('Using native HLS playback (Safari)')
       videoRef.value.src = videoSrc
-      videoRef.value.play().catch((err: any) => {
-        console.warn('Auto-play prevented:', err)
-      })
+      videoRef.value.play().catch(() => {})
     } else {
       console.error('HLS is not supported in this browser')
       emit('stream-error', new Error('HLS not supported'))
@@ -158,16 +144,10 @@ const setupVideoStream = async () => {
       if (videoRef.value) {
         videoNativeWidth.value = videoRef.value.videoWidth || 1920
         videoNativeHeight.value = videoRef.value.videoHeight || 1080
-        console.log(`Video dimensions: ${videoNativeWidth.value}x${videoNativeHeight.value}`)
       }
     }
 
     videoRef.value.onloadeddata = () => {
-      console.log('🎥 Video loadeddata event fired for camera:', props.camera?.name)
-      console.log('Video ready state:', videoRef.value?.readyState)
-      console.log('Video paused:', videoRef.value?.paused)
-      console.log('Video dimensions:', videoRef.value?.videoWidth, 'x', videoRef.value?.videoHeight)
-
       isLoaded.value = true
 
       // Update container dimensions
@@ -179,7 +159,6 @@ const setupVideoStream = async () => {
 
       emit('stream-loaded')
       emit('video-ready', props.camera.id, videoRef.value!)
-      console.log('✅ Video stream loaded for camera:', props.camera?.name)
     }
 
     videoRef.value.onerror = (error: any) => {

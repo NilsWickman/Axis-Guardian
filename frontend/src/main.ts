@@ -7,6 +7,11 @@ import { createPinia } from 'pinia'
 import './index.css'
 import App from './App.vue'
 import router from './router'
+import { configureConsoleLogging } from './utils/logging'
+
+configureConsoleLogging({
+  enableVerbose: import.meta.env.VITE_ENABLE_FRONTEND_LOGS === 'true',
+})
 
 const app = createApp(App)
 const pinia = createPinia()

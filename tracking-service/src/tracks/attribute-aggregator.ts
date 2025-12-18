@@ -158,6 +158,26 @@ export class AttributeAggregator {
   }
 
   /**
+   * Prime the aggregator with an existing embedding (for track revival from archive)
+   * This allows continuing to blend with new detections after re-ID
+   */
+  primeWithEmbedding(embedding: number[], quality: number, sampleCount: number = 1): void {
+    if (embedding.length === 0) return
+
+    // Add the archived embedding with appropriate weight
+    if (this.embeddingSum === null) {
+      this.embeddingSum = embedding.map(v => v * quality)
+    } else if (this.embeddingSum.length === embedding.length) {
+      for (let i = 0; i < embedding.length; i++) {
+        this.embeddingSum[i] += embedding[i] * quality
+      }
+    }
+    this.embeddingWeightSum += quality
+    this.embeddingCount += sampleCount
+    this.sampleCount += sampleCount
+  }
+
+  /**
    * Aggregate clothing attributes from vote maps
    */
   private getAggregatedClothing(

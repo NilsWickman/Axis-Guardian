@@ -50,6 +50,7 @@ import { TrailManager } from './trail-manager.js'
 import { FrameTracker } from './frame-tracker.js'
 import { ExclusionZoneValidator } from './exclusion-zone-validator.js'
 import { LocalTrackStitcher } from './local-track-stitcher.js'
+import { EmbeddingArchive } from '../correlation/embedding-archive.js'
 
 /**
  * Cluster of detections from different cameras that likely represent same person
@@ -138,6 +139,7 @@ export class TrackManager {
   private frameTracker: FrameTracker
   private exclusionValidator: ExclusionZoneValidator
   private localStitcher: LocalTrackStitcher
+  private embeddingArchive: EmbeddingArchive
 
   /** Sitemap geometry for exit detection */
   private siteMapGeometry?: {
@@ -188,9 +190,16 @@ export class TrackManager {
       }
     )
     this.localStitcher = new LocalTrackStitcher({
-      maxGapMs: 3000,
-      maxDistanceMultiplier: 2.5,
+      maxGapMs: ALGORITHM_CONSTANTS.stitching.maxGapMs,  // Use algorithm constant (30s) for long-gap stitching
+      maxDistanceMultiplier: ALGORITHM_CONSTANTS.stitching.maxDistanceMultiplier,
       correlationDistanceM: this.config.correlationDistanceM,
+    })
+    // Embedding archive for long-term re-identification across gaps of minutes
+    this.embeddingArchive = new EmbeddingArchive({
+      maxArchiveAgeMs: 10 * 60 * 1000, // 10 minutes
+      minSimilarity: 0.80,
+      minSampleCount: 1, // Archive even with single sample - we need all embeddings for long gaps
+      minQualityToArchive: 0.01, // Match the threshold in findNearbyTrack
     })
   }
 
@@ -288,7 +297,8 @@ export class TrackManager {
     trackId: number,
     worldX: number,
     worldY: number,
-    confidence: number
+    confidence: number,
+    attributes?: DetectionAttributes
   ): GlobalTrack {
     // For single detection processing, always use current clock time
     // (batch processing uses detection timestamps directly)
@@ -301,6 +311,7 @@ export class TrackManager {
       worldY,
       confidence,
       timestamp: now,
+      attributes,
     }
 
     // First check if this camera+trackId is already associated with a global track
@@ -326,8 +337,7 @@ export class TrackManager {
     }
 
     // Look for nearby track to correlate with
-    const nearbyTrack = this.findNearbyTrack(worldX, worldY, cameraId, trackId)
-
+    const nearbyTrack = this.findNearbyTrack(worldX, worldY, cameraId, trackId, detection.attributes)
     if (nearbyTrack) {
       if (this.associateWithTrack(nearbyTrack, detection)) {
         this.processPendingMerge(nearbyTrack, now)
@@ -336,28 +346,40 @@ export class TrackManager {
       }
     }
 
-    // Check for same-camera stitch candidate (local tracker fragmentation)
-    // This catches cases where YOLOv8 assigned a new track ID to the same person
-    const stitchResult = this.localStitcher.findStitchCandidate(
-      cameraId, trackId, { x: worldX, y: worldY }, now,
-      (id) => this.tracks.get(id)
-    )
-    if (stitchResult.track) {
-      const stitchCandidate = stitchResult.track
-      // Reactivate track if needed
-      if (stitchResult.needsReactivation) {
-        stitchCandidate.isActive = true
-        stitchCandidate.state = stitchCandidate.isConfirmed ? 'confirmed' : 'unconfirmed'
-        if (!this.usedColors.has(stitchCandidate.color)) {
-          this.usedColors.add(stitchCandidate.color)
+    // Check embedding archive for long-term re-identification
+    // This enables re-ID across gaps of minutes when tracks have been deleted
+    if (detection.attributes?.embedding && detection.attributes.embedding.length > 0) {
+      const activeTrackIds = new Set(
+        Array.from(this.tracks.values())
+          .filter(t => t.isActive)
+          .map(t => t.globalTrackId)
+      )
+      const archiveMatch = this.embeddingArchive.findMatch(detection, now, activeTrackIds)
+      if (archiveMatch.entry) {
+        const detPos = { x: worldX, y: worldY }
+        const archivePos = archiveMatch.entry.lastPosition
+        const distanceToArchived = calculateDistance(detPos, archivePos)
+
+        // Apply same-camera bonus: if the archived track was seen on this camera,
+        // it's more likely to be the same person (local tracker fragmentation)
+        const sameCameraMatch = archiveMatch.entry.cameraIds.includes(cameraId)
+
+        // Adaptive threshold based on same-camera match
+        // Same camera: lower threshold (0.68) since local tracker has continuity info
+        // Cross camera: higher threshold (0.90) to avoid false positives
+        const similarityThreshold = sameCameraMatch ? 0.68 : 0.90
+        const maxDistance = sameCameraMatch ? 15.0 : 10.0 // More lenient for same camera
+
+        if (archiveMatch.similarity >= similarityThreshold && distanceToArchived < maxDistance) {
+          // Found a match in the archive - revive the old track identity
+          const revivedTrack = this.reviveArchivedTrack(archiveMatch.entry, detection, now)
+          if (revivedTrack) {
+            // Remove from archive since it's now active again
+            this.embeddingArchive.remove(archiveMatch.entry.globalTrackId)
+            this.onTrackCreated?.(revivedTrack)
+            return revivedTrack
+          }
         }
-      }
-      // Found a recently-ended track from this camera at a nearby position
-      // Associate with it instead of creating a new track
-      if (this.forceAssociateWithTrack(stitchCandidate, detection)) {
-        this.processPendingMerge(stitchCandidate, now)
-        this.onTrackUpdated?.(stitchCandidate)
-        return stitchCandidate
       }
     }
 
@@ -365,6 +387,90 @@ export class TrackManager {
     const newTrack = this.createGlobalTrack(detection)
     this.onTrackCreated?.(newTrack)
     return newTrack
+  }
+
+  /**
+   * Revive an archived track with a new detection
+   * This restores the original global track ID for consistent identity
+   */
+  private reviveArchivedTrack(
+    archived: import('../correlation/embedding-archive.js').ArchivedEmbedding,
+    detection: CameraDetection,
+    now: number
+  ): GlobalTrack | null {
+    // Re-use the original global track ID for consistent identity
+    const globalTrackId = archived.globalTrackId
+    const color = this.assignColor()
+
+    // Initialize Kalman filter state for this track
+    const kalmanState = this.kalmanFilter.initialize(
+      { x: detection.worldX, y: detection.worldY },
+      detection.timestamp
+    )
+
+    // Extract video timing if available
+    const videoTiming = this.extractVideoTiming(detection)
+
+    const track: GlobalTrack = {
+      globalTrackId,
+      cameraAssociations: new Map(),
+      currentPosition: { x: detection.worldX, y: detection.worldY },
+      trail: [{ x: detection.worldX, y: detection.worldY, timestamp: detection.timestamp }],
+      color,
+      lastSeen: detection.timestamp,
+      isActive: true,
+      isConfirmed: false, // Start as unconfirmed until we get more detections
+      detectionCount: 1,
+      confidence: detection.confidence,
+      pendingDetections: [detection],
+      kalmanState,
+      state: 'unconfirmed',
+      missedFrames: 0,
+      consecutiveDetections: 0,
+      videoTiming,
+      // Preserve archived embedding information
+      attributes: {
+        embedding: archived.embedding,
+        embedding_quality: archived.quality,
+        sample_count: archived.sampleCount,
+      },
+    }
+
+    track.cameraAssociations.set(detection.cameraId, {
+      cameraId: detection.cameraId,
+      trackIds: [detection.trackId],
+      lastSeen: detection.timestamp,
+      lastFrameNumber: detection.frameNumber,
+    })
+
+    // Store track first so ensureCameraTrackExclusivity can find it
+    this.tracks.set(globalTrackId, track)
+
+    // Ensure exclusivity - remove this local ID from any other global track
+    this.ensureCameraTrackExclusivity(track, detection.cameraId, detection.trackId)
+
+    // Update camera frame tracker
+    if (detection.frameNumber !== undefined) {
+      this.frameTracker.updateFrame(detection.cameraId, detection.frameNumber, detection.timestamp)
+    }
+
+    // Re-initialize attribute aggregator with archived embedding
+    const aggregator = new AttributeAggregator()
+    // Prime with archived embedding so new detections blend with it
+    if (archived.embedding.length > 0) {
+      aggregator.primeWithEmbedding(archived.embedding, archived.quality, archived.sampleCount)
+    }
+    this.attributeAggregators.set(globalTrackId, aggregator)
+
+    // Aggregate current detection attributes
+    if (detection.attributes) {
+      this.aggregateDetectionAttributes(track, detection.attributes)
+    }
+
+    // Record metrics
+    getMetrics().recordTrackCreated()
+
+    return track
   }
 
   /**
@@ -383,6 +489,8 @@ export class TrackManager {
 
     // Clean up old ended local track entries
     this.localStitcher.cleanup(now)
+    // Clean up old archived embeddings
+    this.embeddingArchive.cleanup(now)
 
     for (const [trackId, track] of this.tracks.entries()) {
       const timeSinceLastSeen = now - track.lastSeen
@@ -454,6 +562,8 @@ export class TrackManager {
           // Not near a pillar or no geometry - expire normally
           track.isActive = false
           this.releaseColor(track.color)
+          // Archive embedding for long-term re-ID before expiring
+          this.embeddingArchive.archiveTrack(track, now)
           this.onTrackExpired?.(track)  // Notify before deletion
           this.tracks.delete(trackId)
           this.kalmanFilter.removeTrackState(trackId)
@@ -578,6 +688,8 @@ export class TrackManager {
 
             track.isActive = false
             this.releaseColor(track.color)
+            // Archive embedding for long-term re-ID before expiring
+            this.embeddingArchive.archiveTrack(track, now)
             // Record expiry metrics
             const creationTime = track.trail[0]?.timestamp ?? track.lastSeen
             getMetrics().recordTrackExpired(now - creationTime, track.isConfirmed)
@@ -595,14 +707,16 @@ export class TrackManager {
 
           track.isActive = false
           this.releaseColor(track.color)
+          // Archive embedding for long-term re-ID before expiring
+          this.embeddingArchive.archiveTrack(track, now)
           // Record expiry metrics
           const creationTime = track.trail[0]?.timestamp ?? track.lastSeen
           getMetrics().recordTrackExpired(now - creationTime, track.isConfirmed)
           this.onTrackExpired?.(track)
         }
 
-        // Remove completely after double expiry time
-        if (timeSinceLastSeen > this.config.trackExpiryMs * 2) {
+        // Remove completely after 5x expiry time (keep for re-ID longer)
+        if (timeSinceLastSeen > this.config.trackExpiryMs * 5) {
           this.tracks.delete(trackId)
           this.kalmanFilter.removeTrackState(trackId)
           this.zoneManager?.clearTrackState(trackId)
@@ -649,6 +763,7 @@ export class TrackManager {
     this.trailManager.clearAllTrails()
     this.frameTracker.clearAll()
     this.localStitcher.clearAll()
+    this.embeddingArchive.clear()
   }
 
   /**
@@ -758,6 +873,36 @@ export class TrackManager {
   }
 
   /**
+   * Ensure a camera-local track ID is only associated with ONE global track.
+   * If another global track has this camera-local ID in its associations,
+   * remove it from that track to prevent FP from duplicate associations.
+   *
+   * This is critical for reducing FP in MOT metrics - when the same person
+   * is tracked by multiple global tracks, each extra track counts as FP.
+   */
+  private ensureCameraTrackExclusivity(
+    targetTrack: GlobalTrack,
+    cameraId: string,
+    localTrackId: number
+  ): void {
+    for (const track of this.tracks.values()) {
+      if (track.globalTrackId === targetTrack.globalTrackId) continue
+      if (!track.isActive) continue
+
+      const assoc = track.cameraAssociations.get(cameraId)
+      if (assoc && assoc.trackIds.includes(localTrackId)) {
+        // Remove this local ID from the other track
+        assoc.trackIds = assoc.trackIds.filter(id => id !== localTrackId)
+
+        // If no more track IDs for this camera, remove the camera association
+        if (assoc.trackIds.length === 0) {
+          track.cameraAssociations.delete(cameraId)
+        }
+      }
+    }
+  }
+
+  /**
    * Find a nearby active track within correlation distance
    * Uses Kalman filter prediction for better accuracy
    *
@@ -769,14 +914,54 @@ export class TrackManager {
     worldX: number,
     worldY: number,
     excludeCameraId?: string,
-    excludeTrackId?: number
+    excludeTrackId?: number,
+    attributes?: DetectionAttributes
   ): GlobalTrack | null {
     let bestMatch: GlobalTrack | null = null
     let bestScore = Infinity  // Lower is better (distance-based)
     const now = this.lastDetectionTimestamp ?? this.clock()
 
+    // Get detection embedding and quality for similarity checking
+    const detectionEmbedding = attributes?.embedding
+    const detectionEmbeddingQuality = attributes?.embedding_quality ?? 0
+
+    // Maximum time to consider reviving an inactive track (for re-ID)
+    // Use a longer window for same-camera detections at very close positions
+    const maxRevivalTimeMs = 5000  // 5 seconds (base)
+    const extendedRevivalTimeMs = 60000  // 60 seconds for same-camera + close position
+
     for (const track of this.tracks.values()) {
-      if (!track.isActive) continue
+      // Allow recently-inactive tracks to be considered for revival
+      const timeSinceLastSeen = now - track.lastSeen
+
+      // Check if this is a same-camera detection - extend revival window for same-camera matches
+      // Local tracker fragmentation is common, so be more lenient about reviving tracks from same camera
+      let useExtendedWindow = false
+      if (excludeCameraId && !track.isActive && timeSinceLastSeen >= maxRevivalTimeMs) {
+        const assoc = track.cameraAssociations.get(excludeCameraId)
+        if (assoc) {
+          // Same camera - extend window more generously
+          const detPos = { x: worldX, y: worldY }
+          const distance = calculateDistance(detPos, track.currentPosition)
+          if (distance < 0.5) {  // Very close position
+            useExtendedWindow = true
+          }
+          // Also extend window for tracks with fragmentation pattern (multiple IDs from same camera)
+          if (assoc.trackIds.length >= 2 && distance < 2.0) {
+            useExtendedWindow = true
+          }
+          // Extend window for any same-camera association if within reasonable distance
+          // This catches the case where global-4 has camera1:[6] and camera1-18 appears
+          if (distance < 4.0 && timeSinceLastSeen < 10000) {
+            useExtendedWindow = true
+          }
+        }
+      }
+
+      const effectiveMaxRevival = useExtendedWindow ? extendedRevivalTimeMs : maxRevivalTimeMs
+      const canRevive = !track.isActive && timeSinceLastSeen < effectiveMaxRevival
+
+      if (!track.isActive && !canRevive) continue
 
       // Check if this track is already associated with this camera+trackId
       if (excludeCameraId && excludeTrackId !== undefined) {
@@ -789,13 +974,16 @@ export class TrackManager {
       const timeSinceUpdate = now - track.lastSeen
 
       // Use Kalman filter prediction if available, fall back to linear prediction
+      // Cap prediction time to avoid unreliable long-term extrapolation
+      const maxPredictionTimeMs = 2000  // Don't trust predictions beyond 2 seconds
+      const effectivePredictionTime = Math.min(timeSinceUpdate, maxPredictionTimeMs)
       let predictedPosition = track.currentPosition
       if (track.kalmanState && timeSinceUpdate > 50) {
-        // Use Kalman prediction
-        predictedPosition = this.kalmanFilter.predict(track.kalmanState, timeSinceUpdate)
+        // Use Kalman prediction with capped time
+        predictedPosition = this.kalmanFilter.predict(track.kalmanState, effectivePredictionTime)
       } else if (track.trail.length >= 2 && timeSinceUpdate > 50) {
-        // Fall back to legacy linear prediction
-        const predicted = predictPosition(track.trail, timeSinceUpdate)
+        // Fall back to legacy linear prediction with capped time
+        const predicted = predictPosition(track.trail, effectivePredictionTime)
         if (predicted) {
           predictedPosition = predicted
         }
@@ -826,15 +1014,33 @@ export class TrackManager {
 
       // Same-camera re-identification bonus: When a detection comes from a camera
       // that already has an association with this track (but with a different local ID),
-      // it's likely local tracker fragmentation. Give small preference to avoid over-merging.
+      // it's likely local tracker fragmentation. Give moderate preference.
+      // But be more conservative for occluded tracks to avoid stealing another person's identity.
       let sameCameraBonus = 0
       if (excludeCameraId) {
         const assoc = track.cameraAssociations.get(excludeCameraId)
-        if (assoc && timeSinceUpdate < 1000) {
-          // This camera was recently tracking this person - likely fragmentation
-          // Small threshold expansion to avoid over-merging different persons
-          threshold = Math.max(threshold * 1.2, 0.8)  // Small expansion
-          sameCameraBonus = 0.2  // Reduce effective distance by 20%
+        // For confirmed (non-occluded) tracks, use a short window
+        // For occluded tracks, be MORE conservative - require very close proximity
+        // This prevents detecting a different person at a similar position
+        if (assoc && track.state !== 'occluded' && timeSinceUpdate < 1000) {
+          // Active track - likely fragmentation
+          threshold = Math.max(threshold * 1.3, 1.0)
+          sameCameraBonus = 0.3
+        } else if (assoc && track.state === 'occluded' && timeSinceUpdate < 5000) {
+          // For occluded tracks, check if Kalman prediction has drifted too far
+          // from the last known position. Excessive drift means the prediction is
+          // unreliable and we should NOT give same-camera bonus.
+          const kalmanDrift = distanceToPredicted < distanceToCurrent
+            ? distanceToCurrent - distanceToPredicted
+            : 0
+          const maxReliableDrift = 1.5  // More than 1.5m drift = unreliable prediction
+
+          if (kalmanDrift < maxReliableDrift && distance < 0.8) {
+            // Kalman prediction is reasonable and detection is close
+            threshold = Math.max(threshold * 1.3, 1.0)
+            sameCameraBonus = 0.2  // Smaller bonus for occluded
+          }
+          // else: excessive drift - no bonus, let distance alone decide
         }
       }
 
@@ -843,13 +1049,65 @@ export class TrackManager {
         const occlusionCoastTimeMs = this.config.occlusionCoastTimeMs ?? 2000
         const timeSinceOcclusion = now - (track.occludedSince ?? now)
         // Gradually expand gate up to 2x based on occlusion duration
-        const expansionFactor = Math.min(2.0, 1.0 + timeSinceOcclusion / occlusionCoastTimeMs)
+        // For same-camera re-acquisition, allow even wider gate (up to 2.5x)
+        const isSameCamera = excludeCameraId && track.cameraAssociations.has(excludeCameraId)
+        const maxExpansion = isSameCamera ? 2.5 : 2.0
+        const expansionFactor = Math.min(maxExpansion, 1.0 + timeSinceOcclusion / occlusionCoastTimeMs)
         threshold *= expansionFactor
       }
 
       if (distance < threshold) {
+        // Calculate embedding similarity if available AND quality is sufficient
+        // Low-quality embeddings (< 0.1) are unreliable and shouldn't be used for matching decisions
+        let embeddingSimilarity = -1  // -1 means no embedding comparison possible
+        const trackEmbedding = track.attributes?.embedding
+        const trackEmbeddingQuality = track.attributes?.embedding_quality ?? 0
+        // Use very low quality threshold since preprocessor outputs 0.02 for all detections
+        const minQualityForMatching = 0.01
+        if (detectionEmbedding && trackEmbedding &&
+            detectionEmbedding.length > 0 && trackEmbedding.length === detectionEmbedding.length &&
+            detectionEmbeddingQuality >= minQualityForMatching && trackEmbeddingQuality >= minQualityForMatching) {
+          embeddingSimilarity = cosineSimilarity(detectionEmbedding, trackEmbedding)
+        }
+
+        // If embeddings are available and clearly mismatch, skip this track entirely
+        // This prevents stealing another person's identity based on spatial proximity alone
+        if (embeddingSimilarity >= 0 && embeddingSimilarity < 0.4) {
+          continue  // Clear embedding mismatch - don't consider this track
+        }
+
+        // Check for same-camera association
+        // When a track already has an association from this camera, it's a strong
+        // candidate for absorbing new trackIds from the same camera (fragmentation)
+        let sameCameraAssocBonus = 1.0
+        if (excludeCameraId) {
+          const assoc = track.cameraAssociations.get(excludeCameraId)
+          if (assoc) {
+            // Track has at least one ID from this camera
+            // This is a strong signal for fragmentation - apply significant bonus
+            sameCameraAssocBonus = 0.3
+            if (assoc.trackIds.length >= 2) {
+              // Track has 2+ IDs from this camera - even stronger fragmentation pattern
+              sameCameraAssocBonus = 0.15
+            }
+          }
+        }
+
         // Calculate score (lower is better)
-        const effectiveDistance = distance * (1 - sameCameraBonus)
+        // Apply embedding bonus more conservatively - embeddings can be noisy
+        let effectiveDistance = distance * (1 - sameCameraBonus)
+        if (embeddingSimilarity >= 0.85) {
+          // Very high embedding similarity - moderate preference
+          effectiveDistance *= 0.7
+        } else if (embeddingSimilarity >= 0.7) {
+          // Good embedding similarity - slight preference
+          effectiveDistance *= 0.85
+        }
+        // Below 0.7: no embedding bonus (but not penalized unless <0.4)
+
+        // Apply same-camera association bonus (strong when applicable)
+        effectiveDistance *= sameCameraAssocBonus
+
         if (effectiveDistance < bestScore) {
           bestScore = effectiveDistance
           bestMatch = track
@@ -1088,6 +1346,9 @@ export class TrackManager {
 
     // Associate with ALL cameras in the cluster
     for (const det of cluster.detections) {
+      // Ensure exclusivity - remove this local ID from any other global track
+      this.ensureCameraTrackExclusivity(track, det.cameraId, det.trackId)
+
       const existingAssoc = track.cameraAssociations.get(det.cameraId)
       if (existingAssoc) {
         if (!existingAssoc.trackIds.includes(det.trackId)) {
@@ -1165,12 +1426,16 @@ export class TrackManager {
       lastFrameNumber: detection.frameNumber,
     })
 
+    // Store track first so ensureCameraTrackExclusivity can find it
+    this.tracks.set(globalTrackId, track)
+
+    // Ensure exclusivity - remove this local ID from any other global track
+    this.ensureCameraTrackExclusivity(track, detection.cameraId, detection.trackId)
+
     // Update camera frame tracker
     if (detection.frameNumber !== undefined) {
       this.frameTracker.updateFrame(detection.cameraId, detection.frameNumber, detection.timestamp)
     }
-
-    this.tracks.set(globalTrackId, track)
 
     // Aggregate attributes if present
     if (detection.attributes) {
@@ -1221,6 +1486,9 @@ export class TrackManager {
         return false
       }
     }
+
+    // Ensure exclusivity - remove this local ID from any other global track
+    this.ensureCameraTrackExclusivity(track, detection.cameraId, detection.trackId)
 
     // Update camera association
     let assoc = track.cameraAssociations.get(detection.cameraId)
@@ -1310,6 +1578,30 @@ export class TrackManager {
   }
 
   private associateWithTrack(track: GlobalTrack, detection: CameraDetection): boolean {
+    // Revive inactive tracks if they are being re-identified
+    if (!track.isActive) {
+      // Check if this is a valid revival (same-camera re-ID with close position)
+      const assoc = track.cameraAssociations.get(detection.cameraId)
+      if (assoc) {
+        // Same camera had this track before - likely local tracker fragmentation
+        track.isActive = true
+        track.state = 'confirmed'  // Revive as confirmed since it was previously confirmed
+        track.color = this.assignColor()  // Reassign a color
+        getMetrics().recordTrackCreated()  // Count as a revival
+      } else {
+        // Cross-camera revival requires stricter matching - only revive if very close
+        const detPos = { x: detection.worldX, y: detection.worldY }
+        const distance = calculateDistance(detPos, track.currentPosition)
+        if (distance > 1.0) {
+          return false  // Too far for cross-camera revival
+        }
+        track.isActive = true
+        track.state = 'confirmed'
+        track.color = this.assignColor()
+        getMetrics().recordTrackCreated()
+      }
+    }
+
     // Velocity sanity check
     const timeDelta = (detection.timestamp - track.lastSeen) / 1000
     if (timeDelta > 0.01) {
@@ -1343,9 +1635,11 @@ export class TrackManager {
         const mahalanobis = this.kalmanFilter.getMahalanobisDistance(track.kalmanState, detPos)
 
         // Relax threshold for same-camera re-identification (likely fragmentation)
+        // Extended window for occluded tracks since they may have been invisible for longer
         const assoc = track.cameraAssociations.get(detection.cameraId)
+        const sameCameraWindow = track.state === 'occluded' ? 6.0 : 2.0
         const isSameCameraReId = assoc && !assoc.trackIds.includes(detection.trackId) &&
-          timeDelta < 2.0  // Increased window for same-camera re-ID
+          timeDelta < sameCameraWindow
         const mahalanobisThreshold = isSameCameraReId ? 8.0 : 4.0  // Increased threshold for same-camera
 
         if (mahalanobis > mahalanobisThreshold) {
@@ -1353,6 +1647,9 @@ export class TrackManager {
         }
       }
     }
+
+    // Ensure exclusivity - remove this local ID from any other global track
+    this.ensureCameraTrackExclusivity(track, detection.cameraId, detection.trackId)
 
     // Update or add camera association
     let assoc = track.cameraAssociations.get(detection.cameraId)
@@ -1717,7 +2014,7 @@ export class TrackManager {
       // If the track was occluded and recently seen by this same camera, prefer reattaching
       // rather than creating a new global track.
       if (anchors.size === 0) {
-        const candidates = new Map<string, { track: GlobalTrack; bestDist: number }>()
+        const candidates = new Map<string, { track: GlobalTrack; bestDist: number; similarity: number }>()
         for (const det of cluster.detections) {
           if (!det.cameraId) continue
           const detPos = { x: det.worldX, y: det.worldY }
@@ -1727,7 +2024,7 @@ export class TrackManager {
             if (t.exitReason !== 'pillar_occlusion' && t.exitReason !== 'partial_occlusion') continue
             const assoc = t.cameraAssociations.get(det.cameraId)
             if (!assoc) continue
-            // Only for the “local ID changed” case
+            // Only for the "local ID changed" case
             if (assoc.trackIds.includes(det.trackId)) continue
             const timeSinceSeenOnThisCam = det.timestamp - assoc.lastSeen
             if (timeSinceSeenOnThisCam < 0 || timeSinceSeenOnThisCam > 2500) continue
@@ -1740,9 +2037,21 @@ export class TrackManager {
             const maxDist = Math.max(0.8, (this.config.correlationDistanceM ?? 1.0) * 0.9)
             if (dist > maxDist) continue
 
+            // Validate with embeddings if available - prevents wrong person from being anchored
+            // This is critical for preventing ID switches when different people are spatially close
+            const detEmb = det.attributes?.embedding
+            const trackEmb = t.attributes?.embedding
+            let similarity = 1.0  // Default to full similarity if no embeddings
+            if (detEmb && trackEmb && detEmb.length > 0 && trackEmb.length === detEmb.length) {
+              similarity = cosineSimilarity(detEmb, trackEmb)
+              // If embedding similarity is too low, this is likely a different person
+              // Don't anchor to this track
+              if (similarity < 0.5) continue
+            }
+
             const existing = candidates.get(t.globalTrackId)
             if (!existing || dist < existing.bestDist) {
-              candidates.set(t.globalTrackId, { track: t, bestDist: dist })
+              candidates.set(t.globalTrackId, { track: t, bestDist: dist, similarity })
             }
           }
         }
@@ -1835,12 +2144,23 @@ export class TrackManager {
       }
     }
 
-    // Try re-identification for unmatched virtual detections with occluded tracks
+    // Try re-identification for unmatched virtual detections with occluded or recently inactive tracks
     // Include both confirmed and unconfirmed occluded tracks - unconfirmed tracks
     // may have transitioned to occluded when disappearing near pillars
-    const occludedTracks = this.getAllTracks().filter(
-      t => t.state === 'occluded' && t.isActive
-    )
+    // Also include recently inactive tracks (not yet deleted) to enable re-ID after expiry
+    const maxReidAgeMs = ALGORITHM_CONSTANTS.reid.adaptiveMaxReidAgeMs
+    const occludedTracks = this.getAllTracks().filter(t => {
+      // Include occluded active tracks
+      if (t.state === 'occluded' && t.isActive) return true
+
+      // Include recently inactive tracks with valid embeddings (for re-ID after expiry)
+      if (!t.isActive && t.attributes?.embedding) {
+        const timeSinceLastSeen = now - t.lastSeen
+        if (timeSinceLastSeen < maxReidAgeMs) return true
+      }
+
+      return false
+    })
 
     const finalUnmatchedClusters: DetectionCluster[] = []
     for (let i = 0; i < unmatchedDetections.length; i++) {
@@ -1865,6 +2185,17 @@ export class TrackManager {
           similarity = cosineSimilarity(detEmb, trackEmb)
         }
         getMetrics().recordReIDMatchSuccess(similarity)
+
+        // Reactivate track if it was inactive (re-ID from expired track)
+        if (!reidentified.isActive) {
+          reidentified.isActive = true
+          // Assign a new color since the old one was released
+          if (!this.usedColors.has(reidentified.color)) {
+            this.usedColors.add(reidentified.color)
+          } else {
+            reidentified.color = this.assignColor()
+          }
+        }
 
         // Restore track from occlusion - preserve confirmation status
         reidentified.state = reidentified.isConfirmed ? 'confirmed' : 'unconfirmed'
@@ -2252,7 +2583,7 @@ export class TrackManager {
     // Preprocessor outputs quality around 0.02, so 0.25 was filtering out valid embeddings
     if (detEmbedding && detEmbedding.length > 0 && detQuality >= 0.01) {
       let bestEmbeddingTrack: GlobalTrack | null = null
-      let bestSimilarity = 0.55  // Lowered from 0.65 to match reid.minSimilarity
+      let bestSimilarity = 0.45  // Lowered to 0.45 - more permissive for same-camera re-ID
 
       for (const track of occludedTracks) {
         const trackEmbedding = track.attributes?.embedding

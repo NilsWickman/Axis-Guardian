@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3-vite'
+import { action } from '@storybook/addon-actions'
 import { ref } from 'vue'
 import {
   Combobox,
@@ -192,7 +193,7 @@ export const FormExample: Story = {
       })
 
       const handleSubmit = () => {
-        console.log('Form submitted:', formData.value)
+        action('form submitted')(formData.value)
       }
 
       return { formData, frameworks, countries, handleSubmit }

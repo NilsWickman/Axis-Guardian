@@ -12,20 +12,15 @@
   const cameraStore = useCameraStore()
 
   onMounted(async () => {
-    console.log('[App] Initializing from JSON config (single source of truth)')
-
     // Initialize camera store from config first
     try {
       await cameraStore.initializeFromConfig()
-      console.log('[App] Camera store initialized from config')
     } catch (error) {
       console.error('[App] Failed to initialize camera store:', error)
     }
 
     // Initialize WebRTC connections (also reads from config)
-    console.log('[App] Initializing global camera connections')
     await connectionManager.initializeConnections()
-    console.log('[App] Camera connections initialized')
   })
 </script>
 
