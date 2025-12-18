@@ -2,7 +2,7 @@
  * Site Map Configuration Types
  *
  * Canonical type definitions for site map configuration.
- * Used by frontend, tracking-service, and any other services.
+ * Used by frontend, backend, and any other services.
  */
 import type { Position2D } from './geometry';
 /**

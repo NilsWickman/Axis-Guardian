@@ -11,7 +11,7 @@ function findRepoRootFromCwd(): string {
     if (parent === current) break
     current = parent
   }
-  // Fallback: assume we are in `tracking-service/`
+  // Fallback: assume we are in `backend/`
   return resolve(process.cwd(), '..')
 }
 
@@ -25,7 +25,7 @@ export function getDefaultReplayDirs(): {
   const recordingsDir =
     process.env.RECORDINGS_DIR
       ? resolve(process.env.RECORDINGS_DIR)
-      : resolve(repoRoot, 'tracking-service', 'recordings')
+      : resolve(repoRoot, 'backend', 'recordings')
 
   const frontendPublicDir =
     process.env.FRONTEND_PUBLIC_DIR
@@ -68,5 +68,4 @@ export function safeBasename(p: string): string {
   const idx = normalized.lastIndexOf('/')
   return idx >= 0 ? normalized.slice(idx + 1) : normalized
 }
-
 

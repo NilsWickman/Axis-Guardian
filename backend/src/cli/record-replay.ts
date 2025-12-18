@@ -4,7 +4,7 @@
  *
  * Creates a recording package by:
  * - copying provided video files into `frontend/public/recordings/<recordingId>/`
- * - starting a tracking-service recorder that captures WS messages into NDJSON
+ * - starting a backend recorder that captures WS messages into NDJSON
  *
  * Usage:
  *   pnpm cli:record --recordingId myrun \
@@ -36,7 +36,7 @@ const program = new Command()
 
 program
   .name('record-replay')
-  .description('Create a replay recording from existing video files + live tracking-service outputs')
+  .description('Create a replay recording from existing video files + live backend outputs')
   .requiredOption('--recordingId <id>', 'Recording ID (used as folder name)')
   .requiredOption('--camera <cameraId=path>', 'Camera mapping (repeat for camera1/camera2)', (v, prev: string[]) => {
     prev.push(v)
@@ -148,5 +148,4 @@ program
   })
 
 program.parse(process.argv)
-
 

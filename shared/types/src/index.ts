@@ -2,7 +2,7 @@
  * Shared types for Axis Guardian
  *
  * This package provides canonical type definitions used across
- * frontend, tracking-service, and other services.
+ * frontend, backend, and other services.
  */
 
 export type { Position2D, Position3D } from './geometry'

@@ -1,6 +1,6 @@
 packages:
   - frontend
-  - tracking-service
+  - backend
   - camera-emulator
   - shared/types
 

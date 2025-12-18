@@ -152,7 +152,7 @@ import { useZoneStore } from '@/stores/zones'
 import { useCameraConnectionManager } from '@/composables/useCameraConnectionManager'
 import { useSiteMapCanvas, type CanvasRenderOptions } from '@/composables/useSiteMapCanvas'
 import { useSiteMapConfig } from '@/composables/useSiteMapConfig'
-import { useTrackingServiceWebSocket } from '@/composables/useTrackingServiceWebSocket'
+import { useBackendWebSocket } from '@/composables/useBackendWebSocket'
 import { useDemoMode } from '@/composables/useDemoMode'
 import { useTheme } from '@/composables/useTheme'
 // Global track store is used by PersonPositionOverlay component
@@ -193,7 +193,7 @@ const canvasOptions = reactive<CanvasRenderOptions>({
 const canvas = useSiteMapCanvas(mapCanvas, ref(canvasOptions))
 
 // Initialize tracking service WebSocket (server-side tracking with K/R/T projection)
-const trackingWs = useTrackingServiceWebSocket({
+const trackingWs = useBackendWebSocket({
   autoReconnect: true,
   reconnectIntervalMs: 3000,
 })
@@ -349,7 +349,7 @@ watch(mapCanvas, (el) => {
   void renderSiteMap()
 }, { flush: 'post' })
 
-// Tracking delay display (rolling average age of latest tracking-service frame per camera)
+// Tracking delay display (rolling average age of latest backend frame per camera)
 const nowMs = ref(Date.now())
 let nowInterval: number | null = null
 const TRACKING_DELAY_AVG_WINDOW_MS = 5000
@@ -375,7 +375,7 @@ function recordDelaySamples(now: number) {
 }
 
 function getTrackingDelayLabel(cameraId: string): string {
-  // If the video decode stalls, show that instead of tracking-service frame age.
+  // If the video decode stalls, show that instead of backend frame age.
   // The previous label only reflected JSON timing and could look "fine" even when video is frozen.
   const vh = videoHealthByCamera.value[cameraId]
   if (connectionStatuses.value[cameraId] && vh && vh.stallMs > 1500) {

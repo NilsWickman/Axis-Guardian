@@ -1,7 +1,7 @@
 {
-  "name": "tracking-service",
+  "name": "backend",
   "version": "1.0.0",
-  "description": "Backend tracking service for person position tracking",
+  "description": "Backend service for person position tracking",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",

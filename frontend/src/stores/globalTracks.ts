@@ -6,7 +6,7 @@
  * merges overlapping FOV detections into single positions.
  *
  * NOTE: Core track types are imported from @axis-guardian/types (shared/types)
- * to ensure consistency with the tracking-service.
+ * to ensure consistency with the backend.
  */
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
@@ -49,9 +49,9 @@ export type {
  * Default tracking configuration values.
  *
  * IMPORTANT: These values MUST match ALGORITHM_CONSTANTS.trackLifecycle in
- * tracking-service/src/config/algorithm-constants.ts
+ * backend/src/config/algorithm-constants.ts
  *
- * The tracking-service is the source of truth. These defaults are provided for:
+ * The backend is the source of truth. These defaults are provided for:
  * 1. Frontend display when server is unavailable
  * 2. Local tracking mode fallback (deprecated)
  * 3. Type safety and consistency checks
@@ -77,14 +77,14 @@ export const DEFAULT_MAX_VELOCITY_MS = DEFAULT_TRACKING_CONFIG_BASE.maxVelocityM
  * Local tracking configuration parameters.
  *
  * Extends TrackingConfigBase from @axis-guardian/types to ensure type consistency
- * with the tracking-service.
+ * with the backend.
  *
  * @deprecated This configuration is only used for legacy local tracking mode
- * (usePersonPositionTracking composable). When using tracking-service WebSocket sync,
+ * (usePersonPositionTracking composable). When using backend WebSocket sync,
  * all tracking logic is handled server-side. The server's ALGORITHM_CONSTANTS is
  * the source of truth for active tracking.
  *
- * For server-synced mode, use the tracking-service REST API to query/modify config.
+ * For server-synced mode, use the backend REST API to query/modify config.
  */
 export type LocalTrackingConfig = TrackingConfigBase
 
@@ -129,12 +129,12 @@ export interface CameraDetection {
 /**
  * Global track that spans multiple cameras
  *
- * NOTE: When using server sync (WebSocket), tracks come from the tracking-service
+ * NOTE: When using server sync (WebSocket), tracks come from the backend
  * in GlobalTrackJSON format. The `pendingDetections` field is only used for
  * legacy local tracking mode (usePersonPositionTracking composable).
  *
  * For server-synced tracks, `pendingDetections` is undefined (not present) as
- * all detection merging is handled by the tracking-service.
+ * all detection merging is handled by the backend.
  */
 export interface GlobalTrack {
   globalTrackId: string
@@ -153,7 +153,7 @@ export interface GlobalTrack {
    * Pending detections for multi-camera merge within time window.
    *
    * @deprecated Only used for legacy local tracking mode. Server-synced tracks
-   * do not have this field as merging is handled by the tracking-service.
+   * do not have this field as merging is handled by the backend.
    * This field is optional - undefined for server tracks, array for local tracks.
    */
   pendingDetections?: CameraDetection[]
@@ -529,7 +529,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
    * Main entry point - process a new detection
    * @deprecated Use server sync (WebSocket) instead. This local tracking method
    * is retained for legacy usePersonPositionTracking composable compatibility.
-   * When using tracking-service WebSocket, use upsertTrackFromServer() instead.
+   * When using backend WebSocket, use upsertTrackFromServer() instead.
    */
   function processDetection(
     cameraId: string,
@@ -687,7 +687,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
   }
 
   // ============================================
-  // Server Sync Methods (for tracking-service WebSocket)
+  // Server Sync Methods (for backend WebSocket)
   // ============================================
 
   // Note: GlobalTrackJSON is imported from @axis-guardian/types (see imports above)
@@ -696,7 +696,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
    * Convert server JSON to frontend GlobalTrack (Map conversion)
    *
    * NOTE: Server-synced tracks do not include `pendingDetections` as all
-   * detection merging is handled by the tracking-service. The field is
+   * detection merging is handled by the backend. The field is
    * intentionally omitted (undefined) to distinguish from local tracks.
    */
   function convertServerTrack(json: GlobalTrackJSON): GlobalTrack {

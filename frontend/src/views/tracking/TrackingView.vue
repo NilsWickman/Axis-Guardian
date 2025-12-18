@@ -211,7 +211,7 @@ import { useZoneStore } from '@/stores/zones'
 import { useCameraConnectionManager } from '@/composables/useCameraConnectionManager'
 import { useSiteMapCanvas, type CanvasRenderOptions } from '@/composables/useSiteMapCanvas'
 import { useSiteMapConfig } from '@/composables/useSiteMapConfig'
-import { useTrackingServiceWebSocket } from '@/composables/useTrackingServiceWebSocket'
+import { useBackendWebSocket } from '@/composables/useBackendWebSocket'
 import { useDemoMode } from '@/composables/useDemoMode'
 import { useTheme } from '@/composables/useTheme'
 import { extractValue, metersToPixels, RENDER_SCALE } from '@/utils/siteMapConversion'
@@ -264,7 +264,7 @@ const canvasOptions = reactive<CanvasRenderOptions>({
 const canvas = useSiteMapCanvas(mapCanvas, ref(canvasOptions))
 const previewCanvas = useSiteMapCanvas(mapPreviewCanvas, ref(canvasOptions))
 
-const trackingWs = useTrackingServiceWebSocket({
+const trackingWs = useBackendWebSocket({
   autoReconnect: true,
   reconnectIntervalMs: 3000,
 })
@@ -383,7 +383,7 @@ function triggerRestartLoading(): void {
 const showMapLoadingOverlay = computed(() => !currentMap.value || isBootLoading.value || isRestarting.value)
 const showVideoLoadingOverlay = computed(() => isBootLoading.value || isRestarting.value)
 
-// Tracking delay display (rolling average age of latest tracking-service frame per camera)
+// Tracking delay display (rolling average age of latest backend frame per camera)
 let nowInterval: number | null = null
 const TRACKING_DELAY_AVG_WINDOW_MS = 5000
 const delaySamplesByCamera = ref(new Map<string, Array<{ t: number; v: number }>>())

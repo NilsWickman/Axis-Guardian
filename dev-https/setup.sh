@@ -108,7 +108,7 @@ else
     echo -e "${YELLOW}$FRONTEND_ENV_LOCAL already exists, skipping${NC}"
 fi
 
-TRACKING_ENV_LOCAL="$SCRIPT_DIR/../tracking-service/.env.local"
+TRACKING_ENV_LOCAL="$SCRIPT_DIR/../backend/.env.local"
 if [ ! -f "$TRACKING_ENV_LOCAL" ]; then
     cat > "$TRACKING_ENV_LOCAL" << 'EOF'
 # HTTPS Development Mode

@@ -172,8 +172,8 @@ Error statistics:
 
 | File | Purpose |
 |------|---------|
-| `tracking-service/src/calibration/calibrate-camera.ts` | CLI calibration tool |
-| `tracking-service/src/calibration/types.ts` | Type definitions |
-| `tracking-service/src/projection/ground-plane.ts` | Projection math |
+| `backend/src/calibration/calibrate-camera.ts` | CLI calibration tool |
+| `backend/src/calibration/types.ts` | Type definitions |
+| `backend/src/projection/ground-plane.ts` | Projection math |
 | `shared/config/sitemap-rectangular-room.json` | Camera configuration |
-| `tracking-service/calibration-result.json` | Calibration output |
+| `backend/calibration-result.json` | Calibration output |

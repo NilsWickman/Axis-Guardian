@@ -223,7 +223,7 @@ importers:
 
   shared/types: {}
 
-  tracking-service:
+  backend:
     dependencies:
       '@fastify/cors':
         specifier: ^9.0.1

@@ -1,25 +1,25 @@
 /**
  * Shared Configuration Types for Axis Guardian
  *
- * Defines the base configuration interface shared between tracking-service
- * and frontend. The tracking-service extends this with additional parameters
+ * Defines the base configuration interface shared between backend
+ * and frontend. The backend extends this with additional parameters
  * while the frontend uses these core values for display and local fallback.
  *
- * IMPORTANT: The tracking-service is the source of truth for all tracking
+ * IMPORTANT: The backend is the source of truth for all tracking
  * configuration. These types define the contract for what the frontend can
  * expect to receive via API when querying server configuration.
  */
 
 /**
- * Base tracking configuration shared between frontend and tracking-service.
+ * Base tracking configuration shared between frontend and backend.
  *
  * These are the core parameters that both services understand and can display.
- * The tracking-service TrackingConfig extends this with many additional
+ * The backend TrackingConfig extends this with many additional
  * algorithm-specific parameters.
  *
  * When adding new fields:
  * 1. Add to this interface if both frontend and backend need it
- * 2. Update tracking-service TrackingConfig to include the field
+ * 2. Update backend TrackingConfig to include the field
  * 3. Update ALGORITHM_CONSTANTS as the source of truth for default values
  */
 export interface TrackingConfigBase {
@@ -41,14 +41,14 @@ export interface TrackingConfigBase {
  * Default values for TrackingConfigBase.
  *
  * IMPORTANT: These values MUST match ALGORITHM_CONSTANTS.trackLifecycle in
- * tracking-service/src/config/algorithm-constants.ts
+ * backend/src/config/algorithm-constants.ts
  *
  * These defaults are provided for:
  * 1. Frontend display when server is unavailable
  * 2. Local tracking mode fallback (deprecated)
  * 3. Documentation and consistency checks
  *
- * Source of truth: ALGORITHM_CONSTANTS.trackLifecycle in tracking-service
+ * Source of truth: ALGORITHM_CONSTANTS.trackLifecycle in backend
  */
 export const DEFAULT_TRACKING_CONFIG_BASE: TrackingConfigBase = {
   correlationDistanceM: 1.0,  // ALGORITHM_CONSTANTS.trackLifecycle.correlationDistanceM

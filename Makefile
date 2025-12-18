@@ -1,4 +1,4 @@
-.PHONY: setup dev help clean check-pnpm kill-ports _kill-ports _kill-https-ports dev-frontend dev-camera dev-tracking db-seed db-reset debug-tracking debug-tracking-stop https-setup dev-https https-stop
+.PHONY: setup dev help clean check-pnpm kill-ports _kill-ports _kill-https-ports dev-frontend dev-camera dev-backend dev-tracking db-seed db-reset debug-backend debug-tracking debug-backend-stop debug-tracking-stop https-setup dev-https https-stop
 
 # Colors for output
 CYAN := \033[0;36m
@@ -38,26 +38,26 @@ setup: check-pnpm ## Install all dependencies and seed database
 	@echo "$(GREEN)✓ Camera emulator dependencies installed$(NC)"
 	@echo ""
 
-	@echo "$(GREEN)[3/4] Installing tracking-service dependencies...$(NC)"
-	@cd tracking-service && pnpm install
-	@echo "$(GREEN)✓ Tracking service dependencies installed$(NC)"
+	@echo "$(GREEN)[3/4] Installing backend dependencies...$(NC)"
+	@cd backend && pnpm install
+	@echo "$(GREEN)✓ Backend dependencies installed$(NC)"
 	@echo ""
 
-	@echo "$(GREEN)[4/4] Seeding tracking-service database...$(NC)"
-	@cd tracking-service && pnpm db:seed
+	@echo "$(GREEN)[4/4] Seeding backend database...$(NC)"
+	@cd backend && pnpm db:seed
 	@echo "$(GREEN)✓ Database seeded from shared/config/sitemap-rectangular-room.json$(NC)"
 	@echo ""
 
 	@echo "$(GREEN)Setup complete! Run 'make dev' to start all development servers.$(NC)"
 
-db-seed: ## Seed the tracking-service database from shared config
+db-seed: ## Seed the backend database from shared config
 	@echo "$(CYAN)Seeding database...$(NC)"
-	@cd tracking-service && pnpm db:seed
+	@cd backend && pnpm db:seed
 	@echo "$(GREEN)✓ Database seeded$(NC)"
 
-db-reset: ## Reset and re-seed the tracking-service database
+db-reset: ## Reset and re-seed the backend database
 	@echo "$(CYAN)Resetting database...$(NC)"
-	@cd tracking-service && pnpm db:reset
+	@cd backend && pnpm db:reset
 	@echo "$(GREEN)✓ Database reset and re-seeded$(NC)"
 
 kill-ports: ## Kill any processes using development ports (5173, 9101, 3010) - USE WITH CAUTION
@@ -91,14 +91,14 @@ _kill-https-ports:
 	done
 	@echo "$(GREEN)✓ HTTPS ports cleared$(NC)"
 
-dev: ## Start all development servers (frontend + camera-emulator + tracking-service)
+dev: ## Start all development servers (frontend + camera-emulator + backend)
 	@echo "$(CYAN)Starting development servers...$(NC)"
 	@echo ""
 	@# Kill any existing processes on dev ports
 	@$(MAKE) _kill-ports
 	@echo "$(YELLOW)Starting frontend dev server (port 5173)...$(NC)"
 	@echo "$(YELLOW)Starting camera-emulator (port 9101)...$(NC)"
-	@echo "$(YELLOW)Starting tracking-service (port 3010)...$(NC)"
+	@echo "$(YELLOW)Starting backend (port 3010)...$(NC)"
 	@echo ""
 	@FRONTEND_PID=0; \
 	CAMERA_PID=0; \
@@ -114,7 +114,7 @@ dev: ## Start all development servers (frontend + camera-emulator + tracking-ser
 		exit 0; \
 	}; \
 	trap cleanup INT TERM; \
-	(cd tracking-service && exec pnpm run dev) & \
+	(cd backend && exec pnpm run dev) & \
 	TRACKING_PID=$$!; \
 	sleep 1; \
 	(cd camera-emulator && exec pnpm run dev) & \
@@ -132,15 +132,18 @@ dev-camera: ## Start only the camera emulator
 	@echo "$(CYAN)Starting camera emulator...$(NC)"
 	@cd camera-emulator && pnpm run dev
 
-dev-tracking: ## Start only the tracking service
-	@echo "$(CYAN)Starting tracking service...$(NC)"
-	@cd tracking-service && pnpm run dev
+dev-backend: ## Start only the backend
+	@echo "$(CYAN)Starting backend...$(NC)"
+	@cd backend && pnpm run dev
+
+dev-tracking:
+	@$(MAKE) dev-backend
 
 clean: ## Remove node_modules from all projects
 	@echo "$(CYAN)Cleaning up...$(NC)"
 	@rm -rf frontend/node_modules
 	@rm -rf camera-emulator/node_modules
-	@rm -rf tracking-service/node_modules
+	@rm -rf backend/node_modules
 	@echo "$(GREEN)✓ Cleanup complete$(NC)"
 
 check: ## Check if all dependencies are installed
@@ -149,12 +152,12 @@ check: ## Check if all dependencies are installed
 	@command -v ffmpeg >/dev/null 2>&1 && echo "$(GREEN)✓ ffmpeg installed$(NC)" || echo "$(YELLOW)✗ ffmpeg not installed (required for camera-emulator)$(NC)"
 	@[ -d "frontend/node_modules" ] && echo "$(GREEN)✓ Frontend dependencies installed$(NC)" || echo "$(YELLOW)✗ Frontend dependencies not installed$(NC)"
 	@[ -d "camera-emulator/node_modules" ] && echo "$(GREEN)✓ Camera emulator dependencies installed$(NC)" || echo "$(YELLOW)✗ Camera emulator dependencies not installed$(NC)"
-	@[ -d "tracking-service/node_modules" ] && echo "$(GREEN)✓ Tracking service dependencies installed$(NC)" || echo "$(YELLOW)✗ Tracking service dependencies not installed$(NC)"
+	@[ -d "backend/node_modules" ] && echo "$(GREEN)✓ Backend dependencies installed$(NC)" || echo "$(YELLOW)✗ Backend dependencies not installed$(NC)"
 
 # Database path for debug operations
-DB_PATH := tracking-service/data/tracking.db
+DB_PATH := backend/data/tracking.db
 
-debug-tracking: ## Clear debug tables, start recording, wait for Ctrl+C to stop
+debug-backend: ## Clear debug tables, start recording, wait for Ctrl+C to stop
 	@echo "$(CYAN)Starting debug tracking session...$(NC)"
 	@echo ""
 	@echo "$(YELLOW)[1/2] Clearing debug tables...$(NC)"
@@ -175,7 +178,7 @@ debug-tracking: ## Clear debug tables, start recording, wait for Ctrl+C to stop
 	@trap 'curl -s -X POST http://localhost:3010/api/debug/session/end -H "Content-Type: application/json" -d "{}" >/dev/null; echo ""; echo "$(GREEN)✓ Debug recording stopped$(NC)"; echo ""; echo "$(CYAN)Query data: sqlite3 $(DB_PATH)$(NC)"; exit 0' INT; \
 	while true; do sleep 1; done
 
-debug-tracking-stop: ## Stop the current debug recording session
+debug-backend-stop: ## Stop the current debug recording session
 	@echo "$(CYAN)Stopping debug tracking session...$(NC)"
 	@curl -s -X POST http://localhost:3010/api/debug/session/end \
 		-H "Content-Type: application/json" \
@@ -190,6 +193,12 @@ debug-tracking-stop: ## Stop the current debug recording session
 	@echo "$(CYAN)Example queries:$(NC)"
 	@echo "  SELECT * FROM debug_sessions ORDER BY started_at DESC LIMIT 1;"
 	@echo "  SELECT camera_id, world_x, world_y FROM debug_projected_positions LIMIT 20;"
+
+debug-tracking:
+	@$(MAKE) debug-backend
+
+debug-tracking-stop:
+	@$(MAKE) debug-backend-stop
 
 # HTTPS Development Environment
 https-setup: ## One-time HTTPS setup (mkcert + certs)
@@ -206,7 +215,7 @@ dev-https: ## Start all services with HTTPS (requires https-setup first)
 	@echo "$(GREEN)Starting nginx HTTPS proxy...$(NC)"
 	@cd dev-https && docker-compose up -d
 	@echo ""
-	@echo "$(YELLOW)Starting tracking-service (port 3010)...$(NC)"
+	@echo "$(YELLOW)Starting backend (port 3010)...$(NC)"
 	@echo "$(YELLOW)Starting camera-emulator (port 9101)...$(NC)"
 	@echo "$(YELLOW)Starting frontend dev server (port 5173)...$(NC)"
 	@echo ""
@@ -231,7 +240,7 @@ dev-https: ## Start all services with HTTPS (requires https-setup first)
 		exit 0; \
 	}; \
 	trap cleanup INT TERM; \
-	(cd tracking-service && CORS_ORIGIN="https://axis.local,https://localhost:5173" exec pnpm run dev) & \
+	(cd backend && CORS_ORIGIN="https://axis.local,https://localhost:5173" exec pnpm run dev) & \
 	TRACKING_PID=$$!; \
 	echo "Waiting for tracking service to be ready..."; \
 	until curl -s http://localhost:3010/api/health > /dev/null 2>&1; do sleep 0.5; done; \

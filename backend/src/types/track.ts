@@ -139,7 +139,7 @@ export interface CameraDetection {
 }
 
 // ============================================================================
-// Kalman Filter State (internal to tracking-service)
+// Kalman Filter State (internal to backend)
 // ============================================================================
 
 /**
