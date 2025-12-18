@@ -1,5 +1,5 @@
 # Store large preprocessed videos via Git LFS
 shared/cameras/preprocessed/**/*.mp4 filter=lfs diff=lfs merge=lfs -text
-
+*.mp4 filter=lfs diff=lfs merge=lfs -text
 *.detections.json filter=lfs diff=lfs merge=lfs -text
 *.detections.json.gz filter=lfs diff=lfs merge=lfs -text
