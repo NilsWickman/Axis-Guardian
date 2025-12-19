@@ -236,6 +236,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
 
   // UI settings
   const showTrails = ref(true)
+  const disableClientExpiry = ref(false)
 
   // Reactive timestamp for time-based computed properties (updated by components)
   // This allows activeTracks to re-evaluate when time passes, not just when tracks change
@@ -246,6 +247,13 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     // Access lastCleanupTimestamp to create reactive dependency on time
     // This ensures the computed re-evaluates when the timestamp is updated
     void lastCleanupTimestamp.value
+
+    // During replay, we rely on recorded track_expired events (and snapshot resets) to remove tracks.
+    // Client-side expiry based on Date.now() causes flicker when the video is paused.
+    if (disableClientExpiry.value) {
+      return Array.from(tracks.value.values()).filter(track => track.isActive && track.isConfirmed)
+    }
+
     const now = Date.now()
     const occlusionGraceMs = 2000
     // Maximum time to display occluded tracks even with predictions (client-side failsafe)
@@ -757,9 +765,19 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
       existing.predictedPosition = converted.predictedPosition
       existing.videoTiming = converted.videoTiming
       existing.attributes = converted.attributes
+      // Merge cameraDetections instead of replacing - preserve recent detections from other cameras
+      // This prevents bbox flickering when a track is only visible in one camera for a frame
+      if (converted.cameraDetections) {
+        existing.cameraDetections = {
+          ...existing.cameraDetections,
+          ...converted.cameraDetections,
+        }
+      }
     } else {
       // Check if this track was recently expired (prevents zombie tracks from late updates)
-      if (recentlyExpiredTracks.value.has(converted.globalTrackId)) {
+      // Skip this check during replay mode (disableClientExpiry=true) because events are processed
+      // much faster than real-time, so wall-clock-based expiry tracking doesn't work correctly
+      if (!disableClientExpiry.value && recentlyExpiredTracks.value.has(converted.globalTrackId)) {
         // Skip inserting - this is a late update for an expired track
         return
       }
@@ -826,10 +844,15 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     lastCleanupTimestamp.value = Date.now()
   }
 
+  function setDisableClientExpiry(disabled: boolean): void {
+    disableClientExpiry.value = disabled
+  }
+
   return {
     // State
     tracks,
     showTrails,
+    disableClientExpiry,
     config, // Configurable tracking parameters
     trackingFrameInfo, // Frame info for timing diagnostics
     // Getters
@@ -855,6 +878,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     getFrameInfoForCamera,
     getAllFrameInfo,
     triggerCleanup,
+    setDisableClientExpiry,
     // For testing/debugging
     findNearbyTrack,
   }

@@ -140,7 +140,7 @@ program
   .name('record-preprocessed-once')
   .description('One-shot: replay preprocessed HC3+HC4 detections once and record a replay package')
   .option('--recordingId <id>', 'Recording ID (folder name)', `preprocessed-${Date.now()}`)
-  .option('--base-path <path>', 'Base path containing preprocessed assets', '/home/nilwi971/projects/Axis-Guardian/shared/cameras/preprocessed/1080p')
+  .option('--base-path <path>', 'Base path containing camera assets', '/home/nilwi971/projects/Axis-Guardian/shared/cameras')
   .option('--hc3-detections <path>', 'HC3 detections file (.json or .json.gz)')
   .option('--hc4-detections <path>', 'HC4 detections file (.json or .json.gz)')
   .option('--hc3-video <path>', 'HC3 video file (.mp4)')
@@ -151,10 +151,10 @@ program
     const basePath = String(options.basePath)
     const snapshotIntervalMs = Number(options.snapshotIntervalMs ?? '2000')
 
-    const hc3Detections = options.hc3Detections ?? `${basePath}/view-HC3-reid.detections.json.gz`
-    const hc4Detections = options.hc4Detections ?? `${basePath}/view-HC4-reid.detections.json.gz`
-    const hc3Video = options.hc3Video ?? `${basePath}/view-HC3-preprocessed.mp4`
-    const hc4Video = options.hc4Video ?? `${basePath}/view-HC4-preprocessed.mp4`
+    const hc3Detections = options.hc3Detections ?? `${basePath}/view-HC3.detections.json.gz`
+    const hc4Detections = options.hc4Detections ?? `${basePath}/view-HC4.detections.json.gz`
+    const hc3Video = options.hc3Video ?? `${basePath}/view-HC3.mp4`
+    const hc4Video = options.hc4Video ?? `${basePath}/view-HC4.mp4`
 
     // Start backend in-process on an ephemeral port.
     const { app } = await createServerWithComponents({ host: '127.0.0.1', port: 0 })

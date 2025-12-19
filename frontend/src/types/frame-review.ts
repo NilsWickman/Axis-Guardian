@@ -75,24 +75,18 @@ export interface VideoFileOption {
 }
 
 // Available preprocessed video files
-// Using uncompressed JSON since Vite dev server doesn't auto-decompress .gz
+// Video file options for frame review
 export const AVAILABLE_VIDEOS: VideoFileOption[] = [
   {
-    id: 'hc3-preprocessed',
-    displayName: 'HC3 Preprocessed',
-    videoPath: '/preprocessed/1080p/view-HC3-preprocessed.mp4',
-    detectionsPath: '/preprocessed/1080p/view-HC3-preprocessed.detections.json',
+    id: 'hc3',
+    displayName: 'Camera HC3',
+    videoPath: '/cameras/view-HC3.mp4',
+    detectionsPath: '/cameras/view-HC3.detections.json.gz',
   },
   {
-    id: 'hc4-preprocessed',
-    displayName: 'HC4 Preprocessed',
-    videoPath: '/preprocessed/1080p/view-HC4-preprocessed.mp4',
-    detectionsPath: '/preprocessed/1080p/view-HC4-preprocessed.detections.json',
-  },
-  {
-    id: 'hc3-rendered',
-    displayName: 'HC3 Rendered',
-    videoPath: '/preprocessed/1080p/view-HC3-rendered.mp4',
-    detectionsPath: '/preprocessed/1080p/view-HC3-rendered.detections.json',
+    id: 'hc4',
+    displayName: 'Camera HC4',
+    videoPath: '/cameras/view-HC4.mp4',
+    detectionsPath: '/cameras/view-HC4.detections.json.gz',
   },
 ]

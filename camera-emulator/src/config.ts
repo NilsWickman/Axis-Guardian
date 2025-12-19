@@ -7,7 +7,7 @@ import path from 'path'
 import type { CameraConfig } from './types.js'
 
 // Allow environment override for Docker deployment
-const BASE_PATH = process.env.VIDEO_PATH || '/home/nilwi971/projects/Axis-Guardian/shared/cameras/preprocessed/1080p'
+const BASE_PATH = process.env.VIDEO_PATH || '/home/nilwi971/projects/Axis-Guardian/shared/cameras'
 
 export const TRACKING_SERVICE_URL = process.env.TRACKING_SERVICE_URL || 'http://localhost:3010'
 
@@ -54,6 +54,12 @@ function pickExistingPath(candidates: string[]): string | undefined {
 }
 
 function detectionsCandidates(basePath: string, viewName: string) {
+  // New naming convention: {viewName}.detections.json(.gz)
+  const standard = [
+    path.join(basePath, `${viewName}.detections.json.gz`),
+    path.join(basePath, `${viewName}.detections.json`),
+  ]
+  // Legacy naming conventions for backward compatibility
   const reid = [
     path.join(basePath, `${viewName}-reid.detections.json.gz`),
     path.join(basePath, `${viewName}-reid.detections.json`),
@@ -63,10 +69,10 @@ function detectionsCandidates(basePath: string, viewName: string) {
     path.join(basePath, `${viewName}-preprocessed.detections.json`),
   ]
 
-  if (DETECTIONS_VARIANT === 'reid') return [...reid, ...preprocessed]
-  if (DETECTIONS_VARIANT === 'preprocessed') return [...preprocessed, ...reid]
-  // auto
-  return [...reid, ...preprocessed]
+  if (DETECTIONS_VARIANT === 'reid') return [...reid, ...standard, ...preprocessed]
+  if (DETECTIONS_VARIANT === 'preprocessed') return [...preprocessed, ...standard, ...reid]
+  // auto - prefer new standard naming first
+  return [...standard, ...reid, ...preprocessed]
 }
 
 function resolveDetectionsPath(basePath: string, viewName: string): string {
@@ -82,8 +88,8 @@ function resolveDetectionsPath(basePath: string, viewName: string): string {
 export const cameras: CameraConfig[] = [
   {
     cameraId: 'camera-HC3',
-    videoPath: path.join(BASE_PATH, 'view-HC3-preprocessed.mp4'),
-    // Detections (auto-select reid vs preprocessed based on availability)
+    videoPath: path.join(BASE_PATH, 'view-HC3.mp4'),
+    // Detections (auto-select based on availability)
     detectionsPath: resolveDetectionsPath(BASE_PATH, 'view-HC3'),
     port: 9101,
     trackingCameraId: 'camera1',
@@ -91,8 +97,8 @@ export const cameras: CameraConfig[] = [
   },
   {
     cameraId: 'camera-HC4',
-    videoPath: path.join(BASE_PATH, 'view-HC4-preprocessed.mp4'),
-    // Detections (auto-select reid vs preprocessed based on availability)
+    videoPath: path.join(BASE_PATH, 'view-HC4.mp4'),
+    // Detections (auto-select based on availability)
     detectionsPath: resolveDetectionsPath(BASE_PATH, 'view-HC4'),
     port: 9102,
     trackingCameraId: 'camera2',

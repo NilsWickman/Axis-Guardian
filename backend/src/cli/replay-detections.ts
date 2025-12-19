@@ -1,16 +1,12 @@
 #!/usr/bin/env node
 /**
- * CLI Tool: Replay Preprocessed Detections
+ * CLI Tool: Replay Detections
  *
- * Replays detection data from preprocessed JSON files to the tracking service,
+ * Replays detection data from JSON files to the tracking service,
  * simulating camera emulators sending real detection data.
  *
  * Usage:
- *   # With re-ID embeddings (recommended):
- *   pnpm cli:replay --file ../shared/cameras/preprocessed/1080p/view-HC3-reid.detections.json.gz --camera camera1
- *
- *   # Without embeddings (spatial-only):
- *   pnpm cli:replay --file ../shared/cameras/preprocessed/1080p/view-HC3-preprocessed.detections.json.gz --camera camera1
+ *   pnpm cli:replay --file ../shared/cameras/view-HC3.detections.json.gz --camera camera1
  *
  *   # With options:
  *   pnpm cli:replay --file detections.json --camera camera1 --speed 2.0 --loop
@@ -252,6 +248,7 @@ async function replayFrames(frames: Frame[], options: ReplayOptions): Promise<vo
           camera_id: cameraId,
           timestamp: frame.timestamp,
           frame_number: frame.frame_number,
+          video_time_ms: Math.round(frame.timestamp * 1000),  // Video position in ms for bbox sync
           detection_count: frame.detections.length,
           detections: frame.detections.map(d => ({
             class_name: d.class_name,

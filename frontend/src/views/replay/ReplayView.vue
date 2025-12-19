@@ -17,7 +17,7 @@
           title="Show detection bounding boxes on video"
           @click="showDetectionBoxes = !showDetectionBoxes"
         >
-          Boxes
+          Boxes <span class="ml-1 font-mono opacity-80">({{ visibleDetectionBoxes.length }})</span>
         </button>
 
         <select
@@ -87,18 +87,48 @@
               @loadedmetadata="onLoadedMetadata"
               @play="onPlay"
               @pause="onPause"
-              @seeking="onSeeking"
+              @seeked="onSeeked"
+              @timeupdate="onTimeUpdate"
             />
 
-            <div v-if="isDebugMode && showDetectionBoxes" class="absolute inset-0 pointer-events-none">
+            <div v-if="isDebugMode" class="absolute left-2 top-2 z-20 pointer-events-none">
+              <div class="px-2 py-1 rounded bg-black/60 text-white text-[11px] font-mono leading-relaxed">
+                <div>cam={{ selectedCameraId }} t={{ currentVideoTimeMs }}ms</div>
+                <div>tracks={{ globalTrackStore.activeTracks.length }} boxes={{ visibleDetectionBoxes.length }}</div>
+                <div>layout: {{ videoLayout.drawW.toFixed(0) }}x{{ videoLayout.drawH.toFixed(0) }} offset={{ videoLayout.offsetX.toFixed(0) }},{{ videoLayout.offsetY.toFixed(0) }}</div>
+                <div v-if="visibleDetectionBoxes[0]">
+                  box0: x={{ visibleDetectionBoxes[0].bbox.x.toFixed(3) }} y={{ visibleDetectionBoxes[0].bbox.y.toFixed(3) }}
+                </div>
+              </div>
+            </div>
+
+            <div v-if="isDebugMode && showDetectionBoxes" class="absolute inset-0 z-10 pointer-events-none">
+              <!-- Calibration crosshairs at video corners to verify coordinate system -->
+              <div
+                class="absolute w-4 h-4 border-l-2 border-t-2 border-yellow-400"
+                :style="{ left: `${videoLayout.offsetX}px`, top: `${videoLayout.offsetY}px` }"
+              />
+              <div
+                class="absolute w-4 h-4 border-r-2 border-t-2 border-yellow-400"
+                :style="{ left: `${videoLayout.offsetX + videoLayout.drawW - 16}px`, top: `${videoLayout.offsetY}px` }"
+              />
+              <div
+                class="absolute w-4 h-4 border-l-2 border-b-2 border-yellow-400"
+                :style="{ left: `${videoLayout.offsetX}px`, top: `${videoLayout.offsetY + videoLayout.drawH - 16}px` }"
+              />
+              <div
+                class="absolute w-4 h-4 border-r-2 border-b-2 border-yellow-400"
+                :style="{ left: `${videoLayout.offsetX + videoLayout.drawW - 16}px`, top: `${videoLayout.offsetY + videoLayout.drawH - 16}px` }"
+              />
+              <!-- Detection boxes -->
               <div
                 v-for="b in visibleDetectionBoxes"
                 :key="b.id"
                 class="absolute border-2 bg-black/0"
                 :style="detectionBoxStyle(b)"
               >
-                <div class="absolute -top-5 left-0 px-1.5 py-0.5 rounded bg-black/60 text-white text-[10px] font-mono">
-                  {{ b.label }}
+                <div class="absolute -top-5 left-0 px-1.5 py-0.5 rounded bg-black/60 text-white text-[10px] font-mono whitespace-nowrap">
+                  {{ b.label }}|{{ b.cameraTrackId }} @{{ b.detVideoTimeMs ?? '?' }}ms
                 </div>
               </div>
             </div>
@@ -245,11 +275,15 @@ function refreshOverlayRect(): void {
 interface VisibleDetectionBox {
   id: string
   label: string
-  color: string
+  cameraTrackId: string
   bbox: { x: number; y: number; width: number; height: number }
+  detVideoTimeMs?: number
 }
 
+// Use currentSec as reactive dependency so visibleDetectionBoxes updates during playback
 const currentVideoTimeMs = computed(() => {
+  // Depend on currentSec to make this reactive during video playback
+  void currentSec.value
   const v = masterVideo.value
   return v ? Math.round(v.currentTime * 1000) : 0
 })
@@ -259,20 +293,27 @@ const visibleDetectionBoxes = computed<VisibleDetectionBox[]>(() => {
   if (!camId) return []
   const nowMs = currentVideoTimeMs.value
 
-  return globalTrackStore.activeTracks
-    .map((t) => {
-      const det = t.cameraDetections?.[camId]
-      const bbox = det?.bbox
-      if (!bbox) return null
-      if (typeof det.videoTimeMs === 'number' && Math.abs(det.videoTimeMs - nowMs) > 140) return null
-      return {
-        id: `${t.globalTrackId}:${camId}`,
-        label: t.globalTrackId.replace('global-', '#'),
-        color: t.color,
-        bbox,
-      }
+  const results: VisibleDetectionBox[] = []
+  for (const t of globalTrackStore.activeTracks) {
+    const det = t.cameraDetections?.[camId]
+    const bbox = det?.bbox
+    if (!bbox) continue
+    if (typeof det.videoTimeMs === 'number' && Math.abs(det.videoTimeMs - nowMs) > 500) continue
+
+    // Get camera-specific track ID from associations
+    const camAssoc = t.cameraAssociations?.get(camId)
+    const camTrackIds = camAssoc?.trackIds ?? []
+    const camTrackId = camTrackIds.length > 0 ? `cam${camTrackIds[camTrackIds.length - 1]}` : '?'
+
+    results.push({
+      id: `${t.globalTrackId}:${camId}`,
+      label: t.globalTrackId.replace('global-', 'G'),
+      cameraTrackId: camTrackId,
+      bbox,
+      detVideoTimeMs: det.videoTimeMs,
     })
-    .filter((x): x is VisibleDetectionBox => x !== null)
+  }
+  return results
 })
 
 function detectionBoxStyle(b: VisibleDetectionBox): Record<string, string> {
@@ -286,7 +327,7 @@ function detectionBoxStyle(b: VisibleDetectionBox): Record<string, string> {
     top: `${top}px`,
     width: `${width}px`,
     height: `${height}px`,
-    borderColor: b.color,
+    borderColor: '#3b82f6',
   }
 }
 
@@ -349,7 +390,13 @@ function onPause(): void {
   isPlaying.value = false
 }
 
-async function onSeeking(): Promise<void> {
+function onTimeUpdate(): void {
+  const v = masterVideo.value
+  if (!v) return
+  currentSec.value = v.currentTime
+}
+
+async function onSeeked(): Promise<void> {
   const v = masterVideo.value
   if (!v) return
   await replay.seekTo(Math.round(v.currentTime * 1000))
@@ -363,7 +410,6 @@ async function onScrub(e: Event): Promise<void> {
   isPlaying.value = false
   v.currentTime = value
   currentSec.value = value
-  await replay.seekTo(Math.round(value * 1000))
 }
 
 function togglePlay(): void {

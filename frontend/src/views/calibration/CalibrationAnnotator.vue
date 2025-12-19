@@ -19,15 +19,15 @@ const { siteMap: activeSiteMap, loadSiteMap } = useSiteMapConfig()
 const cameraSources = [
   {
     cameraId: 'camera1',
-    videoFile: 'hc3-preprocessed',
-    videoPath: AVAILABLE_VIDEOS.find(v => v.id === 'hc3-preprocessed')?.videoPath ?? '',
-    detectionsPath: AVAILABLE_VIDEOS.find(v => v.id === 'hc3-preprocessed')?.detectionsPath ?? '',
+    videoFile: 'hc3',
+    videoPath: AVAILABLE_VIDEOS.find(v => v.id === 'hc3')?.videoPath ?? '',
+    detectionsPath: AVAILABLE_VIDEOS.find(v => v.id === 'hc3')?.detectionsPath ?? '',
   },
   {
     cameraId: 'camera2',
-    videoFile: 'hc4-preprocessed',
-    videoPath: AVAILABLE_VIDEOS.find(v => v.id === 'hc4-preprocessed')?.videoPath ?? '',
-    detectionsPath: AVAILABLE_VIDEOS.find(v => v.id === 'hc4-preprocessed')?.detectionsPath ?? '',
+    videoFile: 'hc4',
+    videoPath: AVAILABLE_VIDEOS.find(v => v.id === 'hc4')?.videoPath ?? '',
+    detectionsPath: AVAILABLE_VIDEOS.find(v => v.id === 'hc4')?.detectionsPath ?? '',
   },
 ]
 

@@ -783,8 +783,8 @@ program
 
     console.log('\n--- MOT-like (retargeted) ---')
     const trackTruths = loadJson<TrackTruthsDataset>('/home/nilwi971/projects/Axis-Guardian/TrackTruths.json')
-    const det1 = loadDetectionGzOrJson('/home/nilwi971/projects/Axis-Guardian/shared/cameras/preprocessed/1080p/view-HC3-reid.detections.json.gz') as DetectionFile
-    const det2 = loadDetectionGzOrJson('/home/nilwi971/projects/Axis-Guardian/shared/cameras/preprocessed/1080p/view-HC4-reid.detections.json.gz') as DetectionFile
+    const det1 = loadDetectionGzOrJson('/home/nilwi971/projects/Axis-Guardian/shared/cameras/view-HC3.detections.json.gz') as DetectionFile
+    const det2 = loadDetectionGzOrJson('/home/nilwi971/projects/Axis-Guardian/shared/cameras/view-HC4.detections.json.gz') as DetectionFile
 
     const events = await loadSlimReplayEvents(eventsPath)
     const mot = replayMOTLike({ events, trackTruths, det1, det2, sampleEveryN })

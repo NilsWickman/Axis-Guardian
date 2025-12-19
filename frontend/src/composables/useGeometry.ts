@@ -1014,8 +1014,8 @@ export function calculateVisibleFOVWithArcs(
       )
 
       // Calculate angular difference to determine arc direction
-      let startNorm = normalizeAngle(arcStartAngle!)
-      let endNorm = normalizeAngle(arcEndAngle)
+      const startNorm = normalizeAngle(arcStartAngle!)
+      const endNorm = normalizeAngle(arcEndAngle)
 
       // We want the arc on the far side from camera (the occluded side)
       // Calculate which direction gives us the arc facing away from camera

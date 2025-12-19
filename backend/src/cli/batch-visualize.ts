@@ -664,9 +664,9 @@ async function main() {
       }
 
       // Load detection files
-      const detectionsDir = join(projectRoot, 'shared/cameras/preprocessed/1080p')
-      const camera1Detections = await loadDetectionFile(join(detectionsDir, 'view-HC3-preprocessed.detections.json'))
-      const camera2Detections = await loadDetectionFile(join(detectionsDir, 'view-HC4-preprocessed.detections.json'))
+      const detectionsDir = join(projectRoot, 'shared/cameras')
+      const camera1Detections = await loadDetectionFile(join(detectionsDir, 'view-HC3.detections.json.gz'))
+      const camera2Detections = await loadDetectionFile(join(detectionsDir, 'view-HC4.detections.json.gz'))
 
       // Determine frames to process
       let framesToProcess: number[]

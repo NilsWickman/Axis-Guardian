@@ -14,9 +14,9 @@ const FRONTEND_RECORDINGS_DIR = resolve(repoRoot, 'frontend', 'public', 'recordi
 
 const SEGMENT_MS = 30_000
 const OUTPUT_IDS = [
-  'beginning, many people walking',
-  'middle two stationary objects',
-  'end many people running',
+  'segment-beginning',
+  'segment-middle',
+  'segment-end',
 ]
 
 type Manifest = {
@@ -32,6 +32,7 @@ type NdjsonEvent = {
   payload?: {
     track?: {
       videoTiming?: { videoTimeMs?: number }
+      cameraDetections?: Record<string, { videoTimeMs?: number }>
     }
     [key: string]: unknown
   }
@@ -42,6 +43,35 @@ type Snapshot = {
   videoTimeMs?: number
   state?: unknown
   [key: string]: unknown
+}
+
+function shiftTrackVideoTimes(track: unknown, startMs: number): void {
+  if (!track || typeof track !== 'object') return
+  const t = track as {
+    videoTiming?: { videoTimeMs?: unknown }
+    cameraDetections?: Record<string, { videoTimeMs?: unknown }> | unknown
+  }
+
+  if (t.videoTiming && typeof t.videoTiming.videoTimeMs === 'number') {
+    t.videoTiming.videoTimeMs = Math.max(0, t.videoTiming.videoTimeMs - startMs)
+  }
+
+  if (!t.cameraDetections || typeof t.cameraDetections !== 'object') return
+  for (const det of Object.values(t.cameraDetections as Record<string, unknown>)) {
+    if (!det || typeof det !== 'object') continue
+    const d = det as { videoTimeMs?: unknown }
+    if (typeof d.videoTimeMs === 'number') {
+      d.videoTimeMs = Math.max(0, d.videoTimeMs - startMs)
+    }
+  }
+}
+
+function shiftSnapshotState(snapshot: Snapshot, startMs: number): Snapshot {
+  if (!snapshot.state || typeof snapshot.state !== 'object') return snapshot
+  const state = snapshot.state as { tracks?: unknown }
+  if (!Array.isArray(state.tracks)) return snapshot
+  for (const t of state.tracks) shiftTrackVideoTimes(t, startMs)
+  return snapshot
 }
 
 function encodeRecordingId(recordingId: string): string {
@@ -150,10 +180,7 @@ async function filterEvents(args: {
     evt.seq = seq
     evt.videoTimeMs = shifted
 
-    const timing = evt.payload?.track?.videoTiming
-    if (timing && typeof timing.videoTimeMs === 'number') {
-      timing.videoTimeMs = Math.max(0, timing.videoTimeMs - args.startMs)
-    }
+    shiftTrackVideoTimes(evt.payload?.track, args.startMs)
 
     out.write(`${JSON.stringify(evt)}\n`)
   }
@@ -208,9 +235,11 @@ async function filterSnapshots(args: {
     (inWindow.length > 0 ? inWindow[0] : null) ??
     ({ videoTimeMs: 0, state: { tracks: [], zones: [], zoneMetrics: [] } } satisfies Snapshot)
 
+  shiftSnapshotState(base, args.startMs)
   out.write(`${JSON.stringify({ ...base, videoTimeMs: 0 })}\n`)
 
   for (const snap of inWindow) {
+    shiftSnapshotState(snap, args.startMs)
     const shifted = Math.max(0, (snap.videoTimeMs ?? 0) - args.startMs)
     if (shifted === 0) continue
     out.write(`${JSON.stringify({ ...snap, videoTimeMs: shifted })}\n`)

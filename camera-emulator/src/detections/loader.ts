@@ -35,9 +35,9 @@ export async function loadDetections(
         [
           `Detections file not found: ${filePath}`,
           `If you're running on the VPS, make sure you've copied detections to your VIDEO_PATH (often /opt/axis-guardian/videos).`,
-          `Expected filenames commonly include:`,
-          `  - view-HC3-preprocessed.detections.json.gz`,
-          `  - view-HC4-preprocessed.detections.json.gz`,
+          `Expected filenames:`,
+          `  - view-HC3.detections.json.gz`,
+          `  - view-HC4.detections.json.gz`,
           `Optionally, you can set DETECTIONS_VARIANT=preprocessed|reid|auto (default: auto).`,
         ].join('\n')
       )

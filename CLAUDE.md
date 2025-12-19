@@ -112,7 +112,7 @@ cd backend && pnpm cli:start --sitemap ../frontend/public/sitemap-rectangular-ro
 pnpm cli:sitemap --watch --trails
 
 # Terminal 3: Replay detection data
-pnpm cli:replay -f ../shared/cameras/preprocessed/1080p/view-HC3-reid.detections.json.gz -c camera1
+pnpm cli:replay -f ../shared/cameras/view-HC3.detections.json.gz -c camera1
 ```
 
 ### Visualization Tools
@@ -154,15 +154,15 @@ The backend uses re-identification (ReID) embeddings for improved cross-camera p
 
 ### Detection Files
 
-Detection files in `shared/cameras/preprocessed/1080p/` contain 512-dimensional OSNet embeddings and clothing color attributes:
+Detection files in `shared/cameras/` contain 512-dimensional OSNet embeddings and clothing color attributes:
 
-- `view-HC3-reid.detections.json.gz` - Camera 1 detections with ReID embeddings
-- `view-HC4-reid.detections.json.gz` - Camera 2 detections with ReID embeddings
+- `view-HC3.detections.json.gz` - Camera 1 detections with ReID embeddings
+- `view-HC4.detections.json.gz` - Camera 2 detections with ReID embeddings
 
 ### CLI Replay
 
 ```bash
-pnpm cli:replay -f ../shared/cameras/preprocessed/1080p/view-HC3-reid.detections.json.gz -c camera1
+pnpm cli:replay -f ../shared/cameras/view-HC3.detections.json.gz -c camera1
 ```
 
 ### ReID Metrics
@@ -179,17 +179,13 @@ The backend exposes re-ID metrics via the `/api/metrics` endpoint:
 To generate ReID embeddings for new video files:
 
 ```bash
-cd scripts/preprocessing
-
-# Install torchreid (for OSNet model)
-pip install torchreid
+# Install dependencies
+pip install -r scripts/requirements-preprocess.txt
 
 # Process video with embeddings
-python yolo_reid_preprocessor.py \
-  --input ../../shared/cameras/videos/view-HC3.mp4 \
-  --output view-HC3-reid.detections.json \
-  --enable-reid \
-  --enable-colors
+python scripts/preprocess-video.py \
+  shared/cameras/view-HC3.mp4 \
+  --output shared/cameras/view-HC3.detections.json.gz
 ```
 
 ## Documentation

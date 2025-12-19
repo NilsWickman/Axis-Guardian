@@ -6,7 +6,7 @@ Usage:
     python scripts/chart_detections.py [path_to_detections.json.gz]
 
 If no path is provided, defaults to:
-    shared/cameras/preprocessed/1080p/view-HC3-rendered.detections.json.gz
+    shared/cameras/view-HC3.detections.json.gz
 """
 
 import gzip
@@ -101,7 +101,7 @@ def create_chart(frame_numbers: list[int], person_counts: list[int],
 
 def main():
     # Default path
-    default_path = "shared/cameras/preprocessed/1080p/view-HC3-rendered.detections.json.gz"
+    default_path = "shared/cameras/view-HC3.detections.json.gz"
 
     filepath = sys.argv[1] if len(sys.argv) > 1 else default_path
 

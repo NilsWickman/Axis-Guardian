@@ -130,12 +130,12 @@ describe('System Performance Metrics', () => {
     // Load detection files
     detectionFiles = new Map()
     const cameraConfigs = [
-      { cameraId: 'camera1', file: 'view-HC3-reid.detections.json.gz' },
-      { cameraId: 'camera2', file: 'view-HC4-reid.detections.json.gz' },
+      { cameraId: 'camera1', file: 'view-HC3.detections.json.gz' },
+      { cameraId: 'camera2', file: 'view-HC4.detections.json.gz' },
     ]
 
     for (const config of cameraConfigs) {
-      const filePath = join(__dirname, '../../../shared/cameras/preprocessed/1080p', config.file)
+      const filePath = join(__dirname, '../../../shared/cameras', config.file)
       const detFile = loadDetectionFile(filePath)
       if (detFile) {
         detectionFiles.set(config.cameraId, detFile)

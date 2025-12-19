@@ -582,9 +582,9 @@ async function generateVisualization(
   console.log(`Found ${frameAnnotations.length} ground truth annotations for frame ${frameNumber}`)
 
   // Load detection files
-  const detectionsDir = join(projectRoot, 'shared/cameras/preprocessed/1080p')
-  const camera1DetPath = join(detectionsDir, 'view-HC3-preprocessed.detections.json')
-  const camera2DetPath = join(detectionsDir, 'view-HC4-preprocessed.detections.json')
+  const detectionsDir = join(projectRoot, 'shared/cameras')
+  const camera1DetPath = join(detectionsDir, 'view-HC3.detections.json.gz')
+  const camera2DetPath = join(detectionsDir, 'view-HC4.detections.json.gz')
 
   const camera1Detections = await loadDetectionFile(camera1DetPath)
   const camera2Detections = await loadDetectionFile(camera2DetPath)

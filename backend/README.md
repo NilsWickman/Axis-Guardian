@@ -36,8 +36,8 @@ pnpm cli:inject --camera camera1 --world "5.2,3.8"
 # Simulate a person walking from point A to B
 pnpm cli:simulate --from "0,0" --to "10,10" --speed 1.4 --rate 10
 
-# Replay preprocessed detection file
-pnpm cli:replay -f ../shared/cameras/preprocessed/1080p/view-HC3-preprocessed.detections.json -c camera1 --speed 2.0
+# Replay detection file
+pnpm cli:replay -f ../shared/cameras/view-HC3.detections.json.gz -c camera1 --speed 2.0
 ```
 
 #### Monitoring & Visualization
@@ -88,7 +88,7 @@ pnpm cli:start --sitemap ../frontend/public/sitemap-rectangular-room.json
 pnpm cli:sitemap --watch --trails
 
 # Terminal 3: Replay detection data
-pnpm cli:replay -f ../shared/cameras/preprocessed/1080p/view-HC3-preprocessed.detections.json -c camera1
+pnpm cli:replay -f ../shared/cameras/view-HC3.detections.json.gz -c camera1
 
 # Terminal 4: Monitor track state
 pnpm cli:query --watch

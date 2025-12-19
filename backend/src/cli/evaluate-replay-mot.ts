@@ -292,7 +292,7 @@ program
   .description('Evaluate a replay recording using the existing MOT-like metrics logic')
   .requiredOption('-r, --recording <dir>', 'Path to recording directory (contains events.ndjson)')
   .option('--track-truths <path>', 'Path to TrackTruths.json', '/home/nilwi971/projects/Axis-Guardian/TrackTruths.json')
-  .option('--detections-dir <dir>', 'Directory containing preprocessed detection files', '/home/nilwi971/projects/Axis-Guardian/shared/cameras/preprocessed/1080p')
+  .option('--detections-dir <dir>', 'Directory containing detection files', '/home/nilwi971/projects/Axis-Guardian/shared/cameras')
   .option('--sample-every <n>', 'Sample every Nth combined frame (like the test)', '10')
   .action((opts) => {
     const recordingDir = resolve(String(opts.recording))
