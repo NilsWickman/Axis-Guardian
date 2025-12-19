@@ -71,7 +71,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onActivated, ref } from 'vue'
 import { config } from '@/config/environment'
 import type { ReplayManifest } from '@/types/replay'
 
@@ -121,6 +121,13 @@ async function load(): Promise<void> {
   }
 }
 
+// Load on mount
 onMounted(load)
+
+// Reload when navigating back (for keep-alive or route reuse)
+onActivated(() => {
+  // Always reload when component is activated to show fresh data
+  void load()
+})
 </script>
 
