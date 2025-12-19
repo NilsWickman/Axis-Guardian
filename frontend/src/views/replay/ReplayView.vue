@@ -298,7 +298,8 @@ const visibleDetectionBoxes = computed<VisibleDetectionBox[]>(() => {
     const det = t.cameraDetections?.[camId]
     const bbox = det?.bbox
     if (!bbox) continue
-    if (typeof det.videoTimeMs === 'number' && Math.abs(det.videoTimeMs - nowMs) > 500) continue
+    // Allow 2 second tolerance for replay scenarios where events are batched
+    if (typeof det.videoTimeMs === 'number' && Math.abs(det.videoTimeMs - nowMs) > 2000) continue
 
     // Get camera-specific track ID from associations
     const camAssoc = t.cameraAssociations?.get(camId)

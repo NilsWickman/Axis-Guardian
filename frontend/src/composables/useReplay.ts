@@ -132,13 +132,14 @@ export function useReplay(options: UseReplayOptions) {
       if (!video) return
       const nowMs = video.currentTime * 1000
 
-      // Drop old buffered events to cap memory
+      // IMPORTANT: Flush events FIRST, then prune old ones.
+      // This ensures events are applied before being dropped.
+      flushBufferedEvents(nowMs)
+
+      // Drop old buffered events to cap memory (only events already past current time)
       while (buffer.length > 0 && buffer[0].videoTimeMs < nowMs - keepBehindMs) {
         buffer.shift()
       }
-
-      // Release events up to (now + tolerance)
-      flushBufferedEvents(nowMs)
 
       // Prefetch ahead if we are running low
       void ensurePrefetch(nowMs)
