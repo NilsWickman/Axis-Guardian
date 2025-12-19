@@ -202,8 +202,8 @@ function getGhostInterpolatedPosition(track: GlobalTrack, now: number): { x: num
   const cappedElapsed = Math.min(elapsed, 5)
 
   // Extrapolate position: startPosition + velocity * time
-  let x = state.ghostStartPosition.x + state.velocity.x * cappedElapsed
-  let y = state.ghostStartPosition.y + state.velocity.y * cappedElapsed
+  const x = state.ghostStartPosition.x + state.velocity.x * cappedElapsed
+  const y = state.ghostStartPosition.y + state.velocity.y * cappedElapsed
 
   // Update the state's position for trail drawing continuity
   state.position = { x, y }

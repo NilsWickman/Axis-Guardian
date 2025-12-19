@@ -5,8 +5,8 @@ import { AVAILABLE_VIDEOS } from '@/types/frame-review'
 
 /** Camera ID to video source mapping */
 const CAMERA_VIDEO_MAP: Record<string, string> = {
-  camera1: 'hc3-preprocessed',
-  camera2: 'hc4-preprocessed',
+  camera1: 'hc3',
+  camera2: 'hc4',
 }
 
 /** Number of thumbnails to extract per track */

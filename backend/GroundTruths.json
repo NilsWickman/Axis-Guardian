@@ -9,13 +9,13 @@
   "cameras": [
     {
       "cameraId": "camera1",
-      "videoFile": "hc3-preprocessed",
-      "detectionsFile": "/preprocessed/1080p/view-HC3-preprocessed.detections.json"
+      "videoFile": "hc3",
+      "detectionsFile": "/cameras/view-HC3.detections.json.gz"
     },
     {
       "cameraId": "camera2",
-      "videoFile": "hc4-preprocessed",
-      "detectionsFile": "/preprocessed/1080p/view-HC4-preprocessed.detections.json"
+      "videoFile": "hc4",
+      "detectionsFile": "/cameras/view-HC4.detections.json.gz"
     }
   ],
   "annotations": [
@@ -31,7 +31,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 11,
           "timestamp": 0.3670337003670337,
           "trackId": 298,
@@ -44,7 +44,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 11,
           "timestamp": 0.3670337003670337,
           "trackId": 3,
@@ -69,7 +69,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 11,
           "timestamp": 0.3670337003670337,
           "trackId": 300,
@@ -82,7 +82,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 11,
           "timestamp": 0.3670337003670337,
           "trackId": 8,
@@ -107,7 +107,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 11,
           "timestamp": 0.3670337003670337,
           "trackId": 2,
@@ -120,7 +120,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 11,
           "timestamp": 0.3670337003670337,
           "trackId": 301,
@@ -145,7 +145,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 11,
           "timestamp": 0.3670337003670337,
           "trackId": 5,
@@ -170,7 +170,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 132,
           "timestamp": 4.404404404404405,
           "trackId": 24,
@@ -183,7 +183,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 132,
           "timestamp": 4.404404404404405,
           "trackId": 321,
@@ -208,7 +208,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 132,
           "timestamp": 4.404404404404405,
           "trackId": 4,
@@ -233,7 +233,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 132,
           "timestamp": 4.404404404404405,
           "trackId": 44,
@@ -258,7 +258,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 211,
           "timestamp": 7.040373707040374,
           "trackId": 24,
@@ -271,7 +271,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 211,
           "timestamp": 7.040373707040374,
           "trackId": 321,
@@ -296,7 +296,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 211,
           "timestamp": 7.040373707040374,
           "trackId": 67,
@@ -309,7 +309,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 211,
           "timestamp": 7.040373707040374,
           "trackId": 335,
@@ -334,7 +334,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 339,
           "timestamp": 11.311311311311313,
           "trackId": 345,
@@ -347,7 +347,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 339,
           "timestamp": 11.311311311311313,
           "trackId": 24,
@@ -372,7 +372,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 339,
           "timestamp": 11.311311311311313,
           "trackId": 350,
@@ -397,7 +397,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 339,
           "timestamp": 11.311311311311313,
           "trackId": 354,
@@ -422,7 +422,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 339,
           "timestamp": 11.311311311311313,
           "trackId": 347,
@@ -447,7 +447,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 339,
           "timestamp": 11.311311311311313,
           "trackId": 67,
@@ -460,7 +460,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 339,
           "timestamp": 11.311311311311313,
           "trackId": 351,
@@ -485,7 +485,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 354,
           "timestamp": 11.811811811811813,
           "trackId": 354,
@@ -510,7 +510,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 354,
           "timestamp": 11.811811811811813,
           "trackId": 82,
@@ -535,7 +535,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 354,
           "timestamp": 11.811811811811813,
           "trackId": 67,
@@ -560,7 +560,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 354,
           "timestamp": 11.811811811811813,
           "trackId": 44,
@@ -585,7 +585,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 354,
           "timestamp": 11.811811811811813,
           "trackId": 64,
@@ -610,7 +610,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 354,
           "timestamp": 11.811811811811813,
           "trackId": 24,
@@ -623,7 +623,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 354,
           "timestamp": 11.811811811811813,
           "trackId": 345,
@@ -648,7 +648,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 371,
           "timestamp": 12.379045712379046,
           "trackId": 345,
@@ -661,7 +661,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 371,
           "timestamp": 12.379045712379046,
           "trackId": 24,
@@ -686,7 +686,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 371,
           "timestamp": 12.379045712379046,
           "trackId": 67,
@@ -711,7 +711,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 371,
           "timestamp": 12.379045712379046,
           "trackId": 82,
@@ -724,7 +724,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 371,
           "timestamp": 12.379045712379046,
           "trackId": 347,
@@ -749,7 +749,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 416,
           "timestamp": 13.880547213880547,
           "trackId": 345,
@@ -762,7 +762,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 416,
           "timestamp": 13.880547213880547,
           "trackId": 24,
@@ -787,7 +787,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 416,
           "timestamp": 13.880547213880547,
           "trackId": 359,
@@ -800,7 +800,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 416,
           "timestamp": 13.880547213880547,
           "trackId": 67,
@@ -825,7 +825,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 421,
           "timestamp": 14.047380714047382,
           "trackId": 372,
@@ -850,7 +850,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 421,
           "timestamp": 14.047380714047382,
           "trackId": 366,
@@ -875,7 +875,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 436,
           "timestamp": 14.547881214547882,
           "trackId": 372,
@@ -900,7 +900,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 436,
           "timestamp": 14.547881214547882,
           "trackId": 366,
@@ -925,7 +925,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 436,
           "timestamp": 14.547881214547882,
           "trackId": 345,
@@ -938,7 +938,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 436,
           "timestamp": 14.547881214547882,
           "trackId": 24,
@@ -963,7 +963,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 436,
           "timestamp": 14.547881214547882,
           "trackId": 67,
@@ -988,7 +988,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 436,
           "timestamp": 14.547881214547882,
           "trackId": 88,
@@ -1001,7 +1001,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 436,
           "timestamp": 14.547881214547882,
           "trackId": 359,
@@ -1026,7 +1026,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 450,
           "timestamp": 15.015015015015015,
           "trackId": 93,
@@ -1039,7 +1039,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 451,
           "timestamp": 15.048381715048382,
           "trackId": 93,
@@ -1064,7 +1064,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 451,
           "timestamp": 15.048381715048382,
           "trackId": 345,
@@ -1077,7 +1077,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 451,
           "timestamp": 15.048381715048382,
           "trackId": 24,
@@ -1102,7 +1102,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 451,
           "timestamp": 15.048381715048382,
           "trackId": 88,
@@ -1127,7 +1127,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 461,
           "timestamp": 15.38204871538205,
           "trackId": 372,
@@ -1152,7 +1152,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 477,
           "timestamp": 15.915915915915917,
           "trackId": 93,
@@ -1177,7 +1177,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 477,
           "timestamp": 15.915915915915917,
           "trackId": 383,
@@ -1202,7 +1202,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 488,
           "timestamp": 16.28294961628295,
           "trackId": 372,
@@ -1215,7 +1215,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 488,
           "timestamp": 16.28294961628295,
           "trackId": 97,
@@ -1240,7 +1240,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 491,
           "timestamp": 16.38304971638305,
           "trackId": 88,
@@ -1265,7 +1265,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 491,
           "timestamp": 16.38304971638305,
           "trackId": 67,
@@ -1290,7 +1290,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 491,
           "timestamp": 16.38304971638305,
           "trackId": 24,
@@ -1303,7 +1303,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 491,
           "timestamp": 16.38304971638305,
           "trackId": 345,
@@ -1328,7 +1328,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 499,
           "timestamp": 16.649983316649983,
           "trackId": 93,
@@ -1341,7 +1341,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 499,
           "timestamp": 16.649983316649983,
           "trackId": 383,
@@ -1366,7 +1366,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 504,
           "timestamp": 16.816816816816818,
           "trackId": 97,
@@ -1379,7 +1379,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 504,
           "timestamp": 16.816816816816818,
           "trackId": 372,
@@ -1404,7 +1404,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 511,
           "timestamp": 17.050383717050384,
           "trackId": 386,
@@ -1429,7 +1429,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 511,
           "timestamp": 17.050383717050384,
           "trackId": 67,
@@ -1454,7 +1454,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 525,
           "timestamp": 17.51751751751752,
           "trackId": 372,
@@ -1467,7 +1467,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 525,
           "timestamp": 17.51751751751752,
           "trackId": 97,
@@ -1492,7 +1492,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 525,
           "timestamp": 17.51751751751752,
           "trackId": 93,
@@ -1517,7 +1517,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 525,
           "timestamp": 17.51751751751752,
           "trackId": 24,
@@ -1542,7 +1542,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 526,
           "timestamp": 17.550884217550884,
           "trackId": 383,
@@ -1567,7 +1567,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 545,
           "timestamp": 18.184851518184853,
           "trackId": 88,
@@ -1592,7 +1592,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 548,
           "timestamp": 18.284951618284953,
           "trackId": 372,
@@ -1605,7 +1605,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 548,
           "timestamp": 18.284951618284953,
           "trackId": 97,
@@ -1630,7 +1630,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 548,
           "timestamp": 18.284951618284953,
           "trackId": 93,
@@ -1643,7 +1643,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 548,
           "timestamp": 18.284951618284953,
           "trackId": 383,
@@ -1668,7 +1668,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 548,
           "timestamp": 18.284951618284953,
           "trackId": 386,
@@ -1693,7 +1693,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 568,
           "timestamp": 18.952285618952285,
           "trackId": 101,
@@ -1706,7 +1706,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 568,
           "timestamp": 18.952285618952285,
           "trackId": 386,
@@ -1731,7 +1731,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 568,
           "timestamp": 18.952285618952285,
           "trackId": 383,
@@ -1744,7 +1744,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 568,
           "timestamp": 18.952285618952285,
           "trackId": 93,
@@ -1769,7 +1769,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 584,
           "timestamp": 19.486152819486154,
           "trackId": 386,
@@ -1782,7 +1782,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 584,
           "timestamp": 19.486152819486154,
           "trackId": 101,
@@ -1807,7 +1807,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 584,
           "timestamp": 19.486152819486154,
           "trackId": 24,
@@ -1832,7 +1832,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 584,
           "timestamp": 19.486152819486154,
           "trackId": 67,
@@ -1857,7 +1857,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 584,
           "timestamp": 19.486152819486154,
           "trackId": 88,
@@ -1882,7 +1882,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 926,
           "timestamp": 30.897564230897565,
           "trackId": 396,
@@ -1895,7 +1895,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 926,
           "timestamp": 30.897564230897565,
           "trackId": 101,
@@ -1920,7 +1920,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 926,
           "timestamp": 30.897564230897565,
           "trackId": 118,
@@ -1945,7 +1945,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 926,
           "timestamp": 30.897564230897565,
           "trackId": 120,
@@ -1970,7 +1970,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 926,
           "timestamp": 30.897564230897565,
           "trackId": 110,
@@ -1995,7 +1995,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 926,
           "timestamp": 30.897564230897565,
           "trackId": 119,
@@ -2020,7 +2020,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 1172,
           "timestamp": 39.10577243910577,
           "trackId": 101,
@@ -2033,7 +2033,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 1172,
           "timestamp": 39.10577243910577,
           "trackId": 386,
@@ -2058,7 +2058,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 1172,
           "timestamp": 39.10577243910577,
           "trackId": 134,
@@ -2083,7 +2083,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 1172,
           "timestamp": 39.10577243910577,
           "trackId": 413,
@@ -2096,7 +2096,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 1172,
           "timestamp": 39.10577243910577,
           "trackId": 132,
@@ -2121,7 +2121,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 1507,
           "timestamp": 50.283616950283616,
           "trackId": 132,
@@ -2146,7 +2146,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 1507,
           "timestamp": 50.283616950283616,
           "trackId": 134,
@@ -2171,7 +2171,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 1797,
           "timestamp": 59.95995995995996,
           "trackId": 414,
@@ -2184,7 +2184,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 1797,
           "timestamp": 59.95995995995996,
           "trackId": 132,
@@ -2209,7 +2209,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 1797,
           "timestamp": 59.95995995995996,
           "trackId": 134,
@@ -2234,7 +2234,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 1820,
           "timestamp": 60.7273940607274,
           "trackId": 414,
@@ -2247,7 +2247,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 1820,
           "timestamp": 60.7273940607274,
           "trackId": 132,
@@ -2272,7 +2272,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 1820,
           "timestamp": 60.7273940607274,
           "trackId": 134,
@@ -2297,7 +2297,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 2059,
           "timestamp": 68.70203536870204,
           "trackId": 134,
@@ -2322,7 +2322,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 2059,
           "timestamp": 68.70203536870204,
           "trackId": 414,
@@ -2347,7 +2347,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 2997,
           "timestamp": 100,
           "trackId": 414,
@@ -2360,7 +2360,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 2997,
           "timestamp": 100,
           "trackId": 132,
@@ -2385,7 +2385,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 2997,
           "timestamp": 100,
           "trackId": 134,
@@ -2410,7 +2410,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4804,
           "timestamp": 160.29362696029364,
           "trackId": 132,
@@ -2435,7 +2435,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4804,
           "timestamp": 160.29362696029364,
           "trackId": 134,
@@ -2460,7 +2460,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4804,
           "timestamp": 160.29362696029364,
           "trackId": 147,
@@ -2485,7 +2485,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 4834,
           "timestamp": 161.29462796129462,
           "trackId": 422,
@@ -2498,7 +2498,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4834,
           "timestamp": 161.29462796129462,
           "trackId": 147,
@@ -2523,7 +2523,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4834,
           "timestamp": 161.29462796129462,
           "trackId": 134,
@@ -2548,7 +2548,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4834,
           "timestamp": 161.29462796129462,
           "trackId": 132,
@@ -2561,7 +2561,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 4834,
           "timestamp": 161.29462796129462,
           "trackId": 414,
@@ -2586,7 +2586,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 4853,
           "timestamp": 161.9285952619286,
           "trackId": 423,
@@ -2599,7 +2599,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4853,
           "timestamp": 161.9285952619286,
           "trackId": 134,
@@ -2624,7 +2624,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 4853,
           "timestamp": 161.9285952619286,
           "trackId": 414,
@@ -2649,7 +2649,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 4876,
           "timestamp": 162.69602936269604,
           "trackId": 414,
@@ -2662,7 +2662,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4876,
           "timestamp": 162.69602936269604,
           "trackId": 132,
@@ -2687,7 +2687,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4876,
           "timestamp": 162.69602936269604,
           "trackId": 134,
@@ -2700,7 +2700,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 4876,
           "timestamp": 162.69602936269604,
           "trackId": 423,
@@ -2725,7 +2725,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 4894,
           "timestamp": 163.29662996329662,
           "trackId": 414,
@@ -2738,7 +2738,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4894,
           "timestamp": 163.29662996329662,
           "trackId": 132,
@@ -2763,7 +2763,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4894,
           "timestamp": 163.29662996329662,
           "trackId": 150,
@@ -2788,7 +2788,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 4894,
           "timestamp": 163.29662996329662,
           "trackId": 423,
@@ -2813,7 +2813,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 4910,
           "timestamp": 163.8304971638305,
           "trackId": 431,
@@ -2826,7 +2826,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4910,
           "timestamp": 163.8304971638305,
           "trackId": 150,
@@ -2851,7 +2851,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 4910,
           "timestamp": 163.8304971638305,
           "trackId": 414,
@@ -2864,7 +2864,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4910,
           "timestamp": 163.8304971638305,
           "trackId": 132,
@@ -2889,7 +2889,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4910,
           "timestamp": 163.8304971638305,
           "trackId": 159,
@@ -2902,7 +2902,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 4910,
           "timestamp": 163.8304971638305,
           "trackId": 423,
@@ -2927,7 +2927,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 4929,
           "timestamp": 164.46446446446447,
           "trackId": 433,
@@ -2940,7 +2940,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4929,
           "timestamp": 164.46446446446447,
           "trackId": 132,
@@ -2965,7 +2965,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4929,
           "timestamp": 164.46446446446447,
           "trackId": 159,
@@ -2978,7 +2978,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 4929,
           "timestamp": 164.46446446446447,
           "trackId": 423,
@@ -3003,7 +3003,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 4929,
           "timestamp": 164.46446446446447,
           "trackId": 431,
@@ -3016,7 +3016,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4929,
           "timestamp": 164.46446446446447,
           "trackId": 150,
@@ -3041,7 +3041,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4941,
           "timestamp": 164.86486486486487,
           "trackId": 162,
@@ -3054,7 +3054,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 4941,
           "timestamp": 164.86486486486487,
           "trackId": 435,
@@ -3079,7 +3079,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 4946,
           "timestamp": 165.0316983650317,
           "trackId": 433,
@@ -3104,7 +3104,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4955,
           "timestamp": 165.331998665332,
           "trackId": 150,
@@ -3129,7 +3129,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4964,
           "timestamp": 165.63229896563232,
           "trackId": 162,
@@ -3154,7 +3154,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4967,
           "timestamp": 165.7323990657324,
           "trackId": 159,
@@ -3167,7 +3167,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 4967,
           "timestamp": 165.7323990657324,
           "trackId": 448,
@@ -3192,7 +3192,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 4967,
           "timestamp": 165.7323990657324,
           "trackId": 451,
@@ -3217,7 +3217,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 4990,
           "timestamp": 166.49983316649983,
           "trackId": 455,
@@ -3242,7 +3242,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 4994,
           "timestamp": 166.6332999666333,
           "trackId": 174,
@@ -3255,7 +3255,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 4994,
           "timestamp": 166.6332999666333,
           "trackId": 456,
@@ -3280,7 +3280,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5001,
           "timestamp": 166.86686686686687,
           "trackId": 457,
@@ -3305,7 +3305,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5027,
           "timestamp": 167.7344010677344,
           "trackId": 183,
@@ -3330,7 +3330,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5053,
           "timestamp": 168.60193526860195,
           "trackId": 465,
@@ -3343,7 +3343,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5053,
           "timestamp": 168.60193526860195,
           "trackId": 201,
@@ -3368,7 +3368,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5071,
           "timestamp": 169.20253586920253,
           "trackId": 201,
@@ -3393,7 +3393,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5071,
           "timestamp": 169.20253586920253,
           "trackId": 468,
@@ -3406,7 +3406,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5072,
           "timestamp": 169.23590256923592,
           "trackId": 210,
@@ -3431,7 +3431,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5094,
           "timestamp": 169.96996996996998,
           "trackId": 470,
@@ -3456,7 +3456,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5113,
           "timestamp": 170.60393727060395,
           "trackId": 224,
@@ -3469,7 +3469,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5113,
           "timestamp": 170.60393727060395,
           "trackId": 470,
@@ -3494,7 +3494,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5113,
           "timestamp": 170.60393727060395,
           "trackId": 483,
@@ -3507,7 +3507,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5113,
           "timestamp": 170.60393727060395,
           "trackId": 229,
@@ -3532,7 +3532,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5131,
           "timestamp": 171.20453787120454,
           "trackId": 224,
@@ -3557,7 +3557,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5131,
           "timestamp": 171.20453787120454,
           "trackId": 483,
@@ -3570,7 +3570,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5131,
           "timestamp": 171.20453787120454,
           "trackId": 229,
@@ -3595,7 +3595,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5155,
           "timestamp": 172.00533867200534,
           "trackId": 236,
@@ -3620,7 +3620,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5155,
           "timestamp": 172.00533867200534,
           "trackId": 244,
@@ -3645,7 +3645,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5187,
           "timestamp": 173.0730730730731,
           "trackId": 244,
@@ -3670,7 +3670,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5187,
           "timestamp": 173.0730730730731,
           "trackId": 491,
@@ -3695,7 +3695,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5193,
           "timestamp": 173.27327327327328,
           "trackId": 493,
@@ -3720,7 +3720,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5199,
           "timestamp": 173.4734734734735,
           "trackId": 495,
@@ -3745,7 +3745,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5210,
           "timestamp": 173.8405071738405,
           "trackId": 493,
@@ -3758,7 +3758,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5210,
           "timestamp": 173.8405071738405,
           "trackId": 244,
@@ -3783,7 +3783,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5210,
           "timestamp": 173.8405071738405,
           "trackId": 236,
@@ -3808,7 +3808,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5234,
           "timestamp": 174.6413079746413,
           "trackId": 244,
@@ -3821,7 +3821,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5234,
           "timestamp": 174.6413079746413,
           "trackId": 493,
@@ -3846,7 +3846,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5252,
           "timestamp": 175.24190857524192,
           "trackId": 493,
@@ -3859,7 +3859,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5252,
           "timestamp": 175.24190857524192,
           "trackId": 244,
@@ -3884,7 +3884,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5252,
           "timestamp": 175.24190857524192,
           "trackId": 268,
@@ -3897,7 +3897,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5252,
           "timestamp": 175.24190857524192,
           "trackId": 501,
@@ -3922,7 +3922,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5256,
           "timestamp": 175.37537537537537,
           "trackId": 252,
@@ -3947,7 +3947,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5258,
           "timestamp": 175.4421087754421,
           "trackId": 283,
@@ -3972,7 +3972,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5262,
           "timestamp": 175.57557557557558,
           "trackId": 503,
@@ -3997,7 +3997,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5270,
           "timestamp": 175.8425091758425,
           "trackId": 493,
@@ -4010,7 +4010,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5270,
           "timestamp": 175.8425091758425,
           "trackId": 244,
@@ -4035,7 +4035,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5270,
           "timestamp": 175.8425091758425,
           "trackId": 268,
@@ -4048,7 +4048,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5270,
           "timestamp": 175.8425091758425,
           "trackId": 501,
@@ -4073,7 +4073,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5287,
           "timestamp": 176.40974307640974,
           "trackId": 493,
@@ -4098,7 +4098,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5287,
           "timestamp": 176.40974307640974,
           "trackId": 501,
@@ -4123,7 +4123,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5305,
           "timestamp": 177.01034367701035,
           "trackId": 493,
@@ -4148,7 +4148,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5305,
           "timestamp": 177.01034367701035,
           "trackId": 501,
@@ -4173,7 +4173,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5305,
           "timestamp": 177.01034367701035,
           "trackId": 288,
@@ -4198,7 +4198,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5322,
           "timestamp": 177.57757757757759,
           "trackId": 493,
@@ -4223,7 +4223,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5322,
           "timestamp": 177.57757757757759,
           "trackId": 501,
@@ -4248,7 +4248,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5327,
           "timestamp": 177.74441107774442,
           "trackId": 514,
@@ -4261,7 +4261,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5327,
           "timestamp": 177.74441107774442,
           "trackId": 288,
@@ -4286,7 +4286,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5338,
           "timestamp": 178.11144477811146,
           "trackId": 493,
@@ -4311,7 +4311,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5338,
           "timestamp": 178.11144477811146,
           "trackId": 501,
@@ -4336,7 +4336,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5354,
           "timestamp": 178.6453119786453,
           "trackId": 493,
@@ -4361,7 +4361,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5354,
           "timestamp": 178.6453119786453,
           "trackId": 501,
@@ -4386,7 +4386,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5354,
           "timestamp": 178.6453119786453,
           "trackId": 288,
@@ -4411,7 +4411,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5379,
           "timestamp": 179.4794794794795,
           "trackId": 296,
@@ -4424,7 +4424,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5379,
           "timestamp": 179.4794794794795,
           "trackId": 519,
@@ -4449,7 +4449,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5406,
           "timestamp": 180.3803803803804,
           "trackId": 296,
@@ -4462,7 +4462,7 @@
         },
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5406,
           "timestamp": 180.3803803803804,
           "trackId": 519,
@@ -4487,7 +4487,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5429,
           "timestamp": 181.14781448114783,
           "trackId": 525,
@@ -4500,7 +4500,7 @@
         },
         {
           "cameraId": "camera1",
-          "videoFile": "hc3-preprocessed",
+          "videoFile": "hc3",
           "frameNumber": 5429,
           "timestamp": 181.14781448114783,
           "trackId": 296,
@@ -4525,7 +4525,7 @@
       "linkedDetections": [
         {
           "cameraId": "camera2",
-          "videoFile": "hc4-preprocessed",
+          "videoFile": "hc4",
           "frameNumber": 5442,
           "timestamp": 181.5815815815816,
           "trackId": 526,

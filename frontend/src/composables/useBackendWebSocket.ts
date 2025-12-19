@@ -74,7 +74,7 @@ export function useBackendWebSocket(options: BackendWebSocketOptions = {}) {
   const syncDeltas: number[] = []
   const MAX_DELTA_SAMPLES = 50
   let currentSyncTolerance = opts.baseSyncToleranceMs
-  let perCameraLastSeen: Map<string, number> = new Map()
+  const perCameraLastSeen: Map<string, number> = new Map()
 
   // Sync metrics (exported for debugging)
   const syncMetrics = ref({

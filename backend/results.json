@@ -1,6 +1,6 @@
 {
   "timestamp": "2025-12-06T17:53:54.302Z",
-  "dataset": "../shared/cameras/preprocessed/1080p/view-HC3-preprocessed.detections.json.gz",
+  "dataset": "../shared/cameras/view-HC3.detections.json.gz",
   "groundTruth": [
     {
       "x": 1,
