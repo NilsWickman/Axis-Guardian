@@ -4,12 +4,17 @@
  */
 
 import { cameras } from './config.js'
-import { createCameraEmulator } from './server.js'
+import { createCameraEmulator, type CameraEmulatorServer } from './server.js'
 
 async function main() {
   console.log('Starting camera emulator(s)...')
 
-  const emulators = []
+  if (cameras.length === 0) {
+    console.error('No cameras available to start - check VIDEO_PATH and video files')
+    process.exit(1)
+  }
+
+  const emulators: CameraEmulatorServer[] = []
 
   for (const config of cameras) {
     try {
@@ -18,11 +23,17 @@ async function main() {
       emulators.push(emulator)
     } catch (error) {
       console.error(`Failed to start camera ${config.cameraId}:`, error)
-      process.exit(1)
+      // Continue with other cameras instead of hard exit
+      console.warn(`Continuing without ${config.cameraId}...`)
     }
   }
 
-  console.log(`\nAll ${emulators.length} camera emulator(s) started successfully`)
+  if (emulators.length === 0) {
+    console.error('No cameras could be started successfully')
+    process.exit(1)
+  }
+
+  console.log(`\n${emulators.length}/${cameras.length} camera emulator(s) started successfully`)
   console.log('Press Ctrl+C to stop\n')
 
   // Handle shutdown

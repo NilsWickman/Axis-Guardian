@@ -145,13 +145,14 @@ function syncVideoToTimestamp(): void {
   }
 }
 
-// Draw video frame for active camera
+// Draw video frame for active camera with bounding boxes
 function drawVideoFrame(): void {
   const videoEl = currentVideoEl.value
   const canvas = videoCanvasRef.value
   if (!videoEl || !canvas) return
 
-  if (!isVideoReady.value.get(annotation.activeCamera.value ?? '')) return
+  const cameraId = annotation.activeCamera.value ?? ''
+  if (!isVideoReady.value.get(cameraId)) return
 
   const ctx = canvas.getContext('2d')
   if (!ctx) return
@@ -164,6 +165,61 @@ function drawVideoFrame(): void {
 
   // Draw video frame
   ctx.drawImage(videoEl, 0, 0)
+
+  // Draw bounding boxes for current frame detections
+  const frameData = annotation.currentFrameData.value
+  if (!frameData?.detections) return
+
+  const videoWidth = videoEl.videoWidth
+  const videoHeight = videoEl.videoHeight
+
+  for (let i = 0; i < frameData.detections.length; i++) {
+    const det = frameData.detections[i]
+    const bbox = det.bbox
+    const trackId = det.track_id
+    const color = getTrackColor(cameraId, trackId)
+    const isSelected = annotation.isDetectionSelected(cameraId, i)
+    const isAnnotated = annotation.isTrackAlreadyAnnotated(cameraId, trackId)
+
+    // Convert normalized bbox (left, top, right, bottom) to pixel coordinates
+    const x = bbox.left * videoWidth
+    const y = bbox.top * videoHeight
+    const w = (bbox.right - bbox.left) * videoWidth
+    const h = (bbox.bottom - bbox.top) * videoHeight
+
+    // Draw bounding box
+    ctx.strokeStyle = color
+    ctx.lineWidth = isSelected ? 4 : 2
+    ctx.strokeRect(x, y, w, h)
+
+    // Draw selection highlight
+    if (isSelected) {
+      ctx.fillStyle = color + '33' // 20% opacity
+      ctx.fillRect(x, y, w, h)
+    }
+
+    // Draw annotated checkmark
+    if (isAnnotated) {
+      ctx.fillStyle = '#22c55e'
+      ctx.beginPath()
+      ctx.arc(x + w - 12, y + 12, 10, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = '#fff'
+      ctx.font = 'bold 12px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.fillText('✓', x + w - 12, y + 16)
+    }
+
+    // Draw track label
+    const label = `#${trackId}`
+    ctx.font = 'bold 14px monospace'
+    const labelWidth = ctx.measureText(label).width + 8
+    ctx.fillStyle = color
+    ctx.fillRect(x, y - 20, labelWidth, 18)
+    ctx.fillStyle = '#fff'
+    ctx.textAlign = 'left'
+    ctx.fillText(label, x + 4, y - 6)
+  }
 }
 
 // Helper to get camera name
@@ -226,8 +282,14 @@ function drawFloorPlan(): void {
     const px = ann.groundPosition.x * scale
     const py = ann.groundPosition.y * scale
 
-    // Draw annotation marker
-    ctx.fillStyle = '#22c55e'
+    // Get color from the first linked detection's track
+    const firstDet = ann.linkedDetections[0]
+    const markerColor = firstDet
+      ? getTrackColor(firstDet.cameraId, firstDet.trackId)
+      : '#22c55e'
+
+    // Draw annotation marker with track color
+    ctx.fillStyle = markerColor
     ctx.beginPath()
     ctx.arc(px, py, 12, 0, Math.PI * 2)
     ctx.fill()
@@ -236,12 +298,12 @@ function drawFloorPlan(): void {
     ctx.lineWidth = 2
     ctx.stroke()
 
-    // Draw linked camera indicators
-    const cameraIndicators = ann.linkedDetections.map(d => d.cameraId.replace('camera', 'C'))
+    // Draw linked track IDs with their colors
+    const trackLabels = ann.linkedDetections.map(d => `#${d.trackId}`)
     ctx.fillStyle = '#fff'
     ctx.font = 'bold 10px monospace'
     ctx.textAlign = 'center'
-    ctx.fillText(cameraIndicators.join('+'), px, py + 4)
+    ctx.fillText(trackLabels.join('+'), px, py + 4)
   }
 
   // Draw currently selected detections (not yet annotated)
@@ -255,7 +317,8 @@ function drawFloorPlan(): void {
 
     const camX = extractValue(camera.position.x) * scale
     const camY = extractValue(camera.position.y) * scale
-    const color = cameraColors[sel.cameraId] ?? '#888'
+    // Use track color instead of camera color
+    const color = getTrackColor(sel.cameraId, sel.trackId)
 
     // Draw a marker near the camera to show selection
     const offsetX = (sel.detectionIndex % 3 - 1) * 20
@@ -274,7 +337,7 @@ function drawFloorPlan(): void {
     ctx.fillStyle = '#fff'
     ctx.font = 'bold 10px monospace'
     ctx.textAlign = 'center'
-    ctx.fillText(`${sel.trackId}`, camX + offsetX, camY + offsetY + 4)
+    ctx.fillText(`#${sel.trackId}`, camX + offsetX, camY + offsetY + 4)
   }
 }
 

@@ -49,6 +49,7 @@ export function useReplay(options: UseReplayOptions) {
   let lastFetchedToMs = 0
   let opToken = 0
   let isSeeking = false
+  let isFetching = false
 
   const prefetchAheadMs = options.prefetchAheadMs ?? 15000
   const keepBehindMs = options.keepBehindMs ?? 5000
@@ -59,6 +60,7 @@ export function useReplay(options: UseReplayOptions) {
   function clearBuffer(): void {
     buffer.length = 0
     lastFetchedToMs = 0
+    isFetching = false
   }
 
   function applyEvent(evt: BufferedEvent): void {
@@ -188,18 +190,25 @@ export function useReplay(options: UseReplayOptions) {
   }
 
   async function ensurePrefetch(nowMs: number): Promise<void> {
-    if (isSeeking) return
+    if (isSeeking || isFetching) return
     const m = manifest.value
     if (!m) return
-    const wantTo = nowMs + prefetchAheadMs
-    if (wantTo <= lastFetchedToMs) return
+    // Only refetch when we've consumed more than half the prefetch buffer
+    // This prevents spamming fetches on every tick
+    const refetchThreshold = prefetchAheadMs / 2
+    if (nowMs + refetchThreshold < lastFetchedToMs) return
     const from = Math.max(0, lastFetchedToMs)
-    const to = wantTo
+    const to = nowMs + prefetchAheadMs
     lastFetchedToMs = to
+    isFetching = true
     const myToken = opToken
-    const events = await loadEvents(m.recordingId, from, to)
-    if (myToken !== opToken) return
-    enqueueEvents(events)
+    try {
+      const events = await loadEvents(m.recordingId, from, to)
+      if (myToken !== opToken) return
+      enqueueEvents(events)
+    } finally {
+      isFetching = false
+    }
   }
 
   async function openRecording(recordingId: string): Promise<void> {

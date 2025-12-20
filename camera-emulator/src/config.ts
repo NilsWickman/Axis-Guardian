@@ -85,26 +85,40 @@ function resolveDetectionsPath(basePath: string, viewName: string): string {
   return candidates[0]
 }
 
-export const cameras: CameraConfig[] = [
-  {
-    cameraId: 'camera-HC3',
-    videoPath: path.join(BASE_PATH, 'view-HC3.mp4'),
-    // Detections (auto-select based on availability)
-    detectionsPath: resolveDetectionsPath(BASE_PATH, 'view-HC3'),
-    port: 9101,
-    trackingCameraId: 'camera1',
+function buildCameraConfig(
+  cameraId: string,
+  viewName: string,
+  port: number,
+  trackingCameraId: string
+): CameraConfig | null {
+  const videoPath = path.join(BASE_PATH, `${viewName}.mp4`)
+  const detectionsPath = resolveDetectionsPath(BASE_PATH, viewName)
+
+  // Validate video file exists
+  if (!fs.existsSync(videoPath)) {
+    console.warn(`⚠️  Skipping ${cameraId}: video file not found at ${videoPath}`)
+    return null
+  }
+
+  return {
+    cameraId,
+    videoPath,
+    detectionsPath,
+    port,
+    trackingCameraId,
     trackingServiceUrl: TRACKING_SERVICE_URL,
-  },
-  {
-    cameraId: 'camera-HC4',
-    videoPath: path.join(BASE_PATH, 'view-HC4.mp4'),
-    // Detections (auto-select based on availability)
-    detectionsPath: resolveDetectionsPath(BASE_PATH, 'view-HC4'),
-    port: 9102,
-    trackingCameraId: 'camera2',
-    trackingServiceUrl: TRACKING_SERVICE_URL,
-  },
+  }
+}
+
+// Build camera configs, filtering out any with missing video files
+const allCameraConfigs = [
+  buildCameraConfig('camera-HC3', 'view-HC3', 9101, 'camera1'),
+  buildCameraConfig('camera-HC4', 'view-HC4', 9102, 'camera2'),
 ]
+
+export const cameras: CameraConfig[] = allCameraConfigs.filter(
+  (c): c is CameraConfig => c !== null
+)
 
 // mediasoup configuration
 export const mediasoupConfig = {
