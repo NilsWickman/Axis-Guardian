@@ -14,6 +14,9 @@ export interface FFmpegStreamerEvents {
   exit: (code: number | null) => void
 }
 
+const MAX_RESTART_ATTEMPTS = 3
+const BASE_RESTART_DELAY_MS = 1000
+
 export class FFmpegStreamer extends EventEmitter {
   private ffmpeg: ChildProcess | null = null
   private frameCount = 0
@@ -22,6 +25,8 @@ export class FFmpegStreamer extends EventEmitter {
   private fps = 30
   private streamStartTime = 0  // When streaming started (ms)
   private videoDurationMs = 0  // Total video duration (ms)
+  private restartAttempts = 0
+  private stopped = false  // Flag to prevent restart after intentional stop
 
   constructor(
     private videoPath: string,
@@ -40,6 +45,7 @@ export class FFmpegStreamer extends EventEmitter {
       return
     }
 
+    this.stopped = false
     console.log(`Starting FFmpeg streamer for ${this.videoPath}`)
     console.log(`  RTP target: rtp://127.0.0.1:${this.rtpPort}`)
 
@@ -89,6 +95,12 @@ export class FFmpegStreamer extends EventEmitter {
       if (frameMatch) {
         const newFrame = parseInt(frameMatch[1], 10)
 
+        // Reset restart attempts on successful frame processing
+        if (this.restartAttempts > 0) {
+          console.log('FFmpeg streaming successfully, resetting restart counter')
+          this.restartAttempts = 0
+        }
+
         // Detect loop (frame number reset or big jump)
         if (this.totalFrames > 0 && newFrame < this.frameCount && this.frameCount > this.totalFrames * 0.9) {
           this.loopCount++
@@ -119,10 +131,26 @@ export class FFmpegStreamer extends EventEmitter {
       this.ffmpeg = null
       this.emit('exit', code)
 
-      // Auto-restart on unexpected exit
+      // Don't restart if intentionally stopped
+      if (this.stopped) {
+        return
+      }
+
+      // Auto-restart on unexpected exit with limited retries
       if (code !== 0 && code !== null) {
-        console.log('Restarting FFmpeg in 1 second...')
-        setTimeout(() => this.start(), 1000)
+        this.restartAttempts++
+
+        if (this.restartAttempts > MAX_RESTART_ATTEMPTS) {
+          console.error(`FFmpeg failed ${MAX_RESTART_ATTEMPTS} times, giving up.`)
+          console.error(`  Video file: ${this.videoPath}`)
+          console.error('  Check that the video file exists and is readable.')
+          this.emit('error', new Error(`FFmpeg failed after ${MAX_RESTART_ATTEMPTS} restart attempts`))
+          return
+        }
+
+        const delay = BASE_RESTART_DELAY_MS * this.restartAttempts
+        console.log(`Restarting FFmpeg in ${delay}ms (attempt ${this.restartAttempts}/${MAX_RESTART_ATTEMPTS})...`)
+        setTimeout(() => this.start(), delay)
       }
     })
 
@@ -130,6 +158,7 @@ export class FFmpegStreamer extends EventEmitter {
   }
 
   stop(): void {
+    this.stopped = true
     if (this.ffmpeg) {
       this.ffmpeg.kill('SIGTERM')
       this.ffmpeg = null

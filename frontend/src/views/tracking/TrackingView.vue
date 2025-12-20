@@ -23,7 +23,7 @@
           :show-person-icon="false"
           :show-stats="!isDemoMode"
           :show-heatmap="false"
-          :show-debug-mode="showDebugMode"
+          :show-debug-mode="false"
           :marker-radius="8"
           :max-trail-length="20"
           :style="{
@@ -47,20 +47,6 @@
         >
           X: {{ mousePosition.x.toFixed(2) }}m, Y: {{ mousePosition.y.toFixed(2) }}m
         </div>
-
-        <button
-          v-if="!isDemoMode"
-          @click="showDebugMode = !showDebugMode"
-          class="absolute bottom-4 left-4 px-3 py-1.5 rounded text-xs font-medium transition-colors"
-          :class="
-            showDebugMode
-              ? 'bg-amber-500/90 text-black'
-              : 'bg-black/50 text-white hover:bg-black/70'
-          "
-          style="z-index: 11"
-        >
-          {{ showDebugMode ? 'Debug ON' : 'Debug' }}
-        </button>
 
         <div
           v-if="showMapLoadingOverlay"
@@ -358,7 +344,6 @@ const canvasStyle = computed(() => ({
   transformOrigin: 'top left',
 }))
 
-const showDebugMode = ref(false)
 const isRestarting = ref(false)
 const isBootLoading = ref(true)
 let restartTimer: number | null = null

@@ -768,8 +768,26 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
       // Merge cameraDetections instead of replacing - preserve recent detections from other cameras
       // This prevents bbox flickering when a track is only visible in one camera for a frame
       if (converted.cameraDetections) {
+        // Get the current videoTimeMs from the new detections to refresh preserved ones
+        const currentVideoTimeMs = converted.videoTiming?.videoTimeMs ??
+          Object.values(converted.cameraDetections)[0]?.videoTimeMs
+
+        // Update preserved detections with current time to prevent them from becoming stale
+        const preservedDetections = existing.cameraDetections ? { ...existing.cameraDetections } : {}
+        if (typeof currentVideoTimeMs === 'number') {
+          for (const camId of Object.keys(preservedDetections)) {
+            if (!converted.cameraDetections[camId]) {
+              // This camera wasn't in the update - refresh its videoTimeMs
+              preservedDetections[camId] = {
+                ...preservedDetections[camId],
+                videoTimeMs: currentVideoTimeMs,
+              }
+            }
+          }
+        }
+
         existing.cameraDetections = {
-          ...existing.cameraDetections,
+          ...preservedDetections,
           ...converted.cameraDetections,
         }
       }
