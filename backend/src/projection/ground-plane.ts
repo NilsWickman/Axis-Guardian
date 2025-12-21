@@ -29,7 +29,8 @@ import type {
 } from '../types.js'
 import { undistortPoint } from './lens-distortion.js'
 import { findOccludingTables, type Point3D as ObstaclePoint3D } from '../geometry/obstacles.js'
-import type { SiteMapObstacle } from '../config/sitemap-loader.js'
+import type { SiteMapObstacle, FloorPlane } from '../config/sitemap-loader.js'
+import { DEFAULT_FLOOR_PLANE } from '../config/sitemap-loader.js'
 
 // ============================================================================
 // Core Functions
@@ -184,6 +185,95 @@ export function intersectGroundPlane(
 }
 
 /**
+ * Find intersection of a ray with an arbitrary floor plane (flat or inclined)
+ *
+ * For a plane defined by point P0 and normal N:
+ *   (P - P0) · N = 0
+ *
+ * For ray: P = O + t*D
+ *   (O + t*D - P0) · N = 0
+ *   t = (P0 - O) · N / (D · N)
+ *
+ * @param origin - Ray origin (camera position)
+ * @param direction - Ray direction (unit vector)
+ * @param floor - Floor plane configuration
+ * @returns Parameter t for intersection point, or null if no valid intersection
+ */
+export function intersectFloorPlane(
+  origin: Point3D,
+  direction: Point3D,
+  floor: FloorPlane = DEFAULT_FLOOR_PLANE
+): number | null {
+  // For flat planes, use the optimized z=0 intersection
+  if (floor.type === 'flat') {
+    return intersectGroundPlane(origin, direction)
+  }
+
+  // Inclined plane intersection
+  const planeOrigin = floor.origin ?? { x: 0, y: 0, z: 0 }
+  const normal = floor.normal ?? { x: 0, y: 0, z: 1 }
+
+  // Compute D · N (denominator)
+  const denom = direction.x * normal.x + direction.y * normal.y + direction.z * normal.z
+
+  // Ray is parallel to plane (or nearly so)
+  if (Math.abs(denom) < 1e-10) {
+    return null
+  }
+
+  // Compute (P0 - O) · N (numerator)
+  const numerator =
+    (planeOrigin.x - origin.x) * normal.x +
+    (planeOrigin.y - origin.y) * normal.y +
+    (planeOrigin.z - origin.z) * normal.z
+
+  const t = numerator / denom
+
+  // Reject if intersection is behind the camera or unreasonably far (>1000m)
+  if (t < 0 || t > 1000) {
+    return null
+  }
+
+  return t
+}
+
+/**
+ * Get the Z elevation at a given (x, y) point on the floor plane
+ *
+ * For a plane defined by point P0 and normal N:
+ *   (P - P0) · N = 0
+ *   N.x * (x - P0.x) + N.y * (y - P0.y) + N.z * (z - P0.z) = 0
+ *   z = P0.z - (N.x * (x - P0.x) + N.y * (y - P0.y)) / N.z
+ *
+ * @param x - X coordinate
+ * @param y - Y coordinate
+ * @param floor - Floor plane configuration
+ * @returns Z elevation at the given point
+ */
+export function getFloorElevation(
+  x: number,
+  y: number,
+  floor: FloorPlane = DEFAULT_FLOOR_PLANE
+): number {
+  if (floor.type === 'flat') {
+    return 0
+  }
+
+  const origin = floor.origin ?? { x: 0, y: 0, z: 0 }
+  const normal = floor.normal ?? { x: 0, y: 0, z: 1 }
+
+  // Avoid division by zero (horizontal plane check)
+  if (Math.abs(normal.z) < 1e-10) {
+    return origin.z
+  }
+
+  return origin.z - (
+    normal.x * (x - origin.x) +
+    normal.y * (y - origin.y)
+  ) / normal.z
+}
+
+/**
  * Project an image point to world coordinates on the ground plane
  */
 export function projectToGround(
@@ -224,6 +314,7 @@ export function projectToGround(
       distance: 0,
       isValid: false,
       reason: 'no_ground_intersection',
+      confidence: 0,
       debug,
     }
   }
@@ -244,14 +335,139 @@ export function projectToGround(
       distance,
       isValid: false,
       reason: 'too_close',
+      confidence: 0,
       debug,
     }
   }
+
+  // Calculate confidence based on distance and ray angle
+  // Closer projections and steeper rays are more confident
+  const MAX_RELIABLE_DISTANCE = 15.0
+  const distanceConfidence = Math.max(0, 1 - distance / (MAX_RELIABLE_DISTANCE * 2))
+
+  // Ray angle confidence: steeper rays (more vertical) are more reliable
+  // rayWorld.z should be negative for downward rays
+  const rayAngle = Math.abs(rayWorld.z)  // Higher = steeper = better
+  const angleConfidence = Math.min(1, rayAngle * 2)  // Scale so 0.5 steepness = 1.0 confidence
+
+  const confidence = Math.sqrt(distanceConfidence * angleConfidence)
 
   return {
     worldPoint,
     distance,
     isValid: true,
+    confidence,
+    debug,
+  }
+}
+
+/**
+ * Extended projection result that includes Z elevation for inclined planes
+ */
+export interface ProjectionResultWithElevation extends ProjectionResult {
+  /** Z elevation at the intersection point (0 for flat planes) */
+  elevation: number
+  debug: DebugInfo
+}
+
+/**
+ * Project an image point to world coordinates on an arbitrary floor plane
+ *
+ * This is an extended version of projectToGround that supports inclined planes
+ * (e.g., for lecture halls with slanted floors).
+ *
+ * @param imagePoint - Point in image coordinates (pixels)
+ * @param camera - Camera parameters
+ * @param image - Image dimensions
+ * @param floor - Floor plane configuration (defaults to flat z=0)
+ * @returns Projection result with world coordinates and elevation
+ */
+export function projectToGroundWithFloor(
+  imagePoint: Point2D,
+  camera: CameraParams,
+  image: ImageParams,
+  floor: FloorPlane = DEFAULT_FLOOR_PLANE
+): ProjectionResultWithElevation {
+  const focalLength = calculateFocalLength(camera.fov, image.width)
+
+  const cx = image.width / 2
+  const cy = image.height / 2
+
+  // Standard pinhole camera model: positive X in image = right side of frame
+  const normalizedX = (imagePoint.x - cx) / focalLength
+  const normalizedY = (imagePoint.y - cy) / focalLength
+
+  const rayCamera = createCameraRay(normalizedX, normalizedY)
+  const rayWorld = transformRayToWorld(rayCamera, camera.azimuth, camera.elevation)
+
+  const cameraOrigin: Point3D = {
+    x: camera.position.x,
+    y: camera.position.y,
+    z: camera.position.z,
+  }
+
+  // Use floor-aware intersection
+  const t = intersectFloorPlane(cameraOrigin, rayWorld, floor)
+
+  const debug: DebugInfo = {
+    normalizedImagePoint: { x: normalizedX, y: normalizedY },
+    focalLength,
+    rayCamera,
+    rayWorld,
+    groundIntersectionT: t ?? -1,
+  }
+
+  if (t === null) {
+    return {
+      worldPoint: { x: 0, y: 0 },
+      elevation: 0,
+      distance: 0,
+      isValid: false,
+      reason: 'no_ground_intersection',
+      confidence: 0,
+      debug,
+    }
+  }
+
+  const worldPoint: Point2D = {
+    x: cameraOrigin.x + rayWorld.x * t,
+    y: cameraOrigin.y + rayWorld.y * t,
+  }
+
+  // Calculate Z elevation at the intersection point
+  const elevation = cameraOrigin.z + rayWorld.z * t
+
+  // 2D distance on the floor plane
+  const distance = Math.sqrt(
+    Math.pow(worldPoint.x - camera.position.x, 2) +
+    Math.pow(worldPoint.y - camera.position.y, 2)
+  )
+
+  if (distance < 0.1) {
+    return {
+      worldPoint,
+      elevation,
+      distance,
+      isValid: false,
+      reason: 'too_close',
+      confidence: 0,
+      debug,
+    }
+  }
+
+  // Calculate confidence based on distance and ray angle
+  const MAX_RELIABLE_DISTANCE = 15.0
+  const distanceConfidence = Math.max(0, 1 - distance / (MAX_RELIABLE_DISTANCE * 2))
+  const rayAngle = Math.abs(rayWorld.z)
+  const angleConfidence = Math.min(1, rayAngle * 2)
+  const confidence = Math.sqrt(distanceConfidence * angleConfidence)
+
+  return {
+    worldPoint,
+    elevation,
+    distance,
+    isValid: true,
+    confidence,
     debug,
   }
 }
@@ -779,7 +995,7 @@ export function projectWithKRT(
   imageX: number,
   imageY: number,
   calibration: CameraCalibration
-): { worldPoint: Point2D; isValid: boolean; reason?: string } {
+): { worldPoint: Point2D; isValid: boolean; reason?: string; confidence: number } {
   const { K, R, T, center, scale, worldTransform } = calibration
 
   // Apply scale
@@ -807,6 +1023,7 @@ export function projectWithKRT(
       worldPoint: { x: 0, y: 0 },
       isValid: false,
       reason: 'singular_matrix',
+      confidence: 0,
     }
   }
 
@@ -818,10 +1035,49 @@ export function projectWithKRT(
     worldPoint = applyWorldTransform(worldPoint, worldTransform)
   }
 
+  // Calculate projection confidence based on z-residual
+  // p[2] should be ~0 for accurate ground plane intersections
+  const zResidual = Math.abs(p[2])
+  const confidence = calculateProjectionConfidence(zResidual, worldPoint, T as [number, number, number])
+
   return {
     worldPoint,
     isValid: true,
+    confidence,
   }
+}
+
+/**
+ * Calculate projection confidence score (0-1)
+ *
+ * Confidence factors:
+ * - Z-residual: How close p[2] is to 0 (lower = better)
+ * - Distance: Closer projections are more reliable
+ *
+ * @param zResidual - Absolute value of p[2] from projection solve
+ * @param worldPoint - Projected world coordinates
+ * @param cameraT - Camera translation vector [Tx, Ty, Tz]
+ */
+function calculateProjectionConfidence(
+  zResidual: number,
+  worldPoint: Point2D,
+  cameraT: [number, number, number]
+): number {
+  // Z-residual confidence: 1.0 when residual=0, drops off exponentially
+  // A residual of 0.5 gives ~60% confidence from this factor
+  const zConfidence = Math.exp(-zResidual * 2)
+
+  // Distance confidence: closer projections are more reliable
+  // Max reliable distance ~15m, confidence drops linearly
+  const dx = worldPoint.x - cameraT[0]
+  const dy = worldPoint.y - cameraT[1]
+  const distance = Math.sqrt(dx * dx + dy * dy)
+  const MAX_RELIABLE_DISTANCE = 15.0  // meters
+  const distanceConfidence = Math.max(0, 1 - distance / (MAX_RELIABLE_DISTANCE * 2))
+
+  // Combined confidence: geometric mean of factors
+  // This ensures both factors must be reasonable for high confidence
+  return Math.sqrt(zConfidence * distanceConfidence)
 }
 
 /**
@@ -844,7 +1100,7 @@ export function projectDetectionWithKRT(
   isNormalized: boolean = false,
   imageWidth: number = 1920,
   imageHeight: number = 1080
-): { worldPoint: Point2D; isValid: boolean; reason?: string } {
+): { worldPoint: Point2D; isValid: boolean; reason?: string; confidence: number } {
   // Get bottom-center of bbox (feet position) with seated/occlusion extension
   const feetPos = getBBoxBottomCenter(
     bbox,

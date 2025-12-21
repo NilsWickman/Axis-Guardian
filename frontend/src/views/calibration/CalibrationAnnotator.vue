@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, reactive } from 'vue'
+import { ref, watch, onMounted, onUnmounted, reactive, nextTick } from 'vue'
 import { useMultiCameraAnnotation } from '@/composables/useMultiCameraAnnotation'
 import { useSiteMapCanvas, type CanvasRenderOptions } from '@/composables/useSiteMapCanvas'
 import { useSiteMapConfig } from '@/composables/useSiteMapConfig'
-import { AVAILABLE_VIDEOS } from '@/types/frame-review'
+import { AVAILABLE_VIDEOS, normalizeBbox } from '@/types/frame-review'
 import { extractValue, RENDER_SCALE } from '@/utils/siteMapConversion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 // Multi-camera annotation composable
 const annotation = useMultiCameraAnnotation()
@@ -31,14 +30,14 @@ const cameraSources = [
   },
 ]
 
-// Refs
-const videoRefs = ref<Map<string, HTMLVideoElement>>(new Map())
-const videoCanvasRef = ref<HTMLCanvasElement | null>(null)
+// Refs - use reactive Maps for proper mutation tracking
+const videoRefs = reactive<Map<string, HTMLVideoElement>>(new Map())
+const videoCanvasRefs = reactive<Map<string, HTMLCanvasElement>>(new Map())
 const floorPlanCanvasRef = ref<HTMLCanvasElement | null>(null)
 const floorPlanContainerRef = ref<HTMLDivElement | null>(null)
 
-// State
-const isVideoReady = ref<Map<string, boolean>>(new Map())
+// State - use reactive Map for proper mutation tracking
+const isVideoReady = reactive<Map<string, boolean>>(new Map())
 const isInitialized = ref(false)
 const selectionError = ref<string | null>(null)
 let selectionErrorTimeout: number | null = null
@@ -118,41 +117,79 @@ async function initializeCameras(): Promise<void> {
 // Set video ref for a camera
 function setVideoRef(cameraId: string, el: HTMLVideoElement | null): void {
   if (el) {
-    videoRefs.value.set(cameraId, el)
+    videoRefs.set(cameraId, el)
   } else {
-    videoRefs.value.delete(cameraId)
+    videoRefs.delete(cameraId)
+  }
+}
+
+// Set canvas ref for a camera
+function setCanvasRef(cameraId: string, el: HTMLCanvasElement | null): void {
+  if (el) {
+    videoCanvasRefs.set(cameraId, el)
+  } else {
+    videoCanvasRefs.delete(cameraId)
   }
 }
 
 // Video loaded handler
 function onVideoLoaded(cameraId: string): void {
-  isVideoReady.value.set(cameraId, true)
-  drawVideoFrame()
+  isVideoReady.set(cameraId, true)
+  // Use nextTick to ensure Vue has processed reactivity updates
+  nextTick(() => {
+    drawAllVideoFrames()
+  })
 }
-
-// Get current video element
-const currentVideoEl = computed(() => {
-  if (!annotation.activeCamera.value) return null
-  return videoRefs.value.get(annotation.activeCamera.value) ?? null
-})
 
 // Sync video to current timestamp
 function syncVideoToTimestamp(): void {
-  for (const [cameraId, videoEl] of videoRefs.value) {
-    if (videoEl && isVideoReady.value.get(cameraId)) {
+  for (const [cameraId, videoEl] of videoRefs) {
+    if (videoEl && isVideoReady.get(cameraId)) {
       videoEl.currentTime = annotation.currentTimestamp.value
     }
   }
 }
 
-// Draw video frame for active camera with bounding boxes
-function drawVideoFrame(): void {
-  const videoEl = currentVideoEl.value
-  const canvas = videoCanvasRef.value
+// Get frame data for a specific camera
+function getFrameDataForCamera(cameraId: string) {
+  const cam = annotation.cameras.get(cameraId)
+  if (!cam?.detectionData) return null
+
+  // Find frame closest to current timestamp
+  const frames = cam.detectionData.frames
+  if (frames.length === 0) return null
+
+  const timestamp = annotation.currentTimestamp.value
+  let low = 0
+  let high = frames.length - 1
+
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2)
+    if (frames[mid].timestamp < timestamp) {
+      low = mid + 1
+    } else {
+      high = mid
+    }
+  }
+
+  if (low > 0) {
+    const prevDiff = Math.abs(frames[low - 1].timestamp - timestamp)
+    const currDiff = Math.abs(frames[low].timestamp - timestamp)
+    if (prevDiff < currDiff) {
+      return frames[low - 1]
+    }
+  }
+
+  return frames[low]
+}
+
+// Draw video frame for a specific camera with bounding boxes
+function drawVideoFrameForCamera(cameraId: string): void {
+  const videoEl = videoRefs.get(cameraId)
+  const canvas = videoCanvasRefs.get(cameraId)
   if (!videoEl || !canvas) return
 
-  const cameraId = annotation.activeCamera.value ?? ''
-  if (!isVideoReady.value.get(cameraId)) return
+  if (!isVideoReady.get(cameraId)) return
 
   const ctx = canvas.getContext('2d')
   if (!ctx) return
@@ -167,7 +204,7 @@ function drawVideoFrame(): void {
   ctx.drawImage(videoEl, 0, 0)
 
   // Draw bounding boxes for current frame detections
-  const frameData = annotation.currentFrameData.value
+  const frameData = getFrameDataForCamera(cameraId)
   if (!frameData?.detections) return
 
   const videoWidth = videoEl.videoWidth
@@ -175,7 +212,7 @@ function drawVideoFrame(): void {
 
   for (let i = 0; i < frameData.detections.length; i++) {
     const det = frameData.detections[i]
-    const bbox = det.bbox
+    const bbox = normalizeBbox(det.bbox)
     const trackId = det.track_id
     const color = getTrackColor(cameraId, trackId)
     const isSelected = annotation.isDetectionSelected(cameraId, i)
@@ -210,21 +247,58 @@ function drawVideoFrame(): void {
       ctx.fillText('✓', x + w - 12, y + 16)
     }
 
-    // Draw track label
+    // Draw track label (larger font)
     const label = `#${trackId}`
-    ctx.font = 'bold 14px monospace'
-    const labelWidth = ctx.measureText(label).width + 8
+    ctx.font = 'bold 24px monospace'
+    const labelWidth = ctx.measureText(label).width + 12
     ctx.fillStyle = color
-    ctx.fillRect(x, y - 20, labelWidth, 18)
+    ctx.fillRect(x, y - 32, labelWidth, 28)
     ctx.fillStyle = '#fff'
     ctx.textAlign = 'left'
-    ctx.fillText(label, x + 4, y - 6)
+    ctx.fillText(label, x + 6, y - 10)
+  }
+}
+
+// Draw all camera video frames
+function drawAllVideoFrames(): void {
+  for (const cameraId of videoRefs.keys()) {
+    drawVideoFrameForCamera(cameraId)
   }
 }
 
 // Helper to get camera name
 function getCameraName(cameraId: string): string {
   return cameraId
+}
+
+// Handle click on camera canvas to select detection
+function handleCanvasClick(cameraId: string, event: MouseEvent): void {
+  const canvas = videoCanvasRefs.get(cameraId)
+  if (!canvas) return
+
+  const rect = canvas.getBoundingClientRect()
+  const scaleX = canvas.width / rect.width
+  const scaleY = canvas.height / rect.height
+  const x = (event.clientX - rect.left) * scaleX
+  const y = (event.clientY - rect.top) * scaleY
+
+  // Find which detection was clicked
+  const frameData = getFrameDataForCamera(cameraId)
+  if (!frameData?.detections) return
+
+  for (let i = 0; i < frameData.detections.length; i++) {
+    const det = frameData.detections[i]
+    const bbox = normalizeBbox(det.bbox)
+    const bx = bbox.left * canvas.width
+    const by = bbox.top * canvas.height
+    const bw = (bbox.right - bbox.left) * canvas.width
+    const bh = (bbox.bottom - bbox.top) * canvas.height
+
+    if (x >= bx && x <= bx + bw && y >= by && y <= by + bh) {
+      handleDetectionClick(cameraId, i)
+      return
+    }
+  }
 }
 
 // Draw floor plan with annotations
@@ -512,35 +586,38 @@ function handleKeydown(event: KeyboardEvent): void {
       break
   }
 
-  drawVideoFrame()
+  drawAllVideoFrames()
   drawFloorPlan()
 }
 
 // Watch for timestamp changes
 watch(() => annotation.currentTimestamp.value, () => {
   syncVideoToTimestamp()
-  drawVideoFrame()
+  drawAllVideoFrames()
   drawFloorPlan()
 })
 
-// Watch for active camera changes
-watch(() => annotation.activeCamera.value, () => {
-  drawVideoFrame()
-})
-
-// Watch for selection changes
+// Watch for selection changes to redraw bboxes
 watch(() => annotation.selectedDetections.value.length, () => {
+  drawAllVideoFrames()
   drawFloorPlan()
 })
 
-// Animation loop
+// Animation loop - for playing videos
 let animationId: number | null = null
 
 function startAnimationLoop(): void {
   const animate = () => {
-    const videoEl = currentVideoEl.value
-    if (videoEl && !videoEl.paused) {
-      drawVideoFrame()
+    // Check if any video is playing
+    let anyPlaying = false
+    for (const videoEl of videoRefs.values()) {
+      if (videoEl && !videoEl.paused) {
+        anyPlaying = true
+        break
+      }
+    }
+    if (anyPlaying) {
+      drawAllVideoFrames()
     }
     animationId = requestAnimationFrame(animate)
   }
@@ -566,6 +643,13 @@ onMounted(async () => {
     await initializeCameras()
     drawFloorPlan()
     setTimeout(fitFloorPlanToView, 100)
+
+    // Wait for Vue to render video elements, then try to draw
+    await nextTick()
+    // Give videos a moment to start loading and trigger loadeddata
+    setTimeout(() => {
+      drawAllVideoFrames()
+    }, 500)
   }
 })
 
@@ -645,115 +729,79 @@ watch(activeSiteMap, async () => {
       </button>
     </div>
 
-    <!-- Main Content -->
-    <div class="flex-1 grid grid-cols-2 gap-4 p-4 overflow-hidden">
-      <!-- Left: Video with Camera Tabs -->
-      <div class="flex flex-col gap-3 min-h-0">
-        <Card class="flex-1 flex flex-col min-h-0">
-          <!-- Camera Tabs -->
-          <CardHeader class="py-2 px-3">
-            <div class="flex items-center justify-between">
-              <Tabs
-                :model-value="annotation.activeCamera.value ?? ''"
-                @update:model-value="(v) => annotation.setActiveCamera(v as string)"
-              >
-                <TabsList>
-                  <TabsTrigger
-                    v-for="cam in annotation.cameraList.value"
-                    :key="cam.cameraId"
-                    :value="cam.cameraId"
-                    class="gap-2"
-                  >
-                    <span
-                      class="w-2 h-2 rounded-full"
-                      :style="{ backgroundColor: cameraColors[cam.cameraId] }"
-                    />
-                    {{ cam.cameraId }}
-                    <span
-                      v-if="annotation.getSelectionsForCamera(cam.cameraId).length > 0"
-                      class="ml-1 px-1.5 py-0.5 bg-primary text-primary-foreground rounded-full text-xs"
-                    >
-                      {{ annotation.getSelectionsForCamera(cam.cameraId).length }}
-                    </span>
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
+    <!-- Main Content: Cameras stacked left, Site map right -->
+    <div class="flex-1 flex flex-col gap-3 p-4 overflow-hidden">
+      <!-- Top: Cameras (stacked) | Site Map (larger) -->
+      <div class="flex-1 grid grid-cols-2 gap-3 min-h-0">
+        <!-- Left: Cameras stacked vertically -->
+        <div class="flex flex-col gap-2 min-h-0">
+          <!-- Camera 1 -->
+          <Card class="flex-1 flex flex-col min-h-0">
+            <CardHeader class="py-1 px-2">
+              <CardTitle class="text-sm flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: cameraColors['camera1'] }" />
+                Camera 1
+                <span v-if="annotation.getSelectionsForCamera('camera1').length > 0" class="ml-1 px-1.5 py-0.5 bg-primary text-primary-foreground rounded-full text-xs">
+                  {{ annotation.getSelectionsForCamera('camera1').length }}
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent class="flex-1 p-1 min-h-0 relative flex items-center justify-center bg-black">
+              <video
+                :ref="(el) => setVideoRef('camera1', el as HTMLVideoElement)"
+                :src="cameraSources[0]?.videoPath"
+                class="hidden"
+                @loadeddata="onVideoLoaded('camera1')"
+                muted
+              />
+              <canvas
+                :ref="(el) => setCanvasRef('camera1', el as HTMLCanvasElement)"
+                class="max-w-full max-h-full"
+                style="aspect-ratio: 16/9;"
+                @click="handleCanvasClick('camera1', $event)"
+              />
+            </CardContent>
+          </Card>
 
-              <span class="font-mono text-sm text-muted-foreground">
-                {{ annotation.currentTimestamp.value.toFixed(2) }}s
-              </span>
-            </div>
-          </CardHeader>
-
-          <CardContent class="flex-1 p-2 min-h-0 relative">
-            <!-- Hidden video elements for each camera -->
-            <video
-              v-for="cam in annotation.cameraList.value"
-              :key="cam.cameraId"
-              :ref="(el) => setVideoRef(cam.cameraId, el as HTMLVideoElement)"
-              :src="cam.videoPath"
-              class="hidden"
-              @loadeddata="onVideoLoaded(cam.cameraId)"
-              muted
-            />
-
-            <!-- Canvas for rendering video frame -->
-            <canvas
-              ref="videoCanvasRef"
-              class="w-full h-full object-contain"
-            />
-
-            <!-- Loading state -->
-            <div
-              v-if="!isInitialized"
-              class="absolute inset-0 flex items-center justify-center bg-muted/50"
-            >
-              <p class="text-muted-foreground">Loading cameras...</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <!-- Timeline Navigation -->
-        <div class="flex items-center gap-2">
-          <Button size="sm" variant="outline" @click="annotation.goToPrevFrame(); syncVideoToTimestamp()">
-            ← Prev
-          </Button>
-
-          <input
-            type="range"
-            :min="0"
-            :max="annotation.totalDuration.value"
-            :step="0.1"
-            :value="annotation.currentTimestamp.value"
-            class="flex-1"
-            @input="(e) => {
-              const ts = parseFloat((e.target as HTMLInputElement).value)
-              annotation.goToTimestamp(ts)
-              syncVideoToTimestamp()
-            }"
-          />
-
-          <Button size="sm" variant="outline" @click="annotation.goToNextFrame(); syncVideoToTimestamp()">
-            Next →
-          </Button>
+          <!-- Camera 2 -->
+          <Card class="flex-1 flex flex-col min-h-0">
+            <CardHeader class="py-1 px-2">
+              <CardTitle class="text-sm flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: cameraColors['camera2'] }" />
+                Camera 2
+                <span v-if="annotation.getSelectionsForCamera('camera2').length > 0" class="ml-1 px-1.5 py-0.5 bg-primary text-primary-foreground rounded-full text-xs">
+                  {{ annotation.getSelectionsForCamera('camera2').length }}
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent class="flex-1 p-1 min-h-0 relative flex items-center justify-center bg-black">
+              <video
+                :ref="(el) => setVideoRef('camera2', el as HTMLVideoElement)"
+                :src="cameraSources[1]?.videoPath"
+                class="hidden"
+                @loadeddata="onVideoLoaded('camera2')"
+                muted
+              />
+              <canvas
+                :ref="(el) => setCanvasRef('camera2', el as HTMLCanvasElement)"
+                class="max-w-full max-h-full"
+                style="aspect-ratio: 16/9;"
+                @click="handleCanvasClick('camera2', $event)"
+              />
+            </CardContent>
+          </Card>
         </div>
-      </div>
 
-      <!-- Right: Floor Plan + Detection List -->
-      <div class="flex flex-col gap-3 min-h-0">
-        <!-- Floor Plan -->
-        <Card class="flex-1 flex flex-col min-h-0">
-          <CardHeader class="py-2 px-3">
+        <!-- Right: Site Map (larger) -->
+        <Card class="flex flex-col min-h-0">
+          <CardHeader class="py-1 px-2">
             <CardTitle class="text-sm flex items-center justify-between">
-              <span>Floor Plan - Click to Set Position</span>
-              <div class="flex items-center gap-3">
-                <span v-if="floorPlanCoords" class="font-mono text-muted-foreground">
+              <span>Site Map - Click to annotate</span>
+              <div class="flex items-center gap-2">
+                <span v-if="floorPlanCoords" class="font-mono text-muted-foreground text-xs">
                   {{ floorPlanCoords.x.toFixed(2) }}m, {{ floorPlanCoords.y.toFixed(2) }}m
                 </span>
-                <span class="font-mono text-muted-foreground text-xs">
-                  {{ (floorPlanScale * 100).toFixed(0) }}%
-                </span>
-                <Button size="sm" variant="ghost" class="h-6 px-2 text-xs" @click="fitFloorPlanToView">
+                <Button size="sm" variant="ghost" class="h-5 px-1 text-xs" @click="fitFloorPlanToView">
                   Fit
                 </Button>
               </div>
@@ -785,81 +833,80 @@ watch(activeSiteMap, async () => {
                 }"
               />
             </div>
-
-            <div
-              v-if="!activeSiteMap"
-              class="absolute inset-0 flex items-center justify-center bg-muted/50"
-            >
-              <p class="text-muted-foreground">No site map loaded</p>
-            </div>
-
-            <div class="absolute bottom-2 left-2 text-xs text-muted-foreground bg-background/80 px-2 py-1 rounded">
-              Scroll to zoom, Shift+drag to pan
+            <div v-if="!activeSiteMap" class="absolute inset-0 flex items-center justify-center bg-muted/50">
+              <p class="text-muted-foreground text-sm">No site map</p>
             </div>
           </CardContent>
         </Card>
+      </div>
 
-        <!-- Detections List for Active Camera -->
-        <Card class="h-[200px] flex flex-col">
-          <CardHeader class="py-2 px-3">
-            <CardTitle class="text-sm flex items-center gap-2">
-              <span
-                class="w-2 h-2 rounded-full"
-                :style="{ backgroundColor: cameraColors[annotation.activeCamera.value ?? ''] }"
-              />
-              Detections - {{ annotation.activeCamera.value }}
-              ({{ annotation.currentFrameData.value?.detections.length ?? 0 }})
-            </CardTitle>
-          </CardHeader>
-          <CardContent class="flex-1 p-2 overflow-y-auto">
-            <div
-              v-if="!annotation.currentFrameData.value?.detections.length"
-              class="text-sm text-muted-foreground text-center py-4"
-            >
-              No detections at this timestamp
+      <!-- Bottom: Timeline + Dynamic Track Grid -->
+      <div class="flex items-center gap-3">
+        <!-- Timeline -->
+        <div class="flex-1 flex items-center gap-2">
+          <Button size="sm" variant="outline" @click="annotation.goToPrevFrame(); syncVideoToTimestamp()">
+            ←
+          </Button>
+
+          <div class="flex-1 flex flex-col gap-1">
+            <input
+              type="range"
+              :min="0"
+              :max="annotation.totalDuration.value"
+              :step="0.1"
+              :value="annotation.currentTimestamp.value"
+              class="w-full"
+              @input="(e) => {
+                const ts = parseFloat((e.target as HTMLInputElement).value)
+                annotation.goToTimestamp(ts)
+                syncVideoToTimestamp()
+              }"
+            />
+            <div class="text-center font-mono text-sm text-muted-foreground">
+              {{ annotation.currentTimestamp.value.toFixed(2) }}s / {{ annotation.totalDuration.value.toFixed(1) }}s
             </div>
+          </div>
 
-            <div v-else class="space-y-1">
-              <div
-                v-for="(det, index) in annotation.currentFrameData.value.detections"
-                :key="index"
-                class="p-2 rounded text-xs transition-colors"
-                :class="[
-                  annotation.isTrackAlreadyAnnotated(annotation.activeCamera.value ?? '', det.track_id)
-                    ? 'bg-green-500/20 cursor-not-allowed opacity-60'
-                    : annotation.isDetectionSelected(annotation.activeCamera.value ?? '', index)
-                      ? 'bg-primary/20 ring-1 ring-primary cursor-pointer'
-                      : 'bg-muted/50 hover:bg-muted cursor-pointer'
-                ]"
-                @click="handleDetectionClick(annotation.activeCamera.value ?? '', index)"
-              >
-                <div class="flex items-center gap-2">
-                  <div
-                    class="w-3 h-3 rounded-full"
-                    :style="{ backgroundColor: getTrackColor(annotation.activeCamera.value ?? '', det.track_id) }"
-                  />
-                  <span class="font-semibold">Track #{{ det.track_id }}</span>
-                  <span class="text-muted-foreground">
-                    {{ (det.confidence * 100).toFixed(0) }}%
-                  </span>
+          <Button size="sm" variant="outline" @click="annotation.goToNextFrame(); syncVideoToTimestamp()">
+            →
+          </Button>
+        </div>
 
-                  <span
-                    v-if="annotation.isTrackAlreadyAnnotated(annotation.activeCamera.value ?? '', det.track_id)"
-                    class="ml-auto text-green-500 font-semibold"
-                  >
-                    ✓ Annotated
-                  </span>
-                  <span
-                    v-else-if="annotation.isDetectionSelected(annotation.activeCamera.value ?? '', index)"
-                    class="ml-auto text-primary font-semibold"
-                  >
-                    Selected
-                  </span>
-                </div>
+        <!-- Dynamic Track Grid - grouped by camera -->
+        <div class="flex gap-4">
+          <template v-for="cam in ['camera1', 'camera2']" :key="cam">
+            <div class="flex items-center gap-1">
+              <!-- Camera label -->
+              <div class="flex items-center gap-1 px-2 py-1 text-xs font-medium text-muted-foreground">
+                <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: cameraColors[cam] }" />
+                <span>{{ cam === 'camera1' ? 'C1' : 'C2' }}</span>
+              </div>
+              <!-- Detections for this camera -->
+              <div class="flex flex-wrap gap-1">
+                <button
+                  v-for="(det, index) in (getFrameDataForCamera(cam)?.detections || [])"
+                  :key="`${cam}-${det.track_id}`"
+                  class="px-2 py-1 rounded text-xs flex items-center gap-1 transition-colors"
+                  :class="[
+                    annotation.isDetectionSelected(cam, index)
+                      ? 'bg-primary/30 ring-2 ring-primary'
+                      : annotation.isTrackAlreadyAnnotated(cam, det.track_id)
+                        ? 'bg-green-500/20 opacity-60'
+                        : 'bg-muted/50 hover:bg-muted'
+                  ]"
+                  @click="handleDetectionClick(cam, index)"
+                >
+                  <span class="w-2 h-2 rounded-full flex-shrink-0" :style="{ backgroundColor: getTrackColor(cam, det.track_id) }" />
+                  <span class="font-mono">#{{ det.track_id }}</span>
+                  <span v-if="annotation.isTrackAlreadyAnnotated(cam, det.track_id)" class="text-green-500">✓</span>
+                </button>
+                <span v-if="(getFrameDataForCamera(cam)?.detections || []).length === 0" class="text-xs text-muted-foreground px-1">
+                  -
+                </span>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </template>
+        </div>
       </div>
     </div>
 

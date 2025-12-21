@@ -60,11 +60,27 @@ export interface Detection {
   track_state: 'new' | 'active' | 'lost'
 }
 
-export interface BoundingBox {
-  left: number   // normalized 0-1
-  top: number    // normalized 0-1
-  right: number  // normalized 0-1
-  bottom: number // normalized 0-1
+// BoundingBox can be in two formats:
+// - Object format: { left, top, right, bottom } (normalized 0-1)
+// - Array format: [x, y, w, h] (normalized 0-1, top-left corner + size)
+export type BoundingBox =
+  | { left: number; top: number; right: number; bottom: number }
+  | [number, number, number, number]
+
+// Helper to convert any bbox format to { left, top, right, bottom }
+export function normalizeBbox(bbox: BoundingBox): { left: number; top: number; right: number; bottom: number } {
+  if (Array.isArray(bbox)) {
+    // [x, y, w, h] format (top-left corner + size)
+    const [x, y, w, h] = bbox
+    return {
+      left: x,
+      top: y,
+      right: x + w,
+      bottom: y + h,
+    }
+  }
+  // Already in object format
+  return bbox
 }
 
 export interface VideoFileOption {
@@ -81,12 +97,12 @@ export const AVAILABLE_VIDEOS: VideoFileOption[] = [
     id: 'hc3',
     displayName: 'Camera HC3',
     videoPath: '/cameras/view-HC3.mp4',
-    detectionsPath: '/cameras/view-HC3.detections.json.gz',
+    detectionsPath: '/cameras/view-HC3.detections.json',
   },
   {
     id: 'hc4',
     displayName: 'Camera HC4',
     videoPath: '/cameras/view-HC4.mp4',
-    detectionsPath: '/cameras/view-HC4.detections.json.gz',
+    detectionsPath: '/cameras/view-HC4.detections.json',
   },
 ]

@@ -12,7 +12,7 @@ import type { Point2D } from './fov-geometry.js'
 import { distance } from './fov-geometry.js'
 
 function isRayBlockedByPillar(cameraPos: Point2D, targetPoint: Point2D, pillar: SiteMapObstacle): boolean {
-  if (pillar.type !== 'circle' || pillar.radius === undefined) return false
+  if (pillar.type !== 'circle' || pillar.radius === undefined || !pillar.position) return false
 
   const dx = targetPoint.x - cameraPos.x
   const dy = targetPoint.y - cameraPos.y
@@ -48,7 +48,7 @@ function isPointInPillarShadow(
   shadowExtension: number,
   lateralTolerance: number
 ): boolean {
-  if (pillar.type !== 'circle' || pillar.radius === undefined) return false
+  if (pillar.type !== 'circle' || pillar.radius === undefined || !pillar.position) return false
 
   const toPillarX = pillar.position.x - cameraPos.x
   const toPillarY = pillar.position.y - cameraPos.y

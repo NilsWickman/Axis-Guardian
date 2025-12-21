@@ -44,6 +44,13 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useGlobalTrackStore, type GlobalTrack } from '../../../stores/globalTracks'
 import type { SiteMap } from '../../../composables/useSiteMapConfig'
 import { calculateVelocity } from '../../../utils/trackCorrelation'
+import {
+  getSegmentVelocity,
+  getVelocityBrightness,
+  getVelocityLineWidth,
+  adjustColorBrightness,
+  shouldShowGlow,
+} from '../../../utils/trail-styling'
 
 export interface PersonPositionOverlayProps {
   siteMap: SiteMap
@@ -294,8 +301,9 @@ function calculateStationaryFade(trail: GlobalTrack['trail'], now: number): numb
 }
 
 /**
- * Draw trail with fading opacity
+ * Draw trail with velocity-based brightness and width
  * Trail fades both by position (older = more transparent) and by time when stationary
+ * Velocity affects: brightness (dim when slow, bright when fast) and line width
  */
 function drawTrail(ctx: CanvasRenderingContext2D, track: GlobalTrack, interpolatedPos: { x: number; y: number }, now: number) {
   if (!props.showTrails) return
@@ -307,30 +315,65 @@ function drawTrail(ctx: CanvasRenderingContext2D, track: GlobalTrack, interpolat
   const stationaryFade = calculateStationaryFade(trail, now)
   if (stationaryFade <= 0) return // Trail fully faded, skip drawing
 
-  ctx.lineWidth = 2
   ctx.lineCap = 'round'
-  ctx.strokeStyle = track.color
+  ctx.lineJoin = 'round'
+
+  // Calculate velocity for the newest segment (interpolated pos to first trail point)
+  const newestVelocity = trail.length >= 1 ? getSegmentVelocity(trail, 0) : 0
+  const newestBrightness = getVelocityBrightness(newestVelocity)
+  const newestWidth = getVelocityLineWidth(newestVelocity)
+  const newestColor = adjustColorBrightness(track.color, newestBrightness)
 
   // Base opacity multiplied by stationary fade
   const baseOpacity = 0.6 * stationaryFade
 
-  // Draw line from interpolated position to first trail point
+  // Draw line from interpolated position to first trail point with velocity styling
   if (trail.length >= 1) {
+    ctx.lineWidth = newestWidth
+    ctx.strokeStyle = newestColor
     ctx.globalAlpha = baseOpacity
+
+    // Add subtle glow for fast movement
+    if (shouldShowGlow(newestVelocity)) {
+      ctx.shadowColor = track.color
+      ctx.shadowBlur = 4
+    }
+
     ctx.beginPath()
     ctx.moveTo(worldToCanvasX(interpolatedPos.x), worldToCanvasY(interpolatedPos.y))
     ctx.lineTo(worldToCanvasX(trail[0].x), worldToCanvasY(trail[0].y))
     ctx.stroke()
+
+    ctx.shadowBlur = 0
   }
 
-  // Draw remaining trail segments
+  // Draw remaining trail segments with per-segment velocity styling
   for (let i = 0; i < trail.length - 1; i++) {
-    const opacity = baseOpacity * (1 - (i + 1) / trail.length)
+    const segmentVelocity = getSegmentVelocity(trail, i)
+    const brightness = getVelocityBrightness(segmentVelocity)
+    const lineWidth = getVelocityLineWidth(segmentVelocity)
+    const segmentColor = adjustColorBrightness(track.color, brightness)
+
+    // Combine age-based fade with velocity brightness
+    const ageFade = 1 - (i + 1) / trail.length
+    const opacity = baseOpacity * ageFade
+
+    ctx.lineWidth = lineWidth
+    ctx.strokeStyle = segmentColor
     ctx.globalAlpha = opacity
+
+    // Add glow for fast segments
+    if (shouldShowGlow(segmentVelocity)) {
+      ctx.shadowColor = track.color
+      ctx.shadowBlur = 3 * ageFade // Fade glow with age too
+    }
+
     ctx.beginPath()
     ctx.moveTo(worldToCanvasX(trail[i].x), worldToCanvasY(trail[i].y))
     ctx.lineTo(worldToCanvasX(trail[i + 1].x), worldToCanvasY(trail[i + 1].y))
     ctx.stroke()
+
+    ctx.shadowBlur = 0
   }
 
   ctx.globalAlpha = 1
@@ -494,7 +537,7 @@ function drawGhostMarker(ctx: CanvasRenderingContext2D, track: GlobalTrack, posi
 }
 
 /**
- * Draw ghost track trail (dashed, semi-transparent)
+ * Draw ghost track trail (dashed, semi-transparent) with velocity-based styling
  * Also fades when stationary for extended periods
  */
 function drawGhostTrail(ctx: CanvasRenderingContext2D, track: GlobalTrack, ghostPos: { x: number; y: number }, now: number) {
@@ -507,16 +550,23 @@ function drawGhostTrail(ctx: CanvasRenderingContext2D, track: GlobalTrack, ghost
   const stationaryFade = calculateStationaryFade(trail, now)
   if (stationaryFade <= 0) return // Trail fully faded, skip drawing
 
-  ctx.lineWidth = 2
   ctx.lineCap = 'round'
-  ctx.strokeStyle = track.color
+  ctx.lineJoin = 'round'
   ctx.setLineDash([4, 4])
+
+  // Calculate velocity for the newest segment
+  const newestVelocity = trail.length >= 1 ? getSegmentVelocity(trail, 0) : 0
+  const newestBrightness = getVelocityBrightness(newestVelocity)
+  const newestWidth = getVelocityLineWidth(newestVelocity)
+  const newestColor = adjustColorBrightness(track.color, newestBrightness)
 
   // Base opacity for ghost trails (0.3) multiplied by stationary fade
   const baseOpacity = 0.3 * stationaryFade
 
   // Draw line from ghost position to first trail point
   if (trail.length >= 1) {
+    ctx.lineWidth = newestWidth
+    ctx.strokeStyle = newestColor
     ctx.globalAlpha = baseOpacity
     ctx.beginPath()
     ctx.moveTo(worldToCanvasX(ghostPos.x), worldToCanvasY(ghostPos.y))
@@ -524,9 +574,18 @@ function drawGhostTrail(ctx: CanvasRenderingContext2D, track: GlobalTrack, ghost
     ctx.stroke()
   }
 
-  // Draw remaining trail segments (fading)
+  // Draw remaining trail segments with per-segment velocity styling
   for (let i = 0; i < trail.length - 1; i++) {
-    const opacity = baseOpacity * (1 - (i + 1) / trail.length)
+    const segmentVelocity = getSegmentVelocity(trail, i)
+    const brightness = getVelocityBrightness(segmentVelocity)
+    const lineWidth = getVelocityLineWidth(segmentVelocity)
+    const segmentColor = adjustColorBrightness(track.color, brightness)
+
+    const ageFade = 1 - (i + 1) / trail.length
+    const opacity = baseOpacity * ageFade
+
+    ctx.lineWidth = lineWidth
+    ctx.strokeStyle = segmentColor
     ctx.globalAlpha = opacity
     ctx.beginPath()
     ctx.moveTo(worldToCanvasX(trail[i].x), worldToCanvasY(trail[i].y))

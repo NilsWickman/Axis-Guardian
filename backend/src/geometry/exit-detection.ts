@@ -54,6 +54,9 @@ function isRayBlockedByPillar(
   const dirX = dx / rayLength
   const dirY = dy / rayLength
 
+  // Guard: pillar must have position
+  if (!pillar.position) return false
+
   // Vector from camera to pillar center
   const toPillarX = pillar.position.x - cameraPos.x
   const toPillarY = pillar.position.y - cameraPos.y
@@ -98,7 +101,7 @@ function isPointInPillarShadow(
   pillar: SiteMapObstacle,
   shadowExtension: number = 3.0
 ): boolean {
-  if (pillar.type !== 'circle' || pillar.radius === undefined) {
+  if (pillar.type !== 'circle' || pillar.radius === undefined || !pillar.position) {
     return false
   }
 
@@ -232,7 +235,7 @@ function predictPillarExit(
   velocity: Point2D,
   pillar: SiteMapObstacle
 ): { exitPoint: Point2D; timeMs: number } | null {
-  if (pillar.type !== 'circle' || pillar.radius === undefined) {
+  if (pillar.type !== 'circle' || pillar.radius === undefined || !pillar.position) {
     return null
   }
 

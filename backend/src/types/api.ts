@@ -43,6 +43,18 @@ export interface CameraFrameInfo {
   timestamp: number
 }
 
+/**
+ * Camera health status for monitoring
+ */
+export interface CameraHealthStatus {
+  cameraId: string
+  lastFrameNumber: number
+  lastSeenMs: number        // Time since last detection
+  clockOffsetMs: number     // Drift from reference
+  frameDropRate: number     // Gaps in frame sequence (0-1)
+  status: 'online' | 'stale' | 'offline'
+}
+
 // ============================================================================
 // WebSocket Message Types
 // ============================================================================

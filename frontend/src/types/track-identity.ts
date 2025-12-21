@@ -32,6 +32,28 @@ export interface TrackThumbnailSet {
 }
 
 /**
+ * Crop region for video playback (normalized 0-1 coordinates)
+ */
+export interface TrackCropRegion {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+/**
+ * Video segment info for a track
+ */
+export interface TrackVideoSegment {
+  cameraId: string
+  trackId: number
+  startTimestamp: number  // seconds
+  endTimestamp: number    // seconds
+  cropRegion: TrackCropRegion
+  duration: number        // seconds
+}
+
+/**
  * A single track-to-person identity mapping
  */
 export interface TrackIdentityAnnotation {
@@ -92,7 +114,7 @@ export interface TrackIdentityDataset {
   persons: PersonDefinition[]
 }
 
-// Default person colors (distinct, accessible) - 20 colors
+// Default person colors (distinct, accessible) - 21 colors (includes invalid)
 const PERSON_COLORS = [
   '#ef4444', // red
   '#f97316', // orange
@@ -114,17 +136,33 @@ const PERSON_COLORS = [
   '#78716c', // stone
   '#dc2626', // red-600
   '#7c3aed', // violet-600
+  '#374151', // gray-700 for person 21
 ]
 
+/** Special ID for invalid/reflection tracks */
+export const INVALID_PERSON_ID = 0
+
 /**
- * Generate default person definitions (1-20)
+ * Generate default person definitions (0=Invalid, 1-21 persons)
  */
 export function createDefaultPersons(): PersonDefinition[] {
-  return Array.from({ length: 20 }, (_, i) => ({
+  // Invalid/Reflection option (ID 0)
+  const invalidPerson: PersonDefinition = {
+    id: INVALID_PERSON_ID,
+    label: 'Invalid',
+    color: '#6b7280', // gray-500
+    thumbnailUrl: undefined,
+  }
+
+  // Persons 1-21 with static thumbnails
+  const persons = Array.from({ length: 21 }, (_, i) => ({
     id: i + 1,
     label: `Person ${i + 1}`,
     color: PERSON_COLORS[i],
+    thumbnailUrl: `/people/person${i + 1}.png`,
   }))
+
+  return [invalidPerson, ...persons]
 }
 
 /**

@@ -66,10 +66,10 @@ const routes: RouteRecordRaw[] = [
       title: 'Replay',
     },
   },
-  // Calibration
+  // Ground Truth Annotator (moved to dev)
   {
-    path: '/calibration/annotator',
-    name: 'CalibrationAnnotator',
+    path: '/dev/ground-annotator',
+    name: 'GroundAnnotator',
     component: () => import('@/views/calibration/CalibrationAnnotator.vue'),
     meta: {
       title: 'Ground Truth Annotator',

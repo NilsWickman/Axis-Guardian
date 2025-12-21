@@ -1,7 +1,7 @@
 import { ref, reactive } from 'vue'
 import type { DetectionFile, FrameData, Detection } from '@/types/frame-review'
-import type { TrackThumbnail, TrackThumbnailSet } from '@/types/track-identity'
-import { AVAILABLE_VIDEOS } from '@/types/frame-review'
+import type { TrackThumbnail, TrackThumbnailSet, TrackCropRegion, TrackVideoSegment } from '@/types/track-identity'
+import { AVAILABLE_VIDEOS, normalizeBbox } from '@/types/frame-review'
 
 /** Camera ID to video source mapping */
 const CAMERA_VIDEO_MAP: Record<string, string> = {
@@ -199,7 +199,7 @@ export function useTrackThumbnails() {
       frameCtx.drawImage(video, 0, 0)
 
       // Calculate crop region with padding
-      const bbox = detection.bbox
+      const bbox = normalizeBbox(detection.bbox)
       const width = (bbox.right - bbox.left) * frameCanvas.width
       const height = (bbox.bottom - bbox.top) * frameCanvas.height
       const padX = width * BBOX_PADDING
@@ -507,6 +507,86 @@ export function useTrackThumbnails() {
     isInitialized.value = false
   }
 
+  /**
+   * Calculate stable crop region from union of all bounding boxes for a track
+   */
+  function calculateTrackCropRegion(
+    cameraId: string,
+    trackId: number,
+    padding: number = 0.15
+  ): TrackCropRegion | null {
+    const camera = cameras.get(cameraId)
+    if (!camera?.detectionData) return null
+
+    const frames = camera.trackFrameIndex.get(trackId) || []
+    if (frames.length === 0) return null
+
+    // Initialize union bounds
+    let minLeft = 1, minTop = 1, maxRight = 0, maxBottom = 0
+
+    for (const frame of frames) {
+      const detection = frame.detections.find(d => d.track_id === trackId)
+      if (!detection) continue
+
+      const bbox = normalizeBbox(detection.bbox)
+      minLeft = Math.min(minLeft, bbox.left)
+      minTop = Math.min(minTop, bbox.top)
+      maxRight = Math.max(maxRight, bbox.right)
+      maxBottom = Math.max(maxBottom, bbox.bottom)
+    }
+
+    // Add padding
+    const width = maxRight - minLeft
+    const height = maxBottom - minTop
+    const padX = width * padding
+    const padY = height * padding
+
+    return {
+      left: Math.max(0, minLeft - padX),
+      top: Math.max(0, minTop - padY),
+      width: Math.min(1 - Math.max(0, minLeft - padX), width + padX * 2),
+      height: Math.min(1 - Math.max(0, minTop - padY), height + padY * 2),
+    }
+  }
+
+  /**
+   * Get video segment information for offline track playback
+   */
+  function getVideoSegmentForTrack(
+    cameraId: string,
+    trackId: number
+  ): TrackVideoSegment | null {
+    const camera = cameras.get(cameraId)
+    if (!camera?.detectionData) return null
+
+    const frames = camera.trackFrameIndex.get(trackId) || []
+    if (frames.length === 0) return null
+
+    // Get track timing from sorted frames
+    const sorted = [...frames].sort((a, b) => a.timestamp - b.timestamp)
+    const startTimestamp = sorted[0].timestamp
+    const endTimestamp = sorted[sorted.length - 1].timestamp
+
+    const cropRegion = calculateTrackCropRegion(cameraId, trackId)
+    if (!cropRegion) return null
+
+    return {
+      cameraId,
+      trackId,
+      startTimestamp,
+      endTimestamp,
+      cropRegion,
+      duration: endTimestamp - startTimestamp,
+    }
+  }
+
+  /**
+   * Get video element for a camera (for direct playback)
+   */
+  function getVideoElement(cameraId: string): HTMLVideoElement | null {
+    return cameras.get(cameraId)?.videoElement ?? null
+  }
+
   return {
     // State
     cameras,
@@ -522,5 +602,10 @@ export function useTrackThumbnails() {
     clearThumbnailCache,
     areCamerasReady,
     cleanup,
+
+    // Video segment methods
+    calculateTrackCropRegion,
+    getVideoSegmentForTrack,
+    getVideoElement,
   }
 }

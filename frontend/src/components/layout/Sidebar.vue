@@ -14,10 +14,14 @@
     Menu,
     X,
     GitGraph,
+    BarChart3,
   } from 'lucide-vue-next'
   import { useTheme } from '@/composables/useTheme'
   import { useDemoMode } from '@/composables/useDemoMode'
+  import { useSystemMetricsStore } from '@/stores/systemMetrics'
   import { Switch } from '@/components/ui/switch'
+
+  const metricsStore = useSystemMetricsStore()
 
   defineProps<{
     isOpen: boolean
@@ -64,7 +68,7 @@
       children: [
         {
           name: 'Ground Truth Annotator',
-          path: '/calibration/annotator',
+          path: '/dev/ground-annotator',
           icon: Crosshair,
         },
         {
@@ -213,6 +217,15 @@
 
     <!-- Settings -->
     <div class="px-4 pb-4 space-y-3">
+      <!-- Metrics Button -->
+      <button
+        @click="metricsStore.openDrawer()"
+        class="w-full flex items-center px-3 py-2 text-xs font-medium rounded-lg transition-colors text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground border border-transparent"
+      >
+        <BarChart3 class="w-5 h-5 mr-3" />
+        Metrics
+      </button>
+
       <div class="flex items-center justify-center gap-4 px-3 py-2 text-xs font-medium text-muted-foreground">
         <!-- Theme Switcher -->
         <div class="flex items-center gap-1.5">

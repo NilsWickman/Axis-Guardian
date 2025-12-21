@@ -252,7 +252,6 @@ const previewCanvas = useSiteMapCanvas(mapPreviewCanvas, ref(canvasOptions))
 
 const trackingWs = useBackendWebSocket({
   autoReconnect: true,
-  reconnectIntervalMs: 3000,
 })
 
 // Global connection manager (thumbnails + primary view)

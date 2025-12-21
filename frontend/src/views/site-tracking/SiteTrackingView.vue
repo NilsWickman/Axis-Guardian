@@ -182,7 +182,6 @@ const canvas = useSiteMapCanvas(mapCanvas, ref(canvasOptions))
 // Initialize tracking service WebSocket (server-side tracking with K/R/T projection)
 const trackingWs = useBackendWebSocket({
   autoReconnect: true,
-  reconnectIntervalMs: 3000,
 })
 
 // Canvas transform state (fixed, no zoom/pan)

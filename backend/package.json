@@ -31,6 +31,7 @@
     "cli:optimize-joint": "tsx src/calibration/optimize-joint.ts",
     "cli:calibrate-full": "tsx src/calibration/full-pipeline.ts",
     "cli:recalibrate": "tsx src/calibration/recalibrate.ts",
+    "cli:sweep-sitemap": "tsx src/calibration/sweep-sitemap-params.ts",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/migrate.ts && tsx src/db/seed.ts",
     "db:reset": "rm -f data/tracking.db && pnpm db:seed"

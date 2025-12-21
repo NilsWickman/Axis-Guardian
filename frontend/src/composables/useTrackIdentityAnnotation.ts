@@ -65,22 +65,11 @@ export function useTrackIdentityAnnotation() {
    * Initialize the annotation session
    */
   function initializeSession(dataSource: 'live' | 'replay' = 'live'): void {
-    // Try to load existing dataset from localStorage
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved)
-        if (isValidDataset(parsed)) {
-          dataset.value = parsed
-          lastSavedAt.value = parsed.updatedAt
-          return
-        }
-      } catch (e) {
-      }
-    }
-
-    // Create new dataset if none exists
+    // Always start fresh - clear any saved annotations
+    localStorage.removeItem(STORAGE_KEY)
     dataset.value = createEmptyDataset(dataSource)
+    lastSavedAt.value = null
+    isModified.value = false
   }
 
   /**
@@ -268,31 +257,13 @@ export function useTrackIdentityAnnotation() {
   }
 
   /**
-   * Set a thumbnail image for a person
+   * Reset dataset - clears all annotations and creates fresh dataset
    */
-  function setPersonThumbnail(personId: number, thumbnailUrl: string): void {
-    if (!dataset.value) return
-
-    const person = dataset.value.persons.find(p => p.id === personId)
-    if (person) {
-      person.thumbnailUrl = thumbnailUrl
-      dataset.value.updatedAt = new Date().toISOString()
-      isModified.value = true
-    }
-  }
-
-  /**
-   * Clear a person's thumbnail
-   */
-  function clearPersonThumbnail(personId: number): void {
-    if (!dataset.value) return
-
-    const person = dataset.value.persons.find(p => p.id === personId)
-    if (person) {
-      delete person.thumbnailUrl
-      dataset.value.updatedAt = new Date().toISOString()
-      isModified.value = true
-    }
+  function resetDataset(dataSource: 'live' | 'replay' = 'live'): void {
+    dataset.value = createEmptyDataset(dataSource)
+    localStorage.removeItem(STORAGE_KEY)
+    lastSavedAt.value = null
+    isModified.value = false
   }
 
   return {
@@ -323,7 +294,6 @@ export function useTrackIdentityAnnotation() {
     exportAsJson,
     importFromJson,
     isTrackAnnotated,
-    setPersonThumbnail,
-    clearPersonThumbnail,
+    resetDataset,
   }
 }

@@ -692,10 +692,25 @@ export function registerRoutes(
     return getMetrics().getQualityMetrics()
   })
 
+  app.get('/api/metrics/reid', async () => {
+    return getMetrics().getReIDMetrics()
+  })
+
   // Reset metrics (protected by read-only guard)
   app.post('/api/metrics/reset', { preHandler: readOnlyGuard }, async () => {
     getMetrics().reset()
     return { success: true, message: 'Metrics reset' }
+  })
+
+  // ============================================================================
+  // Camera Health API
+  // ============================================================================
+
+  app.get('/api/cameras/health', async () => {
+    return {
+      cameras: detectionProcessor.getCameraHealthStatus(),
+      timestamp: Date.now(),
+    }
   })
 
   // ============================================================================

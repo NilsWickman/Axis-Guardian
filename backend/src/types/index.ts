@@ -68,5 +68,6 @@ export type {
   InjectDetectionRequest,
   TracksResponse,
   CameraFrameInfo,
+  CameraHealthStatus,
   WebSocketMessage,
 } from './api.js'

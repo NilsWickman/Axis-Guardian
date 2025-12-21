@@ -340,7 +340,6 @@ const canvas = useSiteMapCanvas(mapCanvas, ref(canvasOptions))
 // WebSocket connection
 const trackingWs = useBackendWebSocket({
   autoReconnect: true,
-  reconnectIntervalMs: 3000,
 })
 
 // Canvas transform state

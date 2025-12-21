@@ -5,7 +5,7 @@
  * coordinates, and feeds them into the TrackManager.
  */
 
-import type { DetectionMessage, RawDetection, GlobalTrack, CameraDetection, CameraFrameInfo, DetectionAttributes } from '../types.js'
+import type { DetectionMessage, RawDetection, GlobalTrack, CameraDetection, CameraFrameInfo, CameraHealthStatus, DetectionAttributes } from '../types.js'
 import {
   projectDetectionWithKRT,
   estimateBBoxHeightExtension,
@@ -33,6 +33,7 @@ export interface IDetectionProcessor {
   setZoneManager(zoneManager: ZoneManager): void
   setObstacles(obstacles: SiteMapObstacle[]): void
   getCameraFrameInfo(): CameraFrameInfo[]
+  getCameraHealthStatus(): CameraHealthStatus[]
   getLastProcessedFrame(cameraId: string): number
   updateFrameInfo(cameraId: string, frameNumber: number): void
   resetFrameTracking(): void
@@ -857,6 +858,41 @@ export class DetectionProcessor implements IDetectionProcessor {
       frames.push({ cameraId, frameNumber, timestamp })
     }
     return frames
+  }
+
+  /**
+   * Get camera health status for all cameras
+   * Includes staleness detection and frame drop rate
+   */
+  getCameraHealthStatus(): CameraHealthStatus[] {
+    const now = Date.now()
+    const healthStatuses: CameraHealthStatus[] = []
+    const STALE_THRESHOLD_MS = 3000  // 3 seconds without update = stale
+    const OFFLINE_THRESHOLD_MS = 10000  // 10 seconds = offline
+
+    for (const [cameraId, frameNumber] of this.lastProcessedFrames.entries()) {
+      const lastTimestamp = this.lastFrameTimestamps.get(cameraId) ?? 0
+      const lastSeenMs = now - lastTimestamp
+
+      // Determine status based on time since last detection
+      let status: 'online' | 'stale' | 'offline' = 'online'
+      if (lastSeenMs > OFFLINE_THRESHOLD_MS) {
+        status = 'offline'
+      } else if (lastSeenMs > STALE_THRESHOLD_MS) {
+        status = 'stale'
+      }
+
+      healthStatuses.push({
+        cameraId,
+        lastFrameNumber: frameNumber,
+        lastSeenMs,
+        clockOffsetMs: 0,  // TODO: integrate with sync buffer if available
+        frameDropRate: 0,  // TODO: track frame gaps
+        status,
+      })
+    }
+
+    return healthStatuses
   }
 
   /**

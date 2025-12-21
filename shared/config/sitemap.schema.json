@@ -37,6 +37,10 @@
       },
       "required": ["x", "y"]
     },
+    "floorPlane": {
+      "$ref": "#/$defs/floorPlane",
+      "description": "Floor plane configuration (flat by default, can be inclined for lecture halls)"
+    },
     "walls": {
       "type": "array",
       "description": "Wall segments defining the room boundary",
@@ -86,6 +90,69 @@
         "x": { "type": "number" },
         "y": { "type": "number" }
       }
+    },
+    "position3D": {
+      "type": "object",
+      "description": "3D position in meters",
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    },
+    "floorPlane": {
+      "type": "object",
+      "description": "Floor plane configuration for rooms with slanted floors (e.g., lecture halls)",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["flat", "inclined"],
+          "default": "flat",
+          "description": "Floor type: flat (z=0) or inclined (sloped surface)"
+        },
+        "origin": {
+          "$ref": "#/$defs/position3D",
+          "description": "A point on the floor plane (used as reference for inclined planes)"
+        },
+        "normal": {
+          "$ref": "#/$defs/position3D",
+          "description": "Unit normal vector of the floor plane (for inclined: tilted from [0,0,1])"
+        },
+        "gradient": {
+          "type": "object",
+          "description": "Alternative to normal: specify slope direction and magnitude",
+          "properties": {
+            "direction": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 360,
+              "description": "Compass direction the floor slopes toward (0=North, 90=East)"
+            },
+            "slope": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Slope ratio (rise/run), e.g., 0.12 = 12% grade"
+            }
+          },
+          "required": ["direction", "slope"]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "type": { "const": "inclined" } }
+          },
+          "then": {
+            "anyOf": [
+              { "required": ["origin", "normal"] },
+              { "required": ["origin", "gradient"] }
+            ]
+          }
+        }
+      ]
     },
     "resolution": {
       "type": "object",
@@ -221,7 +288,7 @@
     "obstacle": {
       "type": "object",
       "description": "Static obstacle configuration",
-      "required": ["id", "type", "position"],
+      "required": ["id", "type"],
       "properties": {
         "id": {
           "type": "string",
@@ -229,22 +296,22 @@
         },
         "type": {
           "type": "string",
-          "enum": ["rectangle", "circle", "polygon"],
+          "enum": ["rectangle", "circle", "polygon", "bench-row"],
           "description": "Obstacle geometry type"
         },
         "label": {
           "type": "string",
-          "description": "Human-readable name (e.g., 'Conference Table')"
+          "description": "Human-readable name (e.g., 'Conference Table', 'Row A')"
         },
         "category": {
           "type": "string",
-          "enum": ["furniture", "structural", "equipment"],
+          "enum": ["furniture", "structural", "equipment", "seating"],
           "default": "furniture",
           "description": "Obstacle category for styling and behavior"
         },
         "position": {
           "$ref": "#/$defs/position2D",
-          "description": "Center position in meters"
+          "description": "Center position in meters (for rectangle, circle, polygon)"
         },
         "rotation": {
           "type": "number",
@@ -270,6 +337,10 @@
           "minItems": 3,
           "description": "For polygons: array of vertex positions"
         },
+        "benchRow": {
+          "$ref": "#/$defs/benchRowGeometry",
+          "description": "For bench-row: seating row geometry and dimensions"
+        },
         "height": {
           "type": "number",
           "minimum": 0,
@@ -286,6 +357,12 @@
           "default": true,
           "description": "If true, occludes camera field of view"
         },
+        "seatedPersonHeight": {
+          "type": "number",
+          "minimum": 0,
+          "default": 1.2,
+          "description": "Expected head height of seated person (meters) for occlusion calculations"
+        },
         "color": {
           "type": "string",
           "description": "Display color (Tailwind class or hex)"
@@ -297,7 +374,7 @@
             "properties": { "type": { "const": "rectangle" } }
           },
           "then": {
-            "required": ["dimensions"]
+            "required": ["position", "dimensions"]
           }
         },
         {
@@ -305,7 +382,7 @@
             "properties": { "type": { "const": "circle" } }
           },
           "then": {
-            "required": ["radius"]
+            "required": ["position", "radius"]
           }
         },
         {
@@ -313,10 +390,61 @@
             "properties": { "type": { "const": "polygon" } }
           },
           "then": {
-            "required": ["vertices"]
+            "required": ["position", "vertices"]
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "bench-row" } }
+          },
+          "then": {
+            "required": ["benchRow"]
           }
         }
       ]
+    },
+    "benchRowGeometry": {
+      "type": "object",
+      "description": "Geometry for a seating row (bench, desk, or stadium seating)",
+      "required": ["start", "end"],
+      "properties": {
+        "start": {
+          "$ref": "#/$defs/position3D",
+          "description": "Start point of the row centerline (includes Z elevation)"
+        },
+        "end": {
+          "$ref": "#/$defs/position3D",
+          "description": "End point of the row centerline (includes Z elevation)"
+        },
+        "depth": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0.6,
+          "description": "Depth of each seat/desk in meters (perpendicular to row line)"
+        },
+        "seatHeight": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0.45,
+          "description": "Height of seat surface above floor in meters"
+        },
+        "backrestHeight": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0.9,
+          "description": "Height of backrest above floor in meters"
+        },
+        "deskHeight": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Height of attached desk/table surface (if any)"
+        },
+        "spacing": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Spacing between individual seats (for calculating seat positions)"
+        }
+      }
     }
   }
 }

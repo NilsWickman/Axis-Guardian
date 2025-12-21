@@ -4,7 +4,8 @@ import { useTrackIdentityAnnotation } from '@/composables/useTrackIdentityAnnota
 import { useTrackThumbnails, type OfflineTrackInfo } from '@/composables/useTrackThumbnails'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import type { TrackThumbnailSet } from '@/types/track-identity'
+import TrackVideoPlayer from '@/components/features/tracking/TrackVideoPlayer.vue'
+import type { TrackVideoSegment } from '@/types/track-identity'
 
 // Composables
 const annotation = useTrackIdentityAnnotation()
@@ -17,10 +18,9 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 const allTracks = ref<OfflineTrackInfo[]>([])
 const currentTrackIndex = ref(0)
 
-// Current track thumbnails
-const currentThumbnails = ref<TrackThumbnailSet | null>(null)
-const isLoadingThumbnails = ref(false)
-const currentImageIndex = ref(0)
+// Current video segment
+const currentVideoSegment = ref<TrackVideoSegment | null>(null)
+const isLoadingSegment = ref(false)
 
 // Loading state
 const isInitializing = ref(true)
@@ -45,55 +45,31 @@ const currentTrackPerson = computed(() => {
   return annotation.getPersonForTrack(currentTrack.value.id)
 })
 
-// Current thumbnail
-const currentThumbnail = computed(() => {
-  if (!currentThumbnails.value || currentThumbnails.value.thumbnails.length === 0) return null
-  return currentThumbnails.value.thumbnails[currentImageIndex.value] ?? null
+// Current video element for playback
+const currentVideoElement = computed(() => {
+  if (!currentTrack.value) return null
+  return thumbnails.getVideoElement(currentTrack.value.cameraId)
 })
 
-// Total images count
-const totalImages = computed(() => currentThumbnails.value?.thumbnails.length ?? 0)
-
-// Load thumbnails for current track
-async function loadCurrentThumbnails(): Promise<void> {
+// Load video segment for current track
+function loadCurrentVideoSegment(): void {
   if (!currentTrack.value) {
-    currentThumbnails.value = null
-    currentImageIndex.value = 0
+    currentVideoSegment.value = null
     return
   }
 
-  isLoadingThumbnails.value = true
-  currentImageIndex.value = 0
+  isLoadingSegment.value = true
   try {
-    const thumbs = await thumbnails.getThumbnailsForOfflineTrack(
+    const segment = thumbnails.getVideoSegmentForTrack(
       currentTrack.value.cameraId,
       currentTrack.value.trackId
     )
-    currentThumbnails.value = thumbs
+    currentVideoSegment.value = segment
   } catch (e) {
-    console.error('Failed to load thumbnails:', e)
-    currentThumbnails.value = null
+    console.error('Failed to load video segment:', e)
+    currentVideoSegment.value = null
   } finally {
-    isLoadingThumbnails.value = false
-  }
-}
-
-// Image carousel navigation
-function nextImage(): void {
-  if (totalImages.value > 0) {
-    currentImageIndex.value = (currentImageIndex.value + 1) % totalImages.value
-  }
-}
-
-function prevImage(): void {
-  if (totalImages.value > 0) {
-    currentImageIndex.value = (currentImageIndex.value - 1 + totalImages.value) % totalImages.value
-  }
-}
-
-function goToImage(index: number): void {
-  if (index >= 0 && index < totalImages.value) {
-    currentImageIndex.value = index
+    isLoadingSegment.value = false
   }
 }
 
@@ -101,7 +77,7 @@ function goToImage(index: number): void {
 function goToTrack(index: number): void {
   if (index < 0 || index >= allTracks.value.length) return
   currentTrackIndex.value = index
-  loadCurrentThumbnails()
+  loadCurrentVideoSegment()
 }
 
 function nextTrack(): void {
@@ -136,15 +112,17 @@ function assignPerson(personId: number): void {
   annotation.assignPersonToTrack(currentTrack.value.id, personId)
 }
 
-// Set current image as person thumbnail
-function setPersonThumbnail(personId: number): void {
-  if (!currentThumbnail.value) return
-  annotation.setPersonThumbnail(personId, currentThumbnail.value.dataUrl)
+// Mark track as invalid
+function markAsInvalid(): void {
+  if (!currentTrack.value) return
+  annotation.assignPersonToTrack(currentTrack.value.id, 0) // 0 = Invalid
 }
 
-// Clear person thumbnail
-function clearPersonThumbnail(personId: number): void {
-  annotation.clearPersonThumbnail(personId)
+// Reset all annotations
+function resetAnnotations(): void {
+  if (confirm('Clear all annotations? This cannot be undone.')) {
+    annotation.resetDataset('replay')
+  }
 }
 
 // Handle keyboard shortcuts
@@ -167,42 +145,23 @@ function handleKeydown(event: KeyboardEvent): void {
 
   switch (event.key) {
     case 'ArrowRight':
-      event.preventDefault()
-      if (event.shiftKey) {
-        nextImage()
-      } else {
-        nextTrack()
-      }
-      break
-    case 'ArrowLeft':
-      event.preventDefault()
-      if (event.shiftKey) {
-        prevImage()
-      } else {
-        prevTrack()
-      }
-      break
     case 'n':
       event.preventDefault()
       nextTrack()
       break
+    case 'ArrowLeft':
     case 'p':
       event.preventDefault()
       prevTrack()
       break
-    case ',':
-    case '<':
-      event.preventDefault()
-      prevImage()
-      break
-    case '.':
-    case '>':
-      event.preventDefault()
-      nextImage()
-      break
     case 'u':
       event.preventDefault()
       goToNextUnannotated()
+      break
+    case 'x':
+    case 'X':
+      event.preventDefault()
+      markAsInvalid()
       break
     case 'Delete':
     case 'Backspace':
@@ -266,9 +225,9 @@ onMounted(async () => {
     // Get all tracks from detection files
     allTracks.value = thumbnails.getAllOfflineTracks()
 
-    // Load first track's thumbnails
+    // Load first track's video segment
     if (allTracks.value.length > 0) {
-      await loadCurrentThumbnails()
+      loadCurrentVideoSegment()
     }
 
     isInitializing.value = false
@@ -316,6 +275,9 @@ onUnmounted(() => {
           </Button>
           <Button variant="outline" size="sm" @click="onImportClick">
             Import
+          </Button>
+          <Button variant="destructive" size="sm" @click="resetAnnotations">
+            Reset
           </Button>
           <input
             ref="fileInputRef"
@@ -410,74 +372,32 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Thumbnails Display -->
+      <!-- Video Display -->
       <div class="flex-1 flex gap-4 min-h-0">
-        <!-- Main Thumbnail Area -->
+        <!-- Main Video Area -->
         <Card class="flex-1 flex flex-col min-h-0">
           <CardHeader class="py-3">
-            <CardTitle class="text-base">Track Images</CardTitle>
+            <CardTitle class="text-base">Track Video</CardTitle>
           </CardHeader>
           <CardContent class="flex-1 flex flex-col items-center justify-center">
-            <div v-if="isLoadingThumbnails" class="text-center">
+            <div v-if="isLoadingSegment" class="text-center">
               <div class="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2" />
-              <div class="text-sm text-muted-foreground">Extracting images...</div>
+              <div class="text-sm text-muted-foreground">Loading video...</div>
             </div>
-            <div v-else-if="currentThumbnail" class="flex flex-col items-center w-full max-w-md">
-              <!-- Main image -->
-              <div class="relative w-full rounded-lg overflow-hidden border border-border bg-muted">
-                <img
-                  :src="currentThumbnail.dataUrl"
-                  :alt="`Track thumbnail ${currentImageIndex + 1}`"
-                  class="w-full h-auto max-h-[400px] object-contain"
-                />
-                <!-- Image info overlay -->
-                <div class="absolute bottom-0 left-0 right-0 px-3 py-2 bg-black/50 text-white text-sm flex justify-between">
-                  <span>{{ formatDuration(currentThumbnail.timestamp) }}</span>
-                  <span>{{ (currentThumbnail.confidence * 100).toFixed(0) }}% confidence</span>
-                </div>
-              </div>
-
-              <!-- Carousel controls -->
-              <div class="flex items-center justify-center gap-4 mt-4">
-                <!-- Previous button -->
-                <Button
-                  variant="outline"
-                  size="sm"
-                  :disabled="totalImages <= 1"
-                  @click="prevImage"
-                >
-                  &larr;
-                </Button>
-
-                <!-- Dots indicator -->
-                <div class="flex items-center gap-2">
-                  <button
-                    v-for="idx in totalImages"
-                    :key="idx"
-                    class="w-3 h-3 rounded-full transition-colors"
-                    :class="idx - 1 === currentImageIndex ? 'bg-primary' : 'bg-muted-foreground/30 hover:bg-muted-foreground/50'"
-                    @click="goToImage(idx - 1)"
-                  />
-                </div>
-
-                <!-- Next button -->
-                <Button
-                  variant="outline"
-                  size="sm"
-                  :disabled="totalImages <= 1"
-                  @click="nextImage"
-                >
-                  &rarr;
-                </Button>
-              </div>
-
-              <!-- Image counter -->
-              <div class="text-sm text-muted-foreground mt-2">
-                Image {{ currentImageIndex + 1 }} of {{ totalImages }}
+            <div v-else-if="currentVideoSegment && currentVideoElement" class="flex flex-col items-center">
+              <TrackVideoPlayer
+                :segment="currentVideoSegment"
+                :video-element="currentVideoElement"
+                :is-active="true"
+              />
+              <!-- Track time info -->
+              <div class="text-sm text-muted-foreground mt-4">
+                {{ formatDuration(currentVideoSegment.startTimestamp) }} -
+                {{ formatDuration(currentVideoSegment.endTimestamp) }}
               </div>
             </div>
             <div v-else class="text-center text-muted-foreground">
-              No images available for this track
+              No video available for this track
             </div>
           </CardContent>
         </Card>
@@ -488,20 +408,32 @@ onUnmounted(() => {
             <CardTitle class="text-base">Assign Person</CardTitle>
           </CardHeader>
           <CardContent>
+            <!-- Invalid/Reflection button -->
+            <button
+              class="w-full mb-3 py-2 px-4 rounded-lg border-2 border-gray-500 bg-gray-100 dark:bg-gray-800 flex items-center justify-center gap-2 transition-all hover:bg-gray-200 dark:hover:bg-gray-700"
+              :class="{
+                'ring-2 ring-offset-2 ring-primary': currentTrackPerson?.id === 0,
+              }"
+              title="Mark as Invalid/Reflection (X)"
+              @click="markAsInvalid"
+            >
+              <span class="text-gray-600 dark:text-gray-400 font-medium">Mark as Invalid / Reflection</span>
+            </button>
+
+            <!-- Person grid -->
             <div class="grid grid-cols-4 gap-2">
               <button
-                v-for="person in annotation.persons.value"
+                v-for="person in annotation.persons.value.filter(p => p.id > 0)"
                 :key="person.id"
-                class="relative group flex flex-col items-center justify-center rounded-lg border-2 p-1 transition-all hover:scale-105"
+                class="relative flex flex-col items-center justify-center rounded-lg border-2 p-1 transition-all hover:scale-105"
                 :class="{
                   'ring-2 ring-offset-2 ring-primary': currentTrackPerson?.id === person.id,
                 }"
                 :style="{
                   borderColor: person.color,
                 }"
-                :title="`Click: Assign Person ${person.id}\nRight-click: Set thumbnail from current image`"
+                :title="`Assign Person ${person.id}`"
                 @click="assignPerson(person.id)"
-                @contextmenu.prevent="currentThumbnail ? setPersonThumbnail(person.id) : null"
               >
                 <!-- Thumbnail or number -->
                 <div
@@ -512,7 +444,7 @@ onUnmounted(() => {
                     v-if="person.thumbnailUrl"
                     :src="person.thumbnailUrl"
                     :alt="`Person ${person.id}`"
-                    class="w-full h-full object-cover"
+                    class="w-full h-full object-cover object-top"
                   />
                   <span
                     v-else
@@ -522,32 +454,15 @@ onUnmounted(() => {
                     {{ person.id }}
                   </span>
                 </div>
-                <!-- Person number badge -->
-                <div
-                  class="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                  :style="{ backgroundColor: person.color }"
-                >
-                  {{ person.id }}
-                </div>
-                <!-- Clear thumbnail button (on hover) -->
-                <button
-                  v-if="person.thumbnailUrl"
-                  class="absolute -top-1 -left-1 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                  title="Clear thumbnail"
-                  @click.stop="clearPersonThumbnail(person.id)"
-                >
-                  &times;
-                </button>
               </button>
             </div>
 
             <div class="mt-4 pt-4 border-t text-xs text-muted-foreground space-y-1">
               <div><kbd class="px-1 bg-muted rounded">1-9, 0</kbd> Assign person 1-10</div>
+              <div><kbd class="px-1 bg-muted rounded">X</kbd> Mark as Invalid</div>
               <div><kbd class="px-1 bg-muted rounded">&larr;</kbd> <kbd class="px-1 bg-muted rounded">&rarr;</kbd> Navigate tracks</div>
-              <div><kbd class="px-1 bg-muted rounded">,</kbd> <kbd class="px-1 bg-muted rounded">.</kbd> Cycle images</div>
               <div><kbd class="px-1 bg-muted rounded">U</kbd> Next unannotated</div>
               <div><kbd class="px-1 bg-muted rounded">Del</kbd> Remove assignment</div>
-              <div class="mt-2 text-muted-foreground/70">Right-click button to set thumbnail</div>
             </div>
           </CardContent>
         </Card>

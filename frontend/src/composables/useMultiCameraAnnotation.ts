@@ -10,6 +10,7 @@ import {
   calculateCrossCameraStats,
 } from '@/types/ground-truth'
 import type { DetectionFile, FrameData } from '@/types/frame-review'
+import { normalizeBbox } from '@/types/frame-review'
 
 const STORAGE_KEY = 'cross-camera-ground-truth'
 
@@ -317,13 +318,14 @@ export function useMultiCameraAnnotation() {
     }
 
     // Select
+    const normalizedBbox = normalizeBbox(detection.bbox)
     selectedDetections.value.push({
       cameraId,
       frameNumber: frame.frame_number,
       timestamp: frame.timestamp,
       detectionIndex,
       trackId: detection.track_id,
-      bbox: { ...detection.bbox },
+      bbox: normalizedBbox,
     })
     return { success: true }
   }

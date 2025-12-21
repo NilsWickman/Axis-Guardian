@@ -16,6 +16,8 @@ export interface ProjectionResult {
   distance: number
   isValid: boolean
   reason?: string
+  /** Confidence score 0-1 based on projection quality (distance, ray angle, etc.) */
+  confidence: number
 }
 
 export interface DebugInfo {

@@ -11,12 +11,15 @@
 import { ref, onUnmounted, type Ref } from 'vue'
 import { useGlobalTrackStore, type VideoTimingInfo } from '@/stores/globalTracks'
 import { useZoneStore } from '@/stores/zones'
+import { useConnectionStatusStore } from '@/stores/connectionStatus'
 import { config } from '@/config/environment'
+import { createBackoffCalculator, type BackoffConfig } from '@/utils/exponential-backoff'
 
 export interface BackendWebSocketOptions {
   autoReconnect?: boolean
-  reconnectIntervalMs?: number
   maxReconnectAttempts?: number
+  /** Backoff configuration for reconnection */
+  backoff?: Partial<BackoffConfig>
   /** Video element ref for sync (optional - if not provided, updates apply immediately) */
   videoElement?: Ref<HTMLVideoElement | null>
   /** Camera ID to sync with (only buffer tracks from this camera) */
@@ -31,9 +34,8 @@ export interface BackendWebSocketOptions {
   staleThresholdMs?: number
 }
 
-const DEFAULT_OPTIONS: Required<Omit<BackendWebSocketOptions, 'videoElement' | 'syncCameraId'>> = {
+const DEFAULT_OPTIONS: Required<Omit<BackendWebSocketOptions, 'videoElement' | 'syncCameraId' | 'backoff'>> = {
   autoReconnect: true,
-  reconnectIntervalMs: 3000,
   maxReconnectAttempts: 10,
   adaptiveTolerance: true,
   baseSyncToleranceMs: 50,
@@ -56,6 +58,10 @@ export function useBackendWebSocket(options: BackendWebSocketOptions = {}) {
 
   const globalTrackStore = useGlobalTrackStore()
   const zoneStore = useZoneStore()
+  const connectionStatus = useConnectionStatusStore()
+
+  // Create backoff calculator for exponential reconnection delays
+  const backoffCalculator = createBackoffCalculator(options.backoff)
 
   const socket = ref<WebSocket | null>(null)
   const isConnected = ref(false)
@@ -97,6 +103,7 @@ export function useBackendWebSocket(options: BackendWebSocketOptions = {}) {
     }
 
     const wsUrl = config.trackingServiceWsUrl || 'ws://localhost:3010/ws'
+    connectionStatus.setBackendConnecting()
 
     try {
       socket.value = new WebSocket(wsUrl)
@@ -105,6 +112,8 @@ export function useBackendWebSocket(options: BackendWebSocketOptions = {}) {
         isConnected.value = true
         reconnectAttempts.value = 0
         lastError.value = null
+        backoffCalculator.reset()
+        connectionStatus.setBackendConnected()
 
         // Clear all tracks on reconnection to prevent stale data from previous session
         // The server will send a fresh snapshot immediately after connection
@@ -125,20 +134,24 @@ export function useBackendWebSocket(options: BackendWebSocketOptions = {}) {
         isConnected.value = false
         socket.value = null
 
-        if (opts.autoReconnect && reconnectAttempts.value < opts.maxReconnectAttempts) {
+        if (opts.autoReconnect && !backoffCalculator.isMaxAttempts(opts.maxReconnectAttempts)) {
           scheduleReconnect()
+        } else {
+          connectionStatus.setBackendDisconnected()
         }
       }
 
       socket.value.onerror = (error) => {
         console.error('[TrackingWS] Error:', error)
         lastError.value = 'WebSocket error'
+        connectionStatus.setBackendError('WebSocket error')
       }
     } catch (error) {
       console.error('[TrackingWS] Failed to create WebSocket:', error)
       lastError.value = String(error)
+      connectionStatus.setBackendError(String(error))
 
-      if (opts.autoReconnect && reconnectAttempts.value < opts.maxReconnectAttempts) {
+      if (opts.autoReconnect && !backoffCalculator.isMaxAttempts(opts.maxReconnectAttempts)) {
         scheduleReconnect()
       }
     }
@@ -159,20 +172,26 @@ export function useBackendWebSocket(options: BackendWebSocketOptions = {}) {
     }
 
     isConnected.value = false
+    backoffCalculator.reset()
+    connectionStatus.setBackendDisconnected()
   }
 
   /**
-   * Schedule a reconnection attempt
+   * Schedule a reconnection attempt with exponential backoff
    */
   function scheduleReconnect(): void {
     if (reconnectTimer) return
 
     reconnectAttempts.value++
+    const delay = backoffCalculator.next()
+
+    connectionStatus.setBackendReconnecting(reconnectAttempts.value, delay)
+    console.log(`[TrackingWS] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.value})`)
 
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null
       connect()
-    }, opts.reconnectIntervalMs)
+    }, delay)
   }
 
   /**

@@ -77,6 +77,19 @@ const CAMERA2_WORLD_TRANSFORM = {
   },
 }
 
+// Initial identity transforms for IP2/IP5 - will need calibration
+const CAMERA3_WORLD_TRANSFORM = {
+  rotation: [[1, 0], [0, 1]] as [[number, number], [number, number]],
+  translation: [0, 0] as [number, number],
+  scale: 1.0,
+}
+
+const CAMERA4_WORLD_TRANSFORM = {
+  rotation: [[1, 0], [0, 1]] as [[number, number], [number, number]],
+  translation: [0, 0] as [number, number],
+  scale: 1.0,
+}
+
 /**
  * K/R/T Calibration data from the Auditorium dataset (cam_param.mat)
  *
@@ -127,6 +140,42 @@ const CAMERA_CALIBRATIONS: Record<string, CameraCalibration> = {
     scale: 1,
     worldTransform: CAMERA2_WORLD_TRANSFORM,
   },
+  // IP2 (camera3) - Initial estimate from scene_metadata.xml
+  // azimuth: 140deg, elevation: 9deg, position: (20.60, 28.31, 2.62)
+  camera3: {
+    K: [
+      [2000, 0, 0],
+      [0, 2000, 0],
+      [0, 0, 1],
+    ],
+    R: [
+      [-0.766, 0.643, 0],
+      [-0.101, -0.120, -0.988],
+      [-0.635, -0.757, 0.156],
+    ],
+    T: [20.60, 28.31, 2.62],
+    center: [960, 540],
+    scale: 1,
+    worldTransform: CAMERA3_WORLD_TRANSFORM,
+  },
+  // IP5 (camera4) - Initial estimate from scene_metadata.xml
+  // azimuth: 339deg, elevation: 0deg, position: (10.57, 16.31, 1.84)
+  camera4: {
+    K: [
+      [2000, 0, 0],
+      [0, 2000, 0],
+      [0, 0, 1],
+    ],
+    R: [
+      [0.934, 0.358, 0],
+      [0, 0, -1],
+      [-0.358, 0.934, 0],
+    ],
+    T: [10.57, 16.31, 1.84],
+    center: [960, 540],
+    scale: 1,
+    worldTransform: CAMERA4_WORLD_TRANSFORM,
+  },
 }
 
 /**
@@ -141,6 +190,8 @@ const CAMERA_CALIBRATIONS: Record<string, CameraCalibration> = {
 export const CAMERA_BIAS_CORRECTIONS: Record<string, { x: number; y: number }> = {
   camera1: { x: 0, y: 0 },
   camera2: { x: 0, y: 0 },
+  camera3: { x: 0, y: 0 },
+  camera4: { x: 0, y: 0 },
 }
 
 /**
@@ -158,6 +209,8 @@ export const CAMERA_BIAS_CORRECTIONS: Record<string, { x: number; y: number }> =
 export const CAMERA_RELIABILITY_WEIGHTS: Record<string, number> = {
   camera1: 1.15,  // More reliable
   camera2: 0.85,  // Less reliable
+  camera3: 1.0,   // Neutral until calibrated
+  camera4: 1.0,   // Neutral until calibrated
 }
 
 

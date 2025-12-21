@@ -62,7 +62,14 @@ export class KalmanTrackFilter {
   private config: KalmanFilterConfig
   // Store internal State objects keyed by track ID for proper library compatibility
   private stateCache: Map<string, KalmanStateInternal> = new Map()
+  // LRU tracking: store last access time for each cached state
+  private lastAccessTime: Map<string, number> = new Map()
   private static readonly MAX_CACHE_SIZE = ALGORITHM_CONSTANTS.kalman.maxCacheSize
+
+  // Cache metrics for monitoring
+  private cacheHits = 0
+  private cacheMisses = 0
+  private evictionCount = 0
 
   constructor(config: Partial<KalmanFilterConfig> = {}) {
     this.config = { ...DEFAULT_KALMAN_CONFIG, ...config }
@@ -170,8 +177,12 @@ export class KalmanTrackFilter {
       let libState: KalmanStateInternal
       if (trackId && this.stateCache.has(trackId)) {
         libState = this.stateCache.get(trackId)!
+        this.cacheHits++
+        // Update LRU access time
+        this.lastAccessTime.set(trackId, timestamp)
       } else {
         libState = this.createLibraryState(state)
+        this.cacheMisses++
       }
 
       // filter() returns the corrected State directly (not { corrected: State })
@@ -184,9 +195,10 @@ export class KalmanTrackFilter {
       // Cache the corrected state for next update
       if (trackId) {
         this.stateCache.set(trackId, correctedState)
+        this.lastAccessTime.set(trackId, timestamp)
         // Emergency cleanup if cache grows too large
         if (this.stateCache.size > KalmanTrackFilter.MAX_CACHE_SIZE) {
-          this.evictOldestEntries()
+          this.evictLRUEntries()
         }
       }
 
@@ -212,6 +224,7 @@ export class KalmanTrackFilter {
    */
   removeTrackState(trackId: string): void {
     this.stateCache.delete(trackId)
+    this.lastAccessTime.delete(trackId)
   }
 
   /**
@@ -219,19 +232,28 @@ export class KalmanTrackFilter {
    */
   clearCache(): void {
     this.stateCache.clear()
+    this.lastAccessTime.clear()
   }
 
   /**
-   * Evict oldest entries when cache exceeds max size
-   * Uses FIFO eviction (Map maintains insertion order)
+   * Evict least recently used entries when cache exceeds max size
+   * Uses LRU eviction based on last access timestamp
    */
-  private evictOldestEntries(): void {
+  private evictLRUEntries(): void {
     const targetSize = Math.floor(KalmanTrackFilter.MAX_CACHE_SIZE * 0.8)  // Remove 20%
-    const keysToRemove = Array.from(this.stateCache.keys())
-      .slice(0, this.stateCache.size - targetSize)
+    const entriesToRemove = this.stateCache.size - targetSize
 
-    for (const key of keysToRemove) {
-      this.stateCache.delete(key)
+    if (entriesToRemove <= 0) return
+
+    // Sort by last access time (oldest first)
+    const sortedByAccess = Array.from(this.lastAccessTime.entries())
+      .sort((a, b) => a[1] - b[1])
+      .slice(0, entriesToRemove)
+
+    for (const [trackId] of sortedByAccess) {
+      this.stateCache.delete(trackId)
+      this.lastAccessTime.delete(trackId)
+      this.evictionCount++
     }
   }
 
@@ -240,6 +262,35 @@ export class KalmanTrackFilter {
    */
   getCacheSize(): number {
     return this.stateCache.size
+  }
+
+  /**
+   * Get cache metrics for monitoring
+   */
+  getCacheMetrics(): {
+    size: number
+    hits: number
+    misses: number
+    hitRate: number
+    evictions: number
+  } {
+    const total = this.cacheHits + this.cacheMisses
+    return {
+      size: this.stateCache.size,
+      hits: this.cacheHits,
+      misses: this.cacheMisses,
+      hitRate: total > 0 ? this.cacheHits / total : 0,
+      evictions: this.evictionCount,
+    }
+  }
+
+  /**
+   * Reset cache metrics (for periodic reporting)
+   */
+  resetCacheMetrics(): void {
+    this.cacheHits = 0
+    this.cacheMisses = 0
+    this.evictionCount = 0
   }
 
   /**

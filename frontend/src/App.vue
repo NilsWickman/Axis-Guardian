@@ -2,6 +2,7 @@
   import { onMounted } from 'vue'
   import Layout from '@/components/layout/Layout.vue'
   import Toast from '@/components/ui/Toast.vue'
+  import MetricsDrawer from '@/components/features/metrics/MetricsDrawer.vue'
   import 'vue-sonner/style.css' // vue-sonner v2 requires this import
   import { useCameraConnectionManager } from '@/composables/useCameraConnectionManager'
   import { useCameraStore } from '@/stores/cameras'
@@ -27,4 +28,5 @@
 <template>
   <Layout />
   <Toast />
+  <MetricsDrawer />
 </template>

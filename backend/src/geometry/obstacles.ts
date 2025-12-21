@@ -71,13 +71,13 @@ export function isPointInsideObstacle(
 ): boolean {
   switch (obstacle.type) {
     case 'circle':
-      if (obstacle.radius === undefined) return false
+      if (obstacle.radius === undefined || !obstacle.position) return false
       // Apply margin to shrink the effective radius
       const effectiveRadius = Math.max(0, obstacle.radius - margin)
       return isPointInCircle(point, obstacle.position, effectiveRadius)
 
     case 'rectangle':
-      if (!obstacle.dimensions) return false
+      if (!obstacle.dimensions || !obstacle.position) return false
       // Apply margin to shrink the effective dimensions
       const effectiveWidth = Math.max(0, obstacle.dimensions.width - margin * 2)
       const effectiveHeight = Math.max(0, obstacle.dimensions.height - margin * 2)
@@ -93,6 +93,11 @@ export function isPointInsideObstacle(
       if (!obstacle.vertices || obstacle.vertices.length < 3) return false
       // Polygon margin would require complex shrinking - not supported
       return isPointInPolygon(point, obstacle.vertices)
+
+    case 'bench-row':
+      // Bench rows use benchRow geometry, not position - skip point-in-obstacle check
+      // (seated people are tracked, not blocked)
+      return false
 
     default:
       return false
@@ -132,7 +137,7 @@ export function distanceToObstacle(
 ): number {
   switch (obstacle.type) {
     case 'circle': {
-      if (obstacle.radius === undefined) return Infinity
+      if (obstacle.radius === undefined || !obstacle.position) return Infinity
       const dx = point.x - obstacle.position.x
       const dy = point.y - obstacle.position.y
       const distanceToCenter = Math.sqrt(dx * dx + dy * dy)
@@ -140,7 +145,7 @@ export function distanceToObstacle(
     }
 
     case 'rectangle': {
-      if (!obstacle.dimensions) return Infinity
+      if (!obstacle.dimensions || !obstacle.position) return Infinity
       const { width, height } = obstacle.dimensions
       const rotation = obstacle.rotation ?? 0
 
@@ -259,7 +264,7 @@ export function getObstacleBufferRadius(
     }
 
     case 'polygon': {
-      if (!obstacle.vertices || obstacle.vertices.length < 3) return bufferMeters
+      if (!obstacle.vertices || obstacle.vertices.length < 3 || !obstacle.position) return bufferMeters
       // Return max distance from center to any vertex plus buffer
       let maxDist = 0
       for (const vertex of obstacle.vertices) {
@@ -269,6 +274,10 @@ export function getObstacleBufferRadius(
       }
       return maxDist + bufferMeters
     }
+
+    case 'bench-row':
+      // Bench rows have linear geometry - return a default buffer
+      return bufferMeters
 
     default:
       return bufferMeters
@@ -405,7 +414,7 @@ export function intersectRayWithRectangle2D(
   dir: Point2D,
   rect: SiteMapObstacle
 ): { tEnter: number; tExit: number } | null {
-  if (rect.type !== 'rectangle' || !rect.dimensions) return null
+  if (rect.type !== 'rectangle' || !rect.dimensions || !rect.position) return null
 
   const rot = rect.rotation ?? 0
 

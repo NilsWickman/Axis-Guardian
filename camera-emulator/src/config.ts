@@ -114,6 +114,8 @@ function buildCameraConfig(
 const allCameraConfigs = [
   buildCameraConfig('camera-HC3', 'view-HC3', 9101, 'camera1'),
   buildCameraConfig('camera-HC4', 'view-HC4', 9102, 'camera2'),
+  buildCameraConfig('camera-IP2', 'view-IP2', 9103, 'camera3'),
+  buildCameraConfig('camera-IP5', 'view-IP5', 9104, 'camera4'),
 ]
 
 export const cameras: CameraConfig[] = allCameraConfigs.filter(

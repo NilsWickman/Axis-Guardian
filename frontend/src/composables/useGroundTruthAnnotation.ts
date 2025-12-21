@@ -6,6 +6,7 @@ import type {
 } from '@/types/ground-truth'
 import { createEmptyDataset, calculateStats } from '@/types/ground-truth'
 import type { FrameData } from '@/types/frame-review'
+import { normalizeBbox } from '@/types/frame-review'
 
 const STORAGE_KEY_PREFIX = 'ground-truth-'
 
@@ -87,7 +88,7 @@ export function useGroundTruthAnnotation() {
         timestamp: frame.timestamp,
         detections: frame.detections.map(det => ({
           trackId: det.track_id,
-          bbox: { ...det.bbox },
+          bbox: normalizeBbox(det.bbox),
           groundPosition: null,
           confidence: 'certain' as const
         }))
