@@ -1,0 +1,24 @@
+# Balanced BoT-SORT Configuration
+# Tuned for ~50 tracks per camera - balance between fragmentation and over-merging
+# Usage: python scripts/preprocess-video.py input.mp4 --tracker scripts/custom-botsort-strict.yaml
+
+tracker_type: botsort
+
+# Detection thresholds - moderate
+track_high_thresh: 0.45     # High confidence threshold (default 0.5)
+track_low_thresh: 0.1       # Low confidence threshold (default 0.1)
+new_track_thresh: 0.5       # New track threshold (default 0.6) - slightly easier to create tracks
+
+# Track memory - extended buffer for re-tracking
+track_buffer: 300           # Frames to keep lost tracks (default 30) - 10s at 30fps
+
+# Association thresholds - balanced matching
+match_thresh: 0.85          # IoU matching threshold (default 0.8) - moderate
+proximity_thresh: 0.6       # Spatial proximity threshold (default 0.5) - moderate gate
+appearance_thresh: 0.22     # Appearance similarity threshold (default 0.25) - require decent appearance
+
+# ReID settings
+with_reid: true             # Enable ReID features for appearance-based matching
+
+# Kalman filter settings
+gmc_method: sparseOptFlow   # Global motion compensation method

@@ -62,6 +62,16 @@
             "type": "string",
             "enum": ["external", "internal", "door"],
             "default": "external"
+          },
+          "geometry": {
+            "type": "string",
+            "enum": ["line", "arc"],
+            "default": "line",
+            "description": "Wall geometry type: line (straight segment) or arc (circular curve)"
+          },
+          "arc": {
+            "$ref": "#/$defs/arcParameters",
+            "description": "Arc parameters (required when geometry is 'arc')"
           }
         }
       }
@@ -89,6 +99,35 @@
       "properties": {
         "x": { "type": "number" },
         "y": { "type": "number" }
+      }
+    },
+    "arcParameters": {
+      "type": "object",
+      "description": "Parameters defining a circular arc",
+      "required": ["center", "radius", "startAngle", "endAngle"],
+      "properties": {
+        "center": {
+          "$ref": "#/$defs/position2D",
+          "description": "Center point of the arc circle"
+        },
+        "radius": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Radius of the arc in meters"
+        },
+        "startAngle": {
+          "type": "number",
+          "description": "Start angle in degrees (0 = right/+X, 90 = down/+Y)"
+        },
+        "endAngle": {
+          "type": "number",
+          "description": "End angle in degrees (0 = right/+X, 90 = down/+Y)"
+        },
+        "clockwise": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, arc is drawn clockwise from start to end angle"
+        }
       }
     },
     "position3D": {
@@ -296,7 +335,7 @@
         },
         "type": {
           "type": "string",
-          "enum": ["rectangle", "circle", "polygon", "bench-row"],
+          "enum": ["rectangle", "circle", "polygon", "bench-row", "arc-segment", "linear"],
           "description": "Obstacle geometry type"
         },
         "label": {
@@ -340,6 +379,14 @@
         "benchRow": {
           "$ref": "#/$defs/benchRowGeometry",
           "description": "For bench-row: seating row geometry and dimensions"
+        },
+        "arcSegment": {
+          "$ref": "#/$defs/arcSegmentGeometry",
+          "description": "For arc-segment: curved seating row geometry"
+        },
+        "linear": {
+          "$ref": "#/$defs/linearGeometry",
+          "description": "For linear: two-point obstacle with perpendicular width"
         },
         "height": {
           "type": "number",
@@ -400,6 +447,22 @@
           "then": {
             "required": ["benchRow"]
           }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "arc-segment" } }
+          },
+          "then": {
+            "required": ["arcSegment"]
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "linear" } }
+          },
+          "then": {
+            "required": ["linear"]
+          }
         }
       ]
     },
@@ -443,6 +506,60 @@
           "type": "number",
           "minimum": 0,
           "description": "Spacing between individual seats (for calculating seat positions)"
+        }
+      }
+    },
+    "arcSegmentGeometry": {
+      "type": "object",
+      "description": "Arc segment geometry for curved seating rows (filled arc between inner and outer radii)",
+      "required": ["center", "innerRadius", "outerRadius", "startAngle", "endAngle"],
+      "properties": {
+        "center": {
+          "$ref": "#/$defs/position2D",
+          "description": "Center point of the arc circle (typically shared with back wall arc)"
+        },
+        "innerRadius": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Inner radius of the arc segment in meters (front edge of seating)"
+        },
+        "outerRadius": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Outer radius of the arc segment in meters (back edge of seating)"
+        },
+        "startAngle": {
+          "type": "number",
+          "description": "Start angle in degrees (0 = right/+X, 90 = down/+Y)"
+        },
+        "endAngle": {
+          "type": "number",
+          "description": "End angle in degrees (0 = right/+X, 90 = down/+Y)"
+        },
+        "clockwise": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, arc is drawn clockwise from start to end angle"
+        }
+      }
+    },
+    "linearGeometry": {
+      "type": "object",
+      "description": "Linear geometry defined by two endpoints with perpendicular width (e.g., tables, benches, barriers)",
+      "required": ["start", "end", "width"],
+      "properties": {
+        "start": {
+          "$ref": "#/$defs/position2D",
+          "description": "First endpoint of the linear obstacle"
+        },
+        "end": {
+          "$ref": "#/$defs/position2D",
+          "description": "Second endpoint of the linear obstacle"
+        },
+        "width": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Perpendicular width of the obstacle in meters (extends equally on both sides of the centerline)"
         }
       }
     }

@@ -18,6 +18,7 @@ import {
   updateZone as updateZoneDb,
   deleteZone as deleteZoneDb,
 } from '../db/repositories.js'
+import { loadSiteMapConfig } from '../config/sitemap-loader.js'
 import { getPipelineLogger } from '../debug/pipeline-logger.js'
 import type { AcapClient } from '../acap/acap-client.js'
 import type { ZoneManager } from '../zones/zone-manager.js'
@@ -557,23 +558,33 @@ export function registerRoutes(
     }
   })
 
-  // Get site map config from database (matches frontend JSON format)
+  // Get site map config from JSON file (includes arc geometry support)
   app.get('/api/sitemap', async (_request: FastifyRequest, reply: FastifyReply) => {
-    if (!isDatabaseSeeded()) {
-      return reply.status(503).send({
-        error: 'Database not seeded',
-        message: 'Run `pnpm db:seed` to initialize the database',
-      })
-    }
+    try {
+      // Load directly from JSON file to include arc geometry and other fields
+      // not stored in the database
+      const __dirname = fileURLToPath(new URL('.', import.meta.url))
+      const sitemapPath = resolve(__dirname, '../../../shared/config/sitemap-rectangular-room.json')
+      const config = loadSiteMapConfig(sitemapPath)
+      return config
+    } catch (error) {
+      // Fall back to database if JSON file not found
+      if (!isDatabaseSeeded()) {
+        return reply.status(503).send({
+          error: 'Database not seeded',
+          message: 'Run `pnpm db:seed` to initialize the database',
+        })
+      }
 
-    const config = getSiteMapConfigJson()
-    if (!config) {
-      return reply.status(404).send({
-        error: 'Site config not found',
-      })
-    }
+      const config = getSiteMapConfigJson()
+      if (!config) {
+        return reply.status(404).send({
+          error: 'Site config not found',
+        })
+      }
 
-    return config
+      return config
+    }
   })
 
   // Get tracking config

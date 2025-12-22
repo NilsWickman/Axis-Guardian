@@ -1,1 +1,1 @@
-export { default as TrackAttributeBadge } from './TrackAttributeBadge.vue'
+// Tracking components barrel export

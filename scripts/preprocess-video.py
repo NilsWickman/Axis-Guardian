@@ -203,6 +203,103 @@ def _empty_colors() -> Dict[str, Any]:
     }
 
 
+def merge_similar_tracks(
+    frames_data: List[Dict[str, Any]],
+    similarity_threshold: float = 0.7,
+    min_track_length: int = 5
+) -> Tuple[int, Dict[int, int]]:
+    """
+    Merge fragmented tracks with similar ReID embeddings.
+
+    This post-processing step identifies tracks that likely belong to the same
+    person based on embedding similarity and merges them to reduce ID switches.
+
+    Args:
+        frames_data: List of frame dictionaries with detections
+        similarity_threshold: Cosine similarity threshold for merging (0.0-1.0)
+        min_track_length: Minimum detections for a track to be considered
+
+    Returns:
+        Tuple of (number of merges, merge mapping dict)
+    """
+    # Build track → embeddings mapping
+    track_embeddings: Dict[int, List[np.ndarray]] = {}
+    track_frame_ranges: Dict[int, Tuple[int, int]] = {}  # track_id -> (first_frame, last_frame)
+
+    for frame in frames_data:
+        frame_num = frame['frame_number']
+        for det in frame['detections']:
+            tid = det['track_id']
+            if tid <= 0:
+                continue
+
+            # Track frame ranges
+            if tid not in track_frame_ranges:
+                track_frame_ranges[tid] = (frame_num, frame_num)
+            else:
+                first, _ = track_frame_ranges[tid]
+                track_frame_ranges[tid] = (first, frame_num)
+
+            # Collect embeddings
+            emb = det.get('attributes', {}).get('embedding')
+            if emb is not None:
+                if tid not in track_embeddings:
+                    track_embeddings[tid] = []
+                track_embeddings[tid].append(np.array(emb))
+
+    # Filter tracks with enough detections and compute average embeddings
+    track_avg: Dict[int, np.ndarray] = {}
+    for tid, embs in track_embeddings.items():
+        if len(embs) >= min_track_length:
+            avg = np.mean(embs, axis=0)
+            norm = np.linalg.norm(avg)
+            if norm > 0:
+                track_avg[tid] = avg / norm
+
+    if len(track_avg) < 2:
+        return 0, {}
+
+    # Find merge candidates - only merge non-overlapping tracks
+    merge_map: Dict[int, int] = {}  # old_id -> canonical_id
+    tids = sorted(track_avg.keys())
+
+    for i, t1 in enumerate(tids):
+        if t1 in merge_map:
+            continue
+
+        # Get canonical ID (might have been merged already)
+        canonical = t1
+
+        for t2 in tids[i+1:]:
+            if t2 in merge_map:
+                continue
+
+            # Check temporal overlap - don't merge overlapping tracks
+            r1 = track_frame_ranges[t1]
+            r2 = track_frame_ranges[t2]
+            overlaps = not (r1[1] < r2[0] or r2[1] < r1[0])
+
+            if overlaps:
+                continue  # Can't merge overlapping tracks
+
+            # Compute cosine similarity
+            sim = float(np.dot(track_avg[canonical], track_avg[t2]))
+
+            if sim > similarity_threshold:
+                merge_map[t2] = canonical
+
+    if not merge_map:
+        return 0, {}
+
+    # Apply merges to all detections
+    for frame in frames_data:
+        for det in frame['detections']:
+            if det['track_id'] in merge_map:
+                det['track_id'] = merge_map[det['track_id']]
+
+    return len(merge_map), merge_map
+
+
 def extract_reid_embedding(
     frame: np.ndarray,
     bbox: Tuple[float, float, float, float],
@@ -275,7 +372,9 @@ def process_video(
     enable_reid: bool = True,
     enable_colors: bool = True,
     device: str = 'auto',
-    render_output: Optional[str] = None
+    render_output: Optional[str] = None,
+    merge_tracks: bool = True,
+    merge_threshold: float = 0.7
 ) -> Dict[str, Any]:
     """
     Process video and generate detection metadata.
@@ -291,6 +390,8 @@ def process_video(
         enable_colors: Analyze clothing colors
         device: Compute device (auto, cuda, cpu, mps)
         render_output: Optional path for rendered video with bboxes
+        merge_tracks: Enable post-processing track merging via ReID
+        merge_threshold: Cosine similarity threshold for track merging
 
     Returns:
         Detection metadata dict
@@ -441,6 +542,20 @@ def process_video(
         video_writer.release()
         print(f"Rendered video saved to: {render_output}")
 
+    # Post-processing: merge fragmented tracks using ReID embeddings
+    tracks_merged = 0
+    if merge_tracks and enable_reid:
+        print(f"\nMerging fragmented tracks (threshold={merge_threshold})...")
+        tracks_merged, merge_map = merge_similar_tracks(
+            frames_data,
+            similarity_threshold=merge_threshold,
+            min_track_length=5
+        )
+        if tracks_merged > 0:
+            print(f"  Merged {tracks_merged} fragmented tracks")
+        else:
+            print(f"  No tracks to merge")
+
     # Build output structure
     output = {
         'format_version': '2.0',
@@ -450,7 +565,10 @@ def process_video(
             'confidence_threshold': conf_threshold,
             'iou_threshold': iou_threshold,
             'reid_enabled': enable_reid,
-            'color_analysis_enabled': enable_colors
+            'color_analysis_enabled': enable_colors,
+            'track_merging_enabled': merge_tracks,
+            'track_merge_threshold': merge_threshold,
+            'tracks_merged': tracks_merged
         },
         'video_info': {
             'width': int(width),
@@ -511,6 +629,9 @@ Examples:
     parser.add_argument('--iou', type=float, default=0.45, help='IoU threshold (default: 0.45)')
     parser.add_argument('--no-reid', action='store_true', help='Disable ReID embeddings')
     parser.add_argument('--no-colors', action='store_true', help='Disable color analysis')
+    parser.add_argument('--no-merge', action='store_true', help='Disable post-processing track merging')
+    parser.add_argument('--merge-threshold', type=float, default=0.7,
+                        help='Cosine similarity threshold for track merging (default: 0.7)')
     parser.add_argument('--device', default='auto', choices=['auto', 'cuda', 'cpu', 'mps'],
                         help='Device (default: auto)')
 
@@ -551,7 +672,9 @@ Examples:
             enable_reid=not args.no_reid,
             enable_colors=not args.no_colors,
             device=args.device,
-            render_output=render_output
+            render_output=render_output,
+            merge_tracks=not args.no_merge,
+            merge_threshold=args.merge_threshold
         )
         print("\nDone!")
     except Exception as e:

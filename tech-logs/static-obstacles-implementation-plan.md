@@ -27,6 +27,15 @@ Add support for static objects (tables, pillars, desks, etc.) to the Axis-Guardi
 }
 ```
 
+parallel -j2 --progress python3 scripts/preprocess-video.py shared/cameras/Auditorium/view-{}.mp4 \
+  --tracker scripts/custom-botsort-strict.yaml \
+  --no-merge \
+  --output-dir shared/cameras/ ::: HC3 HC4 IP2 IP5
+
+
+
+
+
 **Obstacle Definition:**
 ```json
 {

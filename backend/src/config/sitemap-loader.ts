@@ -104,6 +104,24 @@ export interface SiteMapObstacle {
   color?: string
 }
 
+/** Arc parameters for curved walls */
+export interface ArcParameters {
+  center: { x: number; y: number }
+  radius: number
+  startAngle: number  // degrees (0 = right/+X, 90 = down/+Y)
+  endAngle: number    // degrees
+  clockwise?: boolean
+}
+
+export interface SiteMapWall {
+  id: string
+  start: { x: number; y: number }
+  end: { x: number; y: number }
+  type?: string
+  geometry?: 'line' | 'arc'
+  arc?: ArcParameters
+}
+
 export interface SiteMapConfig {
   dimensions: {
     width: number
@@ -113,12 +131,7 @@ export interface SiteMapConfig {
   /** Floor plane configuration (defaults to flat at z=0) */
   floorPlane?: FloorPlane
   cameras: SiteMapCamera[]
-  walls?: Array<{
-    id: string
-    start: { x: number; y: number }
-    end: { x: number; y: number }
-    type: string
-  }>
+  walls?: SiteMapWall[]
   obstacles?: SiteMapObstacle[]
 }
 

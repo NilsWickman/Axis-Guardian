@@ -80,6 +80,61 @@ Single source of truth: `frontend/public/sitemap-rectangular-room.json` - define
 
 Gold Standard.json defines annotated tracks for frames - giving  ground positions on the site map based on bounding boxes.
 
+### Sitemap Coordinate System (Designer ↔ Developer Translation)
+
+**IMPORTANT:** There is a 90° conceptual difference between how designers draw floor plans and how the code renders them.
+
+#### The Two Conventions
+
+| Aspect | Designer Convention (Floor Plans) | Code Convention (Sitemap JSON) |
+|--------|-----------------------------------|-------------------------------|
+| Origin | Bottom-left or center | **Top-left** corner |
+| Y-axis | Increases **upward** | Increases **downward** (screen coords) |
+| North (0°) | Points **up** on paper | Points **down** on screen (+Y direction) |
+
+#### How to Translate Designer Instructions
+
+When a designer says "the stage is at the top of the room":
+- In the JSON, the stage should have **low Y values** (e.g., y ≈ 1-5)
+- Low Y appears at the **top** of the screen
+
+When a designer says "the entrance is at the bottom":
+- In the JSON, the entrance should have **high Y values** (e.g., y ≈ 25-30)
+- High Y appears at the **bottom** of the screen
+
+#### Azimuth (Camera Direction) Convention
+
+The sitemap uses **compass bearings** for camera azimuth, but rendered on a screen where Y is flipped:
+
+| Azimuth | Compass | JSON Direction | Appears on Screen |
+|---------|---------|----------------|-------------------|
+| 0° | North | +Y | Points **down** |
+| 90° | East | +X | Points **right** |
+| 180° | South | -Y | Points **up** |
+| 270° | West | -X | Points **left** |
+
+#### The 90° Code Transformation
+
+The rendering code converts compass azimuth to canvas rotation:
+
+```typescript
+// From useSiteMapCanvas.ts and useGeometry.ts
+const canvasAngle = 90 - azimuth
+```
+
+This formula correctly maps:
+- Azimuth 0° (North/+Y) → Canvas 90° (pointing down)
+- Azimuth 90° (East/+X) → Canvas 0° (pointing right)
+
+#### Quick Reference for Current Sitemap
+
+In `sitemap-rectangular-room.json`:
+- **Auditorium (stage area):** y ≈ 1-16 → appears at **TOP** of screen
+- **Atrium (entrance area):** y ≈ 16-28 → appears at **BOTTOM** of screen
+- **Camera1 (HC3):** position (19, 26), azimuth 315° → in atrium, pointing toward top-left (toward stage)
+
+See `tech-logs/sitemap-creation-guide.md` for detailed sitemap authoring instructions.
+
 ### Algorithm Tuning Constants
 
 All algorithm tuning parameters are centralized in `backend/src/config/algorithm-constants.ts`. This is the single source of truth for:

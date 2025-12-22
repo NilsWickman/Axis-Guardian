@@ -2,7 +2,7 @@ import { ref, type Ref } from 'vue'
 import { useTheme } from './useTheme'
 import type { CameraPlacement, Wall, Obstacle } from '../types/site-map-types'
 import type { ZoneConfig, ZoneMetricsData } from '../stores/zones'
-import { calculateVisibleFOV, drawPolygon, type Point, type LineSegment, type CircleObstacle, type RectangleObstacle, type HeightAwareOptions } from './useGeometry'
+import { calculateVisibleFOV, drawPolygon, arcToLineSegments, type Point, type LineSegment, type CircleObstacle, type RectangleObstacle, type HeightAwareOptions } from './useGeometry'
 import {
   extractValue,
   metersToPixels,
@@ -428,8 +428,26 @@ export function useSiteMapCanvas(
       }
 
       context.beginPath()
-      context.moveTo(startX, startY)
-      context.lineTo(endX, endY)
+
+      // Check if this is an arc wall
+      const geometry = wall.geometry ?? 'line'
+      if (geometry === 'arc' && wall.arc) {
+        // Draw arc using center, radius, and angles
+        const arc = wall.arc
+        const centerX = metersToPixels(extractValue(arc.center.x))
+        const centerY = metersToPixels(extractValue(arc.center.y))
+        const radius = metersToPixels(extractValue(arc.radius))
+        // Convert degrees to radians (canvas arc uses radians)
+        const startRad = extractValue(arc.startAngle) * Math.PI / 180
+        const endRad = extractValue(arc.endAngle) * Math.PI / 180
+        const clockwise = arc.clockwise ?? false
+
+        context.arc(centerX, centerY, radius, startRad, endRad, !clockwise)
+      } else {
+        // Draw straight line
+        context.moveTo(startX, startY)
+        context.lineTo(endX, endY)
+      }
       context.stroke()
 
       context.setLineDash([])
@@ -555,6 +573,7 @@ export function useSiteMapCanvas(
       furniture: isLightMode ? '#1c1917' : '#78716c',   // stone-900 / stone-500
       structural: isLightMode ? '#0f172a' : '#64748b',  // slate-900 / slate-500
       equipment: isLightMode ? '#0f172a' : '#1e293b',   // slate-900 / slate-800
+      seating: isLightMode ? '#92400e' : '#fbbf24',     // amber-800 / amber-400
     }
   }
 
@@ -679,10 +698,10 @@ export function useSiteMapCanvas(
         }
 
       } else if (type === 'polygon' && obstacle.vertices && obstacle.vertices.length >= 3) {
-        // Draw polygon
+        // Draw polygon - vertices are relative offsets from position, context is already translated
         const vertices = obstacle.vertices.map(v => ({
-          x: metersToPixels(extractValue(v.x)) - centerX,
-          y: metersToPixels(extractValue(v.y)) - centerY
+          x: metersToPixels(extractValue(v.x)),
+          y: metersToPixels(extractValue(v.y))
         }))
 
         context.beginPath()
@@ -697,6 +716,105 @@ export function useSiteMapCanvas(
         context.strokeStyle = strokeColor
         context.lineWidth = lineWidth
         context.stroke()
+      } else if (type === 'arc-segment' && obstacle.arcSegment) {
+        // Draw arc segment - curved seating rows
+        // Arc segments use absolute coordinates (center is the arc center, not obstacle position)
+        context.restore() // Restore before drawing with absolute coordinates
+        context.save()
+
+        const arc = obstacle.arcSegment
+        const cx = metersToPixels(extractValue(arc.center.x))
+        const cy = metersToPixels(extractValue(arc.center.y))
+        const innerRadius = metersToPixels(extractValue(arc.innerRadius))
+        const outerRadius = metersToPixels(extractValue(arc.outerRadius))
+        const startRad = extractValue(arc.startAngle) * Math.PI / 180
+        const endRad = extractValue(arc.endAngle) * Math.PI / 180
+        const clockwise = arc.clockwise ?? false
+
+        context.beginPath()
+        // Outer arc (counterclockwise by default)
+        context.arc(cx, cy, outerRadius, startRad, endRad, clockwise)
+        // Inner arc (reversed direction)
+        context.arc(cx, cy, innerRadius, endRad, startRad, !clockwise)
+        context.closePath()
+
+        context.fillStyle = fillColor
+        context.fill()
+        context.strokeStyle = strokeColor
+        context.lineWidth = lineWidth
+        context.stroke()
+      } else if (type === 'linear' && obstacle.linear) {
+        // Draw linear obstacle - two-point definition with perpendicular width
+        // Linear obstacles use absolute coordinates (not relative to position)
+        context.restore() // Restore before drawing with absolute coordinates
+        context.save()
+
+        const linear = obstacle.linear
+        const startX = metersToPixels(extractValue(linear.start.x))
+        const startY = metersToPixels(extractValue(linear.start.y))
+        const endX = metersToPixels(extractValue(linear.end.x))
+        const endY = metersToPixels(extractValue(linear.end.y))
+        const halfWidth = metersToPixels(extractValue(linear.width)) / 2
+
+        // Calculate direction and perpendicular vectors
+        const dx = endX - startX
+        const dy = endY - startY
+        const length = Math.sqrt(dx * dx + dy * dy)
+
+        if (length > 0) {
+          // Normalize and get perpendicular
+          const nx = -dy / length  // perpendicular x
+          const ny = dx / length   // perpendicular y
+
+          // Calculate the four corners of the rectangle
+          const corners = [
+            { x: startX + nx * halfWidth, y: startY + ny * halfWidth },  // start left
+            { x: startX - nx * halfWidth, y: startY - ny * halfWidth },  // start right
+            { x: endX - nx * halfWidth, y: endY - ny * halfWidth },      // end right
+            { x: endX + nx * halfWidth, y: endY + ny * halfWidth },      // end left
+          ]
+
+          // Draw the rectangle
+          context.beginPath()
+          context.moveTo(corners[0].x, corners[0].y)
+          context.lineTo(corners[1].x, corners[1].y)
+          context.lineTo(corners[2].x, corners[2].y)
+          context.lineTo(corners[3].x, corners[3].y)
+          context.closePath()
+
+          context.fillStyle = fillColor
+          context.fill()
+          context.strokeStyle = strokeColor
+          context.lineWidth = lineWidth
+          context.stroke()
+
+          // Draw category-specific patterns
+          if (category === 'structural') {
+            // Draw cross-hatch pattern for structural elements
+            context.strokeStyle = `${baseColor}30`
+            context.lineWidth = 1
+            const step = 10
+            for (let i = 0; i < length; i += step) {
+              const t = i / length
+              const px = startX + dx * t
+              const py = startY + dy * t
+              context.beginPath()
+              context.moveTo(px + nx * halfWidth, py + ny * halfWidth)
+              context.lineTo(px - nx * halfWidth, py - ny * halfWidth)
+              context.stroke()
+            }
+          } else if (category === 'seating') {
+            // Draw centerline for seating to show direction
+            context.strokeStyle = `${baseColor}50`
+            context.lineWidth = 1
+            context.setLineDash([4, 4])
+            context.beginPath()
+            context.moveTo(startX, startY)
+            context.lineTo(endX, endY)
+            context.stroke()
+            context.setLineDash([])
+          }
+        }
       }
 
       context.restore()
@@ -768,10 +886,10 @@ export function useSiteMapCanvas(
           return obstacle
         }
       } else if (obstacle.type === 'polygon' && obstacle.vertices && obstacle.vertices.length >= 3) {
-        // Point-in-polygon test using ray casting
+        // Point-in-polygon test using ray casting - vertices are relative offsets from position
         const vertices = obstacle.vertices.map(v => ({
-          x: metersToPixels(extractValue(v.x)) - centerX,
-          y: metersToPixels(extractValue(v.y)) - centerY
+          x: metersToPixels(extractValue(v.x)),
+          y: metersToPixels(extractValue(v.y))
         }))
 
         let inside = false
@@ -787,6 +905,90 @@ export function useSiteMapCanvas(
 
         if (inside) {
           return obstacle
+        }
+      } else if (obstacle.type === 'arc-segment' && obstacle.arcSegment) {
+        // Arc segment hit testing - check if point is within radii and angle range
+        const arc = obstacle.arcSegment
+        const cx = metersToPixels(extractValue(arc.center.x))
+        const cy = metersToPixels(extractValue(arc.center.y))
+        const innerRadius = metersToPixels(extractValue(arc.innerRadius))
+        const outerRadius = metersToPixels(extractValue(arc.outerRadius))
+        const startAngle = extractValue(arc.startAngle)
+        const endAngle = extractValue(arc.endAngle)
+        const clockwise = arc.clockwise ?? false
+
+        // Distance from arc center to point (using absolute coordinates, not local)
+        const arcDx = x - cx
+        const arcDy = y - cy
+        const distFromCenter = Math.sqrt(arcDx * arcDx + arcDy * arcDy)
+
+        // Check if within radii
+        if (distFromCenter >= innerRadius && distFromCenter <= outerRadius) {
+          // Calculate angle of point from arc center
+          let pointAngle = Math.atan2(arcDy, arcDx) * 180 / Math.PI
+          if (pointAngle < 0) pointAngle += 360
+
+          // Normalize angles to 0-360 range
+          let start = startAngle % 360
+          let end = endAngle % 360
+          if (start < 0) start += 360
+          if (end < 0) end += 360
+
+          // Check if angle is within arc span
+          let inArc = false
+          if (clockwise) {
+            // Clockwise: from start going down to end
+            if (start >= end) {
+              inArc = pointAngle <= start && pointAngle >= end
+            } else {
+              inArc = pointAngle <= start || pointAngle >= end
+            }
+          } else {
+            // Counter-clockwise: from start going up to end
+            if (start <= end) {
+              inArc = pointAngle >= start && pointAngle <= end
+            } else {
+              inArc = pointAngle >= start || pointAngle <= end
+            }
+          }
+
+          if (inArc) {
+            return obstacle
+          }
+        }
+      } else if (obstacle.type === 'linear' && obstacle.linear) {
+        // Linear obstacle hit testing - check if point is inside the rectangle
+        const linear = obstacle.linear
+        const startX = metersToPixels(extractValue(linear.start.x))
+        const startY = metersToPixels(extractValue(linear.start.y))
+        const endX = metersToPixels(extractValue(linear.end.x))
+        const endY = metersToPixels(extractValue(linear.end.y))
+        const halfWidth = metersToPixels(extractValue(linear.width)) / 2
+
+        // Calculate direction and perpendicular vectors
+        const lineDx = endX - startX
+        const lineDy = endY - startY
+        const length = Math.sqrt(lineDx * lineDx + lineDy * lineDy)
+
+        if (length > 0) {
+          // Unit vectors along and perpendicular to the line
+          const ux = lineDx / length  // along line x
+          const uy = lineDy / length  // along line y
+          const nx = -uy  // perpendicular x
+          const ny = ux   // perpendicular y
+
+          // Transform point to line's local coordinate system
+          // (origin at start, x-axis along line, y-axis perpendicular)
+          const ptDx = x - startX
+          const ptDy = y - startY
+          const localAlongLine = ptDx * ux + ptDy * uy
+          const localPerpendicular = ptDx * nx + ptDy * ny
+
+          // Check if within bounds
+          if (localAlongLine >= 0 && localAlongLine <= length &&
+              Math.abs(localPerpendicular) <= halfWidth) {
+            return obstacle
+          }
         }
       }
     }
@@ -1309,16 +1511,37 @@ export function useSiteMapCanvas(
     const hexColor = tailwindColorToHex(color)
 
     // Convert walls to line segments for ray-casting (in pixels)
-    const wallSegments: LineSegment[] = walls.map(wall => ({
-      start: {
-        x: metersToPixels(extractValue(wall.start.x)),
-        y: metersToPixels(extractValue(wall.start.y))
-      },
-      end: {
-        x: metersToPixels(extractValue(wall.end.x)),
-        y: metersToPixels(extractValue(wall.end.y))
+    // Arc walls are converted to multiple line segments
+    const wallSegments: LineSegment[] = walls.flatMap(wall => {
+      const geometry = wall.geometry ?? 'line'
+      if (geometry === 'arc' && wall.arc) {
+        // Convert arc to line segments
+        const arc = wall.arc
+        return arcToLineSegments(
+          {
+            x: metersToPixels(extractValue(arc.center.x)),
+            y: metersToPixels(extractValue(arc.center.y))
+          },
+          metersToPixels(extractValue(arc.radius)),
+          extractValue(arc.startAngle),
+          extractValue(arc.endAngle),
+          arc.clockwise ?? false,
+          24 // Higher segment count for smoother FOV calculation
+        )
+      } else {
+        // Straight line wall
+        return [{
+          start: {
+            x: metersToPixels(extractValue(wall.start.x)),
+            y: metersToPixels(extractValue(wall.start.y))
+          },
+          end: {
+            x: metersToPixels(extractValue(wall.end.x)),
+            y: metersToPixels(extractValue(wall.end.y))
+          }
+        }]
       }
-    }))
+    })
 
     // Convert obstacles to geometry types for ray-casting (only those that block view)
     const circleObstacles: CircleObstacle[] = []
@@ -1347,6 +1570,34 @@ export function useSiteMapCanvas(
           height: metersToPixels(extractValue(obstacle.dimensions.height)),
           rotation: obstacle.rotation,
           obstacleHeight: obstacle.height // physical height in meters
+        })
+      } else if (obstacle.type === 'linear' && obstacle.linear) {
+        // Convert linear obstacle to rectangle for FOV calculation
+        const linear = obstacle.linear
+        const startX = extractValue(linear.start.x)
+        const startY = extractValue(linear.start.y)
+        const endX = extractValue(linear.end.x)
+        const endY = extractValue(linear.end.y)
+        const width = extractValue(linear.width)
+
+        // Calculate center, length, and rotation
+        const centerX = (startX + endX) / 2
+        const centerY = (startY + endY) / 2
+        const dx = endX - startX
+        const dy = endY - startY
+        const length = Math.sqrt(dx * dx + dy * dy)
+        // Rotation in degrees (from positive X axis)
+        const rotation = Math.atan2(dy, dx) * 180 / Math.PI
+
+        rectangleObstacles.push({
+          center: {
+            x: metersToPixels(centerX),
+            y: metersToPixels(centerY)
+          },
+          width: metersToPixels(length),
+          height: metersToPixels(width),
+          rotation: rotation,
+          obstacleHeight: obstacle.height
         })
       }
     }
@@ -1509,17 +1760,35 @@ export function useSiteMapCanvas(
     const FOV_RENDER_DISTANCE_M = 50
     const viewDistance = metersToPixels(FOV_RENDER_DISTANCE_M)
 
-    // Convert walls to line segments
-    const wallSegments: LineSegment[] = walls.map(wall => ({
-      start: {
-        x: metersToPixels(extractValue(wall.start.x)),
-        y: metersToPixels(extractValue(wall.start.y))
-      },
-      end: {
-        x: metersToPixels(extractValue(wall.end.x)),
-        y: metersToPixels(extractValue(wall.end.y))
+    // Convert walls to line segments (arc walls become multiple segments)
+    const wallSegments: LineSegment[] = walls.flatMap(wall => {
+      const geometry = wall.geometry ?? 'line'
+      if (geometry === 'arc' && wall.arc) {
+        const arc = wall.arc
+        return arcToLineSegments(
+          {
+            x: metersToPixels(extractValue(arc.center.x)),
+            y: metersToPixels(extractValue(arc.center.y))
+          },
+          metersToPixels(extractValue(arc.radius)),
+          extractValue(arc.startAngle),
+          extractValue(arc.endAngle),
+          arc.clockwise ?? false,
+          24
+        )
+      } else {
+        return [{
+          start: {
+            x: metersToPixels(extractValue(wall.start.x)),
+            y: metersToPixels(extractValue(wall.start.y))
+          },
+          end: {
+            x: metersToPixels(extractValue(wall.end.x)),
+            y: metersToPixels(extractValue(wall.end.y))
+          }
+        }]
       }
-    }))
+    })
 
     // Convert obstacles (only those that block view AND are tall enough to fully block)
     const cameraHeight = extractValue(placement.height)
@@ -1550,6 +1819,34 @@ export function useSiteMapCanvas(
           width: metersToPixels(extractValue(obstacle.dimensions.width)),
           height: metersToPixels(extractValue(obstacle.dimensions.height)),
           rotation: obstacle.rotation,
+          obstacleHeight: obstacle.height
+        })
+      } else if (obstacle.type === 'linear' && obstacle.linear) {
+        // Convert linear obstacle to rectangle for FOV calculation
+        const linear = obstacle.linear
+        const startX = extractValue(linear.start.x)
+        const startY = extractValue(linear.start.y)
+        const endX = extractValue(linear.end.x)
+        const endY = extractValue(linear.end.y)
+        const width = extractValue(linear.width)
+
+        // Calculate center, length, and rotation
+        const centerX = (startX + endX) / 2
+        const centerY = (startY + endY) / 2
+        const dx = endX - startX
+        const dy = endY - startY
+        const length = Math.sqrt(dx * dx + dy * dy)
+        // Rotation in degrees (from positive X axis)
+        const rotation = Math.atan2(dy, dx) * 180 / Math.PI
+
+        rectangleObstacles.push({
+          center: {
+            x: metersToPixels(centerX),
+            y: metersToPixels(centerY)
+          },
+          width: metersToPixels(length),
+          height: metersToPixels(width),
+          rotation: rotation,
           obstacleHeight: obstacle.height
         })
       }

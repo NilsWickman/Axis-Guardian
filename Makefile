@@ -1,4 +1,4 @@
-.PHONY: setup dev help clean check-pnpm kill-ports _kill-ports _kill-https-ports dev-frontend dev-camera dev-backend dev-tracking db-seed db-reset debug-backend debug-tracking debug-backend-stop debug-tracking-stop https-setup dev-https https-stop
+.PHONY: setup dev help clean check-pnpm kill-ports _kill-ports _kill-https-ports dev-frontend dev-camera dev-backend dev-tracking db-seed db-reset render-sitemap debug-backend debug-tracking debug-backend-stop debug-tracking-stop https-setup dev-https https-stop
 
 # Colors for output
 CYAN := \033[0;36m
@@ -12,6 +12,12 @@ DEV_PORTS := 5173 9101 3010
 
 # Ports used by HTTPS development (includes proxy ports)
 HTTPS_PORTS := 5173 9101 3010 80 443
+
+# Sitemap rendering (for iterating on room models)
+SITEMAP ?= frontend/public/sitemap-rectangular-room.json
+SITEMAP_RENDER_OUT ?= tech-logs/mot-room-modeling/sitemap-render.png
+SITEMAP_RENDER_SCALE ?= 25
+SITEMAP_RENDER_PAD ?= 30
 
 help: ## Show this help message
 	@echo "$(CYAN)Axis-Guardian Development Makefile$(NC)"
@@ -59,6 +65,11 @@ db-reset: ## Reset and re-seed the backend database
 	@echo "$(CYAN)Resetting database...$(NC)"
 	@cd backend && pnpm db:reset
 	@echo "$(GREEN)✓ Database reset and re-seeded$(NC)"
+
+render-sitemap: ## Render a PNG preview of the current sitemap (override SITEMAP=... SITEMAP_RENDER_OUT=...)
+	@mkdir -p "$$(dirname "$(SITEMAP_RENDER_OUT)")"
+	@python3 scripts/render-sitemap.py "$(SITEMAP)" "$(SITEMAP_RENDER_OUT)" --scale "$(SITEMAP_RENDER_SCALE)" --pad "$(SITEMAP_RENDER_PAD)" --show-labels
+	@echo "$(GREEN)✓ Wrote $(SITEMAP_RENDER_OUT)$(NC)"
 
 kill-ports: ## Kill any processes using development ports (5173, 9101, 3010) - USE WITH CAUTION
 	@echo "$(CYAN)Checking for processes on development ports...$(NC)"

@@ -25,6 +25,29 @@ export interface CameraPlacement {
   notes?: string
 }
 
+export interface ArcParameters {
+  center: { x: UnitValue; y: UnitValue }
+  radius: UnitValue
+  startAngle: UnitValue  // degrees (0 = right/+X, 90 = down/+Y)
+  endAngle: UnitValue    // degrees
+  clockwise?: boolean
+}
+
+export interface ArcSegmentGeometry {
+  center: { x: UnitValue; y: UnitValue }
+  innerRadius: UnitValue
+  outerRadius: UnitValue
+  startAngle: UnitValue  // degrees (0 = right/+X, 90 = down/+Y)
+  endAngle: UnitValue    // degrees
+  clockwise?: boolean
+}
+
+export interface LinearGeometry {
+  start: { x: UnitValue; y: UnitValue }
+  end: { x: UnitValue; y: UnitValue }
+  width: UnitValue  // perpendicular width in meters
+}
+
 export interface Wall {
   id: string
   start: {
@@ -36,10 +59,12 @@ export interface Wall {
     y: UnitValue
   }
   type?: 'external' | 'internal' | 'door'
+  geometry?: 'line' | 'arc'
+  arc?: ArcParameters
 }
 
-export type ObstacleType = 'rectangle' | 'circle' | 'polygon'
-export type ObstacleCategory = 'furniture' | 'structural' | 'equipment'
+export type ObstacleType = 'rectangle' | 'circle' | 'polygon' | 'arc-segment' | 'linear'
+export type ObstacleCategory = 'furniture' | 'structural' | 'equipment' | 'seating'
 
 export interface Obstacle {
   id: string
@@ -60,6 +85,10 @@ export interface Obstacle {
   radius?: UnitValue
   // For polygons
   vertices?: { x: UnitValue; y: UnitValue }[]
+  // For arc-segments (curved seating rows)
+  arcSegment?: ArcSegmentGeometry
+  // For linear obstacles (two-point + width)
+  linear?: LinearGeometry
   // Physical height for FOV occlusion
   height?: number
   // Behavior flags

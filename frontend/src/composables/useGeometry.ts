@@ -12,6 +12,71 @@ export interface LineSegment {
   end: Point
 }
 
+export interface ArcWall {
+  center: Point
+  radius: number
+  startAngle: number  // degrees (0 = right/+X, 90 = down/+Y)
+  endAngle: number    // degrees
+  clockwise?: boolean
+}
+
+/**
+ * Convert a circular arc wall to line segments for ray-casting
+ * @param center - Center point of the arc circle
+ * @param radius - Radius of the arc in pixels
+ * @param startAngle - Start angle in degrees (0 = right/+X, 90 = down/+Y)
+ * @param endAngle - End angle in degrees
+ * @param clockwise - If true, arc goes clockwise from start to end
+ * @param segmentCount - Number of line segments to approximate the arc (default: 16)
+ */
+export function arcToLineSegments(
+  center: Point,
+  radius: number,
+  startAngle: number,
+  endAngle: number,
+  clockwise: boolean = false,
+  segmentCount: number = 16
+): LineSegment[] {
+  const segments: LineSegment[] = []
+
+  // Convert degrees to radians
+  const startRad = (startAngle * Math.PI) / 180
+  const endRad = (endAngle * Math.PI) / 180
+
+  // Calculate the angular span
+  let angleDiff = endRad - startRad
+
+  // Handle direction (canvas arc uses opposite convention)
+  if (clockwise) {
+    // Clockwise: go from start to end in clockwise direction
+    if (angleDiff > 0) angleDiff -= 2 * Math.PI
+  } else {
+    // Counter-clockwise: go from start to end in counter-clockwise direction
+    if (angleDiff < 0) angleDiff += 2 * Math.PI
+  }
+
+  // Generate points along the arc
+  const angleStep = angleDiff / segmentCount
+
+  for (let i = 0; i < segmentCount; i++) {
+    const angle1 = startRad + i * angleStep
+    const angle2 = startRad + (i + 1) * angleStep
+
+    segments.push({
+      start: {
+        x: center.x + radius * Math.cos(angle1),
+        y: center.y + radius * Math.sin(angle1)
+      },
+      end: {
+        x: center.x + radius * Math.cos(angle2),
+        y: center.y + radius * Math.sin(angle2)
+      }
+    })
+  }
+
+  return segments
+}
+
 export interface CircleObstacle {
   center: Point
   radius: number

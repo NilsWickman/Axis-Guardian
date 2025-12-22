@@ -1,285 +1,1121 @@
 {
   "$schema": "./sitemap.schema.json",
   "dimensions": {
-    "width": 18,
-    "height": 28,
+    "width": 32,
+    "height": 30,
     "unit": "meters"
   },
   "walls": [
     {
-      "id": "wall-lecture-hall-back-1",
-      "start": { "x": 0, "y": 2 },
-      "end": { "x": 5, "y": 0.5 },
+      "id": "aud-left",
+      "start": {
+        "x": 7,
+        "y": 16
+      },
+      "end": {
+        "x": 0,
+        "y": 4
+      },
       "type": "external"
     },
     {
-      "id": "wall-lecture-hall-back-2",
-      "start": { "x": 5, "y": 0.5 },
-      "end": { "x": 9, "y": 0 },
+      "id": "aud-arch",
+      "start": {
+        "x": 0,
+        "y": 4
+      },
+      "end": {
+        "x": 32,
+        "y": 4
+      },
+      "type": "external",
+      "geometry": "arc",
+      "arc": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "radius": 44,
+        "startAngle": 249,
+        "endAngle": 291,
+        "clockwise": true
+      }
+    },
+    {
+      "id": "aud-right",
+      "start": {
+        "x": 32,
+        "y": 4
+      },
+      "end": {
+        "x": 25,
+        "y": 16
+      },
       "type": "external"
     },
     {
-      "id": "wall-lecture-hall-back-3",
-      "start": { "x": 9, "y": 0 },
-      "end": { "x": 13, "y": 0.5 },
-      "type": "external"
-    },
-    {
-      "id": "wall-lecture-hall-back-4",
-      "start": { "x": 13, "y": 0.5 },
-      "end": { "x": 18, "y": 2 },
-      "type": "external"
-    },
-    {
-      "id": "wall-lecture-hall-right",
-      "start": { "x": 18, "y": 2 },
-      "end": { "x": 15.5, "y": 16 },
-      "type": "external"
-    },
-    {
-      "id": "wall-lecture-hall-left",
-      "start": { "x": 2.5, "y": 16 },
-      "end": { "x": 0, "y": 2 },
-      "type": "external"
-    },
-    {
-      "id": "wall-corridor-inner-slanted",
-      "start": { "x": 15, "y": 2 },
-      "end": { "x": 13, "y": 14 },
+      "id": "corridor-right-inner",
+      "start": {
+        "x": 31,
+        "y": 2
+      },
+      "end": {
+        "x": 24,
+        "y": 15
+      },
       "type": "internal"
     },
     {
-      "id": "wall-auditorium-top-left",
-      "start": { "x": 0, "y": 16 },
-      "end": { "x": 2.5, "y": 16 },
+      "id": "corridor-left-inner",
+      "start": {
+        "x": 8,
+        "y": 15
+      },
+      "end": {
+        "x": 1,
+        "y": 2
+      },
+      "type": "internal"
+    },
+    {
+      "id": "center-divider",
+      "start": {
+        "x": 16,
+        "y": 1
+      },
+      "end": {
+        "x": 16,
+        "y": 16
+      },
+      "type": "internal"
+    },
+    {
+      "id": "section-a-corridor-left",
+      "start": {
+        "x": 7.5,
+        "y": 2
+      },
+      "end": {
+        "x": 11,
+        "y": 15
+      },
+      "type": "internal"
+    },
+    {
+      "id": "section-a-corridor-right",
+      "start": {
+        "x": 9,
+        "y": 2
+      },
+      "end": {
+        "x": 12.5,
+        "y": 15
+      },
+      "type": "internal"
+    },
+    {
+      "id": "section-b-corridor-left",
+      "start": {
+        "x": 23,
+        "y": 2
+      },
+      "end": {
+        "x": 19.5,
+        "y": 15
+      },
+      "type": "internal"
+    },
+    {
+      "id": "section-b-corridor-right",
+      "start": {
+        "x": 24.5,
+        "y": 2
+      },
+      "end": {
+        "x": 21,
+        "y": 15
+      },
+      "type": "internal"
+    },
+    {
+      "id": "dividing-wall-left",
+      "start": {
+        "x": 8.6,
+        "y": 16
+      },
+      "end": {
+        "x": 16,
+        "y": 16
+      },
+      "type": "internal"
+    },
+    {
+      "id": "dividing-wall-right",
+      "start": {
+        "x": 16,
+        "y": 16
+      },
+      "end": {
+        "x": 23.4,
+        "y": 16
+      },
+      "type": "internal"
+    },
+    {
+      "id": "atrium-left",
+      "start": {
+        "x": 7,
+        "y": 16
+      },
+      "end": {
+        "x": 7,
+        "y": 28
+      },
       "type": "external"
     },
     {
-      "id": "wall-auditorium-top-right",
-      "start": { "x": 2.5, "y": 16 },
-      "end": { "x": 15.5, "y": 16 },
+      "id": "atrium-bottom",
+      "start": {
+        "x": 7,
+        "y": 28
+      },
+      "end": {
+        "x": 25,
+        "y": 28
+      },
       "type": "external"
     },
     {
-      "id": "wall-auditorium-right",
-      "start": { "x": 18, "y": 16 },
-      "end": { "x": 18, "y": 28 },
-      "type": "external"
-    },
-    {
-      "id": "wall-auditorium-bottom",
-      "start": { "x": 18, "y": 28 },
-      "end": { "x": 0, "y": 28 },
-      "type": "external"
-    },
-    {
-      "id": "wall-auditorium-left",
-      "start": { "x": 0, "y": 28 },
-      "end": { "x": 0, "y": 16 },
+      "id": "atrium-right",
+      "start": {
+        "x": 25,
+        "y": 28
+      },
+      "end": {
+        "x": 25,
+        "y": 16
+      },
       "type": "external"
     }
   ],
   "cameras": [
     {
       "id": "camera1",
-      "name": "HC3 (Auditorium)",
+      "name": "HC3 (Atrium Right)",
       "model": "AXIS P3245-LVE",
       "rtspUrl": "rtsp://localhost:8554/camera1",
       "webrtcUrl": "http://localhost:9101",
       "ipAddress": "192.168.1.101",
-      "position": { "x": 16.22, "y": 27.7 },
-      "azimuth": 197,
+      "position": {
+        "x": 23,
+        "y": 26
+      },
+      "azimuth": 315,
       "elevation": 35,
-      "height": 1.68,
+      "height": 2.5,
       "fieldOfView": 66,
-      "resolution": { "width": 1920, "height": 1080 },
-      "distortion": { "k1": 0, "k2": 0, "p1": 0, "p2": 0 },
+      "resolution": {
+        "width": 1920,
+        "height": 1080
+      },
+      "distortion": {
+        "k1": 0,
+        "k2": 0,
+        "p1": 0,
+        "p2": 0
+      },
       "color": "cyan-500"
     },
     {
       "id": "camera2",
-      "name": "HC4 (Auditorium)",
+      "name": "HC4 (Atrium Left)",
       "model": "AXIS P3245-LVE",
       "rtspUrl": "rtsp://localhost:8554/camera2",
       "webrtcUrl": "http://localhost:9102",
       "ipAddress": "192.168.1.102",
-      "position": { "x": 0.9, "y": 26.8 },
-      "azimuth": 129.5,
+      "position": {
+        "x": 9,
+        "y": 26
+      },
+      "azimuth": 45,
       "elevation": 40,
-      "height": 1.67,
+      "height": 2.5,
       "fieldOfView": 60,
-      "resolution": { "width": 1920, "height": 1080 },
-      "distortion": { "k1": 0, "k2": 0, "p1": 0, "p2": 0 },
+      "resolution": {
+        "width": 1920,
+        "height": 1080
+      },
+      "distortion": {
+        "k1": 0,
+        "k2": 0,
+        "p1": 0,
+        "p2": 0
+      },
       "color": "amber-500"
     },
     {
       "id": "camera3",
-      "name": "IP2 (Lecture Hall)",
+      "name": "IP2 (Auditorium Back)",
       "model": "AXIS P3245-LVE",
       "rtspUrl": "rtsp://localhost:8554/camera3",
       "webrtcUrl": "http://localhost:9103",
       "ipAddress": "192.168.1.103",
-      "position": { "x": 2, "y": 5 },
-      "azimuth": 120,
-      "elevation": 15,
-      "height": 2.62,
-      "fieldOfView": 60,
-      "resolution": { "width": 1920, "height": 1080 },
-      "distortion": { "k1": 0, "k2": 0, "p1": 0, "p2": 0 },
+      "position": {
+        "x": 23,
+        "y": 14
+      },
+      "azimuth": 315,
+      "elevation": 25,
+      "height": 3,
+      "fieldOfView": 70,
+      "resolution": {
+        "width": 1920,
+        "height": 1080
+      },
+      "distortion": {
+        "k1": 0,
+        "k2": 0,
+        "p1": 0,
+        "p2": 0
+      },
       "color": "emerald-500"
     },
     {
       "id": "camera4",
-      "name": "IP5 (Lecture Hall)",
+      "name": "IP5 (Auditorium Front)",
       "model": "AXIS P3245-LVE",
       "rtspUrl": "rtsp://localhost:8554/camera4",
       "webrtcUrl": "http://localhost:9104",
       "ipAddress": "192.168.1.104",
-      "position": { "x": 16.5, "y": 15 },
-      "azimuth": 0,
-      "elevation": 10,
-      "height": 1.84,
-      "fieldOfView": 60,
-      "resolution": { "width": 1920, "height": 1080 },
-      "distortion": { "k1": 0, "k2": 0, "p1": 0, "p2": 0 },
+      "position": {
+        "x": 16,
+        "y": 6
+      },
+      "azimuth": 180,
+      "elevation": 15,
+      "height": 2.5,
+      "fieldOfView": 80,
+      "resolution": {
+        "width": 1920,
+        "height": 1080
+      },
+      "distortion": {
+        "k1": 0,
+        "k2": 0,
+        "p1": 0,
+        "p2": 0
+      },
       "color": "rose-500"
     }
   ],
   "obstacles": [
     {
-      "id": "pillar-1",
+      "id": "atrium-pillar-1",
       "type": "circle",
       "label": "Pillar 1",
       "category": "structural",
-      "position": { "x": 5.5, "y": 25 },
-      "radius": 0.25,
-      "height": 3.0,
+      "position": {
+        "x": 12,
+        "y": 20
+      },
+      "radius": 0.5,
+      "height": 4,
       "blocksTracking": true,
       "blocksView": true,
       "color": "#e2e8f0"
     },
     {
-      "id": "pillar-2",
+      "id": "atrium-pillar-2",
       "type": "circle",
       "label": "Pillar 2",
       "category": "structural",
-      "position": { "x": 12.5, "y": 25 },
-      "radius": 0.25,
-      "height": 3.0,
+      "position": {
+        "x": 20,
+        "y": 20
+      },
+      "radius": 0.5,
+      "height": 4,
       "blocksTracking": true,
       "blocksView": true,
       "color": "#e2e8f0"
     },
     {
-      "id": "pillar-3",
+      "id": "atrium-pillar-3",
       "type": "circle",
       "label": "Pillar 3",
       "category": "structural",
-      "position": { "x": 5.5, "y": 19 },
-      "radius": 0.25,
-      "height": 3.0,
+      "position": {
+        "x": 12,
+        "y": 24
+      },
+      "radius": 0.5,
+      "height": 4,
       "blocksTracking": true,
       "blocksView": true,
       "color": "#e2e8f0"
     },
     {
-      "id": "pillar-4",
+      "id": "atrium-pillar-4",
       "type": "circle",
       "label": "Pillar 4",
       "category": "structural",
-      "position": { "x": 12.5, "y": 19 },
-      "radius": 0.25,
-      "height": 3.0,
+      "position": {
+        "x": 20,
+        "y": 24
+      },
+      "radius": 0.5,
+      "height": 4,
       "blocksTracking": true,
       "blocksView": true,
       "color": "#e2e8f0"
     },
     {
-      "id": "table-1",
-      "type": "rectangle",
+      "id": "registration-table",
+      "type": "linear",
       "label": "Registration Table",
       "category": "furniture",
-      "position": { "x": 15, "y": 17 },
-      "dimensions": { "width": 1.0, "height": 0.5 },
-      "rotation": 0,
-      "height": 1.0,
+      "position": {
+        "x": 22,
+        "y": 18
+      },
+      "linear": {
+        "start": {
+          "x": 20,
+          "y": 18
+        },
+        "end": {
+          "x": 24,
+          "y": 18
+        },
+        "width": 0.8
+      },
+      "height": 1,
       "blocksTracking": false,
       "blocksView": true,
       "color": "#f5f5f4"
     },
     {
-      "id": "podium",
-      "type": "rectangle",
-      "label": "Podium",
-      "category": "furniture",
-      "position": { "x": 2.5, "y": 12.5 },
-      "dimensions": { "width": 3, "height": 1.5 },
-      "rotation": 0,
-      "height": 1.0,
+      "id": "bench-atrium-1",
+      "type": "linear",
+      "label": "Atrium Bench 1",
+      "category": "seating",
+      "position": {
+        "x": 16,
+        "y": 22
+      },
+      "linear": {
+        "start": {
+          "x": 14,
+          "y": 22
+        },
+        "end": {
+          "x": 18,
+          "y": 22
+        },
+        "width": 0.5
+      },
+      "height": 0.45,
       "blocksTracking": false,
       "blocksView": false,
-      "color": "#a3a3a3"
+      "seatedPersonHeight": 1.2,
+      "color": "#a8a29e"
     },
     {
-      "id": "seating-row-1",
-      "type": "rectangle",
-      "label": "Seating Row 1",
-      "category": "furniture",
-      "position": { "x": 7, "y": 10.5 },
-      "dimensions": { "width": 10, "height": 1.2 },
-      "rotation": 0,
-      "height": 0.5,
+      "id": "bench-atrium-2",
+      "type": "linear",
+      "label": "Atrium Bench 2",
+      "category": "seating",
+      "position": {
+        "x": 16,
+        "y": 25
+      },
+      "linear": {
+        "start": {
+          "x": 14,
+          "y": 25
+        },
+        "end": {
+          "x": 18,
+          "y": 25
+        },
+        "width": 0.5
+      },
+      "height": 0.45,
       "blocksTracking": false,
       "blocksView": false,
-      "color": "#525252"
+      "seatedPersonHeight": 1.2,
+      "color": "#a8a29e"
     },
     {
-      "id": "seating-row-2",
-      "type": "rectangle",
-      "label": "Seating Row 2",
-      "category": "furniture",
-      "position": { "x": 7, "y": 8.5 },
-      "dimensions": { "width": 10, "height": 1.2 },
-      "rotation": 0,
-      "height": 0.5,
+      "id": "seat-a0",
+      "type": "arc-segment",
+      "label": "Row A0 - Front (Section A)",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 42.5,
+        "outerRadius": 43.5,
+        "startAngle": 251.2,
+        "endAngle": 258.8,
+        "clockwise": false
+      },
+      "height": 0.9,
       "blocksTracking": false,
       "blocksView": false,
-      "color": "#525252"
+      "seatedPersonHeight": 1.2
     },
     {
-      "id": "seating-row-3",
-      "type": "rectangle",
-      "label": "Seating Row 3",
-      "category": "furniture",
-      "position": { "x": 7, "y": 6.5 },
-      "dimensions": { "width": 9, "height": 1.2 },
-      "rotation": 0,
-      "height": 0.5,
+      "id": "seat-b0",
+      "type": "arc-segment",
+      "label": "Row B0 - Front (Section B)",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 42.5,
+        "outerRadius": 43.5,
+        "startAngle": 281.2,
+        "endAngle": 288.8,
+        "clockwise": false
+      },
+      "height": 0.9,
       "blocksTracking": false,
       "blocksView": false,
-      "color": "#525252"
+      "seatedPersonHeight": 1.2
     },
     {
-      "id": "seating-row-4",
-      "type": "rectangle",
-      "label": "Seating Row 4",
-      "category": "furniture",
-      "position": { "x": 7, "y": 4.5 },
-      "dimensions": { "width": 8, "height": 1.2 },
-      "rotation": 0,
-      "height": 0.5,
+      "id": "seat-a1-left",
+      "type": "arc-segment",
+      "label": "Row A1 - Left Outer",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 40.66,
+        "outerRadius": 41.51,
+        "startAngle": 251.7,
+        "endAngle": 259.0,
+        "clockwise": false
+      },
+      "height": 0.9,
       "blocksTracking": false,
       "blocksView": false,
-      "color": "#525252"
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-a1-right",
+      "type": "arc-segment",
+      "label": "Row A1 - Left Inner",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 40.86,
+        "outerRadius": 41.7,
+        "startAngle": 261.0,
+        "endAngle": 270,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-b1-left",
+      "type": "arc-segment",
+      "label": "Row A1 - Right Inner",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 40.86,
+        "outerRadius": 41.7,
+        "startAngle": 270,
+        "endAngle": 279.0,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-b1-right",
+      "type": "arc-segment",
+      "label": "Row A1 - Right Outer",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 40.66,
+        "outerRadius": 41.51,
+        "startAngle": 281.0,
+        "endAngle": 288.3,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-a2-left",
+      "type": "arc-segment",
+      "label": "Row A2 - Left Outer",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 39.16,
+        "outerRadius": 40,
+        "startAngle": 252.0,
+        "endAngle": 259.2,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-a2-right",
+      "type": "arc-segment",
+      "label": "Row A2 - Left Inner",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 39.34,
+        "outerRadius": 40.17,
+        "startAngle": 261.2,
+        "endAngle": 270,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-b2-left",
+      "type": "arc-segment",
+      "label": "Row A2 - Right Inner",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 39.34,
+        "outerRadius": 40.17,
+        "startAngle": 270,
+        "endAngle": 278.8,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-b2-right",
+      "type": "arc-segment",
+      "label": "Row A2 - Right Outer",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 39.16,
+        "outerRadius": 40,
+        "startAngle": 280.8,
+        "endAngle": 288.0,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-a3-left",
+      "type": "arc-segment",
+      "label": "Row A3 - Left Outer",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 37.66,
+        "outerRadius": 38.49,
+        "startAngle": 252.4,
+        "endAngle": 259.4,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-a3-right",
+      "type": "arc-segment",
+      "label": "Row A3 - Left Inner",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 37.83,
+        "outerRadius": 38.65,
+        "startAngle": 261.5,
+        "endAngle": 270,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-b3-left",
+      "type": "arc-segment",
+      "label": "Row A3 - Right Inner",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 37.83,
+        "outerRadius": 38.65,
+        "startAngle": 270,
+        "endAngle": 278.5,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-b3-right",
+      "type": "arc-segment",
+      "label": "Row A3 - Right Outer",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 37.66,
+        "outerRadius": 38.49,
+        "startAngle": 280.6,
+        "endAngle": 287.6,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-a4-left",
+      "type": "arc-segment",
+      "label": "Row A4 - Left Outer",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 36.16,
+        "outerRadius": 36.98,
+        "startAngle": 252.9,
+        "endAngle": 259.5,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-a4-right",
+      "type": "arc-segment",
+      "label": "Row A4 - Left Inner",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 36.32,
+        "outerRadius": 37.13,
+        "startAngle": 261.8,
+        "endAngle": 270,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-b4-left",
+      "type": "arc-segment",
+      "label": "Row A4 - Right Inner",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 36.32,
+        "outerRadius": 37.13,
+        "startAngle": 270,
+        "endAngle": 278.2,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-b4-right",
+      "type": "arc-segment",
+      "label": "Row A4 - Right Outer",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 36.16,
+        "outerRadius": 36.98,
+        "startAngle": 280.5,
+        "endAngle": 287.1,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-a5-left",
+      "type": "arc-segment",
+      "label": "Row A5 - Left Outer",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 34.66,
+        "outerRadius": 35.46,
+        "startAngle": 253.4,
+        "endAngle": 259.7,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-a5-right",
+      "type": "arc-segment",
+      "label": "Row A5 - Left Inner",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 34.81,
+        "outerRadius": 35.6,
+        "startAngle": 262.1,
+        "endAngle": 270,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-b5-left",
+      "type": "arc-segment",
+      "label": "Row A5 - Right Inner",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 34.81,
+        "outerRadius": 35.6,
+        "startAngle": 270,
+        "endAngle": 277.9,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-b5-right",
+      "type": "arc-segment",
+      "label": "Row A5 - Right Outer",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 34.66,
+        "outerRadius": 35.46,
+        "startAngle": 280.3,
+        "endAngle": 286.6,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-a6-left",
+      "type": "arc-segment",
+      "label": "Row A6 - Left Outer",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 33.16,
+        "outerRadius": 33.95,
+        "startAngle": 253.9,
+        "endAngle": 260.0,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-a6-right",
+      "type": "arc-segment",
+      "label": "Row A6 - Left Inner",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 33.29,
+        "outerRadius": 34.08,
+        "startAngle": 262.4,
+        "endAngle": 270,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-b6-left",
+      "type": "arc-segment",
+      "label": "Row A6 - Right Inner",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 33.29,
+        "outerRadius": 34.08,
+        "startAngle": 270,
+        "endAngle": 277.6,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-b6-right",
+      "type": "arc-segment",
+      "label": "Row A6 - Right Outer",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 33.16,
+        "outerRadius": 33.95,
+        "startAngle": 280.0,
+        "endAngle": 286.1,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-aback-left",
+      "type": "arc-segment",
+      "label": "Row ABACK - Left Outer",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 31.91,
+        "outerRadius": 32.59,
+        "startAngle": 254.4,
+        "endAngle": 260.2,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-aback-right",
+      "type": "arc-segment",
+      "label": "Row ABACK - Left Inner",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 32.03,
+        "outerRadius": 32.71,
+        "startAngle": 262.7,
+        "endAngle": 270,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-bback-left",
+      "type": "arc-segment",
+      "label": "Row ABACK - Right Inner",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 32.03,
+        "outerRadius": 32.71,
+        "startAngle": 270,
+        "endAngle": 277.3,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
+      "id": "seat-bback-right",
+      "type": "arc-segment",
+      "label": "Row ABACK - Right Outer",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 31.91,
+        "outerRadius": 32.59,
+        "startAngle": 279.8,
+        "endAngle": 285.6,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
     }
   ],
   "doors": [
     {
-      "id": "door-lecture-hall",
-      "label": "Lecture Hall Entrance",
-      "start": { "x": 16, "y": 16 },
-      "end": { "x": 18, "y": 16 },
+      "id": "auditorium-entrance-right",
+      "label": "Right Corridor Entrance",
+      "start": {
+        "x": 23.4,
+        "y": 16
+      },
+      "end": {
+        "x": 25,
+        "y": 16
+      },
       "type": "internal"
+    },
+    {
+      "id": "auditorium-entrance-left",
+      "label": "Left Corridor Entrance",
+      "start": {
+        "x": 7,
+        "y": 16
+      },
+      "end": {
+        "x": 8.6,
+        "y": 16
+      },
+      "type": "internal"
+    },
+    {
+      "id": "atrium-exit",
+      "label": "Atrium Exit",
+      "start": {
+        "x": 13,
+        "y": 28
+      },
+      "end": {
+        "x": 19,
+        "y": 28
+      },
+      "type": "external"
     }
   ]
 }

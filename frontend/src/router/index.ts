@@ -27,6 +27,14 @@ const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/tracking-leaflet',
+    name: 'TrackingLeaflet',
+    component: () => import('@/views/tracking/TrackingLeafletView.vue'),
+    meta: {
+      title: 'Tracking (Leaflet)',
+    },
+  },
+  {
     path: '/cameras/live-detection',
     name: 'LiveDetectionView',
     component: () => import('@/views/camera-views/LiveDetectionView.vue'),
@@ -90,6 +98,14 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/dev/ArchitectureView.vue'),
     meta: {
       title: 'Architecture',
+    },
+  },
+  {
+    path: '/dev/sitemap',
+    name: 'SiteMap',
+    component: () => import('@/views/dev/SiteMapView.vue'),
+    meta: {
+      title: 'Site Map',
     },
   },
 ]

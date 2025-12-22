@@ -70,7 +70,7 @@ function configCameraToCameraPlacement(camera: SiteMapConfigCamera): CameraPlace
  * Convert SiteMapConfigWall to Wall
  */
 function configWallToWall(wall: SiteMapConfigWall): Wall {
-  return {
+  const result: Wall = {
     id: asString(wall.id, ''),
     start: {
       x: toUnitValue(asNumber(wall.start?.x)),
@@ -82,20 +82,43 @@ function configWallToWall(wall: SiteMapConfigWall): Wall {
     },
     type: wall.type,
   }
+
+  // Add arc geometry support
+  if (wall.geometry) {
+    result.geometry = wall.geometry
+  }
+
+  if (wall.arc) {
+    result.arc = {
+      center: {
+        x: toUnitValue(asNumber(wall.arc.center?.x)),
+        y: toUnitValue(asNumber(wall.arc.center?.y)),
+      },
+      radius: toUnitValue(asNumber(wall.arc.radius)),
+      startAngle: toUnitValue(asNumber(wall.arc.startAngle), 'deg'),
+      endAngle: toUnitValue(asNumber(wall.arc.endAngle), 'deg'),
+      clockwise: wall.arc.clockwise ?? false,
+    }
+  }
+
+  return result
 }
 
 /**
  * Convert SiteMapConfigObstacle to Obstacle
  */
 function configObstacleToObstacle(obstacle: SiteMapConfigObstacle): Obstacle {
+  // For arc-segments, use the arc center as position if no position is provided
+  const position = obstacle.position ?? obstacle.arcSegment?.center ?? { x: 0, y: 0 }
+
   const result: Obstacle = {
     id: obstacle.id,
     type: obstacle.type,
     label: obstacle.label,
     category: obstacle.category,
     position: {
-      x: toUnitValue(obstacle.position.x),
-      y: toUnitValue(obstacle.position.y),
+      x: toUnitValue(position.x),
+      y: toUnitValue(position.y),
     },
     rotation: obstacle.rotation,
     height: obstacle.height,
@@ -120,6 +143,20 @@ function configObstacleToObstacle(obstacle: SiteMapConfigObstacle): Obstacle {
       x: toUnitValue(v.x),
       y: toUnitValue(v.y),
     }))
+  }
+
+  if (obstacle.arcSegment) {
+    result.arcSegment = {
+      center: {
+        x: toUnitValue(obstacle.arcSegment.center.x),
+        y: toUnitValue(obstacle.arcSegment.center.y),
+      },
+      innerRadius: toUnitValue(obstacle.arcSegment.innerRadius),
+      outerRadius: toUnitValue(obstacle.arcSegment.outerRadius),
+      startAngle: toUnitValue(obstacle.arcSegment.startAngle),
+      endAngle: toUnitValue(obstacle.arcSegment.endAngle),
+      clockwise: obstacle.arcSegment.clockwise,
+    }
   }
 
   return result

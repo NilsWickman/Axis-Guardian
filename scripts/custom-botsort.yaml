@@ -1,0 +1,23 @@
+# Custom BoT-SORT Configuration for Stronger Re-Tracking
+# Usage: python scripts/preprocess-video.py input.mp4 --tracker scripts/custom-botsort.yaml
+
+tracker_type: botsort
+
+# Detection thresholds - lowered for more track continuity
+track_high_thresh: 0.3      # High confidence threshold (default 0.5) - lowered to keep more tracks
+track_low_thresh: 0.05      # Low confidence threshold (default 0.1) - associate very weak detections
+new_track_thresh: 0.4       # New track threshold (default 0.6) - create tracks from weaker detections
+
+# Track memory - increased for better re-tracking after occlusion
+track_buffer: 90            # Frames to keep lost tracks (default 30) - 3x longer memory at 30fps = 3s
+
+# Association thresholds - more permissive matching
+match_thresh: 0.9           # IoU matching threshold (default 0.8) - more permissive association
+proximity_thresh: 0.7       # Spatial proximity threshold (default 0.5) - wider spatial gate
+appearance_thresh: 0.2      # Appearance similarity threshold (default 0.25) - use weaker appearance matches
+
+# ReID settings
+with_reid: true             # Enable ReID features for appearance-based matching
+
+# Kalman filter settings - tuned for smoother predictions
+gmc_method: sparseOptFlow   # Global motion compensation method (sparseOptFlow, orb, ecc, none)

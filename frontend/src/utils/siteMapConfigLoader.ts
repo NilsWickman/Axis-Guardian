@@ -43,26 +43,45 @@ export interface SiteMapConfigCamera {
   color?: string
 }
 
+export interface SiteMapConfigArc {
+  center: { x: number; y: number }
+  radius: number
+  startAngle: number  // degrees
+  endAngle: number    // degrees
+  clockwise?: boolean
+}
+
 export interface SiteMapConfigWall {
   id: string
   start: { x: number; y: number }
   end: { x: number; y: number }
   type?: 'external' | 'internal' | 'door'
+  geometry?: 'line' | 'arc'
+  arc?: SiteMapConfigArc
 }
 
 export interface SiteMapConfigObstacle {
   id: string
-  type: 'rectangle' | 'circle' | 'polygon'
+  type: 'rectangle' | 'circle' | 'polygon' | 'arc-segment'
   label?: string
-  category?: 'furniture' | 'structural' | 'equipment'
-  position: { x: number; y: number }
+  category?: 'furniture' | 'structural' | 'equipment' | 'seating'
+  position?: { x: number; y: number }
   rotation?: number
   dimensions?: { width: number; height: number }
   radius?: number
   vertices?: { x: number; y: number }[]
+  arcSegment?: {
+    center: { x: number; y: number }
+    innerRadius: number
+    outerRadius: number
+    startAngle: number
+    endAngle: number
+    clockwise?: boolean
+  }
   height?: number
   blocksTracking?: boolean
   blocksView?: boolean
+  seatedPersonHeight?: number
   color?: string
 }
 
