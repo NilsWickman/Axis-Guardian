@@ -6,6 +6,7 @@ import { calculateVisibleFOV, drawPolygon, arcToLineSegments, type Point, type L
 import {
   extractValue,
   metersToPixels,
+  metersToCanvasY,
   RENDER_SCALE
 } from '../utils/siteMapConversion'
 
@@ -389,9 +390,9 @@ export function useSiteMapCanvas(
 
       // Convert meter coordinates to pixels for rendering
       const startX = metersToPixels(extractValue(start.x))
-      const startY = metersToPixels(extractValue(start.y))
+      const startY = metersToCanvasY(extractValue(start.y))
       const endX = metersToPixels(extractValue(end.x))
-      const endY = metersToPixels(extractValue(end.y))
+      const endY = metersToCanvasY(extractValue(end.y))
 
       // Wall styling based on type (fixed line widths)
       const wallStyles = {
@@ -435,14 +436,17 @@ export function useSiteMapCanvas(
         // Draw arc using center, radius, and angles
         const arc = wall.arc
         const centerX = metersToPixels(extractValue(arc.center.x))
-        const centerY = metersToPixels(extractValue(arc.center.y))
+        const centerY = metersToCanvasY(extractValue(arc.center.y))
         const radius = metersToPixels(extractValue(arc.radius))
-        // Convert degrees to radians (canvas arc uses radians)
-        const startRad = extractValue(arc.startAngle) * Math.PI / 180
-        const endRad = extractValue(arc.endAngle) * Math.PI / 180
+        // Negate angles to account for Y-axis flip (metersToCanvasY inverts Y)
+        // Original angles are in standard math convention (0° = +X, counterclockwise)
+        const startRad = -extractValue(arc.startAngle) * Math.PI / 180
+        const endRad = -extractValue(arc.endAngle) * Math.PI / 180
         const clockwise = arc.clockwise ?? false
 
-        context.arc(centerX, centerY, radius, startRad, endRad, !clockwise)
+        // Canvas arc() last param is "anticlockwise"
+        // After Y-flip and angle negation, pass clockwise directly to get correct direction
+        context.arc(centerX, centerY, radius, startRad, endRad, clockwise)
       } else {
         // Draw straight line
         context.moveTo(startX, startY)
@@ -525,9 +529,9 @@ export function useSiteMapCanvas(
 
     // Convert meter coordinates to pixels for rendering
     const startX = metersToPixels(start.x)
-    const startY = metersToPixels(start.y)
+    const startY = metersToCanvasY(start.y)
     const endX = metersToPixels(end.x)
-    const endY = metersToPixels(end.y)
+    const endY = metersToCanvasY(end.y)
 
     const wallStyles = {
       external: { color: colors.wallExternal, width: 6 },
@@ -602,7 +606,7 @@ export function useSiteMapCanvas(
 
       // Convert position from meters to pixels
       const centerX = metersToPixels(extractValue(position.x))
-      const centerY = metersToPixels(extractValue(position.y))
+      const centerY = metersToCanvasY(extractValue(position.y))
 
       // Get color (use category default in light mode for better visibility, otherwise use provided color)
       const { currentTheme } = useTheme()
@@ -701,7 +705,7 @@ export function useSiteMapCanvas(
         // Draw polygon - vertices are relative offsets from position, context is already translated
         const vertices = obstacle.vertices.map(v => ({
           x: metersToPixels(extractValue(v.x)),
-          y: metersToPixels(extractValue(v.y))
+          y: metersToCanvasY(extractValue(v.y))
         }))
 
         context.beginPath()
@@ -724,25 +728,79 @@ export function useSiteMapCanvas(
 
         const arc = obstacle.arcSegment
         const cx = metersToPixels(extractValue(arc.center.x))
-        const cy = metersToPixels(extractValue(arc.center.y))
+        const cy = metersToCanvasY(extractValue(arc.center.y))
         const innerRadius = metersToPixels(extractValue(arc.innerRadius))
         const outerRadius = metersToPixels(extractValue(arc.outerRadius))
-        const startRad = extractValue(arc.startAngle) * Math.PI / 180
-        const endRad = extractValue(arc.endAngle) * Math.PI / 180
+        // Negate angles to account for Y-axis flip (metersToCanvasY inverts Y)
+        const startRad = -extractValue(arc.startAngle) * Math.PI / 180
+        const endRad = -extractValue(arc.endAngle) * Math.PI / 180
         const clockwise = arc.clockwise ?? false
 
+        // Check for wall-aligned sides
+        const hasStartSide = arc.startSidePoints !== undefined
+        const hasEndSide = arc.endSidePoints !== undefined
+
         context.beginPath()
-        // Outer arc (counterclockwise by default)
-        context.arc(cx, cy, outerRadius, startRad, endRad, clockwise)
-        // Inner arc (reversed direction)
-        context.arc(cx, cy, innerRadius, endRad, startRad, !clockwise)
-        context.closePath()
+
+        if (hasStartSide || hasEndSide) {
+          // Wall-aligned rendering: draw explicit lines along walls instead of radial sides
+
+          // Calculate inner arc angles from wall intersection points if needed
+          let innerStartRad = startRad
+          let innerEndRad = endRad
+
+          if (hasStartSide && arc.startSidePoints) {
+            const innerStartPt = arc.startSidePoints.inner
+            // Calculate angle from arc center to inner intersection point
+            // Note: metersToCanvasY flips Y, so we need to account for that in angle calculation
+            const innerStartX = metersToPixels(innerStartPt.x)
+            const innerStartY = metersToCanvasY(innerStartPt.y)
+            innerStartRad = Math.atan2(innerStartY - cy, innerStartX - cx)
+          }
+
+          if (hasEndSide && arc.endSidePoints) {
+            const innerEndPt = arc.endSidePoints.inner
+            const innerEndX = metersToPixels(innerEndPt.x)
+            const innerEndY = metersToCanvasY(innerEndPt.y)
+            innerEndRad = Math.atan2(innerEndY - cy, innerEndX - cx)
+          }
+
+          // 1. Draw outer arc from start to end
+          // Canvas arc() last param is "anticlockwise", so pass !clockwise
+          context.arc(cx, cy, outerRadius, startRad, endRad, !clockwise)
+
+          // 2. End side: line along wall from outer to inner intersection
+          if (hasEndSide && arc.endSidePoints) {
+            const outerEndPt = arc.endSidePoints.outer
+            const innerEndPt = arc.endSidePoints.inner
+            context.lineTo(metersToPixels(outerEndPt.x), metersToCanvasY(outerEndPt.y))
+            context.lineTo(metersToPixels(innerEndPt.x), metersToCanvasY(innerEndPt.y))
+          }
+
+          // 3. Draw inner arc from end back to start (using adjusted angles if wall-aligned)
+          context.arc(cx, cy, innerRadius, innerEndRad, innerStartRad, clockwise)
+
+          // 4. Start side: line along wall from inner to outer intersection
+          if (hasStartSide && arc.startSidePoints) {
+            const innerStartPt = arc.startSidePoints.inner
+            const outerStartPt = arc.startSidePoints.outer
+            context.lineTo(metersToPixels(innerStartPt.x), metersToCanvasY(innerStartPt.y))
+            context.lineTo(metersToPixels(outerStartPt.x), metersToCanvasY(outerStartPt.y))
+          }
+
+          context.closePath()
+        } else {
+          // Standard rendering: radial sides (original behavior)
+          // Canvas arc() last param is "anticlockwise", so pass !clockwise for outer arc
+          context.arc(cx, cy, outerRadius, startRad, endRad, !clockwise)
+          // Inner arc goes in reversed direction
+          context.arc(cx, cy, innerRadius, endRad, startRad, clockwise)
+          context.closePath()
+        }
 
         context.fillStyle = fillColor
         context.fill()
-        context.strokeStyle = strokeColor
-        context.lineWidth = lineWidth
-        context.stroke()
+        // No stroke for arc-segments - borders look weird on curved seating
       } else if (type === 'linear' && obstacle.linear) {
         // Draw linear obstacle - two-point definition with perpendicular width
         // Linear obstacles use absolute coordinates (not relative to position)
@@ -751,9 +809,9 @@ export function useSiteMapCanvas(
 
         const linear = obstacle.linear
         const startX = metersToPixels(extractValue(linear.start.x))
-        const startY = metersToPixels(extractValue(linear.start.y))
+        const startY = metersToCanvasY(extractValue(linear.start.y))
         const endX = metersToPixels(extractValue(linear.end.x))
-        const endY = metersToPixels(extractValue(linear.end.y))
+        const endY = metersToCanvasY(extractValue(linear.end.y))
         const halfWidth = metersToPixels(extractValue(linear.width)) / 2
 
         // Calculate direction and perpendicular vectors
@@ -860,7 +918,7 @@ export function useSiteMapCanvas(
     for (let i = obstacles.length - 1; i >= 0; i--) {
       const obstacle = obstacles[i]
       const centerX = metersToPixels(extractValue(obstacle.position.x))
-      const centerY = metersToPixels(extractValue(obstacle.position.y))
+      const centerY = metersToCanvasY(extractValue(obstacle.position.y))
       const rotation = (obstacle.rotation ?? 0) * Math.PI / 180
 
       // Transform point to obstacle's local coordinate system
@@ -889,7 +947,7 @@ export function useSiteMapCanvas(
         // Point-in-polygon test using ray casting - vertices are relative offsets from position
         const vertices = obstacle.vertices.map(v => ({
           x: metersToPixels(extractValue(v.x)),
-          y: metersToPixels(extractValue(v.y))
+          y: metersToCanvasY(extractValue(v.y))
         }))
 
         let inside = false
@@ -910,7 +968,7 @@ export function useSiteMapCanvas(
         // Arc segment hit testing - check if point is within radii and angle range
         const arc = obstacle.arcSegment
         const cx = metersToPixels(extractValue(arc.center.x))
-        const cy = metersToPixels(extractValue(arc.center.y))
+        const cy = metersToCanvasY(extractValue(arc.center.y))
         const innerRadius = metersToPixels(extractValue(arc.innerRadius))
         const outerRadius = metersToPixels(extractValue(arc.outerRadius))
         const startAngle = extractValue(arc.startAngle)
@@ -960,9 +1018,9 @@ export function useSiteMapCanvas(
         // Linear obstacle hit testing - check if point is inside the rectangle
         const linear = obstacle.linear
         const startX = metersToPixels(extractValue(linear.start.x))
-        const startY = metersToPixels(extractValue(linear.start.y))
+        const startY = metersToCanvasY(extractValue(linear.start.y))
         const endX = metersToPixels(extractValue(linear.end.x))
-        const endY = metersToPixels(extractValue(linear.end.y))
+        const endY = metersToCanvasY(extractValue(linear.end.y))
         const halfWidth = metersToPixels(extractValue(linear.width)) / 2
 
         // Calculate direction and perpendicular vectors
@@ -1031,7 +1089,7 @@ export function useSiteMapCanvas(
       // Convert vertices from meters to pixels
       const pixelVertices = vertices.map(v => ({
         x: metersToPixels(v.x),
-        y: metersToPixels(v.y)
+        y: metersToCanvasY(v.y)
       }))
 
       // Get zone color (use provided or type default)
@@ -1228,7 +1286,7 @@ export function useSiteMapCanvas(
     // Convert vertices from meters to pixels
     const pixelVertices = vertices.map(v => ({
       x: metersToPixels(v.x),
-      y: metersToPixels(v.y)
+      y: metersToCanvasY(v.y)
     }))
 
     const baseColor = color || ZONE_TYPE_COLORS[type] || ZONE_TYPE_COLORS.restricted
@@ -1244,7 +1302,7 @@ export function useSiteMapCanvas(
     if (cursorPosition) {
       const cursorPixel = {
         x: metersToPixels(cursorPosition.x),
-        y: metersToPixels(cursorPosition.y)
+        y: metersToCanvasY(cursorPosition.y)
       }
       context.lineTo(cursorPixel.x, cursorPixel.y)
 
@@ -1285,7 +1343,7 @@ export function useSiteMapCanvas(
       if (isFirst && cursorPosition && pixelVertices.length >= 3) {
         const cursorPixel = {
           x: metersToPixels(cursorPosition.x),
-          y: metersToPixels(cursorPosition.y)
+          y: metersToCanvasY(cursorPosition.y)
         }
         const dist = Math.sqrt(
           Math.pow(cursorPixel.x - vertex.x, 2) + Math.pow(cursorPixel.y - vertex.y, 2)
@@ -1323,7 +1381,7 @@ export function useSiteMapCanvas(
       // Convert vertices to pixels for hit testing
       const pixelVertices = zone.vertices.map(v => ({
         x: metersToPixels(v.x),
-        y: metersToPixels(v.y)
+        y: metersToCanvasY(v.y)
       }))
 
       // Point-in-polygon test using ray casting
@@ -1357,7 +1415,7 @@ export function useSiteMapCanvas(
     for (let i = 0; i < zone.vertices.length; i++) {
       const vertex = zone.vertices[i]
       const pixelX = metersToPixels(vertex.x)
-      const pixelY = metersToPixels(vertex.y)
+      const pixelY = metersToCanvasY(vertex.y)
       const dist = Math.sqrt(Math.pow(x - pixelX, 2) + Math.pow(y - pixelY, 2))
       if (dist <= threshold) {
         return { vertexIndex: i, vertex }
@@ -1378,9 +1436,9 @@ export function useSiteMapCanvas(
 
     // Convert meter coordinates to pixels for rendering
     const startX = metersToPixels(start.x)
-    const startY = metersToPixels(start.y)
+    const startY = metersToCanvasY(start.y)
     const endX = metersToPixels(end.x)
-    const endY = metersToPixels(end.y)
+    const endY = metersToCanvasY(end.y)
 
     // Calculate distance in meters directly
     const dx = end.x - start.x
@@ -1496,7 +1554,7 @@ export function useSiteMapCanvas(
 
     // Extract values from unit objects
     const x = metersToPixels(extractValue(placement.position.x))
-    const y = metersToPixels(extractValue(placement.position.y))
+    const y = metersToCanvasY(extractValue(placement.position.y))
     const azimuth = extractValue(placement.azimuth)
     const elevation = extractValue(placement.elevation)
     const fov = extractValue(placement.fov)
@@ -1517,14 +1575,16 @@ export function useSiteMapCanvas(
       if (geometry === 'arc' && wall.arc) {
         // Convert arc to line segments
         const arc = wall.arc
+        // Negate angles to account for Y-axis flip
+        // Pass clockwise directly - arcToLineSegments handles direction based on angleDiff sign
         return arcToLineSegments(
           {
             x: metersToPixels(extractValue(arc.center.x)),
-            y: metersToPixels(extractValue(arc.center.y))
+            y: metersToCanvasY(extractValue(arc.center.y))
           },
           metersToPixels(extractValue(arc.radius)),
-          extractValue(arc.startAngle),
-          extractValue(arc.endAngle),
+          -extractValue(arc.startAngle),
+          -extractValue(arc.endAngle),
           arc.clockwise ?? false,
           24 // Higher segment count for smoother FOV calculation
         )
@@ -1533,11 +1593,11 @@ export function useSiteMapCanvas(
         return [{
           start: {
             x: metersToPixels(extractValue(wall.start.x)),
-            y: metersToPixels(extractValue(wall.start.y))
+            y: metersToCanvasY(extractValue(wall.start.y))
           },
           end: {
             x: metersToPixels(extractValue(wall.end.x)),
-            y: metersToPixels(extractValue(wall.end.y))
+            y: metersToCanvasY(extractValue(wall.end.y))
           }
         }]
       }
@@ -1555,7 +1615,7 @@ export function useSiteMapCanvas(
         circleObstacles.push({
           center: {
             x: metersToPixels(extractValue(obstacle.position.x)),
-            y: metersToPixels(extractValue(obstacle.position.y))
+            y: metersToCanvasY(extractValue(obstacle.position.y))
           },
           radius: metersToPixels(extractValue(obstacle.radius)),
           obstacleHeight: obstacle.height // physical height in meters
@@ -1564,7 +1624,7 @@ export function useSiteMapCanvas(
         rectangleObstacles.push({
           center: {
             x: metersToPixels(extractValue(obstacle.position.x)),
-            y: metersToPixels(extractValue(obstacle.position.y))
+            y: metersToCanvasY(extractValue(obstacle.position.y))
           },
           width: metersToPixels(extractValue(obstacle.dimensions.width)),
           height: metersToPixels(extractValue(obstacle.dimensions.height)),
@@ -1649,8 +1709,10 @@ export function useSiteMapCanvas(
 
     // Draw camera icon
     // Convert from azimuth (0° = North, clockwise) to canvas rotation
-    // Navigation azimuth: 0°=N, 90°=E - converts to canvas angle = 90 - azimuth
-    const canvasAngle = 90 - azimuth
+    // With Y-flipped coordinates (North at top of canvas):
+    // Azimuth 0° (North) → Canvas -90° (points up toward North)
+    // Azimuth 90° (East) → Canvas 0° (points right)
+    const canvasAngle = azimuth - 90
     context.save()
     context.translate(x, y)
     context.rotate((canvasAngle * Math.PI) / 180)
@@ -1727,7 +1789,7 @@ export function useSiteMapCanvas(
     for (const camera of cameras) {
       // Convert camera position from meters to pixels
       const cameraX = metersToPixels(extractValue(camera.position.x))
-      const cameraY = metersToPixels(extractValue(camera.position.y))
+      const cameraY = metersToCanvasY(extractValue(camera.position.y))
       const distance = Math.sqrt(Math.pow(x - cameraX, 2) + Math.pow(y - cameraY, 2))
       if (distance < 20) {
         return camera
@@ -1754,7 +1816,7 @@ export function useSiteMapCanvas(
     obstacles: Obstacle[] = []
   ): Point[] => {
     const x = metersToPixels(extractValue(placement.position.x))
-    const y = metersToPixels(extractValue(placement.position.y))
+    const y = metersToCanvasY(extractValue(placement.position.y))
     const azimuth = extractValue(placement.azimuth)
     const fov = extractValue(placement.fov)
     const FOV_RENDER_DISTANCE_M = 50
@@ -1765,14 +1827,16 @@ export function useSiteMapCanvas(
       const geometry = wall.geometry ?? 'line'
       if (geometry === 'arc' && wall.arc) {
         const arc = wall.arc
+        // Negate angles to account for Y-axis flip
+        // Pass clockwise directly - arcToLineSegments handles direction based on angleDiff sign
         return arcToLineSegments(
           {
             x: metersToPixels(extractValue(arc.center.x)),
-            y: metersToPixels(extractValue(arc.center.y))
+            y: metersToCanvasY(extractValue(arc.center.y))
           },
           metersToPixels(extractValue(arc.radius)),
-          extractValue(arc.startAngle),
-          extractValue(arc.endAngle),
+          -extractValue(arc.startAngle),
+          -extractValue(arc.endAngle),
           arc.clockwise ?? false,
           24
         )
@@ -1780,11 +1844,11 @@ export function useSiteMapCanvas(
         return [{
           start: {
             x: metersToPixels(extractValue(wall.start.x)),
-            y: metersToPixels(extractValue(wall.start.y))
+            y: metersToCanvasY(extractValue(wall.start.y))
           },
           end: {
             x: metersToPixels(extractValue(wall.end.x)),
-            y: metersToPixels(extractValue(wall.end.y))
+            y: metersToCanvasY(extractValue(wall.end.y))
           }
         }]
       }
@@ -1805,7 +1869,7 @@ export function useSiteMapCanvas(
         circleObstacles.push({
           center: {
             x: metersToPixels(extractValue(obstacle.position.x)),
-            y: metersToPixels(extractValue(obstacle.position.y))
+            y: metersToCanvasY(extractValue(obstacle.position.y))
           },
           radius: metersToPixels(extractValue(obstacle.radius)),
           obstacleHeight: obstacle.height
@@ -1814,7 +1878,7 @@ export function useSiteMapCanvas(
         rectangleObstacles.push({
           center: {
             x: metersToPixels(extractValue(obstacle.position.x)),
-            y: metersToPixels(extractValue(obstacle.position.y))
+            y: metersToCanvasY(extractValue(obstacle.position.y))
           },
           width: metersToPixels(extractValue(obstacle.dimensions.width)),
           height: metersToPixels(extractValue(obstacle.dimensions.height)),

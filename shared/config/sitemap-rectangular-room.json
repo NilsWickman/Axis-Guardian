@@ -9,95 +9,95 @@
     {
       "id": "aud-left",
       "start": {
-        "x": 7,
-        "y": 16
+        "x": 25,
+        "y": 14
       },
       "end": {
-        "x": 0,
-        "y": 4
+        "x": 32,
+        "y": 26
       },
       "type": "external"
     },
     {
       "id": "aud-arch",
       "start": {
-        "x": 0,
-        "y": 4
+        "x": 32,
+        "y": 26
       },
       "end": {
-        "x": 32,
-        "y": 4
+        "x": 0,
+        "y": 26
       },
       "type": "external",
       "geometry": "arc",
       "arc": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "radius": 44,
-        "startAngle": 249,
-        "endAngle": 291,
+        "startAngle": 69,
+        "endAngle": 111,
         "clockwise": true
       }
     },
     {
       "id": "aud-right",
       "start": {
-        "x": 32,
-        "y": 4
+        "x": 0,
+        "y": 26
       },
       "end": {
-        "x": 25,
-        "y": 16
+        "x": 7,
+        "y": 14
       },
       "type": "external"
     },
     {
       "id": "corridor-right-inner",
       "start": {
-        "x": 24.43,
-        "y": 15
+        "x": 7.82,
+        "y": 14.57
       },
       "end": {
-        "x": 29.97,
-        "y": 5.5
+        "x": 2.03,
+        "y": 24.5
       },
       "type": "internal"
     },
     {
       "id": "corridor-left-inner",
       "start": {
-        "x": 7.57,
-        "y": 15
+        "x": 24.18,
+        "y": 14.57
       },
       "end": {
-        "x": 2.03,
-        "y": 5.5
+        "x": 29.97,
+        "y": 24.5
       },
       "type": "internal"
     },
     {
       "id": "protrusion-left",
       "start": {
-        "x": 1.9,
-        "y": 3.1
+        "x": 30.1,
+        "y": 26.9
       },
       "end": {
-        "x": 2.9,
-        "y": 4.8
+        "x": 29.1,
+        "y": 25.2
       },
       "type": "internal"
     },
     {
       "id": "protrusion-right",
       "start": {
-        "x": 30.1,
-        "y": 3.1
+        "x": 1.9,
+        "y": 26.9
       },
       "end": {
-        "x": 29.1,
-        "y": 4.8
+        "x": 2.9,
+        "y": 25.2
       },
       "type": "internal"
     },
@@ -105,23 +105,23 @@
       "id": "center-divider",
       "start": {
         "x": 16,
-        "y": 1
+        "y": 29
       },
       "end": {
         "x": 16,
-        "y": 16
+        "y": 14
       },
       "type": "internal"
     },
     {
       "id": "dividing-wall-left",
       "start": {
-        "x": 8.6,
-        "y": 16
+        "x": 23.4,
+        "y": 14
       },
       "end": {
         "x": 16,
-        "y": 16
+        "y": 14
       },
       "type": "internal"
     },
@@ -129,47 +129,95 @@
       "id": "dividing-wall-right",
       "start": {
         "x": 16,
-        "y": 16
+        "y": 14
+      },
+      "end": {
+        "x": 8.6,
+        "y": 14
+      },
+      "type": "internal"
+    },
+    {
+      "id": "auditorium-door-left-closed",
+      "start": {
+        "x": 24.2,
+        "y": 14
       },
       "end": {
         "x": 23.4,
-        "y": 16
+        "y": 14
+      },
+      "type": "internal"
+    },
+    {
+      "id": "auditorium-door-right-closed",
+      "start": {
+        "x": 8.6,
+        "y": 14
+      },
+      "end": {
+        "x": 7.8,
+        "y": 14
       },
       "type": "internal"
     },
     {
       "id": "atrium-left",
       "start": {
-        "x": 7,
-        "y": 16
+        "x": 25,
+        "y": 14
       },
       "end": {
-        "x": 7,
-        "y": 28
+        "x": 25,
+        "y": 2
       },
       "type": "external"
     },
     {
-      "id": "atrium-bottom",
+      "id": "atrium-bottom-left",
       "start": {
-        "x": 7,
-        "y": 28
+        "x": 25,
+        "y": 2
       },
       "end": {
-        "x": 25,
-        "y": 28
+        "x": 19,
+        "y": 2
+      },
+      "type": "external"
+    },
+    {
+      "id": "atrium-door-closed",
+      "start": {
+        "x": 19,
+        "y": 2
+      },
+      "end": {
+        "x": 16,
+        "y": 2
+      },
+      "type": "external"
+    },
+    {
+      "id": "atrium-bottom-right",
+      "start": {
+        "x": 13,
+        "y": 2
+      },
+      "end": {
+        "x": 7,
+        "y": 2
       },
       "type": "external"
     },
     {
       "id": "atrium-right",
       "start": {
-        "x": 25,
-        "y": 28
+        "x": 7,
+        "y": 2
       },
       "end": {
-        "x": 25,
-        "y": 16
+        "x": 7,
+        "y": 14
       },
       "type": "external"
     }
@@ -177,19 +225,19 @@
   "cameras": [
     {
       "id": "camera1",
-      "name": "HC3 (Atrium Left)",
+      "name": "HC3 (Atrium Right)",
       "model": "AXIS P3245-LVE",
       "rtspUrl": "rtsp://localhost:8554/camera1",
       "webrtcUrl": "http://localhost:9101",
       "ipAddress": "192.168.1.101",
       "position": {
-        "x": 9,
-        "y": 26
+        "x": 23,
+        "y": 4
       },
-      "azimuth": 160,
+      "azimuth": 340,
       "elevation": 35,
       "height": 2.5,
-      "fieldOfView": 66,
+      "fieldOfView": 75,
       "resolution": {
         "width": 1920,
         "height": 1080
@@ -204,19 +252,19 @@
     },
     {
       "id": "camera2",
-      "name": "HC4 (Atrium Right)",
+      "name": "HC4 (Atrium Left)",
       "model": "AXIS P3245-LVE",
       "rtspUrl": "rtsp://localhost:8554/camera2",
       "webrtcUrl": "http://localhost:9102",
       "ipAddress": "192.168.1.102",
       "position": {
-        "x": 23,
-        "y": 26
+        "x": 8,
+        "y": 3.8
       },
-      "azimuth": 220,
+      "azimuth": 52,
       "elevation": 40,
       "height": 2.5,
-      "fieldOfView": 60,
+      "fieldOfView": 63,
       "resolution": {
         "width": 1920,
         "height": 1080
@@ -231,19 +279,19 @@
     },
     {
       "id": "camera3",
-      "name": "IP2 (Auditorium Front)",
+      "name": "IP2 (Auditorium Back)",
       "model": "AXIS P3245-LVE",
       "rtspUrl": "rtsp://localhost:8554/camera3",
       "webrtcUrl": "http://localhost:9103",
       "ipAddress": "192.168.1.103",
       "position": {
-        "x": 3.5,
-        "y": 4
+        "x": 29.5,
+        "y": 26
       },
-      "azimuth": 150,
+      "azimuth": 225,
       "elevation": 25,
       "height": 3,
-      "fieldOfView": 70,
+      "fieldOfView": 60,
       "resolution": {
         "width": 1920,
         "height": 1080
@@ -258,19 +306,19 @@
     },
     {
       "id": "camera4",
-      "name": "IP5 (Auditorium Back)",
+      "name": "IP5 (Auditorium Front)",
       "model": "AXIS P3245-LVE",
       "rtspUrl": "rtsp://localhost:8554/camera4",
       "webrtcUrl": "http://localhost:9104",
       "ipAddress": "192.168.1.104",
       "position": {
-        "x": 15,
-        "y": 14
+        "x": 16.5,
+        "y": 15
       },
-      "azimuth": 10,
+      "azimuth": 29,
       "elevation": 15,
       "height": 2.5,
-      "fieldOfView": 80,
+      "fieldOfView": 60,
       "resolution": {
         "width": 1920,
         "height": 1080
@@ -291,10 +339,10 @@
       "label": "Pillar 1",
       "category": "structural",
       "position": {
-        "x": 12,
-        "y": 20
+        "x": 20,
+        "y": 11
       },
-      "radius": 0.6,
+      "radius": 0.3,
       "height": 4,
       "blocksTracking": true,
       "blocksView": true,
@@ -306,10 +354,10 @@
       "label": "Pillar 2",
       "category": "structural",
       "position": {
-        "x": 20,
-        "y": 20
+        "x": 12,
+        "y": 11
       },
-      "radius": 0.6,
+      "radius": 0.3,
       "height": 4,
       "blocksTracking": true,
       "blocksView": true,
@@ -321,10 +369,10 @@
       "label": "Pillar 3",
       "category": "structural",
       "position": {
-        "x": 12,
-        "y": 24
+        "x": 20,
+        "y": 5
       },
-      "radius": 0.6,
+      "radius": 0.3,
       "height": 4,
       "blocksTracking": true,
       "blocksView": true,
@@ -336,10 +384,10 @@
       "label": "Pillar 4",
       "category": "structural",
       "position": {
-        "x": 20,
-        "y": 24
+        "x": 12,
+        "y": 5
       },
-      "radius": 0.6,
+      "radius": 0.3,
       "height": 4,
       "blocksTracking": true,
       "blocksView": true,
@@ -351,17 +399,17 @@
       "label": "Registration Table",
       "category": "furniture",
       "position": {
-        "x": 10,
-        "y": 18
+        "x": 22,
+        "y": 12
       },
       "linear": {
         "start": {
-          "x": 12,
-          "y": 18
+          "x": 21.25,
+          "y": 12
         },
         "end": {
-          "x": 8,
-          "y": 18
+          "x": 22.75,
+          "y": 12
         },
         "width": 0.8
       },
@@ -371,58 +419,6 @@
       "color": "#f5f5f4"
     },
     {
-      "id": "bench-atrium-1",
-      "type": "linear",
-      "label": "Atrium Bench 1",
-      "category": "seating",
-      "position": {
-        "x": 16,
-        "y": 22
-      },
-      "linear": {
-        "start": {
-          "x": 14,
-          "y": 22
-        },
-        "end": {
-          "x": 18,
-          "y": 22
-        },
-        "width": 0.5
-      },
-      "height": 0.45,
-      "blocksTracking": false,
-      "blocksView": false,
-      "seatedPersonHeight": 1.2,
-      "color": "#a8a29e"
-    },
-    {
-      "id": "bench-atrium-2",
-      "type": "linear",
-      "label": "Atrium Bench 2",
-      "category": "seating",
-      "position": {
-        "x": 16,
-        "y": 25
-      },
-      "linear": {
-        "start": {
-          "x": 14,
-          "y": 25
-        },
-        "end": {
-          "x": 18,
-          "y": 25
-        },
-        "width": 0.5
-      },
-      "height": 0.45,
-      "blocksTracking": false,
-      "blocksView": false,
-      "seatedPersonHeight": 1.2,
-      "color": "#a8a29e"
-    },
-    {
       "id": "seat-a0",
       "type": "arc-segment",
       "label": "Row A0 - Back (Section A - Full Width)",
@@ -430,12 +426,16 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 43.2,
         "outerRadius": 44,
-        "startAngle": 270,
-        "endAngle": { "alignToWall": "protrusion-right", "offset": -0.1 },
+        "startAngle": 90,
+        "endAngle": {
+          "alignToWall": "protrusion-right",
+          "offset": 0.1
+        },
+        "endSideWall": "protrusion-right",
         "clockwise": false
       },
       "height": 0.9,
@@ -451,12 +451,16 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 43.2,
         "outerRadius": 44,
-        "startAngle": { "alignToWall": "protrusion-left", "offset": 0.1 },
-        "endAngle": 270,
+        "startAngle": {
+          "alignToWall": "protrusion-left",
+          "offset": -0.1
+        },
+        "startSideWall": "protrusion-left",
+        "endAngle": 90,
         "clockwise": false
       },
       "height": 0.9,
@@ -472,12 +476,16 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 40.66,
         "outerRadius": 41.51,
-        "startAngle": 281.0,
-        "endAngle": { "alignToWall": "corridor-right-inner", "offset": -0.1 },
+        "startAngle": 101,
+        "endAngle": {
+          "alignToWall": "corridor-right-inner",
+          "offset": 0.1
+        },
+        "endSideWall": "corridor-right-inner",
         "clockwise": false
       },
       "height": 0.9,
@@ -493,12 +501,12 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 40.86,
         "outerRadius": 41.7,
-        "startAngle": 270,
-        "endAngle": 279.0,
+        "startAngle": 90,
+        "endAngle": 99,
         "clockwise": false
       },
       "height": 0.9,
@@ -514,12 +522,12 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 40.86,
         "outerRadius": 41.7,
-        "startAngle": 261.0,
-        "endAngle": 270,
+        "startAngle": 81,
+        "endAngle": 90,
         "clockwise": false
       },
       "height": 0.9,
@@ -535,12 +543,16 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 40.66,
         "outerRadius": 41.51,
-        "startAngle": { "alignToWall": "corridor-left-inner", "offset": 0.1 },
-        "endAngle": 259.0,
+        "startAngle": {
+          "alignToWall": "corridor-left-inner",
+          "offset": -0.1
+        },
+        "startSideWall": "corridor-left-inner",
+        "endAngle": 79,
         "clockwise": false
       },
       "height": 0.9,
@@ -556,12 +568,16 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 39.16,
         "outerRadius": 40,
-        "startAngle": 280.8,
-        "endAngle": { "alignToWall": "corridor-right-inner", "offset": -0.1 },
+        "startAngle": 100.8,
+        "endAngle": {
+          "alignToWall": "corridor-right-inner",
+          "offset": 0.1
+        },
+        "endSideWall": "corridor-right-inner",
         "clockwise": false
       },
       "height": 0.9,
@@ -577,12 +593,12 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 39.34,
         "outerRadius": 40.17,
-        "startAngle": 270,
-        "endAngle": 278.8,
+        "startAngle": 90,
+        "endAngle": 98.8,
         "clockwise": false
       },
       "height": 0.9,
@@ -598,12 +614,12 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 39.34,
         "outerRadius": 40.17,
-        "startAngle": 261.2,
-        "endAngle": 270,
+        "startAngle": 81.2,
+        "endAngle": 90,
         "clockwise": false
       },
       "height": 0.9,
@@ -619,12 +635,16 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 39.16,
         "outerRadius": 40,
-        "startAngle": { "alignToWall": "corridor-left-inner", "offset": 0.1 },
-        "endAngle": 259.2,
+        "startAngle": {
+          "alignToWall": "corridor-left-inner",
+          "offset": -0.1
+        },
+        "startSideWall": "corridor-left-inner",
+        "endAngle": 79.2,
         "clockwise": false
       },
       "height": 0.9,
@@ -640,12 +660,16 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 37.66,
         "outerRadius": 38.49,
-        "startAngle": 280.6,
-        "endAngle": { "alignToWall": "corridor-right-inner", "offset": -0.1 },
+        "startAngle": 100.6,
+        "endAngle": {
+          "alignToWall": "corridor-right-inner",
+          "offset": 0.1
+        },
+        "endSideWall": "corridor-right-inner",
         "clockwise": false
       },
       "height": 0.9,
@@ -661,12 +685,12 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 37.83,
         "outerRadius": 38.65,
-        "startAngle": 270,
-        "endAngle": 278.5,
+        "startAngle": 90,
+        "endAngle": 98.5,
         "clockwise": false
       },
       "height": 0.9,
@@ -682,12 +706,12 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 37.83,
         "outerRadius": 38.65,
-        "startAngle": 261.5,
-        "endAngle": 270,
+        "startAngle": 81.5,
+        "endAngle": 90,
         "clockwise": false
       },
       "height": 0.9,
@@ -703,12 +727,16 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 37.66,
         "outerRadius": 38.49,
-        "startAngle": { "alignToWall": "corridor-left-inner", "offset": 0.1 },
-        "endAngle": 259.4,
+        "startAngle": {
+          "alignToWall": "corridor-left-inner",
+          "offset": -0.1
+        },
+        "startSideWall": "corridor-left-inner",
+        "endAngle": 79.4,
         "clockwise": false
       },
       "height": 0.9,
@@ -724,12 +752,16 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 36.16,
         "outerRadius": 36.98,
-        "startAngle": 280.5,
-        "endAngle": { "alignToWall": "corridor-right-inner", "offset": -0.1 },
+        "startAngle": 100.5,
+        "endAngle": {
+          "alignToWall": "corridor-right-inner",
+          "offset": 0.1
+        },
+        "endSideWall": "corridor-right-inner",
         "clockwise": false
       },
       "height": 0.9,
@@ -745,12 +777,12 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 36.32,
         "outerRadius": 37.13,
-        "startAngle": 270,
-        "endAngle": 278.2,
+        "startAngle": 90,
+        "endAngle": 98.2,
         "clockwise": false
       },
       "height": 0.9,
@@ -766,12 +798,12 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 36.32,
         "outerRadius": 37.13,
-        "startAngle": 261.8,
-        "endAngle": 270,
+        "startAngle": 81.8,
+        "endAngle": 90,
         "clockwise": false
       },
       "height": 0.9,
@@ -787,12 +819,16 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 36.16,
         "outerRadius": 36.98,
-        "startAngle": { "alignToWall": "corridor-left-inner", "offset": 0.1 },
-        "endAngle": 259.5,
+        "startAngle": {
+          "alignToWall": "corridor-left-inner",
+          "offset": -0.1
+        },
+        "startSideWall": "corridor-left-inner",
+        "endAngle": 79.5,
         "clockwise": false
       },
       "height": 0.9,
@@ -808,12 +844,16 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 34.66,
         "outerRadius": 35.46,
-        "startAngle": 280.3,
-        "endAngle": { "alignToWall": "corridor-right-inner", "offset": -0.1 },
+        "startAngle": 100.3,
+        "endAngle": {
+          "alignToWall": "corridor-right-inner",
+          "offset": 0.1
+        },
+        "endSideWall": "corridor-right-inner",
         "clockwise": false
       },
       "height": 0.9,
@@ -829,12 +869,12 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 34.81,
         "outerRadius": 35.6,
-        "startAngle": 270,
-        "endAngle": 277.9,
+        "startAngle": 90,
+        "endAngle": 97.9,
         "clockwise": false
       },
       "height": 0.9,
@@ -850,12 +890,12 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 34.81,
         "outerRadius": 35.6,
-        "startAngle": 262.1,
-        "endAngle": 270,
+        "startAngle": 82.1,
+        "endAngle": 90,
         "clockwise": false
       },
       "height": 0.9,
@@ -871,12 +911,16 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 34.66,
         "outerRadius": 35.46,
-        "startAngle": { "alignToWall": "corridor-left-inner", "offset": 0.1 },
-        "endAngle": 259.7,
+        "startAngle": {
+          "alignToWall": "corridor-left-inner",
+          "offset": -0.1
+        },
+        "startSideWall": "corridor-left-inner",
+        "endAngle": 79.7,
         "clockwise": false
       },
       "height": 0.9,
@@ -892,12 +936,16 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 33.16,
         "outerRadius": 33.95,
-        "startAngle": 280.0,
-        "endAngle": { "alignToWall": "corridor-right-inner", "offset": -0.1 },
+        "startAngle": 100,
+        "endAngle": {
+          "alignToWall": "corridor-right-inner",
+          "offset": 0.1
+        },
+        "endSideWall": "corridor-right-inner",
         "clockwise": false
       },
       "height": 0.9,
@@ -913,12 +961,12 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 33.29,
         "outerRadius": 34.08,
-        "startAngle": 270,
-        "endAngle": 277.6,
+        "startAngle": 90,
+        "endAngle": 97.6,
         "clockwise": false
       },
       "height": 0.9,
@@ -934,12 +982,12 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 33.29,
         "outerRadius": 34.08,
-        "startAngle": 262.4,
-        "endAngle": 270,
+        "startAngle": 82.4,
+        "endAngle": 90,
         "clockwise": false
       },
       "height": 0.9,
@@ -955,12 +1003,16 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 33.16,
         "outerRadius": 33.95,
-        "startAngle": { "alignToWall": "corridor-left-inner", "offset": 0.1 },
-        "endAngle": 260.0,
+        "startAngle": {
+          "alignToWall": "corridor-left-inner",
+          "offset": -0.1
+        },
+        "startSideWall": "corridor-left-inner",
+        "endAngle": 80,
         "clockwise": false
       },
       "height": 0.9,
@@ -976,12 +1028,16 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 31.91,
         "outerRadius": 32.59,
-        "startAngle": 279.8,
-        "endAngle": { "alignToWall": "corridor-right-inner", "offset": -0.1 },
+        "startAngle": 99.8,
+        "endAngle": {
+          "alignToWall": "corridor-right-inner",
+          "offset": 0.1
+        },
+        "endSideWall": "corridor-right-inner",
         "clockwise": false
       },
       "height": 0.9,
@@ -997,12 +1053,12 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 32.03,
         "outerRadius": 32.71,
-        "startAngle": 270,
-        "endAngle": 277.3,
+        "startAngle": 90,
+        "endAngle": 97.3,
         "clockwise": false
       },
       "height": 0.9,
@@ -1018,12 +1074,12 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 32.03,
         "outerRadius": 32.71,
-        "startAngle": 262.7,
-        "endAngle": 270,
+        "startAngle": 82.7,
+        "endAngle": 90,
         "clockwise": false
       },
       "height": 0.9,
@@ -1039,12 +1095,16 @@
       "arcSegment": {
         "center": {
           "x": 16,
-          "y": 45
+          "y": -15
         },
         "innerRadius": 31.91,
         "outerRadius": 32.59,
-        "startAngle": { "alignToWall": "corridor-left-inner", "offset": 0.1 },
-        "endAngle": 260.2,
+        "startAngle": {
+          "alignToWall": "corridor-left-inner",
+          "offset": -0.1
+        },
+        "startSideWall": "corridor-left-inner",
+        "endAngle": 80.2,
         "clockwise": false
       },
       "height": 0.9,
@@ -1058,12 +1118,12 @@
       "id": "auditorium-entrance-right",
       "label": "Right Corridor Entrance",
       "start": {
-        "x": 23.4,
-        "y": 16
+        "x": 7.8,
+        "y": 14
       },
       "end": {
-        "x": 25,
-        "y": 16
+        "x": 7,
+        "y": 14
       },
       "type": "internal"
     },
@@ -1071,12 +1131,12 @@
       "id": "auditorium-entrance-left",
       "label": "Left Corridor Entrance",
       "start": {
-        "x": 7,
-        "y": 16
+        "x": 25,
+        "y": 14
       },
       "end": {
-        "x": 8.6,
-        "y": 16
+        "x": 24.2,
+        "y": 14
       },
       "type": "internal"
     },
@@ -1084,12 +1144,12 @@
       "id": "atrium-exit",
       "label": "Atrium Exit",
       "start": {
-        "x": 13,
-        "y": 28
+        "x": 16,
+        "y": 2
       },
       "end": {
-        "x": 19,
-        "y": 28
+        "x": 13,
+        "y": 2
       },
       "type": "external"
     }

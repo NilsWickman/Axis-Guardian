@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useTrackIdentityAnnotation } from '@/composables/useTrackIdentityAnnotation'
 import { useTrackThumbnails, type OfflineTrackInfo } from '@/composables/useTrackThumbnails'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,6 +18,53 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 const allTracks = ref<OfflineTrackInfo[]>([])
 const currentTrackIndex = ref(0)
 
+// Camera filter state
+const selectedCamera = ref<string | null>(null) // null = all cameras
+
+// Available cameras from loaded tracks
+const availableCameras = computed(() => {
+  const cameras = new Set<string>()
+  for (const track of allTracks.value) {
+    cameras.add(track.cameraId)
+  }
+  return Array.from(cameras).sort()
+})
+
+// Camera colors for visual distinction
+const cameraColors: Record<string, string> = {
+  camera1: '#3b82f6', // blue
+  camera2: '#f97316', // orange
+  camera3: '#22c55e', // green
+  camera4: '#a855f7', // purple
+}
+
+// Filtered tracks based on selected camera
+const filteredTracks = computed(() => {
+  if (!selectedCamera.value) return allTracks.value
+  return allTracks.value.filter(t => t.cameraId === selectedCamera.value)
+})
+
+// Cycle through cameras (null -> camera1 -> camera2 -> null)
+function cycleCamera(): void {
+  const cameras = availableCameras.value
+  if (cameras.length === 0) return
+
+  if (selectedCamera.value === null) {
+    selectedCamera.value = cameras[0]
+  } else {
+    const currentIdx = cameras.indexOf(selectedCamera.value)
+    if (currentIdx === cameras.length - 1) {
+      selectedCamera.value = null // Back to "all"
+    } else {
+      selectedCamera.value = cameras[currentIdx + 1]
+    }
+  }
+
+  // Reset to first track when camera changes
+  currentTrackIndex.value = 0
+  loadCurrentVideoSegment()
+}
+
 // Current video segment
 const currentVideoSegment = ref<TrackVideoSegment | null>(null)
 const isLoadingSegment = ref(false)
@@ -26,17 +73,18 @@ const isLoadingSegment = ref(false)
 const isInitializing = ref(true)
 const initError = ref<string | null>(null)
 
-// Current track
+// Current track (uses filtered tracks)
 const currentTrack = computed(() => {
-  if (allTracks.value.length === 0) return null
-  return allTracks.value[currentTrackIndex.value] ?? null
+  if (filteredTracks.value.length === 0) return null
+  return filteredTracks.value[currentTrackIndex.value] ?? null
 })
 
-// Progress info
+// Progress info (shows filtered count)
 const progressInfo = computed(() => {
-  const total = allTracks.value.length
+  const total = filteredTracks.value.length
   const current = currentTrackIndex.value + 1
-  const annotated = annotation.stats.value?.uniqueTracks ?? 0
+  // Count annotated tracks in current filter
+  const annotated = filteredTracks.value.filter(t => annotation.isTrackAnnotated(t.id)).length
   return { current, total, annotated }
 })
 
@@ -50,6 +98,33 @@ const currentVideoElement = computed(() => {
   if (!currentTrack.value) return null
   return thumbnails.getVideoElement(currentTrack.value.cameraId)
 })
+
+// Detection lookup callback for bounding box drawing
+const getDetectionForCurrentTrack = computed(() => {
+  if (!currentTrack.value) return undefined
+  const { cameraId, trackId } = currentTrack.value
+  return (timestamp: number) => thumbnails.getDetectionAtTimestamp(cameraId, trackId, timestamp)
+})
+
+// Person color for bounding box (white if unassigned)
+const currentPersonColor = computed(() => {
+  return currentTrackPerson.value?.color ?? '#ffffff'
+})
+
+// Video container size tracking
+const videoContainerRef = ref<HTMLElement | null>(null)
+const videoContainerSize = ref({ width: 600, height: 500 })
+
+function updateContainerSize(): void {
+  if (videoContainerRef.value) {
+    const rect = videoContainerRef.value.getBoundingClientRect()
+    // Leave some padding for the time info below
+    videoContainerSize.value = {
+      width: Math.floor(rect.width - 32),
+      height: Math.floor(rect.height - 60)
+    }
+  }
+}
 
 // Load video segment for current track
 function loadCurrentVideoSegment(): void {
@@ -73,9 +148,9 @@ function loadCurrentVideoSegment(): void {
   }
 }
 
-// Navigation
+// Navigation (uses filtered tracks)
 function goToTrack(index: number): void {
-  if (index < 0 || index >= allTracks.value.length) return
+  if (index < 0 || index >= filteredTracks.value.length) return
   currentTrackIndex.value = index
   loadCurrentVideoSegment()
 }
@@ -89,8 +164,9 @@ function prevTrack(): void {
 }
 
 function goToNextUnannotated(): void {
-  for (let i = currentTrackIndex.value + 1; i < allTracks.value.length; i++) {
-    const track = allTracks.value[i]
+  const tracks = filteredTracks.value
+  for (let i = currentTrackIndex.value + 1; i < tracks.length; i++) {
+    const track = tracks[i]
     if (!annotation.isTrackAnnotated(track.id)) {
       goToTrack(i)
       return
@@ -98,7 +174,7 @@ function goToNextUnannotated(): void {
   }
   // Wrap around
   for (let i = 0; i < currentTrackIndex.value; i++) {
-    const track = allTracks.value[i]
+    const track = tracks[i]
     if (!annotation.isTrackAnnotated(track.id)) {
       goToTrack(i)
       return
@@ -163,6 +239,11 @@ function handleKeydown(event: KeyboardEvent): void {
       event.preventDefault()
       markAsInvalid()
       break
+    case 'c':
+    case 'C':
+      event.preventDefault()
+      cycleCamera()
+      break
     case 'Delete':
     case 'Backspace':
       if (currentTrack.value) {
@@ -205,6 +286,17 @@ function formatDuration(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 
+// ResizeObserver for video container
+let resizeObserver: ResizeObserver | null = null
+
+// Watch for container ref to become available (after loading finishes)
+watch(videoContainerRef, (container) => {
+  if (container && resizeObserver) {
+    resizeObserver.observe(container)
+    nextTick(() => updateContainerSize())
+  }
+})
+
 // Lifecycle
 onMounted(async () => {
   // Initialize annotation session
@@ -238,11 +330,21 @@ onMounted(async () => {
 
   // Add keyboard listener
   window.addEventListener('keydown', handleKeydown)
+
+  // Setup ResizeObserver for video container
+  resizeObserver = new ResizeObserver(() => {
+    updateContainerSize()
+  })
+  if (videoContainerRef.value) {
+    resizeObserver.observe(videoContainerRef.value)
+    updateContainerSize()
+  }
 })
 
 onUnmounted(() => {
   thumbnails.cleanup()
   window.removeEventListener('keydown', handleKeydown)
+  resizeObserver?.disconnect()
 })
 </script>
 
@@ -332,7 +434,7 @@ onUnmounted(() => {
           <Button
             variant="outline"
             size="sm"
-            :disabled="currentTrackIndex >= allTracks.length - 1"
+            :disabled="currentTrackIndex >= filteredTracks.length - 1"
             @click="nextTrack"
           >
             Next
@@ -346,10 +448,33 @@ onUnmounted(() => {
           </Button>
         </div>
 
+        <!-- Camera Filter (clickable) -->
+        <button
+          class="flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 transition-all hover:scale-105 cursor-pointer"
+          :style="{
+            borderColor: selectedCamera ? cameraColors[selectedCamera] ?? '#6b7280' : '#6b7280',
+            backgroundColor: selectedCamera ? (cameraColors[selectedCamera] ?? '#6b7280') + '20' : 'transparent'
+          }"
+          title="Click to cycle cameras"
+          @click="cycleCamera"
+        >
+          <span
+            v-if="selectedCamera"
+            class="w-2.5 h-2.5 rounded-full"
+            :style="{ backgroundColor: cameraColors[selectedCamera] ?? '#6b7280' }"
+          />
+          <span class="font-mono text-sm font-medium">
+            {{ selectedCamera ?? 'All Cameras' }}
+          </span>
+          <span class="text-xs text-muted-foreground">
+            ({{ filteredTracks.length }})
+          </span>
+        </button>
+
         <!-- Track Info -->
         <div v-if="currentTrack" class="flex-1 flex items-center gap-4">
           <div class="font-mono text-sm bg-muted px-3 py-1 rounded">
-            {{ currentTrack.cameraId }} / Track #{{ currentTrack.trackId }}
+            Track #{{ currentTrack.trackId }}
           </div>
           <div class="text-sm text-muted-foreground">
             {{ currentTrack.frameCount }} frames
@@ -379,7 +504,7 @@ onUnmounted(() => {
           <CardHeader class="py-3">
             <CardTitle class="text-base">Track Video</CardTitle>
           </CardHeader>
-          <CardContent class="flex-1 flex flex-col items-center justify-center">
+          <CardContent ref="videoContainerRef" class="flex-1 flex flex-col items-center justify-center p-4">
             <div v-if="isLoadingSegment" class="text-center">
               <div class="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2" />
               <div class="text-sm text-muted-foreground">Loading video...</div>
@@ -389,6 +514,9 @@ onUnmounted(() => {
                 :segment="currentVideoSegment"
                 :video-element="currentVideoElement"
                 :is-active="true"
+                :get-detection="getDetectionForCurrentTrack"
+                :person-color="currentPersonColor"
+                :container-size="videoContainerSize"
               />
               <!-- Track time info -->
               <div class="text-sm text-muted-foreground mt-4">
@@ -462,6 +590,7 @@ onUnmounted(() => {
               <div><kbd class="px-1 bg-muted rounded">X</kbd> Mark as Invalid</div>
               <div><kbd class="px-1 bg-muted rounded">&larr;</kbd> <kbd class="px-1 bg-muted rounded">&rarr;</kbd> Navigate tracks</div>
               <div><kbd class="px-1 bg-muted rounded">U</kbd> Next unannotated</div>
+              <div><kbd class="px-1 bg-muted rounded">C</kbd> Cycle cameras</div>
               <div><kbd class="px-1 bg-muted rounded">Del</kbd> Remove assignment</div>
             </div>
           </CardContent>
@@ -473,13 +602,16 @@ onUnmounted(() => {
         <CardContent class="py-2 overflow-x-auto">
           <div class="flex gap-1">
             <button
-              v-for="(track, idx) in allTracks"
+              v-for="(track, idx) in filteredTracks"
               :key="track.id"
-              class="w-8 h-8 rounded text-xs font-mono flex-shrink-0 transition-colors"
+              class="w-8 h-8 rounded text-xs font-mono flex-shrink-0 transition-colors border-2"
               :class="{
                 'bg-primary text-primary-foreground': idx === currentTrackIndex,
                 'bg-green-500 text-white': idx !== currentTrackIndex && annotation.isTrackAnnotated(track.id),
                 'bg-muted hover:bg-muted/80': idx !== currentTrackIndex && !annotation.isTrackAnnotated(track.id),
+              }"
+              :style="{
+                borderColor: !selectedCamera ? (cameraColors[track.cameraId] ?? 'transparent') : 'transparent'
               }"
               :title="`${track.cameraId} #${track.trackId}`"
               @click="goToTrack(idx)"

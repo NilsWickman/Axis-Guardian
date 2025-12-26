@@ -79,10 +79,9 @@ export const DEFAULT_MAX_VELOCITY_MS = DEFAULT_TRACKING_CONFIG_BASE.maxVelocityM
  * Extends TrackingConfigBase from @axis-guardian/types to ensure type consistency
  * with the backend.
  *
- * @deprecated This configuration is only used for legacy local tracking mode
- * (usePersonPositionTracking composable). When using backend WebSocket sync,
- * all tracking logic is handled server-side. The server's ALGORITHM_CONSTANTS is
- * the source of truth for active tracking.
+ * @deprecated This configuration is only used for legacy local tracking mode.
+ * When using backend WebSocket sync, all tracking logic is handled server-side.
+ * The server's ALGORITHM_CONSTANTS is the source of truth for active tracking.
  *
  * For server-synced mode, use the backend REST API to query/modify config.
  */
@@ -131,7 +130,7 @@ export interface CameraDetection {
  *
  * NOTE: When using server sync (WebSocket), tracks come from the backend
  * in GlobalTrackJSON format. The `pendingDetections` field is only used for
- * legacy local tracking mode (usePersonPositionTracking composable).
+ * legacy local tracking mode.
  *
  * For server-synced tracks, `pendingDetections` is undefined (not present) as
  * all detection merging is handled by the backend.
@@ -536,8 +535,8 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
   /**
    * Main entry point - process a new detection
    * @deprecated Use server sync (WebSocket) instead. This local tracking method
-   * is retained for legacy usePersonPositionTracking composable compatibility.
-   * When using backend WebSocket, use upsertTrackFromServer() instead.
+   * is retained for legacy compatibility. When using backend WebSocket, use
+   * upsertTrackFromServer() instead.
    */
   function processDetection(
     cameraId: string,

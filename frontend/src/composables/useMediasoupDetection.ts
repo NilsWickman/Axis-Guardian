@@ -12,7 +12,6 @@ import { Device, type types as mediasoupTypes } from 'mediasoup-client'
 import msgpack from 'msgpack-lite'
 import type { Detection } from '@/types/detection.types'
 import { useToast } from '@/composables/useToast'
-import { emitWebRTCDetection } from './usePersonPositionTracking'
 
 export interface DetectionMetadata {
   camera_id: string
@@ -74,7 +73,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
       'LiveDetectionView',
       'WebRTCDetectionView',
       'SnapshotView',
-      'FocusView',
       'Tracking'
     ]
     return router.currentRoute.value.name && cameraRoutes.includes(router.currentRoute.value.name as string)
@@ -926,8 +924,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
    * Release a detection for processing (called when video catches up)
    */
   function releaseDetection(metadata: DetectionMetadata) {
-    // Emit for person position tracking
-    emitWebRTCDetection(metadata)
 
     // Process buffered detection (update local state)
     processBufferedDetection(metadata)
@@ -1084,7 +1080,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
       const syncDelay = Math.min(connectionQuality.value.roundTripTime / 2, 50)
       const timeoutId = window.setTimeout(() => {
         pendingTimeouts.delete(timeoutId)
-        emitWebRTCDetection(metadata)
         processBufferedDetection(metadata)
       }, syncDelay)
       pendingTimeouts.add(timeoutId)

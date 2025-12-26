@@ -105,4 +105,16 @@ export const AVAILABLE_VIDEOS: VideoFileOption[] = [
     videoPath: '/cameras/view-HC4.mp4',
     detectionsPath: '/cameras/view-HC4.detections.json',
   },
+  {
+    id: 'ip2',
+    displayName: 'Camera IP2',
+    videoPath: '/cameras/view-IP2.mp4',
+    detectionsPath: '/cameras/view-IP2.detections.json',
+  },
+  {
+    id: 'ip5',
+    displayName: 'Camera IP5',
+    videoPath: '/cameras/view-IP5.mp4',
+    detectionsPath: '/cameras/view-IP5.detections.json',
+  },
 ]

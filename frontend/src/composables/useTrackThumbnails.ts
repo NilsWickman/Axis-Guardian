@@ -7,6 +7,8 @@ import { AVAILABLE_VIDEOS, normalizeBbox } from '@/types/frame-review'
 const CAMERA_VIDEO_MAP: Record<string, string> = {
   camera1: 'hc3',
   camera2: 'hc4',
+  camera3: 'ip2',
+  camera4: 'ip5',
 }
 
 /** Number of thumbnails to extract per track */
@@ -587,6 +589,35 @@ export function useTrackThumbnails() {
     return cameras.get(cameraId)?.videoElement ?? null
   }
 
+  /**
+   * Get detection data at a specific timestamp for a track
+   */
+  function getDetectionAtTimestamp(
+    cameraId: string,
+    trackId: number,
+    timestamp: number
+  ): Detection | null {
+    const camera = cameras.get(cameraId)
+    if (!camera?.detectionData) return null
+
+    // Find frame closest to timestamp
+    const frames = camera.trackFrameIndex.get(trackId) || []
+    let closest: FrameData | null = null
+    let minDiff = Infinity
+
+    for (const frame of frames) {
+      const diff = Math.abs(frame.timestamp - timestamp)
+      if (diff < minDiff) {
+        minDiff = diff
+        closest = frame
+      }
+    }
+
+    // 100ms tolerance for frame matching
+    if (!closest || minDiff > 0.1) return null
+    return closest.detections.find(d => d.track_id === trackId) ?? null
+  }
+
   return {
     // State
     cameras,
@@ -607,5 +638,6 @@ export function useTrackThumbnails() {
     calculateTrackCropRegion,
     getVideoSegmentForTrack,
     getVideoElement,
+    getDetectionAtTimestamp,
   }
 }

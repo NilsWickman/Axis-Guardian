@@ -38,15 +38,38 @@ export interface AngleWallAlignment {
   offset?: number      // Optional offset in degrees from calculated intersection
 }
 
+/**
+ * AngleValue can be a UnitValue or an alignToWall reference (in JSON config only).
+ * Note: AngleWallAlignment is resolved to UnitValue during config loading in useSiteMapConfig.ts
+ */
 export type AngleValue = UnitValue | AngleWallAlignment
 
+/**
+ * Intersection points where an arc meets a wall (for wall-aligned sides)
+ */
+export interface WallIntersectionPoints {
+  outer: { x: number; y: number }  // Where outer radius intersects wall
+  inner: { x: number; y: number }  // Where inner radius intersects wall
+}
+
+/**
+ * Arc segment geometry for curved seating rows.
+ * Note: startAngle and endAngle are always resolved UnitValue at runtime.
+ * The JSON config may use AngleWallAlignment objects which get resolved during loading.
+ */
 export interface ArcSegmentGeometry {
   center: { x: UnitValue; y: UnitValue }
   innerRadius: UnitValue
   outerRadius: UnitValue
-  startAngle: AngleValue  // degrees (0 = right/+X, 90 = down/+Y) or wall alignment
-  endAngle: AngleValue    // degrees or wall alignment
+  startAngle: UnitValue  // degrees (0 = right/+X, 90 = up/+Y) - resolved from wall alignment if needed
+  endAngle: UnitValue    // degrees - resolved from wall alignment if needed
   clockwise?: boolean
+  // Wall-aligned sides: if specified, the side edge follows the wall instead of being radial
+  startSideWall?: string  // Wall ID for start side alignment
+  endSideWall?: string    // Wall ID for end side alignment
+  // Calculated intersection points (populated during config loading if side walls are specified)
+  startSidePoints?: WallIntersectionPoints
+  endSidePoints?: WallIntersectionPoints
 }
 
 export interface LinearGeometry {

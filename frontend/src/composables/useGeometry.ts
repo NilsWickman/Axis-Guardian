@@ -606,8 +606,9 @@ export function calculateVisibleFOV(
     )
   }
 
-  // Convert from azimuth (0° = North/+Y world, clockwise) to canvas angle
-  const canvasAngle = 90 - rotation
+  // Convert from azimuth (0° = North, clockwise) to canvas angle
+  // With Y-flipped coordinates: azimuth - 90 so North points up on canvas
+  const canvasAngle = rotation - 90
   const rotationRad = (canvasAngle * Math.PI) / 180
   const halfFovRad = (fov / 2) * (Math.PI / 180)
 
@@ -717,28 +718,53 @@ export function calculateVisibleFOV(
         if (Math.abs(distCurrent - circle.radius) < tolerance &&
             Math.abs(distNext - circle.radius) < tolerance) {
           // Both points are on this circle - add arc points between them
+          // We need to trace the FRONT of the circle (facing camera), not the back
           const angleCurrent = Math.atan2(current.y - circle.center.y, current.x - circle.center.x)
           const angleNext = Math.atan2(next.y - circle.center.y, next.x - circle.center.x)
 
-          // Calculate the arc angle difference
-          let angleDiff = angleNext - angleCurrent
+          // Calculate angle from circle center to camera (front of circle)
+          const cameraAngle = Math.atan2(
+            cameraPosition.y - circle.center.y,
+            cameraPosition.x - circle.center.x
+          )
 
-          // Normalize angleDiff to [-π, π] to get the shorter arc
-          while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI
-          while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI
+          // Check if current and next are on opposite sides of the circle (tangent points)
+          // by measuring their angular distance from the camera direction
+          let currentFromCamera = angleCurrent - cameraAngle
+          while (currentFromCamera > Math.PI) currentFromCamera -= 2 * Math.PI
+          while (currentFromCamera < -Math.PI) currentFromCamera += 2 * Math.PI
 
-          // Only add arc points if the angular span is significant (> 5 degrees)
-          if (Math.abs(angleDiff) > 0.09) {
-            const numArcPoints = Math.max(2, Math.floor(Math.abs(angleDiff) / 0.15)) // ~8.5 degrees per point
-            for (let j = 1; j < numArcPoints; j++) {
-              const t = j / numArcPoints
-              const arcAngle = angleCurrent + angleDiff * t
-              visiblePoints.push({
-                x: circle.center.x + circle.radius * Math.cos(arcAngle),
-                y: circle.center.y + circle.radius * Math.sin(arcAngle)
-              })
+          let nextFromCamera = angleNext - cameraAngle
+          while (nextFromCamera > Math.PI) nextFromCamera -= 2 * Math.PI
+          while (nextFromCamera < -Math.PI) nextFromCamera += 2 * Math.PI
+
+          // Both points should be on the front half of the circle (within ±90° of camera direction)
+          // If either is on the back, skip arc interpolation for this pair
+          const bothOnFront = Math.abs(currentFromCamera) <= Math.PI / 2 + 0.1 &&
+                              Math.abs(nextFromCamera) <= Math.PI / 2 + 0.1
+
+          if (bothOnFront) {
+            // Calculate the arc angle difference
+            let angleDiff = angleNext - angleCurrent
+            while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI
+            while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI
+
+            // For front-side points, always use the shorter arc (which stays on the front)
+            // Only add arc points if the angular span is significant (> 5 degrees)
+            if (Math.abs(angleDiff) > 0.09) {
+              const numArcPoints = Math.max(2, Math.floor(Math.abs(angleDiff) / 0.15))
+              for (let j = 1; j < numArcPoints; j++) {
+                const t = j / numArcPoints
+                const arcAngle = angleCurrent + angleDiff * t
+                visiblePoints.push({
+                  x: circle.center.x + circle.radius * Math.cos(arcAngle),
+                  y: circle.center.y + circle.radius * Math.sin(arcAngle)
+                })
+              }
             }
           }
+          // If points are on opposite sides (tangent points), don't add arc interpolation
+          // The FOV edge rays will naturally connect these points through the camera
           handled = true
           break
         }
@@ -910,8 +936,9 @@ export function calculateVisibleFOVWithArcs(
     )
   }
 
-  // Convert from azimuth (0° = North/+Y world, clockwise) to canvas angle
-  const canvasAngle = 90 - rotation
+  // Convert from azimuth (0° = North, clockwise) to canvas angle
+  // With Y-flipped coordinates: azimuth - 90 so North points up on canvas
+  const canvasAngle = rotation - 90
   const rotationRad = (canvasAngle * Math.PI) / 180
   const halfFovRad = (fov / 2) * (Math.PI / 180)
 

@@ -1,0 +1,1932 @@
+{
+  "version": "1.0",
+  "createdAt": "2025-12-26T20:39:50.091Z",
+  "updatedAt": "2025-12-26T21:32:41.357866Z",
+  "sessionInfo": {
+    "dataSource": "replay",
+    "startedAt": "2025-12-26T20:39:50.091Z"
+  },
+  "annotations": [
+    {
+      "id": "tid_1766783071360_pcgpvrg",
+      "globalTrackId": "camera1-1",
+      "personId": 17,
+      "assignedAt": "2025-12-26T21:04:31.360Z"
+    },
+    {
+      "id": "tid_1766783078115_6osf31p",
+      "globalTrackId": "camera1-2",
+      "personId": 3,
+      "assignedAt": "2025-12-26T21:04:38.115Z"
+    },
+    {
+      "id": "tid_1766783080370_yxivu56",
+      "globalTrackId": "camera1-3",
+      "personId": 8,
+      "assignedAt": "2025-12-26T21:04:40.370Z"
+    },
+    {
+      "id": "tid_1766783081579_me2fib8",
+      "globalTrackId": "camera1-4",
+      "personId": 2,
+      "assignedAt": "2025-12-26T21:04:41.579Z"
+    },
+    {
+      "id": "tid_1766783086268_rfe9mt6",
+      "globalTrackId": "camera1-5",
+      "personId": 4,
+      "assignedAt": "2025-12-26T21:04:46.268Z"
+    },
+    {
+      "id": "tid_1766783087994_935kmti",
+      "globalTrackId": "camera1-6",
+      "personId": 15,
+      "assignedAt": "2025-12-26T21:04:47.994Z"
+    },
+    {
+      "id": "tid_1766783089810_kw1o3su",
+      "globalTrackId": "camera1-7",
+      "personId": 1,
+      "assignedAt": "2025-12-26T21:04:49.810Z"
+    },
+    {
+      "id": "tid_1766783096020_jrzlsxu",
+      "globalTrackId": "camera1-8",
+      "personId": 12,
+      "assignedAt": "2025-12-26T21:04:56.020Z"
+    },
+    {
+      "id": "tid_1766783101800_in6rtf2",
+      "globalTrackId": "camera1-10",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:05:01.800Z"
+    },
+    {
+      "id": "tid_1766783115046_8mhhora",
+      "globalTrackId": "camera1-11",
+      "personId": 10,
+      "assignedAt": "2025-12-26T21:05:15.046Z"
+    },
+    {
+      "id": "tid_1766783120532_8otacnn",
+      "globalTrackId": "camera1-12",
+      "personId": 15,
+      "assignedAt": "2025-12-26T21:05:20.532Z"
+    },
+    {
+      "id": "tid_1766783122236_b7zjzcw",
+      "globalTrackId": "camera1-13",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:05:22.236Z"
+    },
+    {
+      "id": "tid_1766783127895_mauwjnd",
+      "globalTrackId": "camera1-14",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:05:27.895Z"
+    },
+    {
+      "id": "tid_1766783132019_7xy1cud",
+      "globalTrackId": "camera1-15",
+      "personId": 8,
+      "assignedAt": "2025-12-26T21:05:32.019Z"
+    },
+    {
+      "id": "tid_1766783134579_dgxhfi9",
+      "globalTrackId": "camera1-17",
+      "personId": 7,
+      "assignedAt": "2025-12-26T21:05:34.579Z"
+    },
+    {
+      "id": "tid_1766783136288_cfyqupt",
+      "globalTrackId": "camera1-18",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:05:36.288Z"
+    },
+    {
+      "id": "tid_1766783140314_0pbieuw",
+      "globalTrackId": "camera1-19",
+      "personId": 10,
+      "assignedAt": "2025-12-26T21:05:40.314Z"
+    },
+    {
+      "id": "tid_1766783142287_jzbstru",
+      "globalTrackId": "camera1-20",
+      "personId": 8,
+      "assignedAt": "2025-12-26T21:05:42.287Z"
+    },
+    {
+      "id": "tid_1766783155308_6prpxie",
+      "globalTrackId": "camera1-21",
+      "personId": 11,
+      "assignedAt": "2025-12-26T21:05:55.308Z"
+    },
+    {
+      "id": "tid_1766783157802_iouwrk9",
+      "globalTrackId": "camera1-22",
+      "personId": 2,
+      "assignedAt": "2025-12-26T21:05:57.802Z"
+    },
+    {
+      "id": "tid_1766783159677_dz0v8om",
+      "globalTrackId": "camera1-23",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:05:59.677Z"
+    },
+    {
+      "id": "tid_1766783161125_owky0yr",
+      "globalTrackId": "camera1-24",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:06:01.125Z"
+    },
+    {
+      "id": "tid_1766783162260_h2r5xrk",
+      "globalTrackId": "camera1-25",
+      "personId": 3,
+      "assignedAt": "2025-12-26T21:06:06.093Z"
+    },
+    {
+      "id": "tid_1766783169813_qxaq55q",
+      "globalTrackId": "camera1-26",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:06:09.813Z"
+    },
+    {
+      "id": "tid_1766783171832_02t72b1",
+      "globalTrackId": "camera1-27",
+      "personId": 13,
+      "assignedAt": "2025-12-26T21:06:11.832Z"
+    },
+    {
+      "id": "tid_1766783173572_a6act19",
+      "globalTrackId": "camera1-30",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:06:13.572Z"
+    },
+    {
+      "id": "tid_1766783177065_drt8kp1",
+      "globalTrackId": "camera1-31",
+      "personId": 18,
+      "assignedAt": "2025-12-26T21:06:17.065Z"
+    },
+    {
+      "id": "tid_1766783178999_vzlgvnw",
+      "globalTrackId": "camera1-33",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:06:18.999Z"
+    },
+    {
+      "id": "tid_1766783185206_1thmn0n",
+      "globalTrackId": "camera1-35",
+      "personId": 19,
+      "assignedAt": "2025-12-26T21:06:25.206Z"
+    },
+    {
+      "id": "tid_1766783187835_2xet2uf",
+      "globalTrackId": "camera1-36",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:06:27.835Z"
+    },
+    {
+      "id": "tid_1766783190558_0pyl64s",
+      "globalTrackId": "camera1-38",
+      "personId": 20,
+      "assignedAt": "2025-12-26T21:06:30.558Z"
+    },
+    {
+      "id": "tid_1766783193355_n0pnw4k",
+      "globalTrackId": "camera1-39",
+      "personId": 13,
+      "assignedAt": "2025-12-26T21:06:33.355Z"
+    },
+    {
+      "id": "tid_1766783194947_9s3lnh2",
+      "globalTrackId": "camera1-40",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:06:46.815Z"
+    },
+    {
+      "id": "tid_1766783215345_6odzxut",
+      "globalTrackId": "camera1-41",
+      "personId": 14,
+      "assignedAt": "2025-12-26T21:06:55.345Z"
+    },
+    {
+      "id": "tid_1766783222979_v020ww6",
+      "globalTrackId": "camera1-43",
+      "personId": 19,
+      "assignedAt": "2025-12-26T21:07:02.979Z"
+    },
+    {
+      "id": "tid_1766783224921_h88vc7n",
+      "globalTrackId": "camera1-44",
+      "personId": 1,
+      "assignedAt": "2025-12-26T21:07:04.921Z"
+    },
+    {
+      "id": "tid_1766783226122_rhc9mkf",
+      "globalTrackId": "camera1-45",
+      "personId": 2,
+      "assignedAt": "2025-12-26T21:07:06.122Z"
+    },
+    {
+      "id": "tid_1766783227609_96h1gfp",
+      "globalTrackId": "camera1-49",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:07:07.609Z"
+    },
+    {
+      "id": "tid_1766783228858_im3sx12",
+      "globalTrackId": "camera1-50",
+      "personId": 1,
+      "assignedAt": "2025-12-26T21:07:08.858Z"
+    },
+    {
+      "id": "tid_1766783236198_cii51cu",
+      "globalTrackId": "camera1-51",
+      "personId": 18,
+      "assignedAt": "2025-12-26T21:07:16.198Z"
+    },
+    {
+      "id": "tid_1766783238311_y9n636u",
+      "globalTrackId": "camera1-52",
+      "personId": 20,
+      "assignedAt": "2025-12-26T21:07:18.311Z"
+    },
+    {
+      "id": "tid_1766783239975_61im92z",
+      "globalTrackId": "camera1-53",
+      "personId": 1,
+      "assignedAt": "2025-12-26T21:07:19.975Z"
+    },
+    {
+      "id": "tid_1766783241395_3twychc",
+      "globalTrackId": "camera1-54",
+      "personId": 2,
+      "assignedAt": "2025-12-26T21:07:21.395Z"
+    },
+    {
+      "id": "tid_1766783243910_0dtbfl9",
+      "globalTrackId": "camera1-55",
+      "personId": 3,
+      "assignedAt": "2025-12-26T21:07:23.910Z"
+    },
+    {
+      "id": "tid_1766783245459_nu9kaea",
+      "globalTrackId": "camera1-56",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:07:25.459Z"
+    },
+    {
+      "id": "tid_1766783247991_g65vxnw",
+      "globalTrackId": "camera1-59",
+      "personId": 3,
+      "assignedAt": "2025-12-26T21:07:27.991Z"
+    },
+    {
+      "id": "tid_1766783256290_vg921q9",
+      "globalTrackId": "camera1-62",
+      "personId": 5,
+      "assignedAt": "2025-12-26T21:07:36.290Z"
+    },
+    {
+      "id": "tid_1766783258329_aggx9zp",
+      "globalTrackId": "camera1-63",
+      "personId": 1,
+      "assignedAt": "2025-12-26T21:07:38.329Z"
+    },
+    {
+      "id": "tid_1766783266882_3rornfk",
+      "globalTrackId": "camera1-64",
+      "personId": 4,
+      "assignedAt": "2025-12-26T21:07:46.882Z"
+    },
+    {
+      "id": "tid_1766783268829_z1ixqo9",
+      "globalTrackId": "camera1-66",
+      "personId": 2,
+      "assignedAt": "2025-12-26T21:07:48.829Z"
+    },
+    {
+      "id": "tid_1766783272251_z7exu45",
+      "globalTrackId": "camera1-68",
+      "personId": 4,
+      "assignedAt": "2025-12-26T21:07:52.251Z"
+    },
+    {
+      "id": "tid_1766783278575_hjxy117",
+      "globalTrackId": "camera1-69",
+      "personId": 6,
+      "assignedAt": "2025-12-26T21:07:58.575Z"
+    },
+    {
+      "id": "tid_1766783280175_h998wlz",
+      "globalTrackId": "camera1-70",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:08:00.175Z"
+    },
+    {
+      "id": "tid_1766783281502_dhetlym",
+      "globalTrackId": "camera1-71",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:08:01.502Z"
+    },
+    {
+      "id": "tid_1766783282552_dkkqmbo",
+      "globalTrackId": "camera1-72",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:08:02.552Z"
+    },
+    {
+      "id": "tid_1766783283750_d2k3i7z",
+      "globalTrackId": "camera1-73",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:08:03.750Z"
+    },
+    {
+      "id": "tid_1766783286020_7kvqhi4",
+      "globalTrackId": "camera1-74",
+      "personId": 6,
+      "assignedAt": "2025-12-26T21:08:06.020Z"
+    },
+    {
+      "id": "tid_1766783287914_hpou58y",
+      "globalTrackId": "camera1-75",
+      "personId": 7,
+      "assignedAt": "2025-12-26T21:08:07.914Z"
+    },
+    {
+      "id": "tid_1766783292574_p73xccz",
+      "globalTrackId": "camera1-76",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:08:18.486Z"
+    },
+    {
+      "id": "tid_1766783301609_59guxo8",
+      "globalTrackId": "camera1-78",
+      "personId": 7,
+      "assignedAt": "2025-12-26T21:08:21.609Z"
+    },
+    {
+      "id": "tid_1766783307570_bloc2z0",
+      "globalTrackId": "camera1-81",
+      "personId": 8,
+      "assignedAt": "2025-12-26T21:08:27.570Z"
+    },
+    {
+      "id": "tid_1766783309672_4lyx2k4",
+      "globalTrackId": "camera1-82",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:08:29.672Z"
+    },
+    {
+      "id": "tid_1766783320323_ryjkkwy",
+      "globalTrackId": "camera1-86",
+      "personId": 11,
+      "assignedAt": "2025-12-26T21:08:40.323Z"
+    },
+    {
+      "id": "tid_1766783322241_28ls9e5",
+      "globalTrackId": "camera1-87",
+      "personId": 9,
+      "assignedAt": "2025-12-26T21:08:42.241Z"
+    },
+    {
+      "id": "tid_1766783324468_hoeje29",
+      "globalTrackId": "camera1-89",
+      "personId": 10,
+      "assignedAt": "2025-12-26T21:08:44.468Z"
+    },
+    {
+      "id": "tid_1766783326702_qfu1ono",
+      "globalTrackId": "camera1-93",
+      "personId": 9,
+      "assignedAt": "2025-12-26T21:08:46.702Z"
+    },
+    {
+      "id": "tid_1766783328296_mbx6l8g",
+      "globalTrackId": "camera1-94",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:08:48.296Z"
+    },
+    {
+      "id": "tid_1766783330009_irlooey",
+      "globalTrackId": "camera1-95",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:08:50.009Z"
+    },
+    {
+      "id": "tid_1766783333504_jwr57t9",
+      "globalTrackId": "camera1-96",
+      "personId": 11,
+      "assignedAt": "2025-12-26T21:08:53.504Z"
+    },
+    {
+      "id": "tid_1766783335070_lqwwbku",
+      "globalTrackId": "camera1-98",
+      "personId": 11,
+      "assignedAt": "2025-12-26T21:08:55.070Z"
+    },
+    {
+      "id": "tid_1766783336800_rozui39",
+      "globalTrackId": "camera1-101",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:08:56.800Z"
+    },
+    {
+      "id": "tid_1766783339765_gitnpd9",
+      "globalTrackId": "camera1-102",
+      "personId": 12,
+      "assignedAt": "2025-12-26T21:08:59.765Z"
+    },
+    {
+      "id": "tid_1766783344248_nyafgdq",
+      "globalTrackId": "camera1-104",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:09:04.248Z"
+    },
+    {
+      "id": "tid_1766783346158_hvheiu0",
+      "globalTrackId": "camera1-105",
+      "personId": 13,
+      "assignedAt": "2025-12-26T21:09:06.158Z"
+    },
+    {
+      "id": "tid_1766783349553_pxnmfqe",
+      "globalTrackId": "camera1-108",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:09:09.553Z"
+    },
+    {
+      "id": "tid_1766783353037_di0mk0x",
+      "globalTrackId": "camera1-109",
+      "personId": 14,
+      "assignedAt": "2025-12-26T21:09:13.037Z"
+    },
+    {
+      "id": "tid_1766783355768_gpfxok6",
+      "globalTrackId": "camera1-110",
+      "personId": 15,
+      "assignedAt": "2025-12-26T21:09:15.768Z"
+    },
+    {
+      "id": "tid_1766783357302_g2rzw75",
+      "globalTrackId": "camera1-112",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:09:17.302Z"
+    },
+    {
+      "id": "tid_1766783360511_lbj91io",
+      "globalTrackId": "camera1-115",
+      "personId": 17,
+      "assignedAt": "2025-12-26T21:09:20.511Z"
+    },
+    {
+      "id": "tid_1766783363943_jupbzg2",
+      "globalTrackId": "camera1-116",
+      "personId": 18,
+      "assignedAt": "2025-12-26T21:09:23.943Z"
+    },
+    {
+      "id": "tid_1766783366065_c4yi6ad",
+      "globalTrackId": "camera1-118",
+      "personId": 15,
+      "assignedAt": "2025-12-26T21:09:26.065Z"
+    },
+    {
+      "id": "tid_1766783369751_kq625go",
+      "globalTrackId": "camera1-119",
+      "personId": 16,
+      "assignedAt": "2025-12-26T21:09:29.751Z"
+    },
+    {
+      "id": "tid_1766783372613_e3mrjom",
+      "globalTrackId": "camera1-120",
+      "personId": 19,
+      "assignedAt": "2025-12-26T21:09:32.613Z"
+    },
+    {
+      "id": "tid_1766783374461_k1p884d",
+      "globalTrackId": "camera1-121",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:09:34.461Z"
+    },
+    {
+      "id": "tid_1766783377346_im497ti",
+      "globalTrackId": "camera1-122",
+      "personId": 20,
+      "assignedAt": "2025-12-26T21:09:37.346Z"
+    },
+    {
+      "id": "tid_1766783379018_k91nl69",
+      "globalTrackId": "camera1-0",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:09:39.018Z"
+    },
+    {
+      "id": "tid_1766783381581_q468m3m",
+      "globalTrackId": "camera1-124",
+      "personId": 20,
+      "assignedAt": "2025-12-26T21:09:41.581Z"
+    },
+    {
+      "id": "tid_1766783384120_5yv6vnk",
+      "globalTrackId": "camera2-1",
+      "personId": 8,
+      "assignedAt": "2025-12-26T21:09:44.120Z"
+    },
+    {
+      "id": "tid_1766783390196_zc6uof8",
+      "globalTrackId": "camera2-3",
+      "personId": 1,
+      "assignedAt": "2025-12-26T21:09:50.196Z"
+    },
+    {
+      "id": "tid_1766783392258_vapdqyr",
+      "globalTrackId": "camera2-4",
+      "personId": 3,
+      "assignedAt": "2025-12-26T21:09:52.258Z"
+    },
+    {
+      "id": "tid_1766783395407_lx47tn7",
+      "globalTrackId": "camera2-7",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:09:55.407Z"
+    },
+    {
+      "id": "tid_1766783399261_henwv0x",
+      "globalTrackId": "camera2-8",
+      "personId": 17,
+      "assignedAt": "2025-12-26T21:09:59.261Z"
+    },
+    {
+      "id": "tid_1766783402241_08baj15",
+      "globalTrackId": "camera2-9",
+      "personId": 10,
+      "assignedAt": "2025-12-26T21:10:02.241Z"
+    },
+    {
+      "id": "tid_1766783407058_y2hzpru",
+      "globalTrackId": "camera2-10",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:10:07.058Z"
+    },
+    {
+      "id": "tid_1766783414116_elgvlwk",
+      "globalTrackId": "camera2-11",
+      "personId": 10,
+      "assignedAt": "2025-12-26T21:10:14.116Z"
+    },
+    {
+      "id": "tid_1766783419171_cyyh4f7",
+      "globalTrackId": "camera2-12",
+      "personId": 18,
+      "assignedAt": "2025-12-26T21:10:19.171Z"
+    },
+    {
+      "id": "tid_1766783428759_reyuh1t",
+      "globalTrackId": "camera2-14",
+      "personId": 17,
+      "assignedAt": "2025-12-26T21:10:28.759Z"
+    },
+    {
+      "id": "tid_1766783430878_2pvvlc1",
+      "globalTrackId": "camera2-15",
+      "personId": 2,
+      "assignedAt": "2025-12-26T21:10:30.878Z"
+    },
+    {
+      "id": "tid_1766783432719_y7f0tos",
+      "globalTrackId": "camera2-17",
+      "personId": 7,
+      "assignedAt": "2025-12-26T21:10:32.719Z"
+    },
+    {
+      "id": "tid_1766783435305_impav36",
+      "globalTrackId": "camera2-19",
+      "personId": 13,
+      "assignedAt": "2025-12-26T21:10:35.305Z"
+    },
+    {
+      "id": "tid_1766783436679_6lylwjc",
+      "globalTrackId": "camera2-21",
+      "personId": 1,
+      "assignedAt": "2025-12-26T21:10:36.679Z"
+    },
+    {
+      "id": "tid_1766783440031_o93g18f",
+      "globalTrackId": "camera2-22",
+      "personId": 2,
+      "assignedAt": "2025-12-26T21:10:40.031Z"
+    },
+    {
+      "id": "tid_1766783450565_0o08732",
+      "globalTrackId": "camera2-23",
+      "personId": 13,
+      "assignedAt": "2025-12-26T21:10:50.565Z"
+    },
+    {
+      "id": "tid_1766783456180_hoive4e",
+      "globalTrackId": "camera2-25",
+      "personId": 19,
+      "assignedAt": "2025-12-26T21:10:56.180Z"
+    },
+    {
+      "id": "tid_1766783458006_6aii62y",
+      "globalTrackId": "camera2-26",
+      "personId": 20,
+      "assignedAt": "2025-12-26T21:10:58.006Z"
+    },
+    {
+      "id": "tid_1766783463991_uq4krl9",
+      "globalTrackId": "camera2-29",
+      "personId": 18,
+      "assignedAt": "2025-12-26T21:11:03.991Z"
+    },
+    {
+      "id": "tid_1766783468021_m7p07x8",
+      "globalTrackId": "camera2-31",
+      "personId": 14,
+      "assignedAt": "2025-12-26T21:11:08.021Z"
+    },
+    {
+      "id": "tid_1766783470780_g3mfhrr",
+      "globalTrackId": "camera2-32",
+      "personId": 2,
+      "assignedAt": "2025-12-26T21:11:10.780Z"
+    },
+    {
+      "id": "tid_1766783472290_xknuxr5",
+      "globalTrackId": "camera2-33",
+      "personId": 20,
+      "assignedAt": "2025-12-26T21:11:12.290Z"
+    },
+    {
+      "id": "tid_1766783476332_xkobuev",
+      "globalTrackId": "camera2-36",
+      "personId": 19,
+      "assignedAt": "2025-12-26T21:11:16.332Z"
+    },
+    {
+      "id": "tid_1766783479256_s47g4l6",
+      "globalTrackId": "camera2-37",
+      "personId": 14,
+      "assignedAt": "2025-12-26T21:11:19.256Z"
+    },
+    {
+      "id": "tid_1766783480922_i9y1o43",
+      "globalTrackId": "camera2-40",
+      "personId": 20,
+      "assignedAt": "2025-12-26T21:11:20.922Z"
+    },
+    {
+      "id": "tid_1766783488423_2enxcj8",
+      "globalTrackId": "camera2-42",
+      "personId": 19,
+      "assignedAt": "2025-12-26T21:11:28.423Z"
+    },
+    {
+      "id": "tid_1766783491360_foxtsd5",
+      "globalTrackId": "camera2-43",
+      "personId": 1,
+      "assignedAt": "2025-12-26T21:11:31.360Z"
+    },
+    {
+      "id": "tid_1766783497490_wzgz2r3",
+      "globalTrackId": "camera2-44",
+      "personId": 18,
+      "assignedAt": "2025-12-26T21:11:37.490Z"
+    },
+    {
+      "id": "tid_1766783500177_0595l0a",
+      "globalTrackId": "camera2-45",
+      "personId": 20,
+      "assignedAt": "2025-12-26T21:11:40.177Z"
+    },
+    {
+      "id": "tid_1766783503107_e0t1lhh",
+      "globalTrackId": "camera2-47",
+      "personId": 1,
+      "assignedAt": "2025-12-26T21:11:43.107Z"
+    },
+    {
+      "id": "tid_1766783528006_o73o9xt",
+      "globalTrackId": "camera2-0",
+      "personId": 1,
+      "assignedAt": "2025-12-26T21:12:08.006Z"
+    },
+    {
+      "id": "tid_1766783529268_3nbyqmn",
+      "globalTrackId": "camera2-48",
+      "personId": 1,
+      "assignedAt": "2025-12-26T21:12:09.268Z"
+    },
+    {
+      "id": "tid_1766783532270_3qf5to9",
+      "globalTrackId": "camera2-49",
+      "personId": 3,
+      "assignedAt": "2025-12-26T21:12:12.270Z"
+    },
+    {
+      "id": "tid_1766783533846_1oupd1t",
+      "globalTrackId": "camera2-50",
+      "personId": 3,
+      "assignedAt": "2025-12-26T21:12:13.846Z"
+    },
+    {
+      "id": "tid_1766783535870_tmyir9p",
+      "globalTrackId": "camera2-51",
+      "personId": 2,
+      "assignedAt": "2025-12-26T21:12:15.870Z"
+    },
+    {
+      "id": "tid_1766783537671_843z60f",
+      "globalTrackId": "camera2-52",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:12:17.671Z"
+    },
+    {
+      "id": "tid_1766783543355_vrswxri",
+      "globalTrackId": "camera2-54",
+      "personId": 5,
+      "assignedAt": "2025-12-26T21:12:27.222Z"
+    },
+    {
+      "id": "tid_1766783549634_bx7ihvb",
+      "globalTrackId": "camera2-55",
+      "personId": 1,
+      "assignedAt": "2025-12-26T21:12:29.634Z"
+    },
+    {
+      "id": "tid_1766783551739_96vxghc",
+      "globalTrackId": "camera2-56",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:12:31.739Z"
+    },
+    {
+      "id": "tid_1766783563441_xzea2rc",
+      "globalTrackId": "camera2-57",
+      "personId": 4,
+      "assignedAt": "2025-12-26T21:12:43.441Z"
+    },
+    {
+      "id": "tid_1766783565162_96gr5da",
+      "globalTrackId": "camera2-59",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:12:45.162Z"
+    },
+    {
+      "id": "tid_1766783568438_356jdcu",
+      "globalTrackId": "camera2-63",
+      "personId": 6,
+      "assignedAt": "2025-12-26T21:12:48.438Z"
+    },
+    {
+      "id": "tid_1766783570300_925tz89",
+      "globalTrackId": "camera2-64",
+      "personId": 2,
+      "assignedAt": "2025-12-26T21:12:50.300Z"
+    },
+    {
+      "id": "tid_1766783576536_tlmhr9k",
+      "globalTrackId": "camera2-67",
+      "personId": 5,
+      "assignedAt": "2025-12-26T21:12:56.536Z"
+    },
+    {
+      "id": "tid_1766783580212_vh73hje",
+      "globalTrackId": "camera2-68",
+      "personId": 4,
+      "assignedAt": "2025-12-26T21:13:00.212Z"
+    },
+    {
+      "id": "tid_1766783582533_4pgur1v",
+      "globalTrackId": "camera2-69",
+      "personId": 7,
+      "assignedAt": "2025-12-26T21:13:02.533Z"
+    },
+    {
+      "id": "tid_1766783584243_5383zvd",
+      "globalTrackId": "camera2-70",
+      "personId": 6,
+      "assignedAt": "2025-12-26T21:13:04.243Z"
+    },
+    {
+      "id": "tid_1766783587045_0fgr7lo",
+      "globalTrackId": "camera2-71",
+      "personId": 10,
+      "assignedAt": "2025-12-26T21:13:07.045Z"
+    },
+    {
+      "id": "tid_1766783588680_qjwq78v",
+      "globalTrackId": "camera2-72",
+      "personId": 7,
+      "assignedAt": "2025-12-26T21:13:08.680Z"
+    },
+    {
+      "id": "tid_1766783595937_p9zudj8",
+      "globalTrackId": "camera2-73",
+      "personId": 8,
+      "assignedAt": "2025-12-26T21:13:15.937Z"
+    },
+    {
+      "id": "tid_1766783598354_uynqhsi",
+      "globalTrackId": "camera2-74",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:13:18.354Z"
+    },
+    {
+      "id": "tid_1766783602176_xx2flcw",
+      "globalTrackId": "camera2-75",
+      "personId": 9,
+      "assignedAt": "2025-12-26T21:13:22.176Z"
+    },
+    {
+      "id": "tid_1766783612955_8yo0v72",
+      "globalTrackId": "camera2-78",
+      "personId": 11,
+      "assignedAt": "2025-12-26T21:13:32.955Z"
+    },
+    {
+      "id": "tid_1766783615504_ig8he53",
+      "globalTrackId": "camera2-79",
+      "personId": 8,
+      "assignedAt": "2025-12-26T21:13:35.504Z"
+    },
+    {
+      "id": "tid_1766783617643_yy6dd6k",
+      "globalTrackId": "camera2-81",
+      "personId": 12,
+      "assignedAt": "2025-12-26T21:13:37.643Z"
+    },
+    {
+      "id": "tid_1766783620730_o0z4iu1",
+      "globalTrackId": "camera2-82",
+      "personId": 11,
+      "assignedAt": "2025-12-26T21:13:40.730Z"
+    },
+    {
+      "id": "tid_1766783622816_w9tht2b",
+      "globalTrackId": "camera2-83",
+      "personId": 13,
+      "assignedAt": "2025-12-26T21:13:42.816Z"
+    },
+    {
+      "id": "tid_1766783626759_yposnf0",
+      "globalTrackId": "camera2-84",
+      "personId": 14,
+      "assignedAt": "2025-12-26T21:13:46.759Z"
+    },
+    {
+      "id": "tid_1766783630883_7zd9w03",
+      "globalTrackId": "camera2-86",
+      "personId": 12,
+      "assignedAt": "2025-12-26T21:13:50.883Z"
+    },
+    {
+      "id": "tid_1766783633194_v9yugzx",
+      "globalTrackId": "camera2-87",
+      "personId": 15,
+      "assignedAt": "2025-12-26T21:13:53.194Z"
+    },
+    {
+      "id": "tid_1766783634971_adlb869",
+      "globalTrackId": "camera2-88",
+      "personId": 13,
+      "assignedAt": "2025-12-26T21:13:54.971Z"
+    },
+    {
+      "id": "tid_1766783638775_ggl169w",
+      "globalTrackId": "camera2-89",
+      "personId": 17,
+      "assignedAt": "2025-12-26T21:13:58.775Z"
+    },
+    {
+      "id": "tid_1766783645381_pomt9rs",
+      "globalTrackId": "camera2-93",
+      "personId": 18,
+      "assignedAt": "2025-12-26T21:14:05.381Z"
+    },
+    {
+      "id": "tid_1766783649916_kytz108",
+      "globalTrackId": "camera2-94",
+      "personId": 19,
+      "assignedAt": "2025-12-26T21:14:09.916Z"
+    },
+    {
+      "id": "tid_1766783651380_j0dwwyt",
+      "globalTrackId": "camera2-96",
+      "personId": 20,
+      "assignedAt": "2025-12-26T21:14:11.380Z"
+    },
+    {
+      "id": "tid_1766783652754_0ojnwbk",
+      "globalTrackId": "camera2-98",
+      "personId": 20,
+      "assignedAt": "2025-12-26T21:14:12.754Z"
+    },
+    {
+      "id": "tid_1766783654162_w2p44vk",
+      "globalTrackId": "camera2-99",
+      "personId": 20,
+      "assignedAt": "2025-12-26T21:14:14.162Z"
+    },
+    {
+      "id": "tid_1766783661307_cixn379",
+      "globalTrackId": "camera3-1",
+      "personId": 5,
+      "assignedAt": "2025-12-26T21:15:48.775Z"
+    },
+    {
+      "id": "tid_1766783751790_328hgsk",
+      "globalTrackId": "camera3-2",
+      "personId": 16,
+      "assignedAt": "2025-12-26T21:15:51.790Z"
+    },
+    {
+      "id": "tid_1766783756771_59r28xh",
+      "globalTrackId": "camera3-4",
+      "personId": 9,
+      "assignedAt": "2025-12-26T21:15:56.771Z"
+    },
+    {
+      "id": "tid_1766783781128_iwvqemx",
+      "globalTrackId": "camera3-6",
+      "personId": 4,
+      "assignedAt": "2025-12-26T21:16:21.128Z"
+    },
+    {
+      "id": "tid_1766783784227_zfkvtk7",
+      "globalTrackId": "camera3-7",
+      "personId": 6,
+      "assignedAt": "2025-12-26T21:16:24.227Z"
+    },
+    {
+      "id": "tid_1766783788609_mvkrtj1",
+      "globalTrackId": "camera3-8",
+      "personId": 12,
+      "assignedAt": "2025-12-26T21:16:28.609Z"
+    },
+    {
+      "id": "tid_1766783790445_08x2pf0",
+      "globalTrackId": "camera3-9",
+      "personId": 15,
+      "assignedAt": "2025-12-26T21:16:30.445Z"
+    },
+    {
+      "id": "tid_1766783793740_3kr9jxi",
+      "globalTrackId": "camera3-10",
+      "personId": 9,
+      "assignedAt": "2025-12-26T21:16:33.740Z"
+    },
+    {
+      "id": "tid_1766783798904_ss2vmsj",
+      "globalTrackId": "camera3-11",
+      "personId": 4,
+      "assignedAt": "2025-12-26T21:16:38.904Z"
+    },
+    {
+      "id": "tid_1766783807803_lslr51r",
+      "globalTrackId": "camera3-12",
+      "personId": 6,
+      "assignedAt": "2025-12-26T21:16:47.803Z"
+    },
+    {
+      "id": "tid_1766783811459_kzhuvry",
+      "globalTrackId": "camera3-15",
+      "personId": 3,
+      "assignedAt": "2025-12-26T21:16:51.459Z"
+    },
+    {
+      "id": "tid_1766783817010_tla3bni",
+      "globalTrackId": "camera3-17",
+      "personId": 7,
+      "assignedAt": "2025-12-26T21:16:57.010Z"
+    },
+    {
+      "id": "tid_1766783825802_g74r0rw",
+      "globalTrackId": "camera3-19",
+      "personId": 17,
+      "assignedAt": "2025-12-26T21:17:05.802Z"
+    },
+    {
+      "id": "tid_1766783827881_qhasory",
+      "globalTrackId": "camera3-20",
+      "personId": 6,
+      "assignedAt": "2025-12-26T21:17:07.881Z"
+    },
+    {
+      "id": "tid_1766783829755_rvscvea",
+      "globalTrackId": "camera3-21",
+      "personId": 7,
+      "assignedAt": "2025-12-26T21:17:09.755Z"
+    },
+    {
+      "id": "tid_1766783832569_3p60xgy",
+      "globalTrackId": "camera3-24",
+      "personId": 3,
+      "assignedAt": "2025-12-26T21:17:12.569Z"
+    },
+    {
+      "id": "tid_1766783834473_hlpuulf",
+      "globalTrackId": "camera3-26",
+      "personId": 6,
+      "assignedAt": "2025-12-26T21:17:14.473Z"
+    },
+    {
+      "id": "tid_1766783841924_77n3zpc",
+      "globalTrackId": "camera3-27",
+      "personId": 5,
+      "assignedAt": "2025-12-26T21:17:21.924Z"
+    },
+    {
+      "id": "tid_1766783846075_z75brlx",
+      "globalTrackId": "camera3-29",
+      "personId": 11,
+      "assignedAt": "2025-12-26T21:17:26.075Z"
+    },
+    {
+      "id": "tid_1766783849524_98j6kv0",
+      "globalTrackId": "camera3-32",
+      "personId": 6,
+      "assignedAt": "2025-12-26T21:17:29.524Z"
+    },
+    {
+      "id": "tid_1766783852245_98q7cq0",
+      "globalTrackId": "camera3-34",
+      "personId": 15,
+      "assignedAt": "2025-12-26T21:17:32.245Z"
+    },
+    {
+      "id": "tid_1766783854132_76ixj8o",
+      "globalTrackId": "camera3-36",
+      "personId": 7,
+      "assignedAt": "2025-12-26T21:17:34.132Z"
+    },
+    {
+      "id": "tid_1766783858744_w01kosa",
+      "globalTrackId": "camera3-37",
+      "personId": 5,
+      "assignedAt": "2025-12-26T21:17:38.744Z"
+    },
+    {
+      "id": "tid_1766783861972_iuimh4g",
+      "globalTrackId": "camera3-38",
+      "personId": 17,
+      "assignedAt": "2025-12-26T21:17:41.972Z"
+    },
+    {
+      "id": "tid_1766783869758_enlg7nc",
+      "globalTrackId": "camera3-39",
+      "personId": 9,
+      "assignedAt": "2025-12-26T21:17:49.758Z"
+    },
+    {
+      "id": "tid_1766783877697_er6jy68",
+      "globalTrackId": "camera3-41",
+      "personId": 10,
+      "assignedAt": "2025-12-26T21:17:57.697Z"
+    },
+    {
+      "id": "tid_1766783882799_98m1fu0",
+      "globalTrackId": "camera3-45",
+      "personId": 9,
+      "assignedAt": "2025-12-26T21:18:05.971Z"
+    },
+    {
+      "id": "tid_1766783888338_09svrd1",
+      "globalTrackId": "camera3-46",
+      "personId": 7,
+      "assignedAt": "2025-12-26T21:18:08.338Z"
+    },
+    {
+      "id": "tid_1766783893007_4xh4p60",
+      "globalTrackId": "camera3-47",
+      "personId": 11,
+      "assignedAt": "2025-12-26T21:18:13.007Z"
+    },
+    {
+      "id": "tid_1766783897693_rvpaiot",
+      "globalTrackId": "camera3-49",
+      "personId": 16,
+      "assignedAt": "2025-12-26T21:18:17.693Z"
+    },
+    {
+      "id": "tid_1766783900050_5rsbhjf",
+      "globalTrackId": "camera3-50",
+      "personId": 5,
+      "assignedAt": "2025-12-26T21:18:20.050Z"
+    },
+    {
+      "id": "tid_1766783904736_o2d68to",
+      "globalTrackId": "camera3-51",
+      "personId": 10,
+      "assignedAt": "2025-12-26T21:18:24.736Z"
+    },
+    {
+      "id": "tid_1766783906494_086e98b",
+      "globalTrackId": "camera3-52",
+      "personId": 10,
+      "assignedAt": "2025-12-26T21:18:26.494Z"
+    },
+    {
+      "id": "tid_1766783908879_me9tsle",
+      "globalTrackId": "camera3-54",
+      "personId": 4,
+      "assignedAt": "2025-12-26T21:18:28.879Z"
+    },
+    {
+      "id": "tid_1766783911492_b4lwy11",
+      "globalTrackId": "camera3-55",
+      "personId": 13,
+      "assignedAt": "2025-12-26T21:18:31.492Z"
+    },
+    {
+      "id": "tid_1766783916161_z5m3m6p",
+      "globalTrackId": "camera3-56",
+      "personId": 16,
+      "assignedAt": "2025-12-26T21:18:36.161Z"
+    },
+    {
+      "id": "tid_1766783921758_7dqdsm8",
+      "globalTrackId": "camera3-57",
+      "personId": 10,
+      "assignedAt": "2025-12-26T21:18:41.758Z"
+    },
+    {
+      "id": "tid_1766783925317_h14rqbt",
+      "globalTrackId": "camera3-58",
+      "personId": 3,
+      "assignedAt": "2025-12-26T21:18:45.317Z"
+    },
+    {
+      "id": "tid_1766783931422_tg2ngmb",
+      "globalTrackId": "camera3-60",
+      "personId": 18,
+      "assignedAt": "2025-12-26T21:18:51.422Z"
+    },
+    {
+      "id": "tid_1766783933377_bhqydsx",
+      "globalTrackId": "camera3-61",
+      "personId": 17,
+      "assignedAt": "2025-12-26T21:19:00.450Z"
+    },
+    {
+      "id": "tid_1766783947602_uzmeeq0",
+      "globalTrackId": "camera3-62",
+      "personId": 4,
+      "assignedAt": "2025-12-26T21:19:07.602Z"
+    },
+    {
+      "id": "tid_1766783955407_dztu8wf",
+      "globalTrackId": "camera3-64",
+      "personId": 13,
+      "assignedAt": "2025-12-26T21:19:15.407Z"
+    },
+    {
+      "id": "tid_1766783959432_tztxpc1",
+      "globalTrackId": "camera3-66",
+      "personId": 18,
+      "assignedAt": "2025-12-26T21:19:19.432Z"
+    },
+    {
+      "id": "tid_1766783961894_lre9y49",
+      "globalTrackId": "camera3-68",
+      "personId": 5,
+      "assignedAt": "2025-12-26T21:19:21.894Z"
+    },
+    {
+      "id": "tid_1766783964060_197c4q3",
+      "globalTrackId": "camera3-69",
+      "personId": 14,
+      "assignedAt": "2025-12-26T21:19:24.060Z"
+    },
+    {
+      "id": "tid_1766783966682_wbvld6x",
+      "globalTrackId": "camera3-70",
+      "personId": 5,
+      "assignedAt": "2025-12-26T21:19:26.682Z"
+    },
+    {
+      "id": "tid_1766783974008_ug5diio",
+      "globalTrackId": "camera3-71",
+      "personId": 8,
+      "assignedAt": "2025-12-26T21:19:34.008Z"
+    },
+    {
+      "id": "tid_1766783977572_2g569yh",
+      "globalTrackId": "camera3-72",
+      "personId": 9,
+      "assignedAt": "2025-12-26T21:19:37.572Z"
+    },
+    {
+      "id": "tid_1766783979706_3nnkepx",
+      "globalTrackId": "camera3-73",
+      "personId": 3,
+      "assignedAt": "2025-12-26T21:19:39.706Z"
+    },
+    {
+      "id": "tid_1766783981522_w5ak8hy",
+      "globalTrackId": "camera3-75",
+      "personId": 11,
+      "assignedAt": "2025-12-26T21:19:41.522Z"
+    },
+    {
+      "id": "tid_1766783986119_y3kizfn",
+      "globalTrackId": "camera3-76",
+      "personId": 12,
+      "assignedAt": "2025-12-26T21:19:46.119Z"
+    },
+    {
+      "id": "tid_1766783989930_0bojw45",
+      "globalTrackId": "camera3-77",
+      "personId": 13,
+      "assignedAt": "2025-12-26T21:19:49.930Z"
+    },
+    {
+      "id": "tid_1766783992719_o3yadr5",
+      "globalTrackId": "camera3-78",
+      "personId": 12,
+      "assignedAt": "2025-12-26T21:19:52.719Z"
+    },
+    {
+      "id": "tid_1766783996684_b8fa50b",
+      "globalTrackId": "camera3-79",
+      "personId": 9,
+      "assignedAt": "2025-12-26T21:19:56.684Z"
+    },
+    {
+      "id": "tid_1766784001543_jxvam1h",
+      "globalTrackId": "camera3-80",
+      "personId": 3,
+      "assignedAt": "2025-12-26T21:20:01.543Z"
+    },
+    {
+      "id": "tid_1766784002936_w35vrj8",
+      "globalTrackId": "camera3-81",
+      "personId": 3,
+      "assignedAt": "2025-12-26T21:20:02.936Z"
+    },
+    {
+      "id": "tid_1766784007886_a716xfr",
+      "globalTrackId": "camera3-86",
+      "personId": 6,
+      "assignedAt": "2025-12-26T21:20:07.886Z"
+    },
+    {
+      "id": "tid_1766784015747_b6h93ca",
+      "globalTrackId": "camera3-87",
+      "personId": 15,
+      "assignedAt": "2025-12-26T21:20:15.747Z"
+    },
+    {
+      "id": "tid_1766784020576_csl7q9x",
+      "globalTrackId": "camera3-88",
+      "personId": 5,
+      "assignedAt": "2025-12-26T21:20:20.576Z"
+    },
+    {
+      "id": "tid_1766784022688_8z4b59z",
+      "globalTrackId": "camera3-89",
+      "personId": 6,
+      "assignedAt": "2025-12-26T21:20:22.688Z"
+    },
+    {
+      "id": "tid_1766784025438_mygx12b",
+      "globalTrackId": "camera3-92",
+      "personId": 4,
+      "assignedAt": "2025-12-26T21:20:25.438Z"
+    },
+    {
+      "id": "tid_1766784037398_xzrjap4",
+      "globalTrackId": "camera3-98",
+      "personId": 16,
+      "assignedAt": "2025-12-26T21:20:37.398Z"
+    },
+    {
+      "id": "tid_1766784039426_gwnebbb",
+      "globalTrackId": "camera3-100",
+      "personId": 15,
+      "assignedAt": "2025-12-26T21:20:39.426Z"
+    },
+    {
+      "id": "tid_1766784040956_h7m0w7j",
+      "globalTrackId": "camera3-101",
+      "personId": 7,
+      "assignedAt": "2025-12-26T21:20:40.956Z"
+    },
+    {
+      "id": "tid_1766784044810_pzvbqev",
+      "globalTrackId": "camera3-104",
+      "personId": 14,
+      "assignedAt": "2025-12-26T21:20:44.810Z"
+    },
+    {
+      "id": "tid_1766784049126_tuaeqil",
+      "globalTrackId": "camera3-105",
+      "personId": 17,
+      "assignedAt": "2025-12-26T21:20:49.126Z"
+    },
+    {
+      "id": "tid_1766784053713_3kudfck",
+      "globalTrackId": "camera3-107",
+      "personId": 16,
+      "assignedAt": "2025-12-26T21:20:53.713Z"
+    },
+    {
+      "id": "tid_1766784057993_7yw95ma",
+      "globalTrackId": "camera3-108",
+      "personId": 18,
+      "assignedAt": "2025-12-26T21:20:57.993Z"
+    },
+    {
+      "id": "tid_1766784070642_55jn7zb",
+      "globalTrackId": "camera4-1",
+      "personId": 5,
+      "assignedAt": "2025-12-26T21:21:10.642Z"
+    },
+    {
+      "id": "tid_1766784072951_jmyhp66",
+      "globalTrackId": "camera4-3",
+      "personId": 16,
+      "assignedAt": "2025-12-26T21:21:12.951Z"
+    },
+    {
+      "id": "tid_1766784075596_lt0gwzu",
+      "globalTrackId": "camera4-5",
+      "personId": 9,
+      "assignedAt": "2025-12-26T21:21:15.596Z"
+    },
+    {
+      "id": "tid_1766784078305_lvx011e",
+      "globalTrackId": "camera4-7",
+      "personId": 16,
+      "assignedAt": "2025-12-26T21:21:18.305Z"
+    },
+    {
+      "id": "tid_1766784080448_hvcmwjs",
+      "globalTrackId": "camera4-8",
+      "personId": 4,
+      "assignedAt": "2025-12-26T21:21:20.448Z"
+    },
+    {
+      "id": "tid_1766784082454_zo5hi24",
+      "globalTrackId": "camera4-10",
+      "personId": 6,
+      "assignedAt": "2025-12-26T21:21:22.454Z"
+    },
+    {
+      "id": "tid_1766784091766_mknahup",
+      "globalTrackId": "camera4-11",
+      "personId": 12,
+      "assignedAt": "2025-12-26T21:21:31.766Z"
+    },
+    {
+      "id": "tid_1766784093251_q5w9z6w",
+      "globalTrackId": "camera4-12",
+      "personId": 15,
+      "assignedAt": "2025-12-26T21:21:33.251Z"
+    },
+    {
+      "id": "tid_1766784095319_ozo9euv",
+      "globalTrackId": "camera4-15",
+      "personId": 9,
+      "assignedAt": "2025-12-26T21:21:35.319Z"
+    },
+    {
+      "id": "tid_1766784096982_5xer68v",
+      "globalTrackId": "camera4-18",
+      "personId": 12,
+      "assignedAt": "2025-12-26T21:21:36.982Z"
+    },
+    {
+      "id": "tid_1766784099096_c19ovs5",
+      "globalTrackId": "camera4-19",
+      "personId": 17,
+      "assignedAt": "2025-12-26T21:21:39.096Z"
+    },
+    {
+      "id": "tid_1766784100740_30gp10c",
+      "globalTrackId": "camera4-20",
+      "personId": 15,
+      "assignedAt": "2025-12-26T21:21:40.740Z"
+    },
+    {
+      "id": "tid_1766784102464_le3fn15",
+      "globalTrackId": "camera4-21",
+      "personId": 7,
+      "assignedAt": "2025-12-26T21:21:42.464Z"
+    },
+    {
+      "id": "tid_1766784108528_k6qx3ys",
+      "globalTrackId": "camera4-26",
+      "personId": 11,
+      "assignedAt": "2025-12-26T21:21:48.528Z"
+    },
+    {
+      "id": "tid_1766784119468_qop20cj",
+      "globalTrackId": "camera4-28",
+      "personId": 10,
+      "assignedAt": "2025-12-26T21:21:59.468Z"
+    },
+    {
+      "id": "tid_1766784121387_2jasvpw",
+      "globalTrackId": "camera4-31",
+      "personId": 9,
+      "assignedAt": "2025-12-26T21:22:01.387Z"
+    },
+    {
+      "id": "tid_1766784123644_51os36q",
+      "globalTrackId": "camera4-33",
+      "personId": 16,
+      "assignedAt": "2025-12-26T21:22:03.644Z"
+    },
+    {
+      "id": "tid_1766784125477_85f8b7a",
+      "globalTrackId": "camera4-34",
+      "personId": 10,
+      "assignedAt": "2025-12-26T21:22:05.477Z"
+    },
+    {
+      "id": "tid_1766784129003_7m0mz2c",
+      "globalTrackId": "camera4-35",
+      "personId": 16,
+      "assignedAt": "2025-12-26T21:22:09.003Z"
+    },
+    {
+      "id": "tid_1766784131013_rbu29d9",
+      "globalTrackId": "camera4-37",
+      "personId": 17,
+      "assignedAt": "2025-12-26T21:22:11.013Z"
+    },
+    {
+      "id": "tid_1766784133028_olwx1bv",
+      "globalTrackId": "camera4-38",
+      "personId": 9,
+      "assignedAt": "2025-12-26T21:22:13.028Z"
+    },
+    {
+      "id": "tid_1766784134727_3avguwi",
+      "globalTrackId": "camera4-39",
+      "personId": 10,
+      "assignedAt": "2025-12-26T21:22:14.727Z"
+    },
+    {
+      "id": "tid_1766784136280_b4ixupk",
+      "globalTrackId": "camera4-40",
+      "personId": 13,
+      "assignedAt": "2025-12-26T21:22:16.280Z"
+    },
+    {
+      "id": "tid_1766784141977_utz0s4i",
+      "globalTrackId": "camera4-44",
+      "personId": 8,
+      "assignedAt": "2025-12-26T21:22:21.977Z"
+    },
+    {
+      "id": "tid_1766784143856_tzeg1j7",
+      "globalTrackId": "camera4-46",
+      "personId": 18,
+      "assignedAt": "2025-12-26T21:22:23.856Z"
+    },
+    {
+      "id": "tid_1766784145728_r1ndz09",
+      "globalTrackId": "camera4-47",
+      "personId": 15,
+      "assignedAt": "2025-12-26T21:22:25.728Z"
+    },
+    {
+      "id": "tid_1766784148768_9z8t6lu",
+      "globalTrackId": "camera4-50",
+      "personId": 20,
+      "assignedAt": "2025-12-26T21:22:28.768Z"
+    },
+    {
+      "id": "tid_1766784151776_nz7ft3d",
+      "globalTrackId": "camera4-51",
+      "personId": 18,
+      "assignedAt": "2025-12-26T21:22:31.776Z"
+    },
+    {
+      "id": "tid_1766784154212_4nxh10k",
+      "globalTrackId": "camera4-55",
+      "personId": 14,
+      "assignedAt": "2025-12-26T21:22:34.212Z"
+    },
+    {
+      "id": "tid_1766784156067_bhxwn30",
+      "globalTrackId": "camera4-58",
+      "personId": 7,
+      "assignedAt": "2025-12-26T21:22:36.067Z"
+    },
+    {
+      "id": "tid_1766784158603_8igjtjh",
+      "globalTrackId": "camera4-59",
+      "personId": 20,
+      "assignedAt": "2025-12-26T21:22:38.603Z"
+    },
+    {
+      "id": "tid_1766784167399_t3tlrce",
+      "globalTrackId": "camera4-60",
+      "personId": 11,
+      "assignedAt": "2025-12-26T21:22:47.399Z"
+    },
+    {
+      "id": "tid_1766784171489_cuinlga",
+      "globalTrackId": "camera4-61",
+      "personId": 19,
+      "assignedAt": "2025-12-26T21:22:51.489Z"
+    },
+    {
+      "id": "tid_1766784175594_nptp34c",
+      "globalTrackId": "camera4-62",
+      "personId": 9,
+      "assignedAt": "2025-12-26T21:22:55.594Z"
+    },
+    {
+      "id": "tid_1766784178173_bac2oh5",
+      "globalTrackId": "camera4-63",
+      "personId": 13,
+      "assignedAt": "2025-12-26T21:22:58.173Z"
+    },
+    {
+      "id": "tid_1766784187260_mkmbwdf",
+      "globalTrackId": "camera4-64",
+      "personId": 17,
+      "assignedAt": "2025-12-26T21:23:07.260Z"
+    },
+    {
+      "id": "tid_1766784192462_q4mlzzs",
+      "globalTrackId": "camera4-69",
+      "personId": 20,
+      "assignedAt": "2025-12-26T21:23:12.462Z"
+    },
+    {
+      "id": "tid_1766784195549_d28kexc",
+      "globalTrackId": "camera4-70",
+      "personId": 12,
+      "assignedAt": "2025-12-26T21:23:15.549Z"
+    },
+    {
+      "id": "tid_1766784207709_85b8pr7",
+      "globalTrackId": "camera4-78",
+      "personId": 11,
+      "assignedAt": "2025-12-26T21:23:27.709Z"
+    },
+    {
+      "id": "tid_1766784209877_h3qr2ks",
+      "globalTrackId": "camera4-80",
+      "personId": 12,
+      "assignedAt": "2025-12-26T21:23:29.877Z"
+    },
+    {
+      "id": "tid_1766784211992_ggnaxil",
+      "globalTrackId": "camera4-81",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:23:31.992Z"
+    },
+    {
+      "id": "tid_1766784214107_4byfzb8",
+      "globalTrackId": "camera4-83",
+      "personId": 11,
+      "assignedAt": "2025-12-26T21:23:34.107Z"
+    },
+    {
+      "id": "tid_1766784215443_4d1zv3d",
+      "globalTrackId": "camera4-85",
+      "personId": 11,
+      "assignedAt": "2025-12-26T21:23:35.443Z"
+    },
+    {
+      "id": "tid_1766784217220_6kvthvl",
+      "globalTrackId": "camera4-86",
+      "personId": 14,
+      "assignedAt": "2025-12-26T21:23:37.220Z"
+    },
+    {
+      "id": "tid_1766784219953_g84uaqa",
+      "globalTrackId": "camera4-87",
+      "personId": 20,
+      "assignedAt": "2025-12-26T21:23:39.953Z"
+    },
+    {
+      "id": "tid_1766784221909_7l15zax",
+      "globalTrackId": "camera4-88",
+      "personId": 15,
+      "assignedAt": "2025-12-26T21:23:41.909Z"
+    },
+    {
+      "id": "tid_1766784223890_ta2zp8f",
+      "globalTrackId": "camera4-89",
+      "personId": 18,
+      "assignedAt": "2025-12-26T21:23:43.890Z"
+    },
+    {
+      "id": "tid_1766784226252_vut4j1q",
+      "globalTrackId": "camera4-90",
+      "personId": 3,
+      "assignedAt": "2025-12-26T21:23:46.252Z"
+    },
+    {
+      "id": "tid_1766784230884_9p6vwy5",
+      "globalTrackId": "camera4-91",
+      "personId": 17,
+      "assignedAt": "2025-12-26T21:23:50.884Z"
+    },
+    {
+      "id": "tid_1766784232625_xfmr8q7",
+      "globalTrackId": "camera4-92",
+      "personId": 7,
+      "assignedAt": "2025-12-26T21:23:52.625Z"
+    },
+    {
+      "id": "tid_1766784234412_sud2hdw",
+      "globalTrackId": "camera4-93",
+      "personId": 13,
+      "assignedAt": "2025-12-26T21:23:54.412Z"
+    },
+    {
+      "id": "tid_1766784241098_sj2n32j",
+      "globalTrackId": "camera4-95",
+      "personId": 5,
+      "assignedAt": "2025-12-26T21:24:01.098Z"
+    },
+    {
+      "id": "tid_1766784244685_xvbnpoi",
+      "globalTrackId": "camera4-96",
+      "personId": 11,
+      "assignedAt": "2025-12-26T21:24:04.685Z"
+    },
+    {
+      "id": "tid_1766784246624_z5k1gb6",
+      "globalTrackId": "camera4-98",
+      "personId": 17,
+      "assignedAt": "2025-12-26T21:24:06.624Z"
+    },
+    {
+      "id": "tid_1766784248523_lalwp3j",
+      "globalTrackId": "camera4-99",
+      "personId": 8,
+      "assignedAt": "2025-12-26T21:24:08.732Z"
+    },
+    {
+      "id": "tid_1766784251472_f3c30hp",
+      "globalTrackId": "camera4-100",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:24:11.472Z"
+    },
+    {
+      "id": "tid_1766784255279_mnr0a0a",
+      "globalTrackId": "camera4-101",
+      "personId": 7,
+      "assignedAt": "2025-12-26T21:24:15.279Z"
+    },
+    {
+      "id": "tid_1766784260134_h9fep3b",
+      "globalTrackId": "camera4-105",
+      "personId": 11,
+      "assignedAt": "2025-12-26T21:24:20.134Z"
+    },
+    {
+      "id": "tid_1766784268254_04qhw6i",
+      "globalTrackId": "camera4-106",
+      "personId": 12,
+      "assignedAt": "2025-12-26T21:24:28.254Z"
+    },
+    {
+      "id": "tid_1766784272224_yzp3fqs",
+      "globalTrackId": "camera4-108",
+      "personId": 7,
+      "assignedAt": "2025-12-26T21:24:32.224Z"
+    },
+    {
+      "id": "tid_1766784275077_slja53h",
+      "globalTrackId": "camera4-109",
+      "personId": 18,
+      "assignedAt": "2025-12-26T21:24:35.077Z"
+    },
+    {
+      "id": "tid_1766784286923_jznjabc",
+      "globalTrackId": "camera4-111",
+      "personId": 10,
+      "assignedAt": "2025-12-26T21:24:46.923Z"
+    },
+    {
+      "id": "tid_1766784289984_hwq095s",
+      "globalTrackId": "camera4-113",
+      "personId": 19,
+      "assignedAt": "2025-12-26T21:24:49.984Z"
+    },
+    {
+      "id": "tid_1766784292384_r6xoz4z",
+      "globalTrackId": "camera4-114",
+      "personId": 18,
+      "assignedAt": "2025-12-26T21:24:56.968Z"
+    },
+    {
+      "id": "tid_1766784300221_7tz4ogu",
+      "globalTrackId": "camera4-115",
+      "personId": 14,
+      "assignedAt": "2025-12-26T21:25:00.221Z"
+    },
+    {
+      "id": "tid_1766784302938_rlovjni",
+      "globalTrackId": "camera4-117",
+      "personId": 9,
+      "assignedAt": "2025-12-26T21:25:02.938Z"
+    },
+    {
+      "id": "tid_1766784305992_5fiw65h",
+      "globalTrackId": "camera4-119",
+      "personId": 19,
+      "assignedAt": "2025-12-26T21:25:05.992Z"
+    },
+    {
+      "id": "tid_1766784313644_sftfz4f",
+      "globalTrackId": "camera4-121",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:25:13.644Z"
+    },
+    {
+      "id": "tid_1766784316483_yu1twi5",
+      "globalTrackId": "camera4-122",
+      "personId": 11,
+      "assignedAt": "2025-12-26T21:25:16.483Z"
+    },
+    {
+      "id": "tid_1766784320914_phjhpbb",
+      "globalTrackId": "camera4-125",
+      "personId": 16,
+      "assignedAt": "2025-12-26T21:25:20.914Z"
+    },
+    {
+      "id": "tid_1766784322952_xksdgd5",
+      "globalTrackId": "camera4-126",
+      "personId": 16,
+      "assignedAt": "2025-12-26T21:25:22.952Z"
+    },
+    {
+      "id": "tid_1766784325929_76nzzd3",
+      "globalTrackId": "camera4-128",
+      "personId": 12,
+      "assignedAt": "2025-12-26T21:25:25.929Z"
+    },
+    {
+      "id": "tid_1766784328347_j9rar37",
+      "globalTrackId": "camera4-130",
+      "personId": 0,
+      "assignedAt": "2025-12-26T21:25:28.347Z"
+    },
+    {
+      "id": "tid_1766784330391_ewuzb1s",
+      "globalTrackId": "camera4-131",
+      "personId": 17,
+      "assignedAt": "2025-12-26T21:25:30.391Z"
+    },
+    {
+      "id": "tid_1766784332439_x7q51e4",
+      "globalTrackId": "camera4-134",
+      "personId": 14,
+      "assignedAt": "2025-12-26T21:25:32.439Z"
+    },
+    {
+      "id": "tid_1766784334343_6ryucun",
+      "globalTrackId": "camera4-136",
+      "personId": 15,
+      "assignedAt": "2025-12-26T21:25:34.343Z"
+    },
+    {
+      "id": "tid_1766784339147_3p5lsix",
+      "globalTrackId": "camera4-139",
+      "personId": 19,
+      "assignedAt": "2025-12-26T21:25:39.147Z"
+    }
+  ],
+  "persons": [
+    {
+      "id": 0,
+      "label": "Invalid",
+      "color": "#6b7280"
+    },
+    {
+      "id": 1,
+      "label": "Person 1",
+      "color": "#ef4444",
+      "thumbnailUrl": "/people/person1.png"
+    },
+    {
+      "id": 2,
+      "label": "Person 2",
+      "color": "#f97316",
+      "thumbnailUrl": "/people/person2.png"
+    },
+    {
+      "id": 3,
+      "label": "Person 3",
+      "color": "#eab308",
+      "thumbnailUrl": "/people/person3.png"
+    },
+    {
+      "id": 4,
+      "label": "Person 4",
+      "color": "#22c55e",
+      "thumbnailUrl": "/people/person4.png"
+    },
+    {
+      "id": 5,
+      "label": "Person 5",
+      "color": "#06b6d4",
+      "thumbnailUrl": "/people/person5.png"
+    },
+    {
+      "id": 6,
+      "label": "Person 6",
+      "color": "#3b82f6",
+      "thumbnailUrl": "/people/person6.png"
+    },
+    {
+      "id": 7,
+      "label": "Person 7",
+      "color": "#8b5cf6",
+      "thumbnailUrl": "/people/person7.png"
+    },
+    {
+      "id": 8,
+      "label": "Person 8",
+      "color": "#ec4899",
+      "thumbnailUrl": "/people/person8.png"
+    },
+    {
+      "id": 9,
+      "label": "Person 9",
+      "color": "#14b8a6",
+      "thumbnailUrl": "/people/person9.png"
+    },
+    {
+      "id": 10,
+      "label": "Person 10",
+      "color": "#f43f5e",
+      "thumbnailUrl": "/people/person10.png"
+    },
+    {
+      "id": 11,
+      "label": "Person 11",
+      "color": "#84cc16",
+      "thumbnailUrl": "/people/person11.png"
+    },
+    {
+      "id": 12,
+      "label": "Person 12",
+      "color": "#6366f1",
+      "thumbnailUrl": "/people/person12.png"
+    },
+    {
+      "id": 13,
+      "label": "Person 13",
+      "color": "#a855f7",
+      "thumbnailUrl": "/people/person13.png"
+    },
+    {
+      "id": 14,
+      "label": "Person 14",
+      "color": "#0ea5e9",
+      "thumbnailUrl": "/people/person14.png"
+    },
+    {
+      "id": 15,
+      "label": "Person 15",
+      "color": "#10b981",
+      "thumbnailUrl": "/people/person15.png"
+    },
+    {
+      "id": 16,
+      "label": "Person 16",
+      "color": "#f59e0b",
+      "thumbnailUrl": "/people/person16.png"
+    },
+    {
+      "id": 17,
+      "label": "Person 17",
+      "color": "#64748b",
+      "thumbnailUrl": "/people/person17.png"
+    },
+    {
+      "id": 18,
+      "label": "Person 18",
+      "color": "#78716c",
+      "thumbnailUrl": "/people/person18.png"
+    },
+    {
+      "id": 19,
+      "label": "Person 19",
+      "color": "#dc2626",
+      "thumbnailUrl": "/people/person19.png"
+    },
+    {
+      "id": 20,
+      "label": "Person 20",
+      "color": "#7c3aed",
+      "thumbnailUrl": "/people/person20.png"
+    }
+  ]
+}

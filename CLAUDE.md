@@ -80,58 +80,63 @@ Single source of truth: `frontend/public/sitemap-rectangular-room.json` - define
 
 Gold Standard.json defines annotated tracks for frames - giving  ground positions on the site map based on bounding boxes.
 
-### Sitemap Coordinate System (Designer ↔ Developer Translation)
+### Sitemap Coordinate System
 
-**IMPORTANT:** There is a 90° conceptual difference between how designers draw floor plans and how the code renders them.
+The sitemap uses a **cartographic coordinate convention** (Y increases northward/upward) throughout all systems:
 
-#### The Two Conventions
+#### Coordinate Convention
 
-| Aspect | Designer Convention (Floor Plans) | Code Convention (Sitemap JSON) |
-|--------|-----------------------------------|-------------------------------|
-| Origin | Bottom-left or center | **Top-left** corner |
-| Y-axis | Increases **upward** | Increases **downward** (screen coords) |
-| North (0°) | Points **up** on paper | Points **down** on screen (+Y direction) |
+| Aspect | Convention | Notes |
+|--------|------------|-------|
+| Origin | Bottom-left (conceptually) | (0,0) is the southernmost point |
+| X-axis | Increases **eastward** (right) | Standard |
+| Y-axis | Increases **northward** (up) | Like a map, NOT screen coords |
+| North (0°) | Points toward **+Y** | Higher Y values |
 
-#### How to Translate Designer Instructions
+#### JSON ↔ Screen Mapping
 
-When a designer says "the stage is at the top of the room":
-- In the JSON, the stage should have **low Y values** (e.g., y ≈ 1-5)
-- Low Y appears at the **top** of the screen
+The frontend canvas applies a **Y-flip** transformation to convert from sitemap coordinates to screen coordinates:
 
-When a designer says "the entrance is at the bottom":
-- In the JSON, the entrance should have **high Y values** (e.g., y ≈ 25-30)
-- High Y appears at the **bottom** of the screen
+```typescript
+// From siteMapConversion.ts
+canvasY = (mapHeight - sitemapY) * scale
+```
+
+| Sitemap JSON | Screen Display |
+|--------------|----------------|
+| High Y (north) | Top of screen |
+| Low Y (south) | Bottom of screen |
+| +X (east) | Right side |
 
 #### Azimuth (Camera Direction) Convention
 
-The sitemap uses **compass bearings** for camera azimuth, but rendered on a screen where Y is flipped:
+Camera azimuth uses **compass bearings** (0° = North, clockwise):
 
-| Azimuth | Compass | JSON Direction | Appears on Screen |
-|---------|---------|----------------|-------------------|
-| 0° | North | +Y | Points **down** |
-| 90° | East | +X | Points **right** |
-| 180° | South | -Y | Points **up** |
-| 270° | West | -X | Points **left** |
+| Azimuth | Direction | Points Toward |
+|---------|-----------|---------------|
+| 0° | North | Top of screen (+Y in sitemap) |
+| 90° | East | Right side (+X) |
+| 180° | South | Bottom of screen (-Y in sitemap) |
+| 270° | West | Left side (-X) |
 
-#### The 90° Code Transformation
-
-The rendering code converts compass azimuth to canvas rotation:
+#### Azimuth → Canvas Angle Transformation
 
 ```typescript
 // From useSiteMapCanvas.ts and useGeometry.ts
-const canvasAngle = 90 - azimuth
+const canvasAngle = azimuth - 90
 ```
 
-This formula correctly maps:
-- Azimuth 0° (North/+Y) → Canvas 90° (pointing down)
-- Azimuth 90° (East/+X) → Canvas 0° (pointing right)
+This converts compass azimuth to canvas rotation (where 0° = right):
+- Azimuth 0° (North) → Canvas -90° (points up)
+- Azimuth 90° (East) → Canvas 0° (points right)
+- Azimuth 180° (South) → Canvas 90° (points down)
 
 #### Quick Reference for Current Sitemap
 
 In `sitemap-rectangular-room.json`:
-- **Auditorium (stage area):** y ≈ 1-16 → appears at **TOP** of screen
-- **Atrium (entrance area):** y ≈ 16-28 → appears at **BOTTOM** of screen
-- **Camera1 (HC3):** position (19, 26), azimuth 315° → in atrium, pointing toward top-left (toward stage)
+- **Auditorium (curved seating):** y ≈ 14-30 (high Y) → appears at **TOP** of screen
+- **Atrium (entrance/lobby):** y ≈ 2-14 (low Y) → appears at **BOTTOM** of screen
+- **Camera1 (HC3):** position (23, 4), azimuth 340° → in atrium (bottom), pointing toward top-left (toward auditorium)
 
 See `tech-logs/sitemap-creation-guide.md` for detailed sitemap authoring instructions.
 

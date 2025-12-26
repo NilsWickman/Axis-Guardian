@@ -1,29 +1,38 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import type { TrackVideoSegment } from '@/types/track-identity'
+import type { Detection } from '@/types/frame-review'
+import { normalizeBbox } from '@/types/frame-review'
 
 const props = defineProps<{
   segment: TrackVideoSegment
   videoElement: HTMLVideoElement
   isActive: boolean
+  getDetection?: (timestamp: number) => Detection | null
+  personColor?: string
+  containerSize?: { width: number; height: number }
 }>()
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const progress = ref(0)
 let animationId: number | null = null
 
-// Canvas dimensions - maintain aspect ratio of crop region
+// Canvas dimensions - fill container while maintaining aspect ratio
 const canvasSize = computed(() => {
-  const maxWidth = 400
-  const maxHeight = 400
   const aspectRatio = props.segment.cropRegion.width / props.segment.cropRegion.height
 
+  // Use container size if provided, otherwise fall back to defaults
+  const maxWidth = props.containerSize?.width ?? 600
+  const maxHeight = props.containerSize?.height ?? 600
+
   if (aspectRatio > 1) {
-    const w = Math.min(maxWidth, 400)
-    return { width: w, height: Math.round(w / aspectRatio) }
+    // Landscape: fit to width
+    const w = Math.min(maxWidth, maxHeight * aspectRatio)
+    return { width: Math.round(w), height: Math.round(w / aspectRatio) }
   } else {
-    const h = Math.min(maxHeight, 400)
-    return { width: Math.round(h * aspectRatio), height: h }
+    // Portrait: fit to height
+    const h = Math.min(maxHeight, maxWidth / aspectRatio)
+    return { width: Math.round(h * aspectRatio), height: Math.round(h) }
   }
 })
 
@@ -53,6 +62,21 @@ function drawFrame(): void {
     sx, sy, sw, sh,
     0, 0, canvas.width, canvas.height
   )
+
+  // Draw bounding box if detection callback is provided
+  const detection = props.getDetection?.(video.currentTime)
+  if (detection) {
+    const bbox = normalizeBbox(detection.bbox)
+    // Transform from video (normalized) coords to canvas coords, accounting for crop offset
+    const bboxLeft = ((bbox.left - crop.left) / crop.width) * canvas.width
+    const bboxTop = ((bbox.top - crop.top) / crop.height) * canvas.height
+    const bboxWidth = ((bbox.right - bbox.left) / crop.width) * canvas.width
+    const bboxHeight = ((bbox.bottom - bbox.top) / crop.height) * canvas.height
+
+    ctx.strokeStyle = props.personColor ?? '#ffffff'
+    ctx.lineWidth = 3
+    ctx.strokeRect(bboxLeft, bboxTop, bboxWidth, bboxHeight)
+  }
 
   // Calculate progress
   const currentTime = video.currentTime
