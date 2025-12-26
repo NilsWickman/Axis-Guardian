@@ -56,24 +56,48 @@
     {
       "id": "corridor-right-inner",
       "start": {
-        "x": 31,
-        "y": 2
+        "x": 24.43,
+        "y": 15
       },
       "end": {
-        "x": 24,
-        "y": 15
+        "x": 29.97,
+        "y": 5.5
       },
       "type": "internal"
     },
     {
       "id": "corridor-left-inner",
       "start": {
-        "x": 8,
+        "x": 7.57,
         "y": 15
       },
       "end": {
-        "x": 1,
-        "y": 2
+        "x": 2.03,
+        "y": 5.5
+      },
+      "type": "internal"
+    },
+    {
+      "id": "protrusion-left",
+      "start": {
+        "x": 1.9,
+        "y": 3.1
+      },
+      "end": {
+        "x": 2.9,
+        "y": 4.8
+      },
+      "type": "internal"
+    },
+    {
+      "id": "protrusion-right",
+      "start": {
+        "x": 30.1,
+        "y": 3.1
+      },
+      "end": {
+        "x": 29.1,
+        "y": 4.8
       },
       "type": "internal"
     },
@@ -86,54 +110,6 @@
       "end": {
         "x": 16,
         "y": 16
-      },
-      "type": "internal"
-    },
-    {
-      "id": "section-a-corridor-left",
-      "start": {
-        "x": 7.5,
-        "y": 2
-      },
-      "end": {
-        "x": 11,
-        "y": 15
-      },
-      "type": "internal"
-    },
-    {
-      "id": "section-a-corridor-right",
-      "start": {
-        "x": 9,
-        "y": 2
-      },
-      "end": {
-        "x": 12.5,
-        "y": 15
-      },
-      "type": "internal"
-    },
-    {
-      "id": "section-b-corridor-left",
-      "start": {
-        "x": 23,
-        "y": 2
-      },
-      "end": {
-        "x": 19.5,
-        "y": 15
-      },
-      "type": "internal"
-    },
-    {
-      "id": "section-b-corridor-right",
-      "start": {
-        "x": 24.5,
-        "y": 2
-      },
-      "end": {
-        "x": 21,
-        "y": 15
       },
       "type": "internal"
     },
@@ -201,16 +177,16 @@
   "cameras": [
     {
       "id": "camera1",
-      "name": "HC3 (Atrium Right)",
+      "name": "HC3 (Atrium Left)",
       "model": "AXIS P3245-LVE",
       "rtspUrl": "rtsp://localhost:8554/camera1",
       "webrtcUrl": "http://localhost:9101",
       "ipAddress": "192.168.1.101",
       "position": {
-        "x": 23,
+        "x": 9,
         "y": 26
       },
-      "azimuth": 315,
+      "azimuth": 160,
       "elevation": 35,
       "height": 2.5,
       "fieldOfView": 66,
@@ -228,16 +204,16 @@
     },
     {
       "id": "camera2",
-      "name": "HC4 (Atrium Left)",
+      "name": "HC4 (Atrium Right)",
       "model": "AXIS P3245-LVE",
       "rtspUrl": "rtsp://localhost:8554/camera2",
       "webrtcUrl": "http://localhost:9102",
       "ipAddress": "192.168.1.102",
       "position": {
-        "x": 9,
+        "x": 23,
         "y": 26
       },
-      "azimuth": 45,
+      "azimuth": 220,
       "elevation": 40,
       "height": 2.5,
       "fieldOfView": 60,
@@ -255,16 +231,16 @@
     },
     {
       "id": "camera3",
-      "name": "IP2 (Auditorium Back)",
+      "name": "IP2 (Auditorium Front)",
       "model": "AXIS P3245-LVE",
       "rtspUrl": "rtsp://localhost:8554/camera3",
       "webrtcUrl": "http://localhost:9103",
       "ipAddress": "192.168.1.103",
       "position": {
-        "x": 23,
-        "y": 14
+        "x": 3.5,
+        "y": 4
       },
-      "azimuth": 315,
+      "azimuth": 150,
       "elevation": 25,
       "height": 3,
       "fieldOfView": 70,
@@ -282,16 +258,16 @@
     },
     {
       "id": "camera4",
-      "name": "IP5 (Auditorium Front)",
+      "name": "IP5 (Auditorium Back)",
       "model": "AXIS P3245-LVE",
       "rtspUrl": "rtsp://localhost:8554/camera4",
       "webrtcUrl": "http://localhost:9104",
       "ipAddress": "192.168.1.104",
       "position": {
-        "x": 16,
-        "y": 6
+        "x": 15,
+        "y": 14
       },
-      "azimuth": 180,
+      "azimuth": 10,
       "elevation": 15,
       "height": 2.5,
       "fieldOfView": 80,
@@ -318,7 +294,7 @@
         "x": 12,
         "y": 20
       },
-      "radius": 0.5,
+      "radius": 0.6,
       "height": 4,
       "blocksTracking": true,
       "blocksView": true,
@@ -333,7 +309,7 @@
         "x": 20,
         "y": 20
       },
-      "radius": 0.5,
+      "radius": 0.6,
       "height": 4,
       "blocksTracking": true,
       "blocksView": true,
@@ -348,7 +324,7 @@
         "x": 12,
         "y": 24
       },
-      "radius": 0.5,
+      "radius": 0.6,
       "height": 4,
       "blocksTracking": true,
       "blocksView": true,
@@ -363,7 +339,7 @@
         "x": 20,
         "y": 24
       },
-      "radius": 0.5,
+      "radius": 0.6,
       "height": 4,
       "blocksTracking": true,
       "blocksView": true,
@@ -375,16 +351,16 @@
       "label": "Registration Table",
       "category": "furniture",
       "position": {
-        "x": 22,
+        "x": 10,
         "y": 18
       },
       "linear": {
         "start": {
-          "x": 20,
+          "x": 12,
           "y": 18
         },
         "end": {
-          "x": 24,
+          "x": 8,
           "y": 18
         },
         "width": 0.8
@@ -449,17 +425,17 @@
     {
       "id": "seat-a0",
       "type": "arc-segment",
-      "label": "Row A0 - Front (Section A)",
+      "label": "Row A0 - Back (Section A - Full Width)",
       "category": "seating",
       "arcSegment": {
         "center": {
           "x": 16,
           "y": 45
         },
-        "innerRadius": 42.5,
-        "outerRadius": 43.5,
-        "startAngle": 251.2,
-        "endAngle": 258.8,
+        "innerRadius": 43.2,
+        "outerRadius": 44,
+        "startAngle": 270,
+        "endAngle": { "alignToWall": "protrusion-right", "offset": -0.1 },
         "clockwise": false
       },
       "height": 0.9,
@@ -470,17 +446,17 @@
     {
       "id": "seat-b0",
       "type": "arc-segment",
-      "label": "Row B0 - Front (Section B)",
+      "label": "Row B0 - Back (Section B - Full Width)",
       "category": "seating",
       "arcSegment": {
         "center": {
           "x": 16,
           "y": 45
         },
-        "innerRadius": 42.5,
-        "outerRadius": 43.5,
-        "startAngle": 281.2,
-        "endAngle": 288.8,
+        "innerRadius": 43.2,
+        "outerRadius": 44,
+        "startAngle": { "alignToWall": "protrusion-left", "offset": 0.1 },
+        "endAngle": 270,
         "clockwise": false
       },
       "height": 0.9,
@@ -500,8 +476,8 @@
         },
         "innerRadius": 40.66,
         "outerRadius": 41.51,
-        "startAngle": 251.7,
-        "endAngle": 259.0,
+        "startAngle": 281.0,
+        "endAngle": { "alignToWall": "corridor-right-inner", "offset": -0.1 },
         "clockwise": false
       },
       "height": 0.9,
@@ -521,8 +497,8 @@
         },
         "innerRadius": 40.86,
         "outerRadius": 41.7,
-        "startAngle": 261.0,
-        "endAngle": 270,
+        "startAngle": 270,
+        "endAngle": 279.0,
         "clockwise": false
       },
       "height": 0.9,
@@ -542,8 +518,8 @@
         },
         "innerRadius": 40.86,
         "outerRadius": 41.7,
-        "startAngle": 270,
-        "endAngle": 279.0,
+        "startAngle": 261.0,
+        "endAngle": 270,
         "clockwise": false
       },
       "height": 0.9,
@@ -563,8 +539,8 @@
         },
         "innerRadius": 40.66,
         "outerRadius": 41.51,
-        "startAngle": 281.0,
-        "endAngle": 288.3,
+        "startAngle": { "alignToWall": "corridor-left-inner", "offset": 0.1 },
+        "endAngle": 259.0,
         "clockwise": false
       },
       "height": 0.9,
@@ -584,8 +560,8 @@
         },
         "innerRadius": 39.16,
         "outerRadius": 40,
-        "startAngle": 252.0,
-        "endAngle": 259.2,
+        "startAngle": 280.8,
+        "endAngle": { "alignToWall": "corridor-right-inner", "offset": -0.1 },
         "clockwise": false
       },
       "height": 0.9,
@@ -605,8 +581,8 @@
         },
         "innerRadius": 39.34,
         "outerRadius": 40.17,
-        "startAngle": 261.2,
-        "endAngle": 270,
+        "startAngle": 270,
+        "endAngle": 278.8,
         "clockwise": false
       },
       "height": 0.9,
@@ -626,8 +602,8 @@
         },
         "innerRadius": 39.34,
         "outerRadius": 40.17,
-        "startAngle": 270,
-        "endAngle": 278.8,
+        "startAngle": 261.2,
+        "endAngle": 270,
         "clockwise": false
       },
       "height": 0.9,
@@ -647,8 +623,8 @@
         },
         "innerRadius": 39.16,
         "outerRadius": 40,
-        "startAngle": 280.8,
-        "endAngle": 288.0,
+        "startAngle": { "alignToWall": "corridor-left-inner", "offset": 0.1 },
+        "endAngle": 259.2,
         "clockwise": false
       },
       "height": 0.9,
@@ -668,8 +644,8 @@
         },
         "innerRadius": 37.66,
         "outerRadius": 38.49,
-        "startAngle": 252.4,
-        "endAngle": 259.4,
+        "startAngle": 280.6,
+        "endAngle": { "alignToWall": "corridor-right-inner", "offset": -0.1 },
         "clockwise": false
       },
       "height": 0.9,
@@ -689,8 +665,8 @@
         },
         "innerRadius": 37.83,
         "outerRadius": 38.65,
-        "startAngle": 261.5,
-        "endAngle": 270,
+        "startAngle": 270,
+        "endAngle": 278.5,
         "clockwise": false
       },
       "height": 0.9,
@@ -710,8 +686,8 @@
         },
         "innerRadius": 37.83,
         "outerRadius": 38.65,
-        "startAngle": 270,
-        "endAngle": 278.5,
+        "startAngle": 261.5,
+        "endAngle": 270,
         "clockwise": false
       },
       "height": 0.9,
@@ -731,8 +707,8 @@
         },
         "innerRadius": 37.66,
         "outerRadius": 38.49,
-        "startAngle": 280.6,
-        "endAngle": 287.6,
+        "startAngle": { "alignToWall": "corridor-left-inner", "offset": 0.1 },
+        "endAngle": 259.4,
         "clockwise": false
       },
       "height": 0.9,
@@ -752,8 +728,8 @@
         },
         "innerRadius": 36.16,
         "outerRadius": 36.98,
-        "startAngle": 252.9,
-        "endAngle": 259.5,
+        "startAngle": 280.5,
+        "endAngle": { "alignToWall": "corridor-right-inner", "offset": -0.1 },
         "clockwise": false
       },
       "height": 0.9,
@@ -773,8 +749,8 @@
         },
         "innerRadius": 36.32,
         "outerRadius": 37.13,
-        "startAngle": 261.8,
-        "endAngle": 270,
+        "startAngle": 270,
+        "endAngle": 278.2,
         "clockwise": false
       },
       "height": 0.9,
@@ -794,8 +770,8 @@
         },
         "innerRadius": 36.32,
         "outerRadius": 37.13,
-        "startAngle": 270,
-        "endAngle": 278.2,
+        "startAngle": 261.8,
+        "endAngle": 270,
         "clockwise": false
       },
       "height": 0.9,
@@ -815,8 +791,8 @@
         },
         "innerRadius": 36.16,
         "outerRadius": 36.98,
-        "startAngle": 280.5,
-        "endAngle": 287.1,
+        "startAngle": { "alignToWall": "corridor-left-inner", "offset": 0.1 },
+        "endAngle": 259.5,
         "clockwise": false
       },
       "height": 0.9,
@@ -836,8 +812,8 @@
         },
         "innerRadius": 34.66,
         "outerRadius": 35.46,
-        "startAngle": 253.4,
-        "endAngle": 259.7,
+        "startAngle": 280.3,
+        "endAngle": { "alignToWall": "corridor-right-inner", "offset": -0.1 },
         "clockwise": false
       },
       "height": 0.9,
@@ -857,8 +833,8 @@
         },
         "innerRadius": 34.81,
         "outerRadius": 35.6,
-        "startAngle": 262.1,
-        "endAngle": 270,
+        "startAngle": 270,
+        "endAngle": 277.9,
         "clockwise": false
       },
       "height": 0.9,
@@ -878,8 +854,8 @@
         },
         "innerRadius": 34.81,
         "outerRadius": 35.6,
-        "startAngle": 270,
-        "endAngle": 277.9,
+        "startAngle": 262.1,
+        "endAngle": 270,
         "clockwise": false
       },
       "height": 0.9,
@@ -899,8 +875,8 @@
         },
         "innerRadius": 34.66,
         "outerRadius": 35.46,
-        "startAngle": 280.3,
-        "endAngle": 286.6,
+        "startAngle": { "alignToWall": "corridor-left-inner", "offset": 0.1 },
+        "endAngle": 259.7,
         "clockwise": false
       },
       "height": 0.9,
@@ -920,8 +896,8 @@
         },
         "innerRadius": 33.16,
         "outerRadius": 33.95,
-        "startAngle": 253.9,
-        "endAngle": 260.0,
+        "startAngle": 280.0,
+        "endAngle": { "alignToWall": "corridor-right-inner", "offset": -0.1 },
         "clockwise": false
       },
       "height": 0.9,
@@ -941,8 +917,8 @@
         },
         "innerRadius": 33.29,
         "outerRadius": 34.08,
-        "startAngle": 262.4,
-        "endAngle": 270,
+        "startAngle": 270,
+        "endAngle": 277.6,
         "clockwise": false
       },
       "height": 0.9,
@@ -962,8 +938,8 @@
         },
         "innerRadius": 33.29,
         "outerRadius": 34.08,
-        "startAngle": 270,
-        "endAngle": 277.6,
+        "startAngle": 262.4,
+        "endAngle": 270,
         "clockwise": false
       },
       "height": 0.9,
@@ -983,8 +959,8 @@
         },
         "innerRadius": 33.16,
         "outerRadius": 33.95,
-        "startAngle": 280.0,
-        "endAngle": 286.1,
+        "startAngle": { "alignToWall": "corridor-left-inner", "offset": 0.1 },
+        "endAngle": 260.0,
         "clockwise": false
       },
       "height": 0.9,
@@ -1004,8 +980,8 @@
         },
         "innerRadius": 31.91,
         "outerRadius": 32.59,
-        "startAngle": 254.4,
-        "endAngle": 260.2,
+        "startAngle": 279.8,
+        "endAngle": { "alignToWall": "corridor-right-inner", "offset": -0.1 },
         "clockwise": false
       },
       "height": 0.9,
@@ -1025,27 +1001,6 @@
         },
         "innerRadius": 32.03,
         "outerRadius": 32.71,
-        "startAngle": 262.7,
-        "endAngle": 270,
-        "clockwise": false
-      },
-      "height": 0.9,
-      "blocksTracking": false,
-      "blocksView": false,
-      "seatedPersonHeight": 1.2
-    },
-    {
-      "id": "seat-bback-left",
-      "type": "arc-segment",
-      "label": "Row ABACK - Right Inner",
-      "category": "seating",
-      "arcSegment": {
-        "center": {
-          "x": 16,
-          "y": 45
-        },
-        "innerRadius": 32.03,
-        "outerRadius": 32.71,
         "startAngle": 270,
         "endAngle": 277.3,
         "clockwise": false
@@ -1056,9 +1011,30 @@
       "seatedPersonHeight": 1.2
     },
     {
+      "id": "seat-bback-left",
+      "type": "arc-segment",
+      "label": "Row BBACK - Right Inner",
+      "category": "seating",
+      "arcSegment": {
+        "center": {
+          "x": 16,
+          "y": 45
+        },
+        "innerRadius": 32.03,
+        "outerRadius": 32.71,
+        "startAngle": 262.7,
+        "endAngle": 270,
+        "clockwise": false
+      },
+      "height": 0.9,
+      "blocksTracking": false,
+      "blocksView": false,
+      "seatedPersonHeight": 1.2
+    },
+    {
       "id": "seat-bback-right",
       "type": "arc-segment",
-      "label": "Row ABACK - Right Outer",
+      "label": "Row BBACK - Right Outer",
       "category": "seating",
       "arcSegment": {
         "center": {
@@ -1067,8 +1043,8 @@
         },
         "innerRadius": 31.91,
         "outerRadius": 32.59,
-        "startAngle": 279.8,
-        "endAngle": 285.6,
+        "startAngle": { "alignToWall": "corridor-left-inner", "offset": 0.1 },
+        "endAngle": 260.2,
         "clockwise": false
       },
       "height": 0.9,

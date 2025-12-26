@@ -33,12 +33,19 @@ export interface ArcParameters {
   clockwise?: boolean
 }
 
+export interface AngleWallAlignment {
+  alignToWall: string  // ID of the wall to align to
+  offset?: number      // Optional offset in degrees from calculated intersection
+}
+
+export type AngleValue = UnitValue | AngleWallAlignment
+
 export interface ArcSegmentGeometry {
   center: { x: UnitValue; y: UnitValue }
   innerRadius: UnitValue
   outerRadius: UnitValue
-  startAngle: UnitValue  // degrees (0 = right/+X, 90 = down/+Y)
-  endAngle: UnitValue    // degrees
+  startAngle: AngleValue  // degrees (0 = right/+X, 90 = down/+Y) or wall alignment
+  endAngle: AngleValue    // degrees or wall alignment
   clockwise?: boolean
 }
 

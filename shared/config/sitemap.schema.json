@@ -529,17 +529,39 @@
           "description": "Outer radius of the arc segment in meters (back edge of seating)"
         },
         "startAngle": {
-          "type": "number",
-          "description": "Start angle in degrees (0 = right/+X, 90 = down/+Y)"
+          "oneOf": [
+            { "type": "number" },
+            { "$ref": "#/$defs/angleWallAlignment" }
+          ],
+          "description": "Start angle in degrees, or alignment to a wall"
         },
         "endAngle": {
-          "type": "number",
-          "description": "End angle in degrees (0 = right/+X, 90 = down/+Y)"
+          "oneOf": [
+            { "type": "number" },
+            { "$ref": "#/$defs/angleWallAlignment" }
+          ],
+          "description": "End angle in degrees, or alignment to a wall"
         },
         "clockwise": {
           "type": "boolean",
           "default": false,
           "description": "If true, arc is drawn clockwise from start to end angle"
+        }
+      }
+    },
+    "angleWallAlignment": {
+      "type": "object",
+      "description": "Specifies that an arc angle should be calculated from intersection with a wall",
+      "required": ["alignToWall"],
+      "properties": {
+        "alignToWall": {
+          "type": "string",
+          "description": "ID of the wall to align to (arc extends to intersect this wall)"
+        },
+        "offset": {
+          "type": "number",
+          "default": 0,
+          "description": "Optional offset in degrees from the calculated intersection angle"
         }
       }
     },

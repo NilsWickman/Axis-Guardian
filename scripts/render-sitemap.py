@@ -7,6 +7,89 @@ from pathlib import Path
 from PIL import Image, ImageColor, ImageDraw
 
 
+def calculate_wall_intersection_angle(
+    center_x: float, center_y: float, radius: float,
+    wall_start_x: float, wall_start_y: float,
+    wall_end_x: float, wall_end_y: float
+) -> float | None:
+  """Calculate the angle where a circle intersects a line segment."""
+  dx = wall_end_x - wall_start_x
+  dy = wall_end_y - wall_start_y
+
+  fx = wall_start_x - center_x
+  fy = wall_start_y - center_y
+
+  a = dx * dx + dy * dy
+  b = 2 * (fx * dx + fy * dy)
+  c = fx * fx + fy * fy - radius * radius
+
+  discriminant = b * b - 4 * a * c
+
+  if discriminant < 0:
+    return None
+
+  sqrt_disc = math.sqrt(discriminant)
+  t1 = (-b - sqrt_disc) / (2 * a)
+  t2 = (-b + sqrt_disc) / (2 * a)
+
+  valid_ts = []
+  if 0 <= t1 <= 1:
+    valid_ts.append(t1)
+  if 0 <= t2 <= 1 and abs(t2 - t1) > 1e-9:
+    valid_ts.append(t2)
+
+  if not valid_ts:
+    return None
+
+  t = valid_ts[0]
+  x = wall_start_x + t * dx
+  y = wall_start_y + t * dy
+
+  angle_rad = math.atan2(y - center_y, x - center_x)
+  angle_deg = math.degrees(angle_rad)
+  return ((angle_deg % 360) + 360) % 360
+
+
+def resolve_angle(angle_value, arc_center: dict, outer_radius: float, walls: list[dict]) -> float:
+  """Resolve an angle value, handling alignToWall references."""
+  if isinstance(angle_value, (int, float)):
+    return float(angle_value)
+
+  if isinstance(angle_value, dict) and 'alignToWall' in angle_value:
+    wall_id = angle_value['alignToWall']
+    offset = angle_value.get('offset', 0)
+
+    # Find the wall
+    wall = None
+    for w in walls:
+      if w.get('id') == wall_id:
+        wall = w
+        break
+
+    if not wall:
+      print(f"Warning: Wall not found: {wall_id}")
+      return 0
+
+    start = wall.get('start', {})
+    end = wall.get('end', {})
+    center = arc_center
+
+    calculated = calculate_wall_intersection_angle(
+      float(center.get('x', 0)), float(center.get('y', 0)),
+      outer_radius,
+      float(start.get('x', 0)), float(start.get('y', 0)),
+      float(end.get('x', 0)), float(end.get('y', 0))
+    )
+
+    if calculated is None:
+      print(f"Warning: No intersection with wall: {wall_id}")
+      return 0
+
+    return calculated + offset
+
+  return 0
+
+
 def parse_args() -> argparse.Namespace:
   p = argparse.ArgumentParser(description='Render a sitemap JSON to a PNG preview.')
   p.add_argument('input', help='Path to sitemap JSON')
@@ -106,8 +189,9 @@ def render(sitemap: dict, out_path: Path, scale: float, pad: float, show_labels:
       cy = float(center.get('y', 0))
       r_in = float(arc.get('innerRadius', 0))
       r_out = float(arc.get('outerRadius', 0))
-      a1 = float(arc.get('startAngle', 0))
-      a2 = float(arc.get('endAngle', 0))
+      walls = sitemap.get('walls', [])
+      a1 = resolve_angle(arc.get('startAngle', 0), center, r_out, walls)
+      a2 = resolve_angle(arc.get('endAngle', 0), center, r_out, walls)
 
       n = 120
       outer = []
