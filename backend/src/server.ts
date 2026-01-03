@@ -20,6 +20,7 @@ import { getZones } from './db/repositories.js'
 import type { CameraParams } from './types.js'
 import { dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
+import { existsSync } from 'fs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -62,9 +63,16 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
   const cameraRegistry = new CameraRegistry()
 
   // Load cameras from sitemap JSON (single source of truth)
+  // This also auto-generates K/R/T calibration matrices from sitemap geometry
   const sitemapPath = resolve(__dirname, '../../frontend/public/sitemap-rectangular-room.json')
   const sitemapConfig = loadSiteMapConfig(sitemapPath)
   cameraRegistry.loadFromSiteMapConfig(sitemapConfig.cameras)
+
+  // Load optimized calibration from file if available (overrides sitemap-generated calibration)
+  const calibrationPath = resolve(__dirname, '../calibration.json')
+  if (existsSync(calibrationPath)) {
+    await cameraRegistry.loadCalibrationFromFile(calibrationPath)
+  }
 
   // Set up sitemap geometry for exit detection (FOV, boundaries, pillars)
   const geometryCameras = siteMapCamerasToGeometryConfig(sitemapConfig.cameras)
@@ -93,6 +101,14 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
   // Load obstacles for detection filtering
   if (sitemapConfig.obstacles && sitemapConfig.obstacles.length > 0) {
     detectionProcessor.setObstacles(sitemapConfig.obstacles)
+  }
+
+  // Set room bounds for position validation
+  if (sitemapConfig.dimensions) {
+    detectionProcessor.setRoomBounds({
+      width: sitemapConfig.dimensions.width,
+      height: sitemapConfig.dimensions.height,
+    })
   }
 
   const broadcaster = new WebSocketBroadcaster(trackManager, {
@@ -186,6 +202,12 @@ export async function createServerWithComponents(options: CreateServerOptions = 
   const sitemapConfig = loadSiteMapConfig(sitemapPath)
   cameraRegistry.loadFromSiteMapConfig(sitemapConfig.cameras)
 
+  // Load optimized calibration from file if available (overrides sitemap-generated calibration)
+  const calibrationPath = resolve(__dirname, '../calibration.json')
+  if (existsSync(calibrationPath)) {
+    await cameraRegistry.loadCalibrationFromFile(calibrationPath)
+  }
+
   // Set up sitemap geometry for exit detection (FOV, boundaries, pillars)
   const geometryCameras = siteMapCamerasToGeometryConfig(sitemapConfig.cameras)
   const roomBounds = { width: sitemapConfig.dimensions.width, height: sitemapConfig.dimensions.height }
@@ -213,6 +235,14 @@ export async function createServerWithComponents(options: CreateServerOptions = 
   // Load obstacles for detection filtering
   if (sitemapConfig.obstacles && sitemapConfig.obstacles.length > 0) {
     detectionProcessor.setObstacles(sitemapConfig.obstacles)
+  }
+
+  // Set room bounds for position validation
+  if (sitemapConfig.dimensions) {
+    detectionProcessor.setRoomBounds({
+      width: sitemapConfig.dimensions.width,
+      height: sitemapConfig.dimensions.height,
+    })
   }
 
   // Create broadcaster

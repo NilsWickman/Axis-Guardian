@@ -23,7 +23,7 @@
           :show-person-icon="false"
           :show-stats="!isDemoMode"
           :show-heatmap="false"
-          :show-debug-mode="false"
+          :show-debug-mode="true"
           :marker-radius="8"
           :max-trail-length="20"
           :style="{

@@ -51,8 +51,8 @@ export interface DistortionCoeffs {
   k1: number
   /** Radial distortion coefficient 2 */
   k2: number
-  /** Radial distortion coefficient 3 */
-  k3: number
+  /** Radial distortion coefficient 3 (optional, defaults to 0) */
+  k3?: number
   /** Tangential distortion coefficient 1 */
   p1: number
   /** Tangential distortion coefficient 2 */
@@ -129,6 +129,25 @@ export interface WorldTransform {
 // ============================================================================
 
 /**
+ * Direct polynomial calibration - maps normalized image coordinates directly to sitemap
+ * No K/R/T matrices needed. Derived purely from ground truth annotations.
+ *
+ * Input: Normalized image coordinates (u, v) where:
+ *   u = bbox_center_x / image_width (0-1)
+ *   v = bbox_bottom / image_height (0-1)
+ *
+ * Output: Sitemap coordinates (x, y) in meters
+ */
+export interface DirectPolynomial {
+  /** Polynomial degree (3, 4, or 5) */
+  degree: 3 | 4 | 5
+  /** Coefficients for X output (sitemap X coordinate) */
+  coeffsX: number[]
+  /** Coefficients for Y output (sitemap Y coordinate) */
+  coeffsY: number[]
+}
+
+/**
  * Camera calibration matrices (K/R/T) for accurate projection
  * From dataset cam_param.mat file
  */
@@ -147,4 +166,9 @@ export interface CameraCalibration {
   distortion?: DistortionCoeffs
   /** Optional world coordinate transformation (dataset to sitemap coords) */
   worldTransform?: WorldTransform
+  /**
+   * Direct polynomial calibration (if provided, replaces K/R/T + worldTransform entirely)
+   * Maps normalized image coords directly to sitemap coords - annotations are single source of truth
+   */
+  directPolynomial?: DirectPolynomial
 }

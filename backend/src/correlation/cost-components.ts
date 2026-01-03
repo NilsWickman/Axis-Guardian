@@ -245,6 +245,10 @@ export interface EmbeddingCostResult {
  * Temporal gating: Reduced weight for frame-to-frame tracking,
  * full weight for re-identification scenarios (> 500ms gap) or cross-camera.
  *
+ * CROSS-CAMERA MODE: When this is a cross-camera detection (track not seen by
+ * this camera before) AND embeddings are available, use ReID as the PRIMARY
+ * matching signal since calibration may be unreliable between cameras.
+ *
  * @returns Result with multiplier and metadata
  */
 export function calculateEmbeddingSimilarityMultiplier(
@@ -301,6 +305,48 @@ export function calculateEmbeddingSimilarityMultiplier(
     getMetrics().recordEmbeddingComparison(similarity)
   }
 
+  // CROSS-CAMERA PRIMARY MODE: When this is a cross-camera detection,
+  // embedding similarity becomes the primary matching signal.
+  // This compensates for calibration discrepancies between cameras.
+  if (isCrossCamera) {
+    // For cross-camera: use embedding similarity as primary cost driver
+    // High similarity -> very low multiplier (strong match)
+    // Low similarity -> high multiplier (block match)
+    if (similarity > 0.75) {
+      // Very strong embedding match - aggressively reduce cost
+      // similarity 0.75 -> multiplier 0.20, similarity 1.0 -> multiplier 0.05
+      const embeddingBonus = 0.20 - 0.15 * ((similarity - 0.75) / 0.25)
+      result.multiplier = Math.max(0.05, embeddingBonus)
+      result.bonusApplied = true
+      if (recordMetrics) {
+        getMetrics().recordEmbeddingBonus()
+      }
+    } else if (similarity > 0.60) {
+      // Moderate match - give smaller bonus
+      // similarity 0.60 -> multiplier 0.5, similarity 0.75 -> multiplier 0.20
+      const embeddingBonus = 0.5 - 0.30 * ((similarity - 0.60) / 0.15)
+      result.multiplier = embeddingBonus
+      result.bonusApplied = true
+      if (recordMetrics) {
+        getMetrics().recordEmbeddingBonus()
+      }
+    } else if (similarity < 0.45) {
+      // Poor embedding match for cross-camera - heavy penalty to block
+      const embeddingPenalty = 2.5 + 4.0 * ((0.45 - similarity) / 0.45)
+      result.multiplier = embeddingPenalty
+      result.penaltyApplied = true
+      if (recordMetrics) {
+        getMetrics().recordEmbeddingPenalty()
+      }
+    }
+    // Between 0.45-0.60: neutral, let position decide
+    return result
+  }
+
+  // Same-camera mode: use embedding to detect when different person takes over track
+  const isEstablishedTrack = (track.attributes?.sample_count ?? 0) >= 3
+  const hasGoodQuality = trackQuality > 0.4 && detQuality > 0.05
+
   if (similarity > config.embeddingMinSimilarity) {
     // High similarity = bonus (reduce cost)
     const embeddingBonus =
@@ -312,20 +358,28 @@ export function calculateEmbeddingSimilarityMultiplier(
     if (recordMetrics) {
       getMetrics().recordEmbeddingBonus()
     }
-  } else if (similarity < 0.3) {
-    // Very low similarity = penalty for well-established tracks
-    if (
-      trackQuality > 0.6 &&
-      track.attributes?.sample_count &&
-      track.attributes.sample_count >= 5
-    ) {
-      const embeddingPenalty = 1 + effectiveWeight * (0.3 - similarity)
+  } else if (isEstablishedTrack && hasGoodQuality) {
+    // For established tracks with good embeddings, apply strong penalty for low similarity
+    // This prevents a different person from taking over an existing track
+    if (similarity < 0.35) {
+      // Very different appearance - likely different person
+      // Apply heavy penalty to force creation of new track instead
+      const embeddingPenalty = 3.0 + 5.0 * ((0.35 - similarity) / 0.35)
+      result.multiplier = embeddingPenalty
+      result.penaltyApplied = true
+      if (recordMetrics) {
+        getMetrics().recordEmbeddingPenalty()
+      }
+    } else if (similarity < 0.45) {
+      // Moderate mismatch - some penalty
+      const embeddingPenalty = 1.5 + 1.5 * ((0.45 - similarity) / 0.10)
       result.multiplier = embeddingPenalty
       result.penaltyApplied = true
       if (recordMetrics) {
         getMetrics().recordEmbeddingPenalty()
       }
     }
+    // 0.45-0.55: neutral zone
   }
 
   return result

@@ -1126,5 +1126,101 @@ export function projectDetectionWithKRT(
     footY = corrected.y
   }
 
-  return projectWithKRT(footX, footY, calibration)
+  // Use direct polynomial if available (annotations as single source of truth)
+  if (calibration.directPolynomial) {
+    // Convert to normalized coordinates (0-1)
+    const u = footX / imageWidth
+    const v = footY / imageHeight
+    return projectWithDirectPolynomial(u, v, calibration.directPolynomial)
+  }
+
+  const result = projectWithKRT(footX, footY, calibration)
+
+  return result
+}
+
+// ============================================================================
+// Direct Polynomial Projection (annotations as single source of truth)
+// ============================================================================
+
+/**
+ * Generate polynomial feature terms for direct image-to-sitemap mapping
+ *
+ * Term ordering matches Python calibration script:
+ * - degree 1: [1, u, v]
+ * - degree 2: [1, u, v, u², v², uv]
+ * - degree 3: [1, u, v, u², v², uv, u³, v³, u²v, uv²]
+ * - degree 4: [1, ..., u⁴, v⁴, u³v, uv³, u²v²]
+ * - degree 5: [1, ..., u⁵, v⁵, u⁴v, uv⁴, u³v², u²v³]
+ */
+function directPolyTerms(u: number, v: number, degree: number): number[] {
+  const terms: number[] = [1]
+
+  if (degree >= 1) {
+    terms.push(u, v)
+  }
+
+  if (degree >= 2) {
+    terms.push(u * u, v * v, u * v)
+  }
+
+  if (degree >= 3) {
+    terms.push(u * u * u, v * v * v, u * u * v, u * v * v)
+  }
+
+  if (degree >= 4) {
+    terms.push(u ** 4, v ** 4, u ** 3 * v, u * v ** 3, u ** 2 * v ** 2)
+  }
+
+  if (degree >= 5) {
+    terms.push(u ** 5, v ** 5, u ** 4 * v, u * v ** 4, u ** 3 * v ** 2, u ** 2 * v ** 3)
+  }
+
+  return terms
+}
+
+/**
+ * Project normalized image coordinates to sitemap using direct polynomial
+ *
+ * This method uses annotations as the single source of truth:
+ * - No K/R/T matrices from external calibration
+ * - Polynomial fitted directly from image→sitemap correspondences
+ *
+ * @param u - Normalized X coordinate (bbox center X / image width), 0-1
+ * @param v - Normalized Y coordinate (bbox bottom / image height), 0-1
+ * @param poly - Direct polynomial coefficients from calibration
+ */
+export function projectWithDirectPolynomial(
+  u: number,
+  v: number,
+  poly: { degree: number; coeffsX: number[]; coeffsY: number[] }
+): { worldPoint: Point2D; isValid: boolean; reason?: string; confidence: number } {
+  const { degree, coeffsX, coeffsY } = poly
+
+  // Generate feature terms
+  const terms = directPolyTerms(u, v, degree)
+
+  // Apply polynomial: x = sum(coeffsX[i] * terms[i])
+  let x = 0
+  let y = 0
+  for (let i = 0; i < terms.length && i < coeffsX.length; i++) {
+    x += coeffsX[i] * terms[i]
+    y += coeffsY[i] * terms[i]
+  }
+
+  // Sanity check: results should be within reasonable bounds (sitemap area)
+  // Typical auditorium: x in [0, 40], y in [0, 35]
+  const isValid = x >= -5 && x <= 50 && y >= -5 && y <= 50
+
+  // Confidence based on how central the point is in the image
+  // Edge points have lower confidence due to extrapolation
+  const edgeDistance = Math.min(u, 1 - u, v, 1 - v)
+  const confidence = isValid ? Math.min(1, edgeDistance * 5) : 0
+
+  return {
+    worldPoint: { x, y },
+    isValid,
+    reason: isValid ? undefined : 'projection_out_of_bounds',
+    confidence,
+  }
 }

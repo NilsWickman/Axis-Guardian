@@ -69,8 +69,9 @@ export function undistortPoint(
   const r4 = r2 * r2
   const r6 = r4 * r2
 
-  // Radial distortion factor
-  const radialFactor = 1 + coeffs.k1 * r2 + coeffs.k2 * r4 + coeffs.k3 * r6
+  // Radial distortion factor (k3 is optional, defaults to 0)
+  const k3 = coeffs.k3 ?? 0
+  const radialFactor = 1 + coeffs.k1 * r2 + coeffs.k2 * r4 + k3 * r6
 
   // Apply radial distortion correction
   let xCorrected = x * radialFactor
@@ -167,7 +168,7 @@ export function hasSignificantDistortion(coeffs: DistortionCoeffs, threshold: nu
   return (
     Math.abs(coeffs.k1) > threshold ||
     Math.abs(coeffs.k2) > threshold ||
-    Math.abs(coeffs.k3) > threshold ||
+    Math.abs(coeffs.k3 ?? 0) > threshold ||
     Math.abs(coeffs.p1) > threshold ||
     Math.abs(coeffs.p2) > threshold
   )

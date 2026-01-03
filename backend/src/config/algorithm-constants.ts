@@ -425,20 +425,20 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   },
 
   assignment: {
-    maxCost: 0.65, // Expanded to favor association over new track creation (reduces fragmentation)
-    associationBonus: 0.01,  // Very strong binding for existing associations (lower = more bonus)
-    sameCameraPenalty: 2.0,  // Increased - stronger penalty against same-camera double assignments
+    maxCost: 0.45, // Reduced to 0.45m to favor new track creation over false associations
+    associationBonus: 0.25,  // More moderate binding for existing associations
+    sameCameraPenalty: 2.5,  // Strong penalty against same-camera double assignments
     velocityConsistencyWeight: 0.25,  // Slightly reduced - don't over-penalize velocity mismatches
     crossingProximityThreshold: 1.5,
     crossingMaxCostMultiplier: 0.35,  // Tighter for crossings
     directionConsistencyWeight: 0.20,  // Slightly reduced
     minSpeedForDirection: 0.20,  // Raised - only check direction at reasonable speeds
-    crossCameraBonus: 0.30, // Stronger cross-camera bonus (lower = more bonus)
-    crossCameraBonusWindowMs: 5000,  // Extended window for cross-camera association
+    crossCameraBonus: 0.50, // Moderate cross-camera bonus (was 0.30, too aggressive)
+    crossCameraBonusWindowMs: 3000,  // Reduced window for cross-camera association
     maxAccelerationMs2: 4.0,  // Slightly relaxed acceleration limit
     accelerationConsistencyWeight: 0.08,  // Reduced weight
-    embeddingWeight: 0.55,  // Slightly increased - use appearance more for consistency
-    embeddingMinSimilarity: 0.50,  // Lowered - more permissive matching
+    embeddingWeight: 0.65,  // Higher embedding weight for ReID-primary matching
+    embeddingMinSimilarity: 0.55,  // Slightly raised for more discriminative matching
     embeddingMinQuality: 0.10,  // Lowered - allow more embeddings
     trajectoryPredictionSteps: [200, 500, 800, 1000],
     trajectoryPredictionWindowMs: 1000,
@@ -446,13 +446,13 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   },
 
   trackLifecycle: {
-    correlationDistanceM: 1.2,  // Increased to 1.2m - wider association radius to reduce IDSW
+    correlationDistanceM: 2.0,  // Reduced from 4m - ReID now handles cross-camera matching
     mergeWindowMs: 300,  // Extended - longer window for batching detections
-    trackExpiryMs: 10000,  // Back to 10s - balance FP vs IDSW
+    trackExpiryMs: 10000,  // Standard 10s - balance FP vs IDSW
     maxTrailLength: 25,  // Increased
     minDetectionsToConfirm: 2,  // Keep at 2 for good TCI
     maxVelocityMs: 8,
-    unconfirmedTrackExpiryMs: 6000,  // Extended to 6s - prevent early IDSW from unconfirmed track expiry
+    unconfirmedTrackExpiryMs: 6000,  // Standard 6s
     minCreationConfidence: 0.72,  // Slightly raised - require slightly more confidence for new tracks
     maxTracks: 200,
     minTrailMovementThreshold: 0.30,  // Lowered - allow smoother trails
@@ -466,20 +466,20 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   },
 
   trackMerger: {
-    mergeDistanceM: 0.70,  // Increased - allow merging of tracks up to 70cm apart
-    mergeConfidenceThreshold: 0.45,  // Lowered significantly - make merging much easier
-    mergeVelocityThreshold: 2.0,  // Relaxed - allow more velocity difference
-    unconfirmedMergeDistanceM: 0.70,  // Increased - merge unconfirmed tracks more aggressively
-    unconfirmedMergeConfidenceThreshold: 0.40,  // Lowered - very easy unconfirmed merging
-    crossCameraMergeDistanceM: 0.80,  // Expanded - wider cross-camera merge
+    mergeDistanceM: 0.50,  // Reduced - more conservative merging distance
+    mergeConfidenceThreshold: 0.55,  // Raised - require higher confidence for merges
+    mergeVelocityThreshold: 1.5,  // Tightened - similar velocity required
+    unconfirmedMergeDistanceM: 0.50,  // Reduced - more conservative for unconfirmed
+    unconfirmedMergeConfidenceThreshold: 0.50,  // Raised - harder unconfirmed merging
+    crossCameraMergeDistanceM: 2.5,  // Reduced from 4m - ReID handles cross-camera
     minDetectionsForVelocity: 2,  // Reduced - check velocity earlier
     simultaneousDetectionBonus: 0.20,  // Increased - stronger signal for same-time detections
-    simultaneousWindowMs: 300,  // Extended - wider window for simultaneous detection
+    simultaneousWindowMs: 200,  // Tightened - narrower window for simultaneous detection
     slowSpeedThreshold: 0.4,
     fastSpeedThreshold: 1.0,
-    slowSpeedDistanceMultiplier: 1.5,  // Increased - expand radius more for slow tracks
-    fastSpeedDistanceMultiplier: 0.9,  // Relaxed
-    slowSpeedThresholdReduction: 0.10,  // Increased - lower threshold for slow tracks
+    slowSpeedDistanceMultiplier: 1.3,  // Reduced - less expansion for slow tracks
+    fastSpeedDistanceMultiplier: 0.8,  // Tighter for fast tracks
+    slowSpeedThresholdReduction: 0.05,  // Reduced - less threshold reduction for slow tracks
   },
 
   occlusion: {
@@ -563,7 +563,8 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
     frameBucketMs: 33,              // ~30fps frame buckets
     // Time-based bucketing is more robust for real multi-camera feeds (different videos / imperfect frame alignment).
     // Frame-number correlation can be enabled per-deployment when cameras are known to share an identical frame clock.
-    useFrameNumberCorrelation: false,
+    // Enable for synchronized replay files or when cameras share a frame sync signal.
+    useFrameNumberCorrelation: true,
     enabled: true,                  // Enable sync buffer by default
     staleFrameMultiplier: 2,        // Drop frames older than 2x sync window
   },

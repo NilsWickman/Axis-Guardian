@@ -10,7 +10,6 @@
     ShieldAlert,
     Code,
     Crosshair,
-    Users,
     Menu,
     X,
     GitGraph,
@@ -69,14 +68,9 @@
       icon: Code,
       children: [
         {
-          name: 'Ground Truth Annotator',
-          path: '/dev/ground-annotator',
+          name: 'Cross-Camera Annotator',
+          path: '/dev/annotator',
           icon: Crosshair,
-        },
-        {
-          name: 'Track Annotator',
-          path: '/dev/track-annotator',
-          icon: Users,
         },
         {
           name: 'Architecture',

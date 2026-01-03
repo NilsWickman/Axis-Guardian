@@ -33,8 +33,6 @@ pnpm cli:inject   # Inject test detections
 pnpm cli:simulate # Simulate person walk
 pnpm cli:replay   # Replay detection frames
 pnpm cli:query    # Query active tracks (--watch for live)
-pnpm cli:visualize    # Single frame SVG visualization
-pnpm cli:batch-visualize  # Batch visualization with HTML report
 pnpm cli:sitemap  # Terminal ASCII sitemap (--watch for live)
 ```
 
@@ -77,8 +75,6 @@ Detections flow: Camera Emulator posts to `/api/emulator-detections` → Detecti
 ### Configuration
 
 Single source of truth: `frontend/public/sitemap-rectangular-room.json` - defines camera positions, orientations, FOV. Loaded by both frontend and backend.
-
-Gold Standard.json defines annotated tracks for frames - giving  ground positions on the site map based on bounding boxes.
 
 ### Sitemap Coordinate System
 
@@ -181,25 +177,6 @@ pnpm cli:replay -f ../shared/cameras/view-HC3.detections.json.gz -c camera1
 |---------|---------|
 | `pnpm cli:sitemap --watch` | Live ASCII sitemap in terminal |
 | `pnpm cli:query --watch` | Live track table with positions |
-| `pnpm cli:visualize --frame N` | Generate SVG + HTML for single frame |
-| `pnpm cli:batch-visualize` | Generate report for all ground truth frames |
-
-### Ground Truth Validation
-```bash
-# Run projection accuracy tests against GroundTruths.json
-pnpm test tests/integration/ground-truth-validation.test.ts
-
-# Generate batch report with all frames
-pnpm cli:batch-visualize --output ./report --markdown
-# Open ./report/index.html for visual inspection
-```
-
-### Calibration Iteration Loop
-1. Modify calibration in sitemap or K/R/T matrices
-2. Run `pnpm test tests/integration/projection-accuracy.test.ts`
-3. Generate visualization: `pnpm cli:batch-visualize`
-4. Check pass rate and average error in report
-5. Repeat until metrics improve
 
 ## Tech Stack
 

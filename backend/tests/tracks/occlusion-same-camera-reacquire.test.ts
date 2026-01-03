@@ -22,6 +22,9 @@ describe('occlusion same-camera reacquire (local trackId changes)', () => {
     ]
     tm.setSiteMapGeometry(cameras, obstacles, roomBounds)
 
+    // Create a consistent embedding for all detections from same "person"
+    const samePersonEmbedding = Array.from({ length: 512 }, (_, i) => Math.sin(i * 0.1) * 0.1)
+
     const det = (t: number, cam: string, localId: number, x: number, y: number, frame: number): CameraDetection => ({
       cameraId: cam,
       trackId: localId,
@@ -30,6 +33,10 @@ describe('occlusion same-camera reacquire (local trackId changes)', () => {
       confidence: 0.95,
       timestamp: t,
       frameNumber: frame,
+      attributes: {
+        embedding: samePersonEmbedding,
+        embedding_quality: 0.5,
+      },
     })
 
     // Create a track from camera2 with localId=10 and confirm it

@@ -8,7 +8,6 @@
 
 import type { GlobalTrack, CameraDetection } from '../types.js'
 import { cosineSimilarity } from '../tracks/attribute-aggregator.js'
-import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
 
 /**
  * Archived embedding entry

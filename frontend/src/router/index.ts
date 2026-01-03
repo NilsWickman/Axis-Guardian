@@ -74,24 +74,7 @@ const routes: RouteRecordRaw[] = [
       title: 'Replay',
     },
   },
-  // Ground Truth Annotator (moved to dev)
-  {
-    path: '/dev/ground-annotator',
-    name: 'GroundAnnotator',
-    component: () => import('@/views/calibration/CalibrationAnnotator.vue'),
-    meta: {
-      title: 'Ground Truth Annotator',
-    },
-  },
   // Dev Tools
-  {
-    path: '/dev/track-annotator',
-    name: 'TrackAnnotator',
-    component: () => import('@/views/dev/TrackAnnotator.vue'),
-    meta: {
-      title: 'Track Identity Annotator',
-    },
-  },
   {
     path: '/dev/architecture',
     name: 'Architecture',
@@ -106,6 +89,14 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/dev/SiteMapView.vue'),
     meta: {
       title: 'Site Map',
+    },
+  },
+  {
+    path: '/dev/annotator',
+    name: 'CrossCameraAnnotator',
+    component: () => import('@/views/dev/CrossCameraAnnotator.vue'),
+    meta: {
+      title: 'Cross-Camera Annotator',
     },
   },
 ]

@@ -237,6 +237,32 @@ export function buildCostMatrix(
         cost *= ALGORITHM_CONSTANTS.handoff.predictiveHandoffBonus
       }
 
+      // 6. HARD IDENTITY GATE: Block association when embeddings strongly mismatch
+      // This prevents different people from taking over an existing track
+      if (embeddingResult.similarity !== undefined) {
+        const trackSampleCount = track.attributes?.sample_count ?? 0
+        const trackQuality = track.attributes?.embedding_quality ?? 0
+        const detQuality = det.attributes?.embedding_quality ?? 0
+        // Apply identity gate with just 1 sample - earlier protection
+        const hasEmbeddings = trackSampleCount >= 1 && trackQuality > 0.1 && detQuality > 0.01
+
+        if (hasEmbeddings) {
+          // Block association for very different appearances
+          if (embeddingResult.similarity < 0.35) {
+            // Different person - return impossibly high cost
+            return 1000 // Way above any maxCost threshold
+          }
+          // Moderate mismatch - strong penalty but not blocking
+          if (embeddingResult.similarity < 0.45) {
+            cost *= 6.0
+          }
+          // Low-moderate mismatch - moderate penalty
+          if (embeddingResult.similarity < 0.55) {
+            cost *= 3.0
+          }
+        }
+      }
+
       // Cap cost at adaptive gate for this track
       return Math.min(cost, adaptiveGates[trackIdx])
     })

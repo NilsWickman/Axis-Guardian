@@ -403,7 +403,7 @@ export class TrackManager {
   private reviveArchivedTrack(
     archived: import('../correlation/embedding-archive.js').ArchivedEmbedding,
     detection: CameraDetection,
-    now: number
+    _now: number // Wall clock time, detection.timestamp used for track timing
   ): GlobalTrack | null {
     // Re-use the original global track ID for consistent identity
     const globalTrackId = archived.globalTrackId
@@ -1093,24 +1093,47 @@ export class TrackManager {
 
         // If embeddings are available and clearly mismatch, skip this track entirely
         // This prevents stealing another person's identity based on spatial proximity alone
-        if (embeddingSimilarity >= 0 && embeddingSimilarity < 0.4) {
-          continue  // Clear embedding mismatch - don't consider this track
+        // Use moderate threshold (0.65) - balance between preventing false merges and
+        // allowing same-person matching during appearance changes
+        if (embeddingSimilarity >= 0 && embeddingSimilarity < 0.65) {
+          continue  // Embedding mismatch - don't consider this track
+        }
+
+        // When track already has associations from this camera AND detection has an embedding,
+        // but the track doesn't have an embedding yet, be more conservative.
+        // This prevents a new person from being absorbed by a track that just started.
+        if (excludeCameraId && detectionEmbedding && detectionEmbedding.length > 0) {
+          const assoc = track.cameraAssociations.get(excludeCameraId)
+          if (assoc && embeddingSimilarity < 0) {
+            // Track has association from this camera but no embedding comparison possible
+            // Require very close spatial proximity (0.5m) to allow association
+            if (distance > 0.5) {
+              continue  // Too far without embedding confirmation
+            }
+          }
         }
 
         // Check for same-camera association
         // When a track already has an association from this camera, it's a strong
         // candidate for absorbing new trackIds from the same camera (fragmentation)
+        // BUT only if embeddings are similar enough - otherwise it might be a different person
         let sameCameraAssocBonus = 1.0
         if (excludeCameraId) {
           const assoc = track.cameraAssociations.get(excludeCameraId)
           if (assoc) {
             // Track has at least one ID from this camera
-            // This is a strong signal for fragmentation - apply significant bonus
-            sameCameraAssocBonus = 0.3
-            if (assoc.trackIds.length >= 2) {
-              // Track has 2+ IDs from this camera - even stronger fragmentation pattern
-              sameCameraAssocBonus = 0.15
+            // Only apply fragmentation bonus if embeddings match well
+            const embeddingsCompatible = embeddingSimilarity >= 0.65
+            // If no embeddings to compare, don't apply bonus (be conservative)
+            if (embeddingsCompatible) {
+              // This is a strong signal for fragmentation - apply significant bonus
+              sameCameraAssocBonus = 0.3
+              if (assoc.trackIds.length >= 2) {
+                // Track has 2+ IDs from this camera - even stronger fragmentation pattern
+                sameCameraAssocBonus = 0.15
+              }
             }
+            // else: embeddings clearly different - no same-camera bonus
           }
         }
 
@@ -1124,7 +1147,7 @@ export class TrackManager {
           // Good embedding similarity - slight preference
           effectiveDistance *= 0.85
         }
-        // Below 0.7: no embedding bonus (but not penalized unless <0.4)
+        // Below 0.7: no embedding bonus (but not penalized unless <0.5)
 
         // Apply same-camera association bonus (strong when applicable)
         effectiveDistance *= sameCameraAssocBonus
@@ -1189,7 +1212,8 @@ export class TrackManager {
     const clusteringDistance = hasAnyCrossings ? 0.5 : baseClusteringDistance
 
     // Build candidate cross-camera pairs under distance threshold
-    const pairs: Array<{ i: number; j: number; dist: number }> = []
+    // ALSO require embedding similarity for cross-camera clustering
+    const pairs: Array<{ i: number; j: number; dist: number; similarity: number }> = []
     for (let i = 0; i < detections.length; i++) {
       for (let j = i + 1; j < detections.length; j++) {
         if (detections[i].cameraId === detections[j].cameraId) continue
@@ -1198,7 +1222,27 @@ export class TrackManager {
           { x: detections[j].worldX, y: detections[j].worldY }
         )
         if (dist < clusteringDistance) {
-          pairs.push({ i, j, dist })
+          // Check embedding similarity before clustering
+          const emb1 = detections[i].attributes?.embedding
+          const emb2 = detections[j].attributes?.embedding
+          let similarity = 0.5 // Default neutral if no embeddings
+
+          if (emb1 && emb2 && emb1.length > 0 && emb1.length === emb2.length) {
+            // Compute cosine similarity inline
+            let dot = 0, norm1 = 0, norm2 = 0
+            for (let k = 0; k < emb1.length; k++) {
+              dot += emb1[k] * emb2[k]
+              norm1 += emb1[k] * emb1[k]
+              norm2 += emb2[k] * emb2[k]
+            }
+            similarity = norm1 > 0 && norm2 > 0 ? dot / (Math.sqrt(norm1) * Math.sqrt(norm2)) : 0
+          }
+
+          // Only cluster if embedding similarity is good enough
+          // This prevents different people from being pre-clustered together
+          if (similarity > 0.45) {
+            pairs.push({ i, j, dist, similarity })
+          }
         }
       }
     }
@@ -1416,6 +1460,9 @@ export class TrackManager {
         this.aggregateDetectionAttributes(track, det.attributes)
       }
     }
+
+    // Record metrics
+    getMetrics().recordTrackCreated()
 
     return track
   }
@@ -1710,6 +1757,24 @@ export class TrackManager {
     let assoc = track.cameraAssociations.get(detection.cameraId)
     if (assoc) {
       if (!assoc.trackIds.includes(detection.trackId)) {
+        // Adding a NEW trackId from same camera - this is HIGH RISK for false merges
+        // Different people often walk through the same area sequentially
+        // Require VERY high embedding similarity (0.80) to allow this
+        const detEmbedding = detection.attributes?.embedding
+        const trackEmbedding = track.attributes?.embedding
+        if (detEmbedding && trackEmbedding &&
+            detEmbedding.length > 0 && detEmbedding.length === trackEmbedding.length) {
+          const similarity = cosineSimilarity(detEmbedding, trackEmbedding)
+          if (similarity < 0.80) {
+            // Not clearly the same person - reject this association
+            // This prevents tracks from absorbing different people over time
+            return false
+          }
+        } else {
+          // No embeddings to compare - don't allow absorbing new trackId
+          // This prevents false merges when embeddings aren't available
+          return false
+        }
         assoc.trackIds.push(detection.trackId)
       }
       assoc.lastSeen = detection.timestamp
@@ -1718,6 +1783,22 @@ export class TrackManager {
       }
     } else {
       // This is a cross-camera handoff - track is being seen by a new camera
+      // Validate with embedding similarity to prevent cross-camera false merges
+      const detEmbedding = detection.attributes?.embedding
+      const trackEmbedding = track.attributes?.embedding
+      if (detEmbedding && trackEmbedding &&
+          detEmbedding.length > 0 && detEmbedding.length === trackEmbedding.length) {
+        const similarity = cosineSimilarity(detEmbedding, trackEmbedding)
+        // For cross-camera, use moderate threshold (0.60)
+        // This is lower than same-camera (0.80) because calibration differences
+        // can affect appearance, but still blocks clearly different people
+        if (similarity < 0.60) {
+          // Not the same person - reject cross-camera association
+          return false
+        }
+      }
+      // If no embeddings available, let spatial proximity decide (already validated in findNearbyTrack)
+
       track.cameraAssociations.set(detection.cameraId, {
         cameraId: detection.cameraId,
         trackIds: [detection.trackId],

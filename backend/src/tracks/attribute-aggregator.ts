@@ -49,6 +49,11 @@ export class AttributeAggregator {
   private embeddingWeightSum = 0
   private embeddingCount = 0
 
+  // Once embedding is "locked" (enough high-quality samples), stop updating it
+  // This prevents identity drift as track absorbs more detections
+  private embeddingLocked = false
+  private static readonly EMBEDDING_LOCK_THRESHOLD = 3  // Lock after 3 samples
+
   // Sample tracking
   private sampleCount = 0
 
@@ -96,8 +101,8 @@ export class AttributeAggregator {
       )
     }
 
-    // Aggregate embedding (quality-weighted average)
-    if (attributes.embedding && attributes.embedding.length > 0) {
+    // Aggregate embedding (quality-weighted average) - but only until locked
+    if (attributes.embedding && attributes.embedding.length > 0 && !this.embeddingLocked) {
       const quality = attributes.embedding_quality ?? 0.5
 
       if (this.embeddingSum === null) {
@@ -113,6 +118,11 @@ export class AttributeAggregator {
 
       this.embeddingWeightSum += quality
       this.embeddingCount++
+
+      // Lock embedding after enough samples to prevent identity drift
+      if (this.embeddingCount >= AttributeAggregator.EMBEDDING_LOCK_THRESHOLD) {
+        this.embeddingLocked = true
+      }
     }
   }
 
@@ -154,6 +164,7 @@ export class AttributeAggregator {
     this.embeddingSum = null
     this.embeddingWeightSum = 0
     this.embeddingCount = 0
+    this.embeddingLocked = false
     this.sampleCount = 0
   }
 

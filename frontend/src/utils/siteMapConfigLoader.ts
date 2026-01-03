@@ -78,6 +78,11 @@ export interface SiteMapConfigObstacle {
     endAngle: number
     clockwise?: boolean
   }
+  linear?: {
+    start: { x: number; y: number }
+    end: { x: number; y: number }
+    width: number
+  }
   height?: number
   blocksTracking?: boolean
   blocksView?: boolean

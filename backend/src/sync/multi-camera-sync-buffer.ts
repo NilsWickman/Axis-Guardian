@@ -91,6 +91,10 @@ export class MultiCameraSyncBuffer {
   private cameraVideoTimeBaseMs: Map<string, number> = new Map()
   /** Reference baseline used to compute relative offsets */
   private referenceVideoTimeBaseMs: number | null = null
+  /** Track consecutive single-camera flushes to detect single-camera mode */
+  private consecutiveSingleCameraFlushes: number = 0
+  /** Threshold for consecutive single-camera flushes before enabling fast single-camera mode */
+  private readonly SINGLE_CAMERA_MODE_THRESHOLD = 5
 
   constructor(config?: Partial<SyncBufferConfig>) {
     const defaults = ALGORITHM_CONSTANTS.sync
@@ -239,10 +243,17 @@ export class MultiCameraSyncBuffer {
     const expectedCameras = this.getExpectedCameras(now)
     const expectedCount = expectedCameras.size
 
-    // Complete only when we have a *multi-camera* batch.
-    // If we only expect 0-1 cameras, rely on the timeout flush to avoid prematurely
-    // finalizing a bucket before another camera becomes active and starts contributing.
+    // Multi-camera mode: complete when all expected cameras have reported
     if (expectedCount >= 2 && cameraCount >= expectedCount) {
+      this.flushBucket(bucket, 'complete')
+      return
+    }
+
+    // Single-camera mode optimization: if we've seen consistent single-camera
+    // traffic, don't wait for the full timeout - flush immediately.
+    // This reduces latency from ~200ms to near-zero for single-camera setups.
+    if (expectedCount === 1 && cameraCount === 1 &&
+        this.consecutiveSingleCameraFlushes >= this.SINGLE_CAMERA_MODE_THRESHOLD) {
       this.flushBucket(bucket, 'complete')
       return
     }
@@ -349,6 +360,15 @@ export class MultiCameraSyncBuffer {
     }
 
     if (messages.length === 0) return
+
+    // Track single-camera mode for optimization
+    const uniqueCameras = new Set(messages.map(m => m.camera_id))
+    if (uniqueCameras.size === 1) {
+      this.consecutiveSingleCameraFlushes++
+    } else {
+      // Multi-camera batch detected, reset the counter
+      this.consecutiveSingleCameraFlushes = 0
+    }
 
     // Update metrics
     const now = Date.now()
@@ -532,6 +552,7 @@ export class MultiCameraSyncBuffer {
     this.batchDetectionCounts = []
     this.syncWaitTimes = []
     this.frameSkews = []
+    this.consecutiveSingleCameraFlushes = 0
   }
 
   /**

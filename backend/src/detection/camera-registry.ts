@@ -11,8 +11,9 @@
  * - Loading from JSON file via loadCalibrationFromFile()
  */
 
-import type { CameraParams, CameraConfig, SiteMapCameraConfig, CameraCalibration } from '../types.js'
+import type { CameraParams, CameraConfig, SiteMapCameraConfig, CameraCalibration, WorldTransform } from '../types.js'
 import { siteMapConfigToCamera } from '../projection/ground-plane.js'
+import { generateCalibrationFromSitemap, validateSitemapCamera } from '../calibration/sitemap-calibration.js'
 
 /**
  * Feature flag: Set to true to skip polynomial world transform and use
@@ -21,90 +22,37 @@ import { siteMapConfigToCamera } from '../projection/ground-plane.js'
  * Once the new calibration tooling has been run and K/R/T matrices are
  * properly calibrated for sitemap coordinates, set this to true.
  */
-export const USE_DIRECT_KRT_PROJECTION = false
+export const USE_DIRECT_KRT_PROJECTION = true
 
 /**
- * Per-camera world coordinate transformations from K/R/T dataset coords to sitemap coords
+ * Camera Calibration Data
  *
- * These transforms were derived using quadratic least squares regression on 211 ground truth
- * annotations. Each camera has its own optimal transform because the raw K/R/T projection
- * coordinate system varies between cameras due to different rotation matrices.
+ * IMPORTANT: Calibration needs to be derived from ground truth annotations.
+ * Use the frontend annotation tool to create annotations, then run:
+ *   python3 scripts/direct-image-to-sitemap.py
  *
- * Quadratic model: result = c0 + c1*x + c2*y + c3*x^2 + c4*y^2 + c5*x*y
- * This captures non-linear distortions that affine transforms cannot model.
- *
- * Performance: 47.9% within 0.5m, 0.64m average error (vs 23.7% with affine)
+ * Current sitemap: 32x30m
+ * Camera positions from sitemap-rectangular-room.json
  */
-const CAMERA1_WORLD_TRANSFORM = {
-  // Keep affine as fallback
-  rotation: [
-    [0.617269, 1.102075],
-    [0.344626, -0.320704],
-  ],
-  translation: [-4.145655, 7.232865],
-  scale: 1.0,
-  // Cubic polynomial (Degree 3, IRLS + Ridge λ=0.01, outlier filtered)
-  // CV pass rate: 62.4%, mean error: 0.454m
-  // Joint optimized with camera2 for cross-camera consistency
-  polynomial: {
-    degree: 3 as const,
-    coeffsX: [0.91892405, 3.27104513, -0.27790634, 0.22072677, 0.11318064, -0.28978615,
-              -0.00726981, -0.00291038, -0.01106634, 0.00776505],
-    coeffsY: [11.78496064, -0.50705540, -0.94383915, 0.01901654, 0.01775988, 0.30441243,
-              -0.00418223, -0.00003657, 0.00658078, -0.01481308],
-  },
-}
-
-const CAMERA2_WORLD_TRANSFORM = {
-  // Keep affine as fallback
-  rotation: [
-    [0.801481, 0.932076],
-    [0.960596, -0.669338],
-  ],
-  translation: [-1.599807, 11.586605],
-  scale: 1.0,
-  // Quartic polynomial (Degree 4, IRLS + Ridge λ=0.1, outlier filtered)
-  // CV pass rate: 65.5%, mean error: 0.436m
-  // Joint optimized with camera1 for cross-camera consistency
-  polynomial: {
-    degree: 4 as const,
-    coeffsX: [1.64803471, -1.31100788, -0.13431030, 1.62550464, 0.11270215, 0.42699729,
-              0.08269888, -0.00517666, -0.35509015, -0.00586804,
-              0.01694579, 0.00010593, -0.01346027, -0.00093404, 0.01716980],
-    coeffsY: [11.32299982, 1.59070288, 0.14884978, -0.57506294, -0.17817716, -0.29825832,
-              0.06894811, 0.01185195, 0.08182519, 0.03649617,
-              0.00015376, -0.00023932, -0.00632516, -0.00132674, -0.00215036],
-  },
-}
-
-// Initial identity transforms for IP2/IP5 - will need calibration
-const CAMERA3_WORLD_TRANSFORM = {
-  rotation: [[1, 0], [0, 1]] as [[number, number], [number, number]],
-  translation: [0, 0] as [number, number],
-  scale: 1.0,
-}
-
-const CAMERA4_WORLD_TRANSFORM = {
-  rotation: [[1, 0], [0, 1]] as [[number, number], [number, number]],
-  translation: [0, 0] as [number, number],
-  scale: 1.0,
-}
-
 /**
- * K/R/T Calibration data from the Auditorium dataset (cam_param.mat)
+ * Direct polynomial calibration - maps normalized image coords directly to sitemap
  *
- * These matrices were extracted from the MATLAB calibration file and provide
- * accurate ground-plane projection using the formula from the dataset README:
+ * PLACEHOLDER: These coefficients need to be derived from new ground truth annotations
+ * for the current sitemap (32x30m). Use the annotation tool to create annotations,
+ * then run: python3 scripts/direct-image-to-sitemap.py
  *
- *   A = K * R
- *   A = [A(:, 1:2), [cx - x; cy - y; -1]]
- *   KRT = K * R * T
- *   p = A \ KRT  (solve linear system)
+ * Input: Normalized image coordinates (u, v) where:
+ *   u = bbox_center_x / image_width (0-1)
+ *   v = bbox_bottom / image_height (0-1)
  *
- * The worldTransform converts from dataset coordinates to sitemap coordinates.
+ * Output: Sitemap coordinates (x, y) in meters
  */
+// TODO: Generate new coefficients from annotations for the new 32x30m sitemap
+// Camera positions: camera1 (23,4), camera2 (8,3.8), camera3 (29.5,26), camera4 (16.5,15)
+
 const CAMERA_CALIBRATIONS: Record<string, CameraCalibration> = {
-  // HC3 (camera1) - mounted at position (16.22, 11.7) in sitemap
+  // camera1 - position (23, 4), azimuth 340°
+  // NEEDS NEW CALIBRATION from annotations for 32x30m sitemap
   camera1: {
     K: [
       [1480, 0, 0],
@@ -112,69 +60,68 @@ const CAMERA_CALIBRATIONS: Record<string, CameraCalibration> = {
       [0, 0, 1],
     ],
     R: [
-      [0.26415998, 0.96365108, -0.0399512],
-      [0.01284627, -0.04493433, -0.99890734],
-      [-0.96439332, 0.26335812, -0.02424917],
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 0, 1],
     ],
-    T: [8.31972445, 13.44595571, 1.59303293],
+    T: [23, 4, 3],  // Camera position from sitemap
     center: [960, 540],
     scale: 1,
-    worldTransform: CAMERA1_WORLD_TRANSFORM,
+    // directPolynomial: TODO - derive from new annotations
   },
-  // HC4 (camera2) - mounted at position (0.9, 11.5) in sitemap
-  // Note: Focal length optimized from 2350 to 2300 via calibration sweep
-  // (77.0% pass rate vs 75.7% baseline, cross-validated with no overfitting)
+  // camera2 - position (8, 3.8), azimuth 52°
+  // NEEDS NEW CALIBRATION from annotations for 32x30m sitemap
   camera2: {
     K: [
-      [2300, 0, 0],
-      [0, 2300, 0],
+      [1480, 0, 0],
+      [0, 1480, 0],
       [0, 0, 1],
     ],
     R: [
       [1, 0, 0],
-      [0, -0.08715574, -0.9961947],
-      [0, 0.9961947, -0.08715574],
+      [0, 1, 0],
+      [0, 0, 1],
     ],
-    T: [0, 0, 1.5],
+    T: [8, 3.8, 3],  // Camera position from sitemap
     center: [960, 540],
     scale: 1,
-    worldTransform: CAMERA2_WORLD_TRANSFORM,
+    // directPolynomial: TODO - derive from new annotations
   },
-  // IP2 (camera3) - Initial estimate from scene_metadata.xml
-  // azimuth: 140deg, elevation: 9deg, position: (20.60, 28.31, 2.62)
+  // camera3 - position (29.5, 26), azimuth 225°
+  // NEEDS NEW CALIBRATION from annotations for 32x30m sitemap
   camera3: {
     K: [
-      [2000, 0, 0],
-      [0, 2000, 0],
+      [1480, 0, 0],
+      [0, 1480, 0],
       [0, 0, 1],
     ],
     R: [
-      [-0.766, 0.643, 0],
-      [-0.101, -0.120, -0.988],
-      [-0.635, -0.757, 0.156],
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 0, 1],
     ],
-    T: [20.60, 28.31, 2.62],
+    T: [29.5, 26, 3],  // Camera position from sitemap
     center: [960, 540],
     scale: 1,
-    worldTransform: CAMERA3_WORLD_TRANSFORM,
+    // directPolynomial: TODO - derive from new annotations
   },
-  // IP5 (camera4) - Initial estimate from scene_metadata.xml
-  // azimuth: 339deg, elevation: 0deg, position: (10.57, 16.31, 1.84)
+  // camera4 - position (16.5, 15), azimuth 29°
+  // NEEDS NEW CALIBRATION from annotations for 32x30m sitemap
   camera4: {
     K: [
-      [2000, 0, 0],
-      [0, 2000, 0],
+      [1480, 0, 0],
+      [0, 1480, 0],
       [0, 0, 1],
     ],
     R: [
-      [0.934, 0.358, 0],
-      [0, 0, -1],
-      [-0.358, 0.934, 0],
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 0, 1],
     ],
-    T: [10.57, 16.31, 1.84],
+    T: [16.5, 15, 3],  // Camera position from sitemap
     center: [960, 540],
     scale: 1,
-    worldTransform: CAMERA4_WORLD_TRANSFORM,
+    // directPolynomial: TODO - derive from new annotations
   },
 }
 
@@ -326,14 +273,39 @@ export class CameraRegistry {
 
     if (data.cameras && Array.isArray(data.cameras)) {
       for (const cam of data.cameras) {
+        // Convert distortion array [k1, k2, p1, p2, k3] to DistortionCoeffs object
+        let distortion = undefined
+        if (Array.isArray(cam.distortion) && cam.distortion.length >= 5) {
+          distortion = {
+            k1: cam.distortion[0],
+            k2: cam.distortion[1],
+            p1: cam.distortion[2],
+            p2: cam.distortion[3],
+            k3: cam.distortion[4],
+          }
+        } else if (cam.distortion && typeof cam.distortion === 'object') {
+          distortion = cam.distortion
+        }
+
+        // Convert worldTransform.polynomial if present
+        let worldTransform: WorldTransform | undefined = undefined
+        if (cam.worldTransform?.polynomial) {
+          // Polynomial overrides rotation/translation, but we need placeholder values
+          worldTransform = {
+            rotation: cam.worldTransform.rotation ?? [[1, 0], [0, 1]],
+            translation: cam.worldTransform.translation ?? [0, 0],
+            polynomial: cam.worldTransform.polynomial,
+          }
+        }
+
         const calibration: CameraCalibration = {
           K: cam.K,
           R: cam.R,
           T: cam.T,
           center: cam.center,
           scale: cam.scale ?? 1,
-          distortion: cam.distortion,
-          // No worldTransform - new calibrations are in sitemap coords
+          distortion,
+          worldTransform,
         }
         this.setCalibration(cam.cameraId, calibration)
       }
@@ -398,12 +370,34 @@ export class CameraRegistry {
 
   /**
    * Load cameras from sitemap config array
+   *
+   * This also auto-generates K/R/T calibration matrices from the sitemap
+   * geometry (position, azimuth, elevation, FOV, height).
    */
   loadFromSiteMapConfig(configs: SiteMapCameraConfig[]): void {
     this.cameras.clear()
     this.acapDeviceIdMap.clear()
+    this.calibrationOverrides.clear()  // Clear any previous calibrations
+
     for (const config of configs) {
+      // Store camera params for projection
       this.cameras.set(config.id, siteMapConfigToCamera(config))
+
+      // Auto-generate K/R/T calibration from sitemap geometry
+      const validation = validateSitemapCamera(config)
+      if (validation.warnings.length > 0) {
+        validation.warnings.forEach(w => console.warn(`[CameraRegistry] ${w}`))
+      }
+      if (validation.errors.length > 0) {
+        validation.errors.forEach(e => console.error(`[CameraRegistry] ${e}`))
+      }
+
+      if (validation.valid) {
+        const calibration = generateCalibrationFromSitemap(config)
+        this.calibrationOverrides.set(config.id, calibration)
+        console.log(`[CameraRegistry] Generated K/R/T calibration for ${config.id} from sitemap geometry`)
+      }
+
       // Register ACAP device ID mapping if specified
       if (config.acapDeviceId) {
         this.acapDeviceIdMap.set(config.acapDeviceId, config.id)

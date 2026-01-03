@@ -148,8 +148,8 @@ function worldToCanvasX(worldX: number): number {
 }
 
 function worldToCanvasY(worldY: number): number {
-  const origin = props.siteMap.origin ?? { x: 0, y: 0 }
-  return (worldY - origin.y) * props.siteMap.renderScale
+  const mapHeight = props.siteMap.height.value
+  return (mapHeight - worldY) * props.siteMap.renderScale
 }
 
 /**

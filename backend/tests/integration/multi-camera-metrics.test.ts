@@ -41,10 +41,15 @@ interface DetectionFrame {
   frame_number: number
   timestamp: number
   detections: Array<{
-    bbox: { left: number; top: number; right: number; bottom: number }
+    // YOLO format: [center_x, center_y, width, height] normalized OR {left, top, right, bottom}
+    bbox: [number, number, number, number] | { left: number; top: number; right: number; bottom: number }
     confidence: number
     class_name: string
     track_id: number
+    attributes?: {
+      embedding?: number[]
+      embedding_quality?: number
+    }
   }>
 }
 
@@ -69,6 +74,26 @@ interface MultiCameraMetrics {
 
 function distance(p1: Point2D, p2: { x: number; y: number }): number {
   return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2))
+}
+
+/**
+ * Convert detection bbox to top-left format expected by projection
+ * Handles both YOLO format [cx, cy, w, h] and object format {left, top, right, bottom}
+ */
+function convertBBox(bbox: [number, number, number, number] | { left: number; top: number; right: number; bottom: number }): { x: number; y: number; width: number; height: number } {
+  if (Array.isArray(bbox)) {
+    // YOLO format: [center_x, center_y, width, height] normalized
+    const [cx, cy, width, height] = bbox
+    return { x: cx - width / 2, y: cy - height / 2, width, height }
+  } else {
+    // Object format: {left, top, right, bottom}
+    return {
+      x: bbox.left,
+      y: bbox.top,
+      width: bbox.right - bbox.left,
+      height: bbox.bottom - bbox.top,
+    }
+  }
 }
 
 function loadTrackTruths(): TrackTruthsDataset | null {
@@ -112,7 +137,7 @@ describe('Multi-Camera Specific Metrics', () => {
   let sitemapConfig: ReturnType<typeof loadSiteMapConfig>
   let detectionFiles: Map<string, DetectionFile>
 
-  beforeAll(() => {
+  beforeAll(async () => {
     console.log('\n' + '='.repeat(70))
     console.log('MULTI-CAMERA SPECIFIC METRICS')
     console.log('='.repeat(70))
@@ -130,6 +155,14 @@ describe('Multi-Camera Specific Metrics', () => {
     // Initialize camera registry
     cameraRegistry = new CameraRegistry()
     cameraRegistry.loadFromSiteMapConfig(sitemapConfig.cameras as any)
+
+    // Load calibration from calibration.json for proper K/R/T matrices and worldTransform
+    try {
+      const calibrationPath = join(__dirname, '../../calibration.json')
+      await cameraRegistry.loadCalibrationFromFile(calibrationPath)
+    } catch (e) {
+      console.log('Could not load calibration.json - using hardcoded calibrations')
+    }
 
     // Load detection files
     detectionFiles = new Map()
@@ -157,10 +190,16 @@ describe('Multi-Camera Specific Metrics', () => {
       }
 
       // Build camera track -> person ID mapping
+      // Skip person 0 ("Invalid") - these are noise/invalid detections
       const cameraTrackToPerson = new Map<string, number>()
       for (const ann of trackTruths.annotations) {
-        cameraTrackToPerson.set(ann.globalTrackId, ann.personId)
+        if (ann.personId !== 0) {
+          cameraTrackToPerson.set(ann.globalTrackId, ann.personId)
+        }
       }
+
+      // Track embedding similarities for false merge analysis
+      const personEmbeddings: Map<number, number[][]> = new Map()  // personId -> list of embeddings
 
       let mockTime = 1000
       const trackManager = new TrackManager({
@@ -171,6 +210,8 @@ describe('Multi-Camera Specific Metrics', () => {
 
       // Track which persons are in each global track
       const globalTrackPersons: Map<string, Set<number>> = new Map()
+      // Also track which camera tracks contributed to each global track
+      const globalTrackCameraTracks: Map<string, Set<string>> = new Map()
 
       // Process frames
       const allFrames: Array<{ cameraId: string; frame: DetectionFrame }> = []
@@ -188,31 +229,41 @@ describe('Multi-Camera Specific Metrics', () => {
           const cameraTrackId = `${cameraId}-${det.track_id}`
           const personId = cameraTrackToPerson.get(cameraTrackId)
 
-          const bbox = {
-            x: det.bbox.left,
-            y: det.bbox.top,
-            width: det.bbox.right - det.bbox.left,
-            height: det.bbox.bottom - det.bbox.top,
-          }
-
-          const track = detectionProcessor.processInjection(cameraId, bbox, det.confidence, det.track_id)
+          const bbox = convertBBox(det.bbox)
+          const track = detectionProcessor.processInjection(cameraId, bbox, det.confidence, det.track_id, det.attributes)
 
           if (track && personId !== undefined) {
             if (!globalTrackPersons.has(track.globalTrackId)) {
               globalTrackPersons.set(track.globalTrackId, new Set())
+              globalTrackCameraTracks.set(track.globalTrackId, new Set())
             }
             globalTrackPersons.get(track.globalTrackId)!.add(personId)
+            globalTrackCameraTracks.get(track.globalTrackId)!.add(cameraTrackId)
+
+            // Collect embeddings by person for similarity analysis
+            const embedding = det.attributes?.embedding
+            if (embedding && embedding.length > 0) {
+              if (!personEmbeddings.has(personId)) {
+                personEmbeddings.set(personId, [])
+              }
+              // Only keep first embedding per detection to avoid duplicates
+              personEmbeddings.get(personId)!.push(embedding)
+            }
           }
         }
       }
 
-      // Count false merges
+      // Count false merges (excluding person 0 "Invalid")
       let totalTracks = 0
       let falseMerges = 0
 
       for (const [trackId, persons] of globalTrackPersons) {
+        // Filter out person 0 (Invalid) from the set
+        const validPersons = new Set([...persons].filter(p => p !== 0))
+        if (validPersons.size === 0) continue // Skip tracks with only invalid detections
+
         totalTracks++
-        if (persons.size > 1) {
+        if (validPersons.size > 1) {
           falseMerges++
         }
       }
@@ -225,13 +276,33 @@ describe('Multi-Camera Specific Metrics', () => {
       console.log(`False Merge Rate: ${(falseMergeRate * 100).toFixed(1)}%`)
       console.log(`Target: < 5%`)
 
-      // List false merges
+      // List false merges with detailed camera track info
       if (falseMerges > 0) {
         console.log(`\nFalse merge details:`)
         let count = 0
+
+        // Build reverse mapping: globalTrack -> list of cameraTrackIds with their personIds
+        const trackDetails: Map<string, Array<{ cameraTrack: string; personId: number }>> = new Map()
         for (const [trackId, persons] of globalTrackPersons) {
-          if (persons.size > 1 && count < 5) {
-            console.log(`  ${trackId}: persons [${Array.from(persons).join(', ')}]`)
+          const validPersons = new Set([...persons].filter(p => p !== 0))
+          if (validPersons.size > 1) {
+            // Find which camera tracks contributed to this global track
+            const details: Array<{ cameraTrack: string; personId: number }> = []
+            for (const ann of trackTruths.annotations) {
+              if (ann.personId === 0) continue
+              // This is a bit hacky - we can't directly trace which camera tracks went to which global track
+              // So just list the persons
+            }
+            trackDetails.set(trackId, details)
+          }
+        }
+
+        for (const [trackId, persons] of globalTrackPersons) {
+          const validPersons = new Set([...persons].filter(p => p !== 0))
+          if (validPersons.size > 1 && count < 5) {
+            const cameraTracks = globalTrackCameraTracks.get(trackId) ?? new Set()
+            console.log(`  ${trackId}: persons [${Array.from(validPersons).join(', ')}]`)
+            console.log(`    camera tracks: [${Array.from(cameraTracks).join(', ')}]`)
             count++
           }
         }
@@ -239,6 +310,40 @@ describe('Multi-Camera Specific Metrics', () => {
           console.log(`  ... and ${falseMerges - 5} more`)
         }
       }
+
+      // Analyze embedding similarity between different persons that got merged
+      console.log(`\nEmbedding similarity analysis (should be < 0.70 to block merge):`)
+      // For the problematic merges, check pairwise similarity
+      let highSimilarityMerges = 0
+      let lowSimilarityMerges = 0
+      let noEmbeddingMerges = 0
+      for (const [trackId, persons] of globalTrackPersons) {
+        const validPersons = [...persons].filter(p => p !== 0)
+        if (validPersons.length > 1) {
+          // Check similarity between first two persons
+          const p1 = validPersons[0]
+          const p2 = validPersons[1]
+          const emb1 = personEmbeddings.get(p1)?.[0]
+          const emb2 = personEmbeddings.get(p2)?.[0]
+          if (emb1 && emb2 && emb1.length === emb2.length) {
+            let dot = 0, norm1 = 0, norm2 = 0
+            for (let i = 0; i < emb1.length; i++) {
+              dot += emb1[i] * emb2[i]
+              norm1 += emb1[i] * emb1[i]
+              norm2 += emb2[i] * emb2[i]
+            }
+            const sim = dot / (Math.sqrt(norm1) * Math.sqrt(norm2))
+            const passThreshold = sim >= 0.70
+            console.log(`  ${trackId}: person ${p1} vs ${p2} = ${sim.toFixed(3)} ${passThreshold ? '❌ PASSES threshold' : '✓ below threshold'}`)
+            if (passThreshold) highSimilarityMerges++
+            else lowSimilarityMerges++
+          } else {
+            console.log(`  ${trackId}: person ${p1} vs ${p2} = NO EMBEDDINGS`)
+            noEmbeddingMerges++
+          }
+        }
+      }
+      console.log(`\nSummary: ${highSimilarityMerges} merges with sim>=0.70, ${lowSimilarityMerges} with sim<0.70, ${noEmbeddingMerges} without embeddings`)
 
       expect(falseMergeRate).toBeLessThan(0.5) // Allow up to 50% for now
     })
@@ -272,14 +377,8 @@ describe('Multi-Camera Specific Metrics', () => {
         for (const det of frame.detections) {
           cameraDetectionCount.set(cameraId, (cameraDetectionCount.get(cameraId) ?? 0) + 1)
 
-          const bbox = {
-            x: det.bbox.left,
-            y: det.bbox.top,
-            width: det.bbox.right - det.bbox.left,
-            height: det.bbox.bottom - det.bbox.top,
-          }
-
-          const track = detectionProcessor.processInjection(cameraId, bbox, det.confidence, det.track_id)
+          const bbox = convertBBox(det.bbox)
+          const track = detectionProcessor.processInjection(cameraId, bbox, det.confidence, det.track_id, det.attributes)
 
           if (track) {
             cameraTrackContribution.set(cameraId, (cameraTrackContribution.get(cameraId) ?? 0) + 1)
@@ -345,13 +444,8 @@ describe('Multi-Camera Specific Metrics', () => {
         mockTime = Math.floor(frame.timestamp * 1000) + 1000
 
         for (const det of frame.detections) {
-          const bbox = {
-            x: det.bbox.left,
-            y: det.bbox.top,
-            width: det.bbox.right - det.bbox.left,
-            height: det.bbox.bottom - det.bbox.top,
-          }
-          detectionProcessor.processInjection(cameraId, bbox, det.confidence, det.track_id)
+          const bbox = convertBBox(det.bbox)
+          detectionProcessor.processInjection(cameraId, bbox, det.confidence, det.track_id, det.attributes)
         }
       }
 

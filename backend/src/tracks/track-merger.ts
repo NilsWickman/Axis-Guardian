@@ -11,6 +11,7 @@ import { calculateDistance } from '../correlation/track-matcher.js'
 import { KalmanTrackFilter } from '../filters/kalman-track-filter.js'
 import { getMetrics } from '../metrics/index.js'
 import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
+import { cosineSimilarity } from './attribute-aggregator.js'
 
 /**
  * Candidate pair for merging
@@ -236,6 +237,21 @@ export class TrackMerger {
   }
 
   /**
+   * Calculate embedding similarity between two tracks.
+   * Returns similarity value (0-1) or -1 if embeddings not available.
+   */
+  private calculateEmbeddingSimilarity(track1: GlobalTrack, track2: GlobalTrack): number {
+    const emb1 = track1.attributes?.embedding
+    const emb2 = track2.attributes?.embedding
+
+    if (!emb1 || !emb2 || emb1.length === 0 || emb2.length === 0 || emb1.length !== emb2.length) {
+      return -1
+    }
+
+    return cosineSimilarity(emb1, emb2)
+  }
+
+  /**
    * Calculate confidence that two tracks represent the same person
    *
    * Scoring:
@@ -243,6 +259,7 @@ export class TrackMerger {
    * - Velocity alignment: 0-0.3 points (similar velocity = higher)
    * - Temporal correlation: 0-0.2 points (seen at same time = higher)
    * - Camera exclusivity: 0.1 bonus (different cameras = good)
+   * - ReID embedding similarity: 0-0.35 points (for cross-camera merges)
    *
    * Returns 0 if same camera sees both tracks (impossible for same person)
    */
@@ -254,14 +271,38 @@ export class TrackMerger {
   ): number {
     let confidence = 0
 
-    // 1. Spatial proximity (0-0.4 points)
+    // Check if this is a cross-camera merge (tracks from different cameras)
+    const cameras1 = Array.from(track1.cameraAssociations.keys())
+    const cameras2 = Array.from(track2.cameraAssociations.keys())
+    const isCrossCameraMerge = !cameras1.some(c => cameras2.includes(c))
+
+    // 1. Spatial proximity (0-0.4 points, reduced for cross-camera)
     // Use effectiveMergeDistance when provided (e.g., 0.9m for cross-camera merges)
     // to properly score tracks that are within the allowed merge range
     const distanceThreshold = effectiveMergeDistance ?? this.config.mergeDistanceM
-    if (distance < distanceThreshold) {
-      confidence += 0.4 * (1 - distance / distanceThreshold)
+
+    // For cross-camera merges with ReID, use position as a gate but not primary signal
+    const embeddingSimilarity = this.calculateEmbeddingSimilarity(track1, track2)
+
+    if (isCrossCameraMerge && embeddingSimilarity > 0.5) {
+      // Cross-camera with good embedding match: relax position requirement
+      // Strong embedding match can override position uncertainty
+      if (distance < distanceThreshold) {
+        confidence += 0.25 * (1 - distance / distanceThreshold)  // Reduced spatial weight
+      } else if (distance < distanceThreshold * 2 && embeddingSimilarity > 0.65) {
+        // Extended range for very good embedding matches
+        confidence += 0.15 * (1 - distance / (distanceThreshold * 2))
+      } else if (embeddingSimilarity < 0.75) {
+        return 0 // Too far apart and not excellent embedding match
+      }
+      // If similarity > 0.75, allow even larger distances (calibration uncertainty)
     } else {
-      return 0 // Too far apart
+      // Same-camera or no embeddings: use original logic
+      if (distance < distanceThreshold) {
+        confidence += 0.4 * (1 - distance / distanceThreshold)
+      } else {
+        return 0 // Too far apart
+      }
     }
 
     // 2. Velocity alignment (0-0.3 points)
@@ -355,12 +396,44 @@ export class TrackMerger {
     }
 
     // 6. Bonus for being tracked by different cameras (supports hypothesis of same person)
-    const cameras1 = Array.from(track1.cameraAssociations.keys())
-    const cameras2 = Array.from(track2.cameraAssociations.keys())
     const hasOverlap = cameras1.some(c => cameras2.includes(c))
 
     if (!hasOverlap) {
       confidence += 0.1 // Different camera sets - good indicator
+    }
+
+    // 7. ReID embedding similarity bonus/penalty
+    // This is the PRIMARY signal for preventing false merges
+    if (embeddingSimilarity > 0) {
+      if (isCrossCameraMerge) {
+        // Cross-camera merge: use embedding as strong signal
+        if (embeddingSimilarity > 0.80) {
+          // Excellent match - strong bonus
+          confidence += 0.35
+        } else if (embeddingSimilarity > 0.70) {
+          // Good match - moderate bonus
+          confidence += 0.20
+        } else if (embeddingSimilarity > 0.60) {
+          // Acceptable match - small bonus
+          confidence += 0.10
+        } else if (embeddingSimilarity < 0.45) {
+          // Poor match - heavy penalty to prevent false merges
+          confidence -= 0.4
+        }
+        // Between 0.45-0.60: neutral, let other factors decide
+      } else {
+        // Same-camera merge (fragmentation recovery): be MORE strict
+        // Fragmentation should only merge tracks of the SAME person
+        // Require high embedding similarity to prevent merging different people
+        if (embeddingSimilarity > 0.75) {
+          // High similarity - likely same person, allow merge
+          confidence += 0.15
+        } else if (embeddingSimilarity < 0.65) {
+          // Low similarity - likely different people, heavy penalty
+          confidence -= 0.5
+        }
+        // Between 0.65-0.75: neutral for same-camera
+      }
     }
 
     return Math.max(0, Math.min(1, confidence))

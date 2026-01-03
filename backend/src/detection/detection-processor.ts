@@ -27,11 +27,18 @@ import { BatchOptimizer, type BatchOptimizerConfig, type FrameAssignment } from 
  * Common interface for detection processors
  * Used by AcapClient and other consumers that need to process detections
  */
+/** Room bounds for position validation */
+export interface RoomBounds {
+  width: number
+  height: number
+}
+
 export interface IDetectionProcessor {
   processMessage(message: DetectionMessage): GlobalTrack[]
   processMultiCameraMessages(messages: DetectionMessage[]): GlobalTrack[]
   setZoneManager(zoneManager: ZoneManager): void
   setObstacles(obstacles: SiteMapObstacle[]): void
+  setRoomBounds(bounds: RoomBounds): void
   getCameraFrameInfo(): CameraFrameInfo[]
   getCameraHealthStatus(): CameraHealthStatus[]
   getLastProcessedFrame(cameraId: string): number
@@ -75,6 +82,10 @@ export class DetectionProcessor implements IDetectionProcessor {
   /** Tables/furniture that block view (used for occlusion-based position adjustment) */
   private viewBlockingObstacles: SiteMapObstacle[] = []
   private obstacleFilterCount: number = 0
+  /** Counter for detections filtered for being outside room bounds */
+  private outOfBoundsFilterCount: number = 0
+  /** Room bounds for validating projections (if set) */
+  private roomBounds: RoomBounds | null = null
   /** Counter for same-camera deduplicated detections */
   private sameCameraDeduplicatedCount: number = 0
   /** Counter for detections downweighted for being geometrically behind a pillar */
@@ -180,6 +191,29 @@ export class DetectionProcessor implements IDetectionProcessor {
 
     console.log(`[DetectionProcessor] Loaded ${this.trackingBlockingObstacles.length} tracking-blocking obstacles`)
     console.log(`[DetectionProcessor] Loaded ${this.viewBlockingObstacles.length} view-blocking obstacles (tables)`)
+  }
+
+  /**
+   * Set room bounds for filtering out-of-bounds projections
+   * Detections projecting outside room bounds will be filtered out
+   */
+  setRoomBounds(bounds: RoomBounds): void {
+    this.roomBounds = bounds
+    console.log(`[DetectionProcessor] Room bounds set: ${bounds.width}m x ${bounds.height}m`)
+  }
+
+  /**
+   * Check if a point is outside room bounds (with margin)
+   */
+  private isOutsideRoomBounds(x: number, y: number): boolean {
+    if (!this.roomBounds) return false
+    const margin = 0.5 // Allow 0.5m outside for edge cases
+    return (
+      x < -margin ||
+      x > this.roomBounds.width + margin ||
+      y < -margin ||
+      y > this.roomBounds.height + margin
+    )
   }
 
   /**
@@ -457,6 +491,17 @@ export class DetectionProcessor implements IDetectionProcessor {
         continue
       }
 
+      // Filter detections that project outside room bounds
+      if (this.isOutsideRoomBounds(worldPoint.x, worldPoint.y)) {
+        this.outOfBoundsFilterCount++
+        if (this.outOfBoundsFilterCount <= 10 || this.outOfBoundsFilterCount % 100 === 0) {
+          console.log(
+            `[DetectionProcessor] Filtered detection outside room bounds: (${worldPoint.x.toFixed(2)}, ${worldPoint.y.toFixed(2)}) [total filtered: ${this.outOfBoundsFilterCount}]`
+          )
+        }
+        continue
+      }
+
       // Filter detections that are geometrically behind pillars from THIS camera's viewpoint.
       // Instead of dropping them (which can prevent reconnection after a pillar),
       // downweight their confidence so they can't spawn NEW tracks, but can still be used
@@ -487,6 +532,11 @@ export class DetectionProcessor implements IDetectionProcessor {
             )
           }
         }
+      }
+
+      // Skip invalid projections
+      if (!Number.isFinite(worldPoint.x) || !Number.isFinite(worldPoint.y)) {
+        continue
       }
 
       // Add to batch for Hungarian assignment
@@ -732,17 +782,8 @@ export class DetectionProcessor implements IDetectionProcessor {
           projectionMethod = 'krt'
           projectionReason = krtResult.reason
 
-          if (isValid) {
-            const dx = rawWorldPoint.x - camera.position.x
-            const dy = rawWorldPoint.y - camera.position.y
-            const angleToPoint = radToDeg(Math.atan2(dx, dy))
-            const diffDeg = Math.abs(angleDifference(angleToPoint, camera.azimuth))
-            const fovMarginDeg = 15
-            if (diffDeg > (camera.fov / 2 + fovMarginDeg)) {
-              isValid = false
-              projectionReason = 'krt_outside_fov'
-            }
-          }
+          // Note: FOV angle check disabled - sitemap-generated calibration may not match
+          // actual camera orientations. Room bounds check provides sufficient filtering.
         }
 
         // Apply camera-specific bias correction
@@ -774,6 +815,12 @@ export class DetectionProcessor implements IDetectionProcessor {
           continue
         }
 
+        // Filter detections that project outside room bounds
+        if (this.isOutsideRoomBounds(worldPoint.x, worldPoint.y)) {
+          this.outOfBoundsFilterCount++
+          continue
+        }
+
         // Filter detections that are geometrically behind pillars from THIS camera's viewpoint.
         if (
           this.trackingBlockingObstacles.length > 0 &&
@@ -793,6 +840,11 @@ export class DetectionProcessor implements IDetectionProcessor {
           detection.confidence = Math.min(detection.confidence, 0.69)
           this.pillarShadowDownweightedCount++
         }
+        }
+
+        // Skip invalid projections
+        if (!Number.isFinite(worldPoint.x) || !Number.isFinite(worldPoint.y)) {
+          continue
         }
 
         // Add to combined batch for all cameras

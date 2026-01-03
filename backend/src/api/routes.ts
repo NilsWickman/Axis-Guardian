@@ -5,6 +5,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { z } from 'zod'
 import { appendFileSync } from 'fs'
+import { fileURLToPath } from 'url'
+import { resolve } from 'path'
 import { TrackManager, trackToJSON } from '../tracks/track-manager.js'
 import type { GlobalTrack } from '../types.js'
 import type { IDetectionProcessor } from '../detection/detection-processor.js'
