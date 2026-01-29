@@ -146,6 +146,11 @@ import { useBackendWebSocket } from '@/composables/useBackendWebSocket'
 import DetectionMetadataPanel from '@/components/features/camera/DetectionMetadataPanel.vue'
 import VideoMetrics from '@/components/features/camera/VideoMetrics.vue'
 import type { Detection } from '@/types/detection.types'
+import {
+  normalizePixelBbox,
+  calculateObjectCoverTransform,
+  transformBboxToCanvas,
+} from '@/utils/bbox-transform'
 
 interface Camera {
   id: string
@@ -404,19 +409,34 @@ const CLASS_COLORS: Record<string, string> = {
   bicycle: '#eab308',
 }
 
+/**
+ * Update canvas dimensions to match container size.
+ * This ensures the canvas overlay aligns with the video element.
+ */
+function updateVideoLayout() {
+  const canvas = primaryCanvasRef.value
+  if (!canvas) return
+
+  const containerW = canvas.clientWidth
+  const containerH = canvas.clientHeight
+
+  // Set canvas drawing surface to match container
+  canvas.width = containerW
+  canvas.height = containerH
+}
+
 function onPrimaryVideoLoaded() {
   const video = primaryVideoRef.value
-  const canvasEl = primaryCanvasRef.value
-  if (!video || !canvasEl || video.videoWidth <= 0) return
+  if (!video || video.videoWidth <= 0) return
 
-  canvasEl.width = video.videoWidth
-  canvasEl.height = video.videoHeight
   primaryVideoDimensions.value = { width: video.videoWidth, height: video.videoHeight }
+  updateVideoLayout()
 }
 
 function drawDetections() {
   const canvasEl = primaryCanvasRef.value
-  if (!canvasEl || !primaryVideoDimensions.value) return
+  const video = primaryVideoRef.value
+  if (!canvasEl || !video || !primaryVideoDimensions.value) return
 
   const ctx = canvasEl.getContext('2d')
   if (!ctx) return
@@ -424,28 +444,57 @@ function drawDetections() {
   ctx.clearRect(0, 0, canvasEl.width, canvasEl.height)
   if (currentDetections.value.length === 0) return
 
+  const videoW = video.videoWidth
+  const videoH = video.videoHeight
+
+  // Calculate object-cover transform (how CSS scales/crops the video)
+  const transform = calculateObjectCoverTransform(
+    videoW,
+    videoH,
+    canvasEl.width,
+    canvasEl.height
+  )
+
   for (const detection of currentDetections.value) {
-    const { bbox, class_name, confidence } = detection
+    const { class_name, confidence } = detection
     const color = CLASS_COLORS[class_name] || '#94a3b8'
 
-    const x = bbox.left * canvasEl.width
-    const y = bbox.top * canvasEl.height
-    const w = (bbox.right - bbox.left) * canvasEl.width
-    const h = (bbox.bottom - bbox.top) * canvasEl.height
+    // Camera-emulator always sends pixel coordinates [x, y, w, h]
+    // Runtime check for array (type says object but actual data is array)
+    const rawBbox = detection.bbox as unknown
+    let pixelBbox: [number, number, number, number]
 
+    if (Array.isArray(rawBbox)) {
+      pixelBbox = rawBbox as [number, number, number, number]
+    } else if (rawBbox && typeof rawBbox === 'object') {
+      // Convert object format {left, top, right, bottom} back to [x, y, w, h]
+      const b = rawBbox as { left: number; top: number; right: number; bottom: number }
+      pixelBbox = [b.left, b.top, b.right - b.left, b.bottom - b.top]
+    } else {
+      continue // Skip invalid bbox
+    }
+
+    // Step 1: Normalize pixel coords to 0-1 range
+    const normalized = normalizePixelBbox(pixelBbox, videoW, videoH)
+
+    // Step 2: Transform to canvas coordinates with object-cover offset
+    const canvasBbox = transformBboxToCanvas(normalized, transform, videoW, videoH)
+
+    // Draw bounding box
     ctx.strokeStyle = color
     ctx.lineWidth = 3
-    ctx.strokeRect(x, y, w, h)
+    ctx.strokeRect(canvasBbox.x, canvasBbox.y, canvasBbox.width, canvasBbox.height)
 
+    // Draw label
     const label = `${class_name} ${(confidence * 100).toFixed(0)}%`
     ctx.font = 'bold 14px Arial'
     const textMetrics = ctx.measureText(label)
     const textHeight = 20
 
     ctx.fillStyle = color
-    ctx.fillRect(x, y - textHeight - 5, textMetrics.width + 10, textHeight)
+    ctx.fillRect(canvasBbox.x, canvasBbox.y - textHeight - 5, textMetrics.width + 10, textHeight)
     ctx.fillStyle = '#000'
-    ctx.fillText(label, x + 5, y - 8)
+    ctx.fillText(label, canvasBbox.x + 5, canvasBbox.y - 8)
   }
 }
 
@@ -542,6 +591,7 @@ watch(cameras, () => {
 
 // Lifecycle
 let nowInterval: number | null = null
+let resizeObserver: ResizeObserver | null = null
 
 onMounted(async () => {
   await loadSiteMap()
@@ -569,6 +619,19 @@ onMounted(async () => {
   nowInterval = window.setInterval(() => {
     recordDelaySamples(Date.now())
   }, 1000)
+
+  // Setup resize observer to recalculate video layout on container resize
+  resizeObserver = new ResizeObserver(() => {
+    if (activeView.value === 'camera' && primaryVideoRef.value) {
+      updateVideoLayout()
+    }
+  })
+
+  // Observe the video container for resize events
+  const videoContainer = document.querySelector('.flex-1.relative.bg-background.overflow-hidden')
+  if (videoContainer) {
+    resizeObserver.observe(videoContainer)
+  }
 })
 
 onUnmounted(() => {
@@ -581,6 +644,10 @@ onUnmounted(() => {
   }
   if (nowInterval) {
     clearInterval(nowInterval)
+  }
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
   }
 
   for (const cleanup of detectionCallbackCleanups.value.values()) {

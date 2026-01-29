@@ -312,6 +312,14 @@ export interface SyncConstants {
   readonly enabled: boolean
   /** Stale frame threshold multiplier (frames older than syncWindowMs * this are dropped) */
   readonly staleFrameMultiplier: number
+  /** Enable adaptive timeout based on camera count (reduces latency for single-camera) */
+  readonly adaptiveTimeout: boolean
+  /** Minimum timeout for single-camera mode (ms) */
+  readonly singleCameraTimeoutMs: number
+  /** Base timeout per camera for multi-camera mode (ms) */
+  readonly perCameraTimeoutMs: number
+  /** Maximum adaptive timeout (ms) */
+  readonly maxAdaptiveTimeoutMs: number
 }
 
 // =============================================================================
@@ -415,18 +423,18 @@ export interface AlgorithmConstants {
 
 export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   detection: {
-    minConfidence: 0.7,
+    minConfidence: 0.5,  // Lowered from 0.7 - allow seated/partial detections through
     imageWidth: 1920,
     imageHeight: 1080,
     frameJumpBackwardThreshold: 10,
     maxCameras: 100,
     cleanupIntervalMs: 60000,
-    sameCameraDeduplicationDistanceM: 0.3,  // Remove duplicate detections within 30cm on same camera
+    sameCameraDeduplicationDistanceM: 0.20,  // Reduced from 0.3m - allow closer people to be tracked separately
   },
 
   assignment: {
-    maxCost: 0.45, // Reduced to 0.45m to favor new track creation over false associations
-    associationBonus: 0.25,  // More moderate binding for existing associations
+    maxCost: 0.8, // Balanced: 0.8m allows association while preventing over-merging
+    associationBonus: 0.35,  // Balanced: moderate binding for existing associations
     sameCameraPenalty: 2.5,  // Strong penalty against same-camera double assignments
     velocityConsistencyWeight: 0.25,  // Slightly reduced - don't over-penalize velocity mismatches
     crossingProximityThreshold: 1.5,
@@ -446,35 +454,35 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   },
 
   trackLifecycle: {
-    correlationDistanceM: 2.0,  // Reduced from 4m - ReID now handles cross-camera matching
+    correlationDistanceM: 2.5,  // Optimal for false merge rate
     mergeWindowMs: 300,  // Extended - longer window for batching detections
     trackExpiryMs: 10000,  // Standard 10s - balance FP vs IDSW
     maxTrailLength: 25,  // Increased
     minDetectionsToConfirm: 2,  // Keep at 2 for good TCI
     maxVelocityMs: 8,
     unconfirmedTrackExpiryMs: 6000,  // Standard 6s
-    minCreationConfidence: 0.72,  // Slightly raised - require slightly more confidence for new tracks
+    minCreationConfidence: 0.55,  // Lowered from 0.72 - allow more track creation for seated/distant people
     maxTracks: 200,
     minTrailMovementThreshold: 0.30,  // Lowered - allow smoother trails
   },
 
   exclusionZone: {
-    confirmedExclusionRadius: 0.80,  // Larger - block duplicates within 80cm of confirmed tracks
-    unconfirmedExclusionRadius: 0.70,  // Larger - reduce fragmentation around unconfirmed tracks
-    crossCameraExclusionRadius: 0.65,  // Larger - wider cross-camera duplicate prevention
+    confirmedExclusionRadius: 0.35,  // EXPERIMENT: Smaller exclusion for close people
+    unconfirmedExclusionRadius: 0.30,  // EXPERIMENT: Smaller exclusion for unconfirmed
+    crossCameraExclusionRadius: 0.40,  // Reduced from 0.65m - tighter cross-camera exclusion
     crossCameraExclusionTimeMs: 500,  // Extended - longer window for sync jitter
   },
 
   trackMerger: {
     mergeDistanceM: 0.50,  // Reduced - more conservative merging distance
-    mergeConfidenceThreshold: 0.55,  // Raised - require higher confidence for merges
+    mergeConfidenceThreshold: 0.45,  // Lowered from 0.55 - allow more cross-camera merges
     mergeVelocityThreshold: 1.5,  // Tightened - similar velocity required
     unconfirmedMergeDistanceM: 0.50,  // Reduced - more conservative for unconfirmed
     unconfirmedMergeConfidenceThreshold: 0.50,  // Raised - harder unconfirmed merging
-    crossCameraMergeDistanceM: 2.5,  // Reduced from 4m - ReID handles cross-camera
+    crossCameraMergeDistanceM: 5.5,  // Increased from 4.0m - account for ~1m calibration error
     minDetectionsForVelocity: 2,  // Reduced - check velocity earlier
-    simultaneousDetectionBonus: 0.20,  // Increased - stronger signal for same-time detections
-    simultaneousWindowMs: 200,  // Tightened - narrower window for simultaneous detection
+    simultaneousDetectionBonus: 0.35,  // Higher bonus for same-time cross-camera detections
+    simultaneousWindowMs: 500,  // Increased from 350ms - wider window for cross-camera sync jitter
     slowSpeedThreshold: 0.4,
     fastSpeedThreshold: 1.0,
     slowSpeedDistanceMultiplier: 1.3,  // Reduced - less expansion for slow tracks
@@ -483,8 +491,8 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   },
 
   occlusion: {
-    missedFramesBeforeOcclusion: 10,  // Standard occlusion transition
-    occlusionCoastTimeMs: 5000,  // Moderate coast time
+    missedFramesBeforeOcclusion: 6,  // Reduced from 10 - faster occlusion transition
+    occlusionCoastTimeMs: 8000,  // Increased from 5000ms - longer coast time for recovery
     detectionsToExitOcclusion: 2,  // Keep hysteresis (flicker protection)
     reidentificationGateMultiplier: 5.5,  // Moderately wide gate for re-ID
     fovExitTimeoutMs: 3000,  // Moderate handoff gap
@@ -532,7 +540,7 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   },
 
   clustering: {
-    clusteringDistanceM: 0.45, // Tight clustering to create more distinct tracks
+    clusteringDistanceM: 1.2, // Increased to account for cross-camera calibration variance (RMSE 0.3-0.6m per camera)
   },
 
   positionMerging: {
@@ -548,7 +556,7 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
 
   velocity: {
     impossibleVelocityMs: 50,
-    mahalanobisThreshold: 6.0,  // Balanced gating for cross-camera velocity validation
+    mahalanobisThreshold: 8.0,  // EXPERIMENT: Moderately relaxed velocity gating
     sameCameraMahalanobisThreshold: 9.0,  // Relaxed from 7.0 - better same-camera re-ID
     minTimeDeltaMs: 50,
     sameCameraReIDWindowMs: 1000,  // Increased from 500ms - longer window for same-camera re-ID
@@ -557,7 +565,8 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   sync: {
     // Increased to tolerate real-world camera / HTTP jitter so multi-camera batches can complete.
     // (66ms was frequently too tight, leading to single-camera timeout flushes and poor handoffs.)
-    syncWindowMs: 200,
+    // Increased from 200ms to 400ms - 99.5% timeout rate indicated sync window too tight
+    syncWindowMs: 400,
     minCamerasForSync: 1,           // Minimum cameras before partial flush
     maxBufferedDetections: 500,     // Emergency flush if buffer gets too large
     frameBucketMs: 33,              // ~30fps frame buckets
@@ -567,6 +576,11 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
     useFrameNumberCorrelation: true,
     enabled: true,                  // Enable sync buffer by default
     staleFrameMultiplier: 2,        // Drop frames older than 2x sync window
+    // Adaptive timeout reduces latency for single-camera setups
+    adaptiveTimeout: true,          // Enable adaptive timeout based on camera count
+    singleCameraTimeoutMs: 50,      // Minimal wait for single camera (just buffer jitter)
+    perCameraTimeoutMs: 100,        // Base timeout per additional camera
+    maxAdaptiveTimeoutMs: 400,      // Cap adaptive timeout
   },
 
   // Trajectory curve estimation for coasting - uses geometry, not tuned params

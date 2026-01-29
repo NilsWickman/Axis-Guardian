@@ -16,6 +16,7 @@ export async function createPlainTransport(
 ): Promise<{
   transport: mediasoup.types.PlainTransport
   rtpPort: number  // The actual port FFmpeg should send RTP to
+  ssrc: number  // The SSRC that FFmpeg will use (must match producer)
   createProducer: () => Promise<mediasoup.types.Producer>
 }> {
   const transport = await router.createPlainTransport({
@@ -26,8 +27,10 @@ export async function createPlainTransport(
 
   // Get the actual listening port
   const rtpPort = transport.tuple.localPort
+  // Generate unique SSRC based on port (ensures uniqueness across cameras)
+  const ssrc = 12345678 + rtpPort
 
-  console.log(`PlainTransport created, listening on port ${rtpPort}`)
+  console.log(`PlainTransport created, listening on port ${rtpPort}, SSRC: ${ssrc}`)
 
   // Log when transport tuple is updated (comedia detected source)
   transport.on('tuple', (tuple) => {
@@ -48,7 +51,7 @@ export async function createPlainTransport(
             'profile-level-id': '42e01f',
           },
         }],
-        encodings: [{ ssrc: 12345678 }],  // Fixed SSRC - must match FFmpeg
+        encodings: [{ ssrc }],  // Dynamic SSRC - must match FFmpeg
       },
     })
 
@@ -62,7 +65,7 @@ export async function createPlainTransport(
     return producer
   }
 
-  return { transport, rtpPort, createProducer }
+  return { transport, rtpPort, ssrc, createProducer }
 }
 
 /**

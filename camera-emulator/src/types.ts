@@ -2,6 +2,16 @@
  * Types for the camera emulator
  */
 
+// Import shared types instead of duplicating
+import type {
+  ColorScore,
+  ClothingTypeScore,
+  DetectionAttributes,
+} from '@axis-guardian/types'
+
+// Re-export for consumers
+export type { ColorScore, ClothingTypeScore, DetectionAttributes }
+
 export interface CameraConfig {
   cameraId: string
   videoPath: string
@@ -11,47 +21,11 @@ export interface CameraConfig {
   trackingServiceUrl: string
 }
 
-// ============================================================================
-// Detection Attributes (from YOLOv8 + Re-ID preprocessing)
-// ============================================================================
-
-/**
- * Color with confidence score
- */
-export interface ColorScore {
-  name: string
-  score: number
-}
-
-/**
- * Clothing type with confidence score
- */
-export interface ClothingTypeScore {
-  name: string  // e.g., 'jacket', 'shirt', 'dress', 'jeans', 'shorts'
-  score: number
-}
-
-/**
- * Clothing attributes (colors and type)
- */
+// ClothingAttributes is used locally but not in shared types
+// It matches the inline structure in DetectionAttributes
 export interface ClothingAttributes {
-  colors: ColorScore[]
-  type?: ClothingTypeScore
-}
-
-/**
- * Person detection attributes from re-ID preprocessing
- * All fields optional for backwards compatibility with old detection files
- */
-export interface DetectionAttributes {
-  /** Upper body clothing (shirt, jacket, etc.) */
-  upper_clothing?: ClothingAttributes
-  /** Lower body clothing (pants, shorts, skirt, etc.) */
-  lower_clothing?: ClothingAttributes
-  /** Re-ID embedding vector (typically 512-dim from OSNet) */
-  embedding?: number[]
-  /** Quality/confidence of the embedding (0-1) */
-  embedding_quality?: number
+  colors: Array<{ name: string; score: number }>
+  type?: { name: string; score: number }
 }
 
 // ============================================================================
@@ -110,4 +84,14 @@ export interface ClientSession {
   transport: import('mediasoup').types.WebRtcTransport
   consumer?: import('mediasoup').types.Consumer
   dataConsumer?: import('mediasoup').types.DataConsumer
+}
+
+/**
+ * Sync coordinator for multi-camera time synchronization
+ */
+export interface SyncCoordinator {
+  /** Shared start time across all cameras (may be a getter for lazy evaluation) */
+  readonly sharedStartTime: number
+  /** Called when any camera loops - should reset all cameras */
+  onSyncReset: () => void
 }

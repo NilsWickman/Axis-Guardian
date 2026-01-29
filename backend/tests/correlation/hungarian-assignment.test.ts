@@ -39,14 +39,14 @@ const TEST_CONFIG: AssignmentConfig = {
 
 function createMockDetection(
   cameraId: string,
-  trackId: number,
+  localTrackId: number,
   worldX: number,
   worldY: number,
   confidence: number = 0.9
 ): CameraDetection {
   return {
     cameraId,
-    trackId,
+    localTrackId,
     worldX,
     worldY,
     confidence,

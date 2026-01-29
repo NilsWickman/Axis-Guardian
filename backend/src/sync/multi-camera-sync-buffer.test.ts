@@ -124,9 +124,10 @@ describe('MultiCameraSyncBuffer', () => {
     })
 
     it('should fall back to time-based bucketing when frame numbers are not aligned', () => {
-      // Default is time-based (useFrameNumberCorrelation=false via ALGORITHM_CONSTANTS)
+      // Explicitly disable frame-number correlation to test time-based bucketing
       syncBuffer = new MultiCameraSyncBuffer({
         syncWindowMs: 200,
+        useFrameNumberCorrelation: false,
       })
 
       const flushed: DetectionMessage[][] = []
@@ -273,6 +274,111 @@ describe('MultiCameraSyncBuffer', () => {
 
       // Should have flushed some buckets due to overflow
       expect(flushed.length).toBeGreaterThan(0)
+    })
+  })
+
+  describe('adaptive timeout', () => {
+    it('should use shorter timeout for single camera', () => {
+      // Use a shorter syncWindowMs so timer fires more frequently
+      // Timer interval = syncWindowMs / 4 = 40ms
+      syncBuffer = new MultiCameraSyncBuffer({
+        syncWindowMs: 160,
+        adaptiveTimeout: true,
+        singleCameraTimeoutMs: 50,
+        perCameraTimeoutMs: 100,
+        maxAdaptiveTimeoutMs: 400,
+      })
+
+      // Only one camera registered and active
+      syncBuffer.registerCamera('camera1')
+
+      const flushed: DetectionMessage[][] = []
+      syncBuffer.onFlush((messages) => {
+        flushed.push(messages)
+      })
+
+      syncBuffer.addMessage(createMessage('camera1', 1))
+
+      // Should not flush immediately
+      expect(flushed.length).toBe(0)
+
+      // Wait for timer to fire (interval = 40ms) after adaptive timeout (50ms)
+      vi.advanceTimersByTime(80)
+
+      // Should have flushed quickly with adaptive timeout
+      expect(flushed.length).toBe(1)
+    })
+
+    it('should use longer timeout for multiple cameras', () => {
+      syncBuffer = new MultiCameraSyncBuffer({
+        syncWindowMs: 160,
+        adaptiveTimeout: true,
+        singleCameraTimeoutMs: 50,
+        perCameraTimeoutMs: 100,
+        maxAdaptiveTimeoutMs: 400,
+      })
+
+      // Two cameras registered
+      syncBuffer.registerCamera('camera1')
+      syncBuffer.registerCamera('camera2')
+
+      const flushed: DetectionMessage[][] = []
+      syncBuffer.onFlush((messages) => {
+        flushed.push(messages)
+      })
+
+      // Send from BOTH cameras so both are considered "active"
+      // This is required because the adaptive timeout is based on active cameras
+      syncBuffer.addMessage(createMessage('camera1', 0))  // Frame 0 from camera1
+      syncBuffer.addMessage(createMessage('camera2', 0))  // Frame 0 from camera2 (completes batch)
+
+      // First batch should flush immediately since both cameras reported
+      expect(flushed.length).toBe(1)
+
+      // Now send a new frame from only camera1
+      syncBuffer.addMessage(createMessage('camera1', 1))
+
+      // Wait past single camera timeout but before multi-camera timeout
+      vi.advanceTimersByTime(80)
+
+      // Should NOT have flushed yet (multi-camera timeout = 50 + 2*100 = 250ms)
+      // because camera2 was recently active
+      expect(flushed.length).toBe(1)  // Still just the first batch
+
+      // Wait for multi-camera adaptive timeout
+      vi.advanceTimersByTime(200)
+
+      // Should have flushed the second batch now
+      expect(flushed.length).toBe(2)
+    })
+
+    it('should respect maxAdaptiveTimeoutMs', () => {
+      syncBuffer = new MultiCameraSyncBuffer({
+        syncWindowMs: 160,
+        adaptiveTimeout: true,
+        singleCameraTimeoutMs: 50,
+        perCameraTimeoutMs: 200,
+        maxAdaptiveTimeoutMs: 300,  // Cap at 300ms even with many cameras
+      })
+
+      // Four cameras registered (would be 50 + 4*200 = 850ms without cap)
+      syncBuffer.registerCamera('camera1')
+      syncBuffer.registerCamera('camera2')
+      syncBuffer.registerCamera('camera3')
+      syncBuffer.registerCamera('camera4')
+
+      const flushed: DetectionMessage[][] = []
+      syncBuffer.onFlush((messages) => {
+        flushed.push(messages)
+      })
+
+      syncBuffer.addMessage(createMessage('camera1', 1))
+
+      // Wait past the capped timeout (300ms + timer interval headroom)
+      vi.advanceTimersByTime(350)
+
+      // Should have flushed at capped timeout (300ms)
+      expect(flushed.length).toBe(1)
     })
   })
 })

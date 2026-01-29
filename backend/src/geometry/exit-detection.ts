@@ -431,6 +431,12 @@ export function getQualityAdaptiveTimeout(
     qualityRetentionBonus?: number
     maxRetentionMultiplier?: number
     minQualityForRetention?: number
+  },
+  /** Optional track history for further adaptive extension */
+  trackHistory?: {
+    detectionCount?: number
+    occlusionCount?: number
+    avgConfidence?: number
   }
 ): number {
   const baseTimeout = getTimeoutForExitReason(reason, config)
@@ -446,22 +452,42 @@ export function getQualityAdaptiveTimeout(
     return baseTimeout
   }
 
-  // Don't extend for low-quality embeddings
-  if (embeddingQuality < minQuality) {
-    return baseTimeout
+  let multiplier = 1.0
+
+  // Quality-based extension
+  if (embeddingQuality >= minQuality) {
+    // Scale quality to 0-1 range above threshold
+    // This normalizes so minQuality maps to 0 and 1.0 maps to 1
+    const normalizedQuality = (embeddingQuality - minQuality) / (1 - minQuality)
+    multiplier += qualityBonus * normalizedQuality
   }
 
-  // Scale quality to 0-1 range above threshold
-  // This normalizes so minQuality maps to 0 and 1.0 maps to 1
-  const normalizedQuality = (embeddingQuality - minQuality) / (1 - minQuality)
+  // Detection count based extension (well-established tracks get longer timeouts)
+  // Tracks with many detections are more likely to be real people worth keeping
+  if (trackHistory?.detectionCount) {
+    const detectionCount = trackHistory.detectionCount
+    // Bonus for tracks with 10+ detections, max 0.3x bonus at 30+ detections
+    if (detectionCount >= 10) {
+      const detectionBonus = Math.min(0.3, (detectionCount - 10) / 66.67)
+      multiplier += detectionBonus
+    }
+  }
 
-  // Calculate multiplier: 1 + (bonus * normalizedQuality), capped at maxMultiplier
-  // Examples with default values (bonus=0.5, maxMultiplier=1.8, minQuality=0.3):
-  //   quality=0.3 -> normalizedQuality=0 -> multiplier=1.0
-  //   quality=0.5 -> normalizedQuality=0.286 -> multiplier=1.143
-  //   quality=0.7 -> normalizedQuality=0.571 -> multiplier=1.286
-  //   quality=1.0 -> normalizedQuality=1.0 -> multiplier=1.5
-  const multiplier = Math.min(1 + qualityBonus * normalizedQuality, maxMultiplier)
+  // Occlusion history based extension (tracks that have recovered before get longer timeouts)
+  if (trackHistory?.occlusionCount && trackHistory.occlusionCount > 0) {
+    // If track has recovered from occlusion before, it's more likely to recover again
+    // Add 0.1x bonus per previous occlusion recovery, max 0.3x
+    const occlusionBonus = Math.min(0.3, trackHistory.occlusionCount * 0.1)
+    multiplier += occlusionBonus
+  }
+
+  // High confidence tracks get slight extension
+  if (trackHistory?.avgConfidence && trackHistory.avgConfidence > 0.8) {
+    multiplier += 0.1
+  }
+
+  // Cap the total multiplier
+  multiplier = Math.min(multiplier, maxMultiplier)
 
   return baseTimeout * multiplier
 }

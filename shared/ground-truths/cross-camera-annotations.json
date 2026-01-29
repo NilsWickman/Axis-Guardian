@@ -1,0 +1,2854 @@
+{
+  "version": "2.0",
+  "keyframeIntervalSeconds": 5,
+  "videoDuration": 182.082082,
+  "cameras": [
+    "camera1",
+    "camera2",
+    "camera3",
+    "camera4"
+  ],
+  "annotations": [
+    {
+      "id": "ann_1767555445285_8tvw2ds",
+      "timestamp": 0,
+      "cameraId": "camera2",
+      "trackId": 3,
+      "personId": 1,
+      "bbox": [
+        0.621026,
+        0.351787,
+        0.038057,
+        0.156375
+      ],
+      "confidence": 0.6904,
+      "assignedAt": "2026-01-04T19:37:50.645Z",
+      "worldPosition": {
+        "x": 22.477981651376147,
+        "y": 10.948623853211007
+      }
+    },
+    {
+      "id": "ann_1767555448978_ge7r0ay",
+      "timestamp": 0,
+      "cameraId": "camera1",
+      "trackId": 4,
+      "personId": 2,
+      "bbox": [
+        0.532001,
+        0.512002,
+        0.03102,
+        0.225424
+      ],
+      "confidence": 0.8671,
+      "assignedAt": "2026-01-04T19:37:32.588Z",
+      "worldPosition": {
+        "x": 21.01009174311927,
+        "y": 12.064220183486238
+      }
+    },
+    {
+      "id": "ann_1767555462510_ckv9zi3",
+      "timestamp": 0,
+      "cameraId": "camera1",
+      "trackId": 2,
+      "personId": 3,
+      "bbox": [
+        0.707365,
+        0.442944,
+        0.06822,
+        0.313105
+      ],
+      "confidence": 0.8775,
+      "assignedAt": "2026-01-04T19:37:42.510Z",
+      "worldPosition": {
+        "x": 23.241284403669724,
+        "y": 12.064220183486238
+      }
+    },
+    {
+      "id": "ann_1767555476121_712cc1c",
+      "timestamp": 0,
+      "cameraId": "camera1",
+      "trackId": 5,
+      "personId": 4,
+      "bbox": [
+        0.765588,
+        0.487891,
+        0.034757,
+        0.230105
+      ],
+      "confidence": 0.7651,
+      "assignedAt": "2026-01-04T19:37:56.121Z"
+    },
+    {
+      "id": "ann_1767555477912_ypj6efw",
+      "timestamp": 0,
+      "cameraId": "camera3",
+      "trackId": 1,
+      "personId": 5,
+      "bbox": [
+        0.532129,
+        0.311215,
+        0.077193,
+        0.285786
+      ],
+      "confidence": 0.8383,
+      "assignedAt": "2026-01-04T19:37:57.912Z",
+      "worldPosition": {
+        "x": 20.070642201834865,
+        "y": 17.759633027522934
+      }
+    },
+    {
+      "id": "ann_1767555486535_824fa2d",
+      "timestamp": 0,
+      "cameraId": "camera1",
+      "trackId": 3,
+      "personId": 8,
+      "bbox": [
+        0.215351,
+        0.538976,
+        0.045498,
+        0.181677
+      ],
+      "confidence": 0.8765,
+      "assignedAt": "2026-01-04T19:38:06.535Z",
+      "worldPosition": {
+        "x": 16.78256880733945,
+        "y": 13.121100917431193
+      }
+    },
+    {
+      "id": "ann_1767555491555_4zh4bv7",
+      "timestamp": 0,
+      "cameraId": "camera1",
+      "trackId": 6,
+      "personId": 15,
+      "bbox": [
+        0.852388,
+        0.507083,
+        0.046497,
+        0.233113
+      ],
+      "confidence": 0.7483,
+      "assignedAt": "2026-01-04T19:38:11.555Z",
+      "worldPosition": {
+        "x": 24.767889908256883,
+        "y": 13.003669724770642
+      }
+    },
+    {
+      "id": "ann_1767555497779_34wm8x0",
+      "timestamp": 0,
+      "cameraId": "camera1",
+      "trackId": 1,
+      "personId": 17,
+      "bbox": [
+        0.778106,
+        0.500093,
+        0.080973,
+        0.363786
+      ],
+      "confidence": 0.8944,
+      "assignedAt": "2026-01-04T19:38:17.779Z",
+      "worldPosition": {
+        "x": 24.06330275229358,
+        "y": 9.0697247706422
+      }
+    },
+    {
+      "id": "ann_1767555508345_um48kxq",
+      "timestamp": 5,
+      "cameraId": "camera1",
+      "trackId": 7,
+      "personId": 1,
+      "bbox": [
+        0.592058,
+        0.492991,
+        0.081004,
+        0.308931
+      ],
+      "confidence": 0.9113,
+      "assignedAt": "2026-01-04T19:38:28.345Z",
+      "worldPosition": {
+        "x": 21.949541284403672,
+        "y": 10.948623853211007
+      }
+    },
+    {
+      "id": "ann_1767555522355_hj3unan",
+      "timestamp": 5,
+      "cameraId": "camera2",
+      "trackId": 15,
+      "personId": 2,
+      "bbox": [
+        0.522317,
+        0.366896,
+        0.025025,
+        0.149144
+      ],
+      "confidence": 0.7897,
+      "assignedAt": "2026-01-04T19:38:51.884Z",
+      "worldPosition": {
+        "x": 21.01009174311927,
+        "y": 12.29908256880734
+      }
+    },
+    {
+      "id": "ann_1767555523890_w97pfh7",
+      "timestamp": 5,
+      "cameraId": "camera1",
+      "trackId": 2,
+      "personId": 3,
+      "bbox": [
+        0.707488,
+        0.490817,
+        0.038988,
+        0.220927
+      ],
+      "confidence": 0.8863,
+      "assignedAt": "2026-01-04T19:38:47.638Z",
+      "worldPosition": {
+        "x": 24.122018348623854,
+        "y": 13.708256880733941
+      }
+    },
+    {
+      "id": "ann_1767555537816_3bwlkwf",
+      "timestamp": 5,
+      "cameraId": "camera3",
+      "trackId": 1,
+      "personId": 5,
+      "bbox": [
+        0.566223,
+        0.30362,
+        0.060583,
+        0.319665
+      ],
+      "confidence": 0.8913,
+      "assignedAt": "2026-01-04T19:38:57.816Z",
+      "worldPosition": {
+        "x": 19.83577981651376,
+        "y": 17.70091743119266
+      }
+    },
+    {
+      "id": "ann_1767555544628_y9q9dml",
+      "timestamp": 5,
+      "cameraId": "camera1",
+      "trackId": 17,
+      "personId": 7,
+      "bbox": [
+        0.831975,
+        0.497837,
+        0.055816,
+        0.26158
+      ],
+      "confidence": 0.8898,
+      "assignedAt": "2026-01-04T19:39:04.628Z",
+      "worldPosition": {
+        "x": 24.70917431192661,
+        "y": 13.121100917431193
+      }
+    },
+    {
+      "id": "ann_1767555549556_a356y25",
+      "timestamp": 5,
+      "cameraId": "camera1",
+      "trackId": 15,
+      "personId": 8,
+      "bbox": [
+        0.525477,
+        0.514958,
+        0.046167,
+        0.230243
+      ],
+      "confidence": 0.7039,
+      "assignedAt": "2026-01-04T19:39:09.556Z",
+      "worldPosition": {
+        "x": 21.01009174311927,
+        "y": 11.418348623853209
+      }
+    },
+    {
+      "id": "ann_1767555559211_anal2kr",
+      "timestamp": 5,
+      "cameraId": "camera3",
+      "trackId": 4,
+      "personId": 9,
+      "bbox": [
+        0.233016,
+        0.368545,
+        0.044868,
+        0.193435
+      ],
+      "confidence": 0.8248,
+      "assignedAt": "2026-01-04T19:39:19.211Z",
+      "worldPosition": {
+        "x": 22.066972477064223,
+        "y": 15.293577981651376
+      }
+    },
+    {
+      "id": "ann_1767555566841_b3q0c62",
+      "timestamp": 5,
+      "cameraId": "camera3",
+      "trackId": 2,
+      "personId": 16,
+      "bbox": [
+        0.409762,
+        0.343055,
+        0.065189,
+        0.273287
+      ],
+      "confidence": 0.8584,
+      "assignedAt": "2026-01-04T19:39:40.814Z"
+    },
+    {
+      "id": "ann_1767555578131_qfihlq1",
+      "timestamp": 5,
+      "cameraId": "camera1",
+      "trackId": 1,
+      "personId": 17,
+      "bbox": [
+        0.762088,
+        0.507781,
+        0.051874,
+        0.229266
+      ],
+      "confidence": 0.8543,
+      "assignedAt": "2026-01-04T19:39:41.508Z",
+      "worldPosition": {
+        "x": 24.41559633027523,
+        "y": 13.590825688073394
+      }
+    },
+    {
+      "id": "ann_1767555585964_huqft8z",
+      "timestamp": 10,
+      "cameraId": "camera1",
+      "trackId": 7,
+      "personId": 1,
+      "bbox": [
+        0.42369,
+        0.500516,
+        0.023476,
+        0.229184
+      ],
+      "confidence": 0.7489,
+      "assignedAt": "2026-01-04T19:39:45.964Z",
+      "worldPosition": {
+        "x": 19.60091743119266,
+        "y": 13.473394495412844
+      }
+    },
+    {
+      "id": "ann_1767555592631_t1rzg95",
+      "timestamp": 10,
+      "cameraId": "camera1",
+      "trackId": 22,
+      "personId": 2,
+      "bbox": [
+        0.647478,
+        0.515224,
+        0.034053,
+        0.119759
+      ],
+      "confidence": 0.8349,
+      "assignedAt": "2026-01-04T19:39:52.631Z",
+      "worldPosition": {
+        "x": 22.360550458715597,
+        "y": 12.768807339449541
+      }
+    },
+    {
+      "id": "ann_1767555596412_8y0n0jf",
+      "timestamp": 10,
+      "cameraId": "camera3",
+      "trackId": 6,
+      "personId": 4,
+      "bbox": [
+        0.429345,
+        0.325959,
+        0.057744,
+        0.289645
+      ],
+      "confidence": 0.8721,
+      "assignedAt": "2026-01-04T19:39:56.412Z",
+      "worldPosition": {
+        "x": 20.83394495412844,
+        "y": 16.585321100917433
+      }
+    },
+    {
+      "id": "ann_1767555601093_24creot",
+      "timestamp": 10,
+      "cameraId": "camera4",
+      "trackId": 1,
+      "personId": 5,
+      "bbox": [
+        0.482761,
+        0.571481,
+        0.084165,
+        0.320371
+      ],
+      "confidence": 0.8695,
+      "assignedAt": "2026-01-04T19:40:01.093Z",
+      "worldPosition": {
+        "x": 19.659633027522936,
+        "y": 17.70091743119266
+      }
+    },
+    {
+      "id": "ann_1767555605455_vlu566q",
+      "timestamp": 10,
+      "cameraId": "camera3",
+      "trackId": 7,
+      "personId": 6,
+      "bbox": [
+        0.330269,
+        0.372946,
+        0.043027,
+        0.176677
+      ],
+      "confidence": 0.7607,
+      "assignedAt": "2026-01-04T19:40:05.455Z",
+      "worldPosition": {
+        "x": 21.36238532110092,
+        "y": 15.822018348623853
+      }
+    },
+    {
+      "id": "ann_1767555611549_siopys1",
+      "timestamp": 10,
+      "cameraId": "camera1",
+      "trackId": 20,
+      "personId": 8,
+      "bbox": [
+        0.729684,
+        0.520111,
+        0.039163,
+        0.208548
+      ],
+      "confidence": 0.8414,
+      "assignedAt": "2026-01-04T19:40:11.549Z",
+      "worldPosition": {
+        "x": 24.122018348623854,
+        "y": 13.590825688073394
+      }
+    },
+    {
+      "id": "ann_1767555615192_kvpxcxy",
+      "timestamp": 10,
+      "cameraId": "camera3",
+      "trackId": 4,
+      "personId": 9,
+      "bbox": [
+        0.61879,
+        0.384215,
+        0.079729,
+        0.240188
+      ],
+      "confidence": 0.8588,
+      "assignedAt": "2026-01-04T19:40:23.334Z"
+    },
+    {
+      "id": "ann_1767555624254_qia39xg",
+      "timestamp": 10,
+      "cameraId": "camera1",
+      "trackId": 21,
+      "personId": 11,
+      "bbox": [
+        0.766427,
+        0.503443,
+        0.041623,
+        0.211608
+      ],
+      "confidence": 0.8404,
+      "assignedAt": "2026-01-04T19:40:30.805Z"
+    },
+    {
+      "id": "ann_1767555625968_ph94p57",
+      "timestamp": 10,
+      "cameraId": "camera3",
+      "trackId": 8,
+      "personId": 12,
+      "bbox": [
+        0.224543,
+        0.371812,
+        0.040731,
+        0.190496
+      ],
+      "confidence": 0.7176,
+      "assignedAt": "2026-01-04T19:40:31.385Z",
+      "worldPosition": {
+        "x": 22.360550458715597,
+        "y": 15.176146788990826
+      }
+    },
+    {
+      "id": "ann_1767555634629_0a335dn",
+      "timestamp": 10,
+      "cameraId": "camera3",
+      "trackId": 9,
+      "personId": 15,
+      "bbox": [
+        0.110637,
+        0.378454,
+        0.041706,
+        0.198735
+      ],
+      "confidence": 0.7707,
+      "assignedAt": "2026-01-04T19:40:34.629Z",
+      "worldPosition": {
+        "x": 23.358715596330274,
+        "y": 15
+      }
+    },
+    {
+      "id": "ann_1767555638713_rp8ol03",
+      "timestamp": 10,
+      "cameraId": "camera3",
+      "trackId": 2,
+      "personId": 16,
+      "bbox": [
+        0.684289,
+        0.336711,
+        0.122135,
+        0.333373
+      ],
+      "confidence": 0.9223,
+      "assignedAt": "2026-01-04T19:40:38.713Z",
+      "worldPosition": {
+        "x": 21.890825688073395,
+        "y": 21.165137614678898
+      }
+    },
+    {
+      "id": "ann_1767555646648_eq8z0kv",
+      "timestamp": 15,
+      "cameraId": "camera1",
+      "trackId": 7,
+      "personId": 1,
+      "bbox": [
+        0.548127,
+        0.518963,
+        0.054436,
+        0.203572
+      ],
+      "confidence": 0.8911,
+      "assignedAt": "2026-01-04T19:40:46.648Z",
+      "worldPosition": {
+        "x": 20.892660550458718,
+        "y": 12.122935779816512
+      }
+    },
+    {
+      "id": "ann_1767555649638_huc2vuj",
+      "timestamp": 15,
+      "cameraId": "camera1",
+      "trackId": 22,
+      "personId": 2,
+      "bbox": [
+        0.666761,
+        0.512182,
+        0.052708,
+        0.186008
+      ],
+      "confidence": 0.863,
+      "assignedAt": "2026-01-04T19:40:49.638Z",
+      "worldPosition": {
+        "x": 22.536697247706424,
+        "y": 12.710091743119264
+      }
+    },
+    {
+      "id": "ann_1767555651964_e9u5dpi",
+      "timestamp": 15,
+      "cameraId": "camera3",
+      "trackId": 11,
+      "personId": 4,
+      "bbox": [
+        0.649129,
+        0.336675,
+        0.090366,
+        0.294105
+      ],
+      "confidence": 0.8799,
+      "assignedAt": "2026-01-04T19:40:51.964Z",
+      "worldPosition": {
+        "x": 22.066972477064223,
+        "y": 21.223853211009175
+      }
+    },
+    {
+      "id": "ann_1767555657299_k9qa6cj",
+      "timestamp": 15,
+      "cameraId": "camera4",
+      "trackId": 1,
+      "personId": 5,
+      "bbox": [
+        0.495321,
+        0.581539,
+        0.107832,
+        0.28985
+      ],
+      "confidence": 0.7806,
+      "assignedAt": "2026-01-04T19:41:03.662Z"
+    },
+    {
+      "id": "ann_1767555661533_q0quq76",
+      "timestamp": 15,
+      "cameraId": "camera4",
+      "trackId": 10,
+      "personId": 6,
+      "bbox": [
+        0.346201,
+        0.475704,
+        0.059226,
+        0.29251
+      ],
+      "confidence": 0.8133,
+      "assignedAt": "2026-01-04T19:41:11.464Z"
+    },
+    {
+      "id": "ann_1767555667640_0ju58af",
+      "timestamp": 15,
+      "cameraId": "camera3",
+      "trackId": 17,
+      "personId": 7,
+      "bbox": [
+        0.106607,
+        0.332763,
+        0.047256,
+        0.112188
+      ],
+      "confidence": 0.528,
+      "assignedAt": "2026-01-04T19:41:12.074Z"
+    },
+    {
+      "id": "ann_1767555675185_ljyb267",
+      "timestamp": 15,
+      "cameraId": "camera3",
+      "trackId": 10,
+      "personId": 9,
+      "bbox": [
+        0.719845,
+        0.366664,
+        0.137681,
+        0.406269
+      ],
+      "confidence": 0.8935,
+      "assignedAt": "2026-01-04T19:41:23.983Z"
+    },
+    {
+      "id": "ann_1767555685146_4s97qhh",
+      "timestamp": 15,
+      "cameraId": "camera3",
+      "trackId": 8,
+      "personId": 12,
+      "bbox": [
+        0.569574,
+        0.394253,
+        0.057258,
+        0.234396
+      ],
+      "confidence": 0.7905,
+      "assignedAt": "2026-01-04T19:41:25.146Z",
+      "worldPosition": {
+        "x": 21.303669724770643,
+        "y": 18.522935779816514
+      }
+    },
+    {
+      "id": "ann_1767555688327_6fjr6gf",
+      "timestamp": 15,
+      "cameraId": "camera1",
+      "trackId": 27,
+      "personId": 13,
+      "bbox": [
+        0.768748,
+        0.509647,
+        0.044365,
+        0.193409
+      ],
+      "confidence": 0.8795,
+      "assignedAt": "2026-01-04T19:41:28.327Z",
+      "worldPosition": {
+        "x": 24.18073394495413,
+        "y": 14.060550458715595
+      }
+    },
+    {
+      "id": "ann_1767555691427_prvygpq",
+      "timestamp": 15,
+      "cameraId": "camera3",
+      "trackId": 9,
+      "personId": 15,
+      "bbox": [
+        0.495517,
+        0.37226,
+        0.065847,
+        0.230511
+      ],
+      "confidence": 0.8999,
+      "assignedAt": "2026-01-04T19:41:31.427Z",
+      "worldPosition": {
+        "x": 20.892660550458718,
+        "y": 17.231192660550455
+      }
+    },
+    {
+      "id": "ann_1767555697299_jh8tucg",
+      "timestamp": 15,
+      "cameraId": "camera3",
+      "trackId": 2,
+      "personId": 16,
+      "bbox": [
+        0.081873,
+        0.397079,
+        0.17045,
+        0.379186
+      ],
+      "confidence": 0.8948,
+      "assignedAt": "2026-01-04T19:41:37.299Z",
+      "worldPosition": {
+        "x": 26.411926605504586,
+        "y": 20.81284403669725
+      }
+    },
+    {
+      "id": "ann_1767555707058_pgmek5f",
+      "timestamp": 15,
+      "cameraId": "camera3",
+      "trackId": 19,
+      "personId": 17,
+      "bbox": [
+        0.216425,
+        0.364762,
+        0.075392,
+        0.198087
+      ],
+      "confidence": 0.8654,
+      "assignedAt": "2026-01-04T19:41:49.099Z",
+      "worldPosition": {
+        "x": 22.243119266055047,
+        "y": 15.293577981651376
+      }
+    },
+    {
+      "id": "ann_1767555712220_0b3h2gi",
+      "timestamp": 15,
+      "cameraId": "camera1",
+      "trackId": 31,
+      "personId": 18,
+      "bbox": [
+        0.808079,
+        0.485334,
+        0.040401,
+        0.25302
+      ],
+      "confidence": 0.8706,
+      "assignedAt": "2026-01-04T19:41:56.363Z"
+    },
+    {
+      "id": "ann_1767555716907_hdu45v5",
+      "timestamp": 15,
+      "cameraId": "camera1",
+      "trackId": 35,
+      "personId": 19,
+      "bbox": [
+        0.000098,
+        0.523567,
+        0.09839,
+        0.366506
+      ],
+      "confidence": 0.9287,
+      "assignedAt": "2026-01-04T19:41:56.907Z",
+      "worldPosition": {
+        "x": 16.78256880733945,
+        "y": 8.541284403669724
+      }
+    },
+    {
+      "id": "ann_1767555725523_nz6hhzx",
+      "timestamp": 15,
+      "cameraId": "camera2",
+      "trackId": 33,
+      "personId": 20,
+      "bbox": [
+        0.648115,
+        0.364563,
+        0.093867,
+        0.271646
+      ],
+      "confidence": 0.878,
+      "assignedAt": "2026-01-04T19:42:05.523Z",
+      "worldPosition": {
+        "x": 16.488990825688074,
+        "y": 7.719266055045868
+      }
+    },
+    {
+      "id": "ann_1767555730631_ejhojlm",
+      "timestamp": 20,
+      "cameraId": "camera1",
+      "trackId": 7,
+      "personId": 1,
+      "bbox": [
+        0.542314,
+        0.508798,
+        0.058687,
+        0.234614
+      ],
+      "confidence": 0.9099,
+      "assignedAt": "2026-01-04T19:42:10.631Z",
+      "worldPosition": {
+        "x": 20.951376146788995,
+        "y": 11.829357798165134
+      }
+    },
+    {
+      "id": "ann_1767555733550_xvvpzdh",
+      "timestamp": 20,
+      "cameraId": "camera1",
+      "trackId": 22,
+      "personId": 2,
+      "bbox": [
+        0.69378,
+        0.516236,
+        0.049259,
+        0.23483
+      ],
+      "confidence": 0.8891,
+      "assignedAt": "2026-01-04T19:42:13.550Z",
+      "worldPosition": {
+        "x": 23.006422018348626,
+        "y": 12.064220183486238
+      }
+    },
+    {
+      "id": "ann_1767555735816_8sgy4jt",
+      "timestamp": 20,
+      "cameraId": "camera3",
+      "trackId": 24,
+      "personId": 3,
+      "bbox": [
+        0.220913,
+        0.317027,
+        0.047616,
+        0.14284
+      ],
+      "confidence": 0.8829,
+      "assignedAt": "2026-01-04T19:42:40.736Z"
+    },
+    {
+      "id": "ann_1767555743867_o34dkpm",
+      "timestamp": 20,
+      "cameraId": "camera3",
+      "trackId": 11,
+      "personId": 4,
+      "bbox": [
+        0.747944,
+        0.329222,
+        0.069352,
+        0.22027
+      ],
+      "confidence": 0.6009,
+      "assignedAt": "2026-01-04T19:42:41.356Z",
+      "worldPosition": {
+        "x": 21.127522935779815,
+        "y": 20.51926605504587
+      }
+    },
+    {
+      "id": "ann_1767555749492_5n7lzks",
+      "timestamp": 20,
+      "cameraId": "camera3",
+      "trackId": 27,
+      "personId": 5,
+      "bbox": [
+        0.594623,
+        0.406052,
+        0.034641,
+        0.198076
+      ],
+      "confidence": 0.692,
+      "assignedAt": "2026-01-04T19:42:39.394Z"
+    },
+    {
+      "id": "ann_1767555753075_nu9ylms",
+      "timestamp": 20,
+      "cameraId": "camera4",
+      "trackId": 10,
+      "personId": 6,
+      "bbox": [
+        0.175936,
+        0.544729,
+        0.106211,
+        0.238352
+      ],
+      "confidence": 0.8361,
+      "assignedAt": "2026-01-04T19:43:06.140Z",
+      "worldPosition": {
+        "x": 17.78073394495413,
+        "y": 19.40366972477064
+      }
+    },
+    {
+      "id": "ann_1767555776411_godhdlf",
+      "timestamp": 20,
+      "cameraId": "camera3",
+      "trackId": 29,
+      "personId": 11,
+      "bbox": [
+        0.383556,
+        0.355154,
+        0.054711,
+        0.170611
+      ],
+      "confidence": 0.7755,
+      "assignedAt": "2026-01-04T19:43:27.271Z",
+      "worldPosition": {
+        "x": 21.186238532110092,
+        "y": 15.880733944954127
+      }
+    },
+    {
+      "id": "ann_1767555780607_1q4jdk0",
+      "timestamp": 20,
+      "cameraId": "camera3",
+      "trackId": 17,
+      "personId": 7,
+      "bbox": [
+        0.517574,
+        0.361027,
+        0.070038,
+        0.234242
+      ],
+      "confidence": 0.8675,
+      "assignedAt": "2026-01-04T19:43:00.607Z",
+      "worldPosition": {
+        "x": 20.657798165137613,
+        "y": 17.34862385321101
+      }
+    },
+    {
+      "id": "ann_1767555789243_73h7hv3",
+      "timestamp": 20,
+      "cameraId": "camera3",
+      "trackId": 10,
+      "personId": 9,
+      "bbox": [
+        0.774691,
+        0.382254,
+        0.081063,
+        0.282568
+      ],
+      "confidence": 0.8263,
+      "assignedAt": "2026-01-04T19:43:09.243Z",
+      "worldPosition": {
+        "x": 22.71284403669725,
+        "y": 21.752293577981654
+      }
+    },
+    {
+      "id": "ann_1767555811428_myxfv9i",
+      "timestamp": 20,
+      "cameraId": "camera4",
+      "trackId": 18,
+      "personId": 12,
+      "bbox": [
+        0.146827,
+        0.418123,
+        0.088751,
+        0.20319
+      ],
+      "confidence": 0.7016,
+      "assignedAt": "2026-01-04T19:43:31.428Z",
+      "worldPosition": {
+        "x": 18.36788990825688,
+        "y": 20.988990825688074
+      }
+    },
+    {
+      "id": "ann_1767555817880_8z4uo6v",
+      "timestamp": 20,
+      "cameraId": "camera1",
+      "trackId": 41,
+      "personId": 14,
+      "bbox": [
+        0.109975,
+        0.487966,
+        0.090014,
+        0.349918
+      ],
+      "confidence": 0.8922,
+      "assignedAt": "2026-01-04T19:43:37.880Z",
+      "worldPosition": {
+        "x": 17.722018348623852,
+        "y": 9.245871559633027
+      }
+    },
+    {
+      "id": "ann_1767555824841_1od5r86",
+      "timestamp": 20,
+      "cameraId": "camera4",
+      "trackId": 20,
+      "personId": 15,
+      "bbox": [
+        0.377638,
+        0.39038,
+        0.058413,
+        0.19644
+      ],
+      "confidence": 0.6855,
+      "assignedAt": "2026-01-04T19:43:44.841Z",
+      "worldPosition": {
+        "x": 20.422935779816513,
+        "y": 22.222018348623852
+      }
+    },
+    {
+      "id": "ann_1767555830816_wkno9su",
+      "timestamp": 20,
+      "cameraId": "camera3",
+      "trackId": 19,
+      "personId": 17,
+      "bbox": [
+        0.613349,
+        0.359499,
+        0.082348,
+        0.26372
+      ],
+      "confidence": 0.8957,
+      "assignedAt": "2026-01-04T19:43:50.816Z",
+      "worldPosition": {
+        "x": 21.068807339449542,
+        "y": 18.992660550458716
+      }
+    },
+    {
+      "id": "ann_1767555836590_h38z1lg",
+      "timestamp": 20,
+      "cameraId": "camera1",
+      "trackId": 31,
+      "personId": 18,
+      "bbox": [
+        0.830894,
+        0.486312,
+        0.071757,
+        0.253513
+      ],
+      "confidence": 0.8473,
+      "assignedAt": "2026-01-04T19:43:56.590Z",
+      "worldPosition": {
+        "x": 24.88532110091743,
+        "y": 13.179816513761466
+      }
+    },
+    {
+      "id": "ann_1767555841126_qb0jpho",
+      "timestamp": 20,
+      "cameraId": "camera2",
+      "trackId": 36,
+      "personId": 19,
+      "bbox": [
+        0.571353,
+        0.361772,
+        0.040712,
+        0.188179
+      ],
+      "confidence": 0.8593,
+      "assignedAt": "2026-01-04T19:44:01.126Z",
+      "worldPosition": {
+        "x": 19.777064220183487,
+        "y": 10.478899082568805
+      }
+    },
+    {
+      "id": "ann_1767555844914_afxwty9",
+      "timestamp": 20,
+      "cameraId": "camera1",
+      "trackId": 38,
+      "personId": 20,
+      "bbox": [
+        0.307117,
+        0.515498,
+        0.071653,
+        0.30768
+      ],
+      "confidence": 0.9064,
+      "assignedAt": "2026-01-04T19:44:04.914Z",
+      "worldPosition": {
+        "x": 20.011926605504588,
+        "y": 10.009174311926603
+      }
+    },
+    {
+      "id": "ann_1767555853822_y53r7wi",
+      "timestamp": 25,
+      "cameraId": "camera1",
+      "trackId": 44,
+      "personId": 1,
+      "bbox": [
+        0.581104,
+        0.496578,
+        0.034485,
+        0.137373
+      ],
+      "confidence": 0.7944,
+      "assignedAt": "2026-01-04T19:44:13.822Z",
+      "worldPosition": {
+        "x": 21.655963302752294,
+        "y": 12.65137614678899
+      }
+    },
+    {
+      "id": "ann_1767555856941_680dk3z",
+      "timestamp": 25,
+      "cameraId": "camera3",
+      "trackId": 24,
+      "personId": 3,
+      "bbox": [
+        0.236959,
+        0.327361,
+        0.05965,
+        0.153206
+      ],
+      "confidence": 0.8677,
+      "assignedAt": "2026-01-04T19:44:16.941Z",
+      "worldPosition": {
+        "x": 21.303669724770643,
+        "y": 14.706422018348624
+      }
+    },
+    {
+      "id": "ann_1767555861132_7rm4awp",
+      "timestamp": 25,
+      "cameraId": "camera4",
+      "trackId": 1,
+      "personId": 5,
+      "bbox": [
+        0.48049,
+        0.596957,
+        0.14534,
+        0.280197
+      ],
+      "confidence": 0.8778,
+      "assignedAt": "2026-01-04T19:44:21.132Z",
+      "worldPosition": {
+        "x": 19.777064220183487,
+        "y": 17.58348623853211
+      }
+    },
+    {
+      "id": "ann_1767555864310_v5mbgin",
+      "timestamp": 25,
+      "cameraId": "camera4",
+      "trackId": 10,
+      "personId": 6,
+      "bbox": [
+        0.180619,
+        0.605011,
+        0.07774,
+        0.181758
+      ],
+      "confidence": 0.748,
+      "assignedAt": "2026-01-04T19:44:24.310Z",
+      "worldPosition": {
+        "x": 17.487155963302754,
+        "y": 18.992660550458716
+      }
+    },
+    {
+      "id": "ann_1767555867419_udgnz3t",
+      "timestamp": 25,
+      "cameraId": "camera4",
+      "trackId": 21,
+      "personId": 7,
+      "bbox": [
+        0.534122,
+        0.389301,
+        0.081186,
+        0.323333
+      ],
+      "confidence": 0.8012,
+      "assignedAt": "2026-01-04T19:44:29.670Z",
+      "worldPosition": {
+        "x": 21.24495412844037,
+        "y": 20.460550458715595
+      }
+    },
+    {
+      "id": "ann_1767555874615_tdn3vc3",
+      "timestamp": 25,
+      "cameraId": "camera3",
+      "trackId": 39,
+      "personId": 9,
+      "bbox": [
+        0.476882,
+        0.39253,
+        0.152094,
+        0.309317
+      ],
+      "confidence": 0.8792,
+      "assignedAt": "2026-01-04T19:44:34.615Z",
+      "worldPosition": {
+        "x": 24.41559633027523,
+        "y": 21.282568807339448
+      }
+    },
+    {
+      "id": "ann_1767555884250_3071rm9",
+      "timestamp": 25,
+      "cameraId": "camera3",
+      "trackId": 41,
+      "personId": 10,
+      "bbox": [
+        0.000382,
+        0.299829,
+        0.128815,
+        0.695237
+      ],
+      "confidence": 0.9057,
+      "assignedAt": "2026-01-04T19:44:44.250Z",
+      "worldPosition": {
+        "x": 28.87798165137615,
+        "y": 24.629357798165138
+      }
+    },
+    {
+      "id": "ann_1767555889120_nuc7qrk",
+      "timestamp": 25,
+      "cameraId": "camera4",
+      "trackId": 26,
+      "personId": 11,
+      "bbox": [
+        0.606671,
+        0.412091,
+        0.094488,
+        0.443259
+      ],
+      "confidence": 0.7827,
+      "assignedAt": "2026-01-04T19:44:49.120Z",
+      "worldPosition": {
+        "x": 21.421100917431193,
+        "y": 19.52110091743119
+      }
+    },
+    {
+      "id": "ann_1767555893273_cd5q32m",
+      "timestamp": 25,
+      "cameraId": "camera1",
+      "trackId": 41,
+      "personId": 14,
+      "bbox": [
+        0.259326,
+        0.485695,
+        0.05122,
+        0.311266
+      ],
+      "confidence": 0.8208,
+      "assignedAt": "2026-01-04T19:44:53.273Z",
+      "worldPosition": {
+        "x": 19.13119266055046,
+        "y": 10.244036697247704
+      }
+    },
+    {
+      "id": "ann_1767555899364_fdnglq2",
+      "timestamp": 25,
+      "cameraId": "camera4",
+      "trackId": 20,
+      "personId": 15,
+      "bbox": [
+        0.217371,
+        0.38587,
+        0.07105,
+        0.214108
+      ],
+      "confidence": 0.5725,
+      "assignedAt": "2026-01-04T19:44:59.364Z",
+      "worldPosition": {
+        "x": 19.01376146788991,
+        "y": 22.222018348623852
+      }
+    },
+    {
+      "id": "ann_1767555908182_ky154iy",
+      "timestamp": 25,
+      "cameraId": "camera3",
+      "trackId": 2,
+      "personId": 16,
+      "bbox": [
+        0.713739,
+        0.318225,
+        0.116184,
+        0.35118
+      ],
+      "confidence": 0.8485,
+      "assignedAt": "2026-01-04T19:45:16.435Z",
+      "worldPosition": {
+        "x": 22.536697247706424,
+        "y": 21.811009174311927
+      }
+    },
+    {
+      "id": "ann_1767555922712_nxmxqta",
+      "timestamp": 25,
+      "cameraId": "camera3",
+      "trackId": 38,
+      "personId": 17,
+      "bbox": [
+        0.857378,
+        0.310739,
+        0.128011,
+        0.428211
+      ],
+      "confidence": 0.87,
+      "assignedAt": "2026-01-04T19:45:22.712Z",
+      "worldPosition": {
+        "x": 23.065137614678903,
+        "y": 23.337614678899083
+      }
+    },
+    {
+      "id": "ann_1767555926473_wbwxp5h",
+      "timestamp": 25,
+      "cameraId": "camera1",
+      "trackId": 43,
+      "personId": 19,
+      "bbox": [
+        0.326989,
+        0.515789,
+        0.063811,
+        0.281208
+      ],
+      "confidence": 0.9086,
+      "assignedAt": "2026-01-04T19:45:26.473Z",
+      "worldPosition": {
+        "x": 19.894495412844037,
+        "y": 10.596330275229356
+      }
+    },
+    {
+      "id": "ann_1767555930029_qb8d6r9",
+      "timestamp": 25,
+      "cameraId": "camera1",
+      "trackId": 38,
+      "personId": 20,
+      "bbox": [
+        0.667591,
+        0.514059,
+        0.075777,
+        0.273967
+      ],
+      "confidence": 0.8899,
+      "assignedAt": "2026-01-04T19:45:30.029Z",
+      "worldPosition": {
+        "x": 22.94770642201835,
+        "y": 11.183486238532108
+      }
+    },
+    {
+      "id": "ann_1767555935014_0ehcn2e",
+      "timestamp": 30,
+      "cameraId": "camera1",
+      "trackId": 50,
+      "personId": 1,
+      "bbox": [
+        0.591497,
+        0.553471,
+        0.046461,
+        0.082344
+      ],
+      "confidence": 0.8844,
+      "assignedAt": "2026-01-04T19:45:35.014Z",
+      "worldPosition": {
+        "x": 21.714678899082568,
+        "y": 12.768807339449541
+      }
+    },
+    {
+      "id": "ann_1767555938963_bapmonl",
+      "timestamp": 30,
+      "cameraId": "camera3",
+      "trackId": 11,
+      "personId": 4,
+      "bbox": [
+        0.945824,
+        0.342777,
+        0.053876,
+        0.256939
+      ],
+      "confidence": 0.7573,
+      "assignedAt": "2026-01-04T19:46:36.062Z",
+      "worldPosition": {
+        "x": 20.775229357798167,
+        "y": 22.28073394495413
+      }
+    },
+    {
+      "id": "ann_1767555953089_z3godgf",
+      "timestamp": 30,
+      "cameraId": "camera3",
+      "trackId": 50,
+      "personId": 5,
+      "bbox": [
+        0.596386,
+        0.407342,
+        0.058697,
+        0.194098
+      ],
+      "confidence": 0.7849,
+      "assignedAt": "2026-01-04T19:45:53.089Z",
+      "worldPosition": {
+        "x": 19.483486238532112,
+        "y": 17.70091743119266
+      }
+    },
+    {
+      "id": "ann_1767555956875_vbdbsvw",
+      "timestamp": 30,
+      "cameraId": "camera4",
+      "trackId": 10,
+      "personId": 6,
+      "bbox": [
+        0.180297,
+        0.609222,
+        0.075582,
+        0.177618
+      ],
+      "confidence": 0.7375,
+      "assignedAt": "2026-01-04T19:45:56.875Z",
+      "worldPosition": {
+        "x": 17.487155963302754,
+        "y": 19.227522935779817
+      }
+    },
+    {
+      "id": "ann_1767555959779_wawnemc",
+      "timestamp": 30,
+      "cameraId": "camera4",
+      "trackId": 21,
+      "personId": 7,
+      "bbox": [
+        0.294399,
+        0.352406,
+        0.076271,
+        0.198544
+      ],
+      "confidence": 0.7079,
+      "assignedAt": "2026-01-04T19:45:59.779Z",
+      "worldPosition": {
+        "x": 19.424770642201835,
+        "y": 23.748623853211008
+      }
+    },
+    {
+      "id": "ann_1767555963166_zr8lqxa",
+      "timestamp": 30,
+      "cameraId": "camera3",
+      "trackId": 45,
+      "personId": 9,
+      "bbox": [
+        0.456059,
+        0.508982,
+        0.130148,
+        0.211585
+      ],
+      "confidence": 0.8934,
+      "assignedAt": "2026-01-04T19:46:03.166Z",
+      "worldPosition": {
+        "x": 25.589908256880737,
+        "y": 21.047706422018347
+      }
+    },
+    {
+      "id": "ann_1767555970688_2oy5x4d",
+      "timestamp": 30,
+      "cameraId": "camera3",
+      "trackId": 41,
+      "personId": 10,
+      "bbox": [
+        0.609669,
+        0.48284,
+        0.336172,
+        0.506463
+      ],
+      "confidence": 0.7494,
+      "assignedAt": "2026-01-04T19:46:10.688Z",
+      "worldPosition": {
+        "x": 27.821100917431195,
+        "y": 23.513761467889907
+      }
+    },
+    {
+      "id": "ann_1767555981255_rxs40gf",
+      "timestamp": 30,
+      "cameraId": "camera4",
+      "trackId": 26,
+      "personId": 11,
+      "bbox": [
+        0.409107,
+        0.389572,
+        0.08138,
+        0.212042
+      ],
+      "confidence": 0.8149,
+      "assignedAt": "2026-01-04T19:46:21.255Z"
+    },
+    {
+      "id": "ann_1767556008117_5ki32hk",
+      "timestamp": 30,
+      "cameraId": "camera1",
+      "trackId": 41,
+      "personId": 14,
+      "bbox": [
+        0.380483,
+        0.484174,
+        0.079593,
+        0.315066
+      ],
+      "confidence": 0.9011,
+      "assignedAt": "2026-01-04T19:46:48.117Z",
+      "worldPosition": {
+        "x": 20.481651376146793,
+        "y": 10.361467889908255
+      }
+    },
+    {
+      "id": "ann_1767556011515_yxf180r",
+      "timestamp": 30,
+      "cameraId": "camera4",
+      "trackId": 20,
+      "personId": 15,
+      "bbox": [
+        0.273758,
+        0.463355,
+        0.070459,
+        0.140114
+      ],
+      "confidence": 0.7174,
+      "assignedAt": "2026-01-04T19:46:51.515Z",
+      "worldPosition": {
+        "x": 19.366055045871562,
+        "y": 22.28073394495413
+      }
+    },
+    {
+      "id": "ann_1767556015363_r4fvwzh",
+      "timestamp": 30,
+      "cameraId": "camera3",
+      "trackId": 49,
+      "personId": 16,
+      "bbox": [
+        0.178505,
+        0.371934,
+        0.126172,
+        0.321841
+      ],
+      "confidence": 0.9058,
+      "assignedAt": "2026-01-04T19:46:55.363Z"
+    },
+    {
+      "id": "ann_1767556018394_extfeoc",
+      "timestamp": 30,
+      "cameraId": "camera4",
+      "trackId": 37,
+      "personId": 17,
+      "bbox": [
+        0.664061,
+        0.383224,
+        0.090452,
+        0.174552
+      ],
+      "confidence": 0.6278,
+      "assignedAt": "2026-01-04T19:47:03.040Z",
+      "worldPosition": {
+        "x": 24.06330275229358,
+        "y": 22.98532110091743
+      }
+    },
+    {
+      "id": "ann_1767556026370_4cart2q",
+      "timestamp": 30,
+      "cameraId": "camera1",
+      "trackId": 51,
+      "personId": 18,
+      "bbox": [
+        0.761959,
+        0.491393,
+        0.048148,
+        0.230236
+      ],
+      "confidence": 0.886,
+      "assignedAt": "2026-01-04T19:47:07.986Z",
+      "worldPosition": {
+        "x": 24.298165137614678,
+        "y": 13.943119266055046
+      }
+    },
+    {
+      "id": "ann_1767556031053_ggc81h4",
+      "timestamp": 30,
+      "cameraId": "camera1",
+      "trackId": 43,
+      "personId": 19,
+      "bbox": [
+        0.717862,
+        0.502681,
+        0.059314,
+        0.253158
+      ],
+      "confidence": 0.8959,
+      "assignedAt": "2026-01-04T19:47:11.053Z",
+      "worldPosition": {
+        "x": 24.004587155963304,
+        "y": 12.944954128440365
+      }
+    },
+    {
+      "id": "ann_1767556036219_ebxa5hr",
+      "timestamp": 35,
+      "cameraId": "camera1",
+      "trackId": 50,
+      "personId": 1,
+      "bbox": [
+        0.58924,
+        0.569069,
+        0.052211,
+        0.065943
+      ],
+      "confidence": 0.8756,
+      "assignedAt": "2026-01-04T19:47:18.546Z",
+      "worldPosition": {
+        "x": 21.655963302752294,
+        "y": 12.65137614678899
+      }
+    },
+    {
+      "id": "ann_1767556043503_ex551wk",
+      "timestamp": 35,
+      "cameraId": "camera3",
+      "trackId": 58,
+      "personId": 3,
+      "bbox": [
+        0.219542,
+        0.340212,
+        0.060156,
+        0.122203
+      ],
+      "confidence": 0.8806,
+      "assignedAt": "2026-01-04T19:47:23.503Z",
+      "worldPosition": {
+        "x": 21.655963302752294,
+        "y": 14.471559633027523
+      }
+    },
+    {
+      "id": "ann_1767556047067_7beooea",
+      "timestamp": 35,
+      "cameraId": "camera3",
+      "trackId": 11,
+      "personId": 4,
+      "bbox": [
+        0.939711,
+        0.333245,
+        0.059785,
+        0.256282
+      ],
+      "confidence": 0.7844,
+      "assignedAt": "2026-01-04T19:47:27.067Z"
+    },
+    {
+      "id": "ann_1767556048792_ls2q256",
+      "timestamp": 35,
+      "cameraId": "camera3",
+      "trackId": 50,
+      "personId": 5,
+      "bbox": [
+        0.5953,
+        0.407176,
+        0.069351,
+        0.19669
+      ],
+      "confidence": 0.7386,
+      "assignedAt": "2026-01-04T19:47:28.792Z",
+      "worldPosition": {
+        "x": 19.777064220183487,
+        "y": 17.70091743119266
+      }
+    },
+    {
+      "id": "ann_1767556052979_rwn5eah",
+      "timestamp": 35,
+      "cameraId": "camera4",
+      "trackId": 10,
+      "personId": 6,
+      "bbox": [
+        0.180509,
+        0.609394,
+        0.077034,
+        0.178248
+      ],
+      "confidence": 0.7428,
+      "assignedAt": "2026-01-04T19:47:41.708Z",
+      "worldPosition": {
+        "x": 17.604587155963305,
+        "y": 19.344954128440364
+      }
+    },
+    {
+      "id": "ann_1767556056383_wmu7u4w",
+      "timestamp": 35,
+      "cameraId": "camera4",
+      "trackId": 38,
+      "personId": 9,
+      "bbox": [
+        0.794311,
+        0.477683,
+        0.095386,
+        0.136705
+      ],
+      "confidence": 0.6024,
+      "assignedAt": "2026-01-04T19:47:36.383Z",
+      "worldPosition": {
+        "x": 25.942201834862384,
+        "y": 20.871559633027523
+      }
+    },
+    {
+      "id": "ann_1767556065223_irb3g89",
+      "timestamp": 35,
+      "cameraId": "camera3",
+      "trackId": 57,
+      "personId": 10,
+      "bbox": [
+        0.03274,
+        0.597884,
+        0.329348,
+        0.39441
+      ],
+      "confidence": 0.9068,
+      "assignedAt": "2026-01-04T19:47:45.223Z",
+      "worldPosition": {
+        "x": 27.644954128440368,
+        "y": 23.631192660550457
+      }
+    },
+    {
+      "id": "ann_1767556069954_sboi82y",
+      "timestamp": 35,
+      "cameraId": "camera4",
+      "trackId": 26,
+      "personId": 11,
+      "bbox": [
+        0.420886,
+        0.386883,
+        0.072963,
+        0.212081
+      ],
+      "confidence": 0.6595,
+      "assignedAt": "2026-01-04T19:47:49.954Z",
+      "worldPosition": {
+        "x": 20.657798165137613,
+        "y": 22.045871559633028
+      }
+    },
+    {
+      "id": "ann_1767556074300_z4nxxsq",
+      "timestamp": 35,
+      "cameraId": "camera3",
+      "trackId": 55,
+      "personId": 13,
+      "bbox": [
+        0.34907,
+        0.364574,
+        0.27281,
+        0.626487
+      ],
+      "confidence": 0.9387,
+      "assignedAt": "2026-01-04T19:47:54.300Z",
+      "worldPosition": {
+        "x": 26.705504587155964,
+        "y": 23.807339449541285
+      }
+    },
+    {
+      "id": "ann_1767556077882_wsupgfp",
+      "timestamp": 35,
+      "cameraId": "camera1",
+      "trackId": 41,
+      "personId": 14,
+      "bbox": [
+        0.395411,
+        0.482834,
+        0.061507,
+        0.311633
+      ],
+      "confidence": 0.8502,
+      "assignedAt": "2026-01-04T19:47:57.882Z",
+      "worldPosition": {
+        "x": 20.71651376146789,
+        "y": 10.537614678899082
+      }
+    },
+    {
+      "id": "ann_1767556080973_nk76dol",
+      "timestamp": 35,
+      "cameraId": "camera4",
+      "trackId": 20,
+      "personId": 15,
+      "bbox": [
+        0.273997,
+        0.467881,
+        0.083481,
+        0.136154
+      ],
+      "confidence": 0.7011,
+      "assignedAt": "2026-01-04T19:48:00.973Z",
+      "worldPosition": {
+        "x": 19.01376146788991,
+        "y": 22.39816513761468
+      }
+    },
+    {
+      "id": "ann_1767556085236_50abtde",
+      "timestamp": 35,
+      "cameraId": "camera3",
+      "trackId": 56,
+      "personId": 16,
+      "bbox": [
+        0.123394,
+        0.521661,
+        0.094161,
+        0.171217
+      ],
+      "confidence": 0.7515,
+      "assignedAt": "2026-01-04T19:48:12.443Z"
+    },
+    {
+      "id": "ann_1767556089802_b54oaux",
+      "timestamp": 35,
+      "cameraId": "camera3",
+      "trackId": 38,
+      "personId": 17,
+      "bbox": [
+        0.774121,
+        0.522153,
+        0.160144,
+        0.252245
+      ],
+      "confidence": 0.8469,
+      "assignedAt": "2026-01-04T19:48:13.343Z",
+      "worldPosition": {
+        "x": 24.826605504587157,
+        "y": 22.809174311926604
+      }
+    },
+    {
+      "id": "ann_1767556098610_1wldca5",
+      "timestamp": 35,
+      "cameraId": "camera1",
+      "trackId": 43,
+      "personId": 19,
+      "bbox": [
+        0.767326,
+        0.507038,
+        0.045883,
+        0.171885
+      ],
+      "confidence": 0.8768,
+      "assignedAt": "2026-01-04T19:48:20.923Z",
+      "worldPosition": {
+        "x": 24.239449541284408,
+        "y": 14.00183486238532
+      }
+    },
+    {
+      "id": "ann_1767556105545_hs5zsoy",
+      "timestamp": 40,
+      "cameraId": "camera1",
+      "trackId": 53,
+      "personId": 1,
+      "bbox": [
+        0.592493,
+        0.554289,
+        0.046198,
+        0.081319
+      ],
+      "confidence": 0.8719,
+      "assignedAt": "2026-01-04T19:48:25.545Z"
+    },
+    {
+      "id": "aug_1767565124762_5e1b1",
+      "timestamp": 0,
+      "cameraId": "camera1",
+      "trackId": 7,
+      "personId": 1,
+      "bbox": [
+        0.663999,
+        0.518672,
+        0.057778,
+        0.240707
+      ],
+      "confidence": 0.7708,
+      "assignedAt": "2026-01-04T22:18:44.762Z",
+      "worldPosition": {
+        "x": 22.477981651376147,
+        "y": 10.948623853211007
+      }
+    },
+    {
+      "id": "aug_1767565124763_kfp0o",
+      "timestamp": 0,
+      "cameraId": "camera2",
+      "trackId": 1,
+      "personId": 8,
+      "bbox": [
+        0.356268,
+        0.387796,
+        0.0457,
+        0.173783
+      ],
+      "confidence": 0.844,
+      "assignedAt": "2026-01-04T22:18:44.763Z",
+      "worldPosition": {
+        "x": 16.78256880733945,
+        "y": 13.121100917431193
+      }
+    },
+    {
+      "id": "aug_1767565124763_ryiaq",
+      "timestamp": 0,
+      "cameraId": "camera2",
+      "trackId": 4,
+      "personId": 3,
+      "bbox": [
+        0.613535,
+        0.350161,
+        0.021625,
+        0.133715
+      ],
+      "confidence": 0.706,
+      "assignedAt": "2026-01-04T22:18:44.763Z",
+      "worldPosition": {
+        "x": 23.241284403669724,
+        "y": 12.064220183486238
+      }
+    },
+    {
+      "id": "aug_1767565124763_9fx63",
+      "timestamp": 0,
+      "cameraId": "camera4",
+      "trackId": 1,
+      "personId": 5,
+      "bbox": [
+        0.574786,
+        0.385127,
+        0.165854,
+        0.488979
+      ],
+      "confidence": 0.917,
+      "assignedAt": "2026-01-04T22:18:44.763Z",
+      "worldPosition": {
+        "x": 20.070642201834865,
+        "y": 17.759633027522934
+      }
+    },
+    {
+      "id": "aug_1767565124763_gkucl",
+      "timestamp": 5,
+      "cameraId": "camera2",
+      "trackId": 3,
+      "personId": 1,
+      "bbox": [
+        0.643425,
+        0.3535,
+        0.033896,
+        0.164635
+      ],
+      "confidence": 0.8503,
+      "assignedAt": "2026-01-04T22:18:44.763Z",
+      "worldPosition": {
+        "x": 21.949541284403672,
+        "y": 10.948623853211007
+      }
+    },
+    {
+      "id": "aug_1767565124763_hpsyc",
+      "timestamp": 5,
+      "cameraId": "camera2",
+      "trackId": 17,
+      "personId": 7,
+      "bbox": [
+        0.626809,
+        0.359413,
+        0.015403,
+        0.069322
+      ],
+      "confidence": 0.6546,
+      "assignedAt": "2026-01-04T22:18:44.763Z",
+      "worldPosition": {
+        "x": 24.70917431192661,
+        "y": 13.121100917431193
+      }
+    },
+    {
+      "id": "aug_1767565124763_6wxg4",
+      "timestamp": 5,
+      "cameraId": "camera4",
+      "trackId": 1,
+      "personId": 5,
+      "bbox": [
+        0.538629,
+        0.386873,
+        0.142924,
+        0.482643
+      ],
+      "confidence": 0.9373,
+      "assignedAt": "2026-01-04T22:18:44.763Z",
+      "worldPosition": {
+        "x": 19.83577981651376,
+        "y": 17.70091743119266
+      }
+    },
+    {
+      "id": "aug_1767565124763_ri2x5",
+      "timestamp": 10,
+      "cameraId": "camera2",
+      "trackId": 21,
+      "personId": 1,
+      "bbox": [
+        0.461176,
+        0.356534,
+        0.038807,
+        0.170414
+      ],
+      "confidence": 0.8562,
+      "assignedAt": "2026-01-04T22:18:44.763Z",
+      "worldPosition": {
+        "x": 19.60091743119266,
+        "y": 13.473394495412844
+      }
+    },
+    {
+      "id": "aug_1767565124763_lghe8",
+      "timestamp": 10,
+      "cameraId": "camera4",
+      "trackId": 8,
+      "personId": 4,
+      "bbox": [
+        0.744015,
+        0.421011,
+        0.222935,
+        0.575093
+      ],
+      "confidence": 0.9333,
+      "assignedAt": "2026-01-04T22:18:44.763Z",
+      "worldPosition": {
+        "x": 20.83394495412844,
+        "y": 16.585321100917433
+      }
+    },
+    {
+      "id": "aug_1767565124763_oypv2",
+      "timestamp": 10,
+      "cameraId": "camera4",
+      "trackId": 7,
+      "personId": 16,
+      "bbox": [
+        0.666929,
+        0.37205,
+        0.084788,
+        0.212358
+      ],
+      "confidence": 0.778,
+      "assignedAt": "2026-01-04T22:18:44.763Z",
+      "worldPosition": {
+        "x": 21.890825688073395,
+        "y": 21.165137614678898
+      }
+    },
+    {
+      "id": "aug_1767565124763_8pvm0",
+      "timestamp": 15,
+      "cameraId": "camera2",
+      "trackId": 21,
+      "personId": 1,
+      "bbox": [
+        0.496527,
+        0.384836,
+        0.035095,
+        0.129508
+      ],
+      "confidence": 0.7986,
+      "assignedAt": "2026-01-04T22:18:44.763Z",
+      "worldPosition": {
+        "x": 20.892660550458718,
+        "y": 12.122935779816512
+      }
+    },
+    {
+      "id": "aug_1767565124763_yxrt0",
+      "timestamp": 15,
+      "cameraId": "camera3",
+      "trackId": 6,
+      "personId": 4,
+      "bbox": [
+        0.617607,
+        0.379536,
+        0.058094,
+        0.245482
+      ],
+      "confidence": 0.7019,
+      "assignedAt": "2026-01-04T22:18:44.763Z",
+      "worldPosition": {
+        "x": 22.066972477064223,
+        "y": 21.223853211009175
+      }
+    },
+    {
+      "id": "aug_1767565124763_to5zl",
+      "timestamp": 15,
+      "cameraId": "camera4",
+      "trackId": 11,
+      "personId": 12,
+      "bbox": [
+        0.645323,
+        0.455973,
+        0.069375,
+        0.397252
+      ],
+      "confidence": 0.8093,
+      "assignedAt": "2026-01-04T22:18:44.763Z",
+      "worldPosition": {
+        "x": 21.303669724770643,
+        "y": 18.522935779816514
+      }
+    },
+    {
+      "id": "aug_1767565124763_062u4",
+      "timestamp": 15,
+      "cameraId": "camera4",
+      "trackId": 12,
+      "personId": 15,
+      "bbox": [
+        0.717688,
+        0.485569,
+        0.110352,
+        0.510666
+      ],
+      "confidence": 0.8943,
+      "assignedAt": "2026-01-04T22:18:44.763Z",
+      "worldPosition": {
+        "x": 20.892660550458718,
+        "y": 17.231192660550455
+      }
+    },
+    {
+      "id": "aug_1767565124763_a427o",
+      "timestamp": 15,
+      "cameraId": "camera4",
+      "trackId": 8,
+      "personId": 4,
+      "bbox": [
+        0.607839,
+        0.391908,
+        0.039716,
+        0.286236
+      ],
+      "confidence": 0.6392,
+      "assignedAt": "2026-01-04T22:18:44.763Z",
+      "worldPosition": {
+        "x": 22.066972477064223,
+        "y": 21.223853211009175
+      }
+    },
+    {
+      "id": "aug_1767565124764_o9qsk",
+      "timestamp": 20,
+      "cameraId": "camera1",
+      "trackId": 43,
+      "personId": 19,
+      "bbox": [
+        0.313379,
+        0.513399,
+        0.022159,
+        0.183426
+      ],
+      "confidence": 0.5365,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 19.777064220183487,
+        "y": 10.478899082568805
+      }
+    },
+    {
+      "id": "aug_1767565124764_dzual",
+      "timestamp": 20,
+      "cameraId": "camera2",
+      "trackId": 37,
+      "personId": 14,
+      "bbox": [
+        0.583133,
+        0.337609,
+        0.054921,
+        0.230358
+      ],
+      "confidence": 0.7098,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 17.722018348623852,
+        "y": 9.245871559633027
+      }
+    },
+    {
+      "id": "aug_1767565124764_97kfr",
+      "timestamp": 20,
+      "cameraId": "camera2",
+      "trackId": 40,
+      "personId": 20,
+      "bbox": [
+        0.636237,
+        0.361915,
+        0.047098,
+        0.184121
+      ],
+      "confidence": 0.8367,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 20.011926605504588,
+        "y": 10.009174311926603
+      }
+    },
+    {
+      "id": "aug_1767565124764_d4s0r",
+      "timestamp": 20,
+      "cameraId": "camera4",
+      "trackId": 19,
+      "personId": 17,
+      "bbox": [
+        0.604314,
+        0.419486,
+        0.075077,
+        0.444011
+      ],
+      "confidence": 0.8697,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 21.068807339449542,
+        "y": 18.992660550458716
+      }
+    },
+    {
+      "id": "aug_1767565124764_t7lei",
+      "timestamp": 20,
+      "cameraId": "camera4",
+      "trackId": 21,
+      "personId": 7,
+      "bbox": [
+        0.669804,
+        0.447998,
+        0.113657,
+        0.528076
+      ],
+      "confidence": 0.8872,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 20.657798165137613,
+        "y": 17.34862385321101
+      }
+    },
+    {
+      "id": "aug_1767565124764_e5ol0",
+      "timestamp": 20,
+      "cameraId": "camera4",
+      "trackId": 26,
+      "personId": 11,
+      "bbox": [
+        0.916569,
+        0.482618,
+        0.083019,
+        0.509285
+      ],
+      "confidence": 0.8883,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 21.186238532110092,
+        "y": 15.880733944954127
+      }
+    },
+    {
+      "id": "aug_1767565124764_vovmi",
+      "timestamp": 25,
+      "cameraId": "camera2",
+      "trackId": 37,
+      "personId": 14,
+      "bbox": [
+        0.564911,
+        0.341018,
+        0.04666,
+        0.215333
+      ],
+      "confidence": 0.869,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 19.13119266055046,
+        "y": 10.244036697247704
+      }
+    },
+    {
+      "id": "aug_1767565124764_5ggav",
+      "timestamp": 25,
+      "cameraId": "camera2",
+      "trackId": 40,
+      "personId": 20,
+      "bbox": [
+        0.646717,
+        0.36478,
+        0.028016,
+        0.139836
+      ],
+      "confidence": 0.7731,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 22.94770642201835,
+        "y": 11.183486238532108
+      }
+    },
+    {
+      "id": "aug_1767565124764_fs2hi",
+      "timestamp": 25,
+      "cameraId": "camera2",
+      "trackId": 43,
+      "personId": 1,
+      "bbox": [
+        0.527166,
+        0.364791,
+        0.020381,
+        0.144294
+      ],
+      "confidence": 0.7877,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 21.655963302752294,
+        "y": 12.65137614678899
+      }
+    },
+    {
+      "id": "aug_1767565124764_vxo6g",
+      "timestamp": 25,
+      "cameraId": "camera2",
+      "trackId": 42,
+      "personId": 19,
+      "bbox": [
+        0.610091,
+        0.362144,
+        0.043507,
+        0.181697
+      ],
+      "confidence": 0.8392,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 19.894495412844037,
+        "y": 10.596330275229356
+      }
+    },
+    {
+      "id": "aug_1767565124764_7k9zi",
+      "timestamp": 25,
+      "cameraId": "camera3",
+      "trackId": 45,
+      "personId": 9,
+      "bbox": [
+        0.597738,
+        0.405216,
+        0.057687,
+        0.136791
+      ],
+      "confidence": 0.6637,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 24.41559633027523,
+        "y": 21.282568807339448
+      }
+    },
+    {
+      "id": "aug_1767565124764_j7rj8",
+      "timestamp": 25,
+      "cameraId": "camera4",
+      "trackId": 34,
+      "personId": 10,
+      "bbox": [
+        0.917956,
+        0.348264,
+        0.073703,
+        0.176841
+      ],
+      "confidence": 0.7994,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 28.87798165137615,
+        "y": 24.629357798165138
+      }
+    },
+    {
+      "id": "aug_1767565124764_q870r",
+      "timestamp": 25,
+      "cameraId": "camera4",
+      "trackId": 31,
+      "personId": 9,
+      "bbox": [
+        0.760315,
+        0.406846,
+        0.095301,
+        0.202963
+      ],
+      "confidence": 0.8815,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 24.41559633027523,
+        "y": 21.282568807339448
+      }
+    },
+    {
+      "id": "aug_1767565124764_4vxrs",
+      "timestamp": 25,
+      "cameraId": "camera4",
+      "trackId": 33,
+      "personId": 16,
+      "bbox": [
+        0.677892,
+        0.419602,
+        0.068936,
+        0.189985
+      ],
+      "confidence": 0.5557,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 22.536697247706424,
+        "y": 21.811009174311927
+      }
+    },
+    {
+      "id": "aug_1767565124764_3myd4",
+      "timestamp": 30,
+      "cameraId": "camera1",
+      "trackId": 44,
+      "personId": 1,
+      "bbox": [
+        0.633965,
+        0.52071,
+        0.044473,
+        0.114661
+      ],
+      "confidence": 0.8949,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 21.714678899082568,
+        "y": 12.768807339449541
+      }
+    },
+    {
+      "id": "aug_1767565124764_u3qsi",
+      "timestamp": 30,
+      "cameraId": "camera2",
+      "trackId": 37,
+      "personId": 14,
+      "bbox": [
+        0.61033,
+        0.341953,
+        0.031555,
+        0.197302
+      ],
+      "confidence": 0.7888,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 20.481651376146793,
+        "y": 10.361467889908255
+      }
+    },
+    {
+      "id": "aug_1767565124764_kv7p5",
+      "timestamp": 30,
+      "cameraId": "camera2",
+      "trackId": 43,
+      "personId": 1,
+      "bbox": [
+        0.526267,
+        0.389921,
+        0.021158,
+        0.117762
+      ],
+      "confidence": 0.8013,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 21.714678899082568,
+        "y": 12.768807339449541
+      }
+    },
+    {
+      "id": "aug_1767565124764_vm1nf",
+      "timestamp": 30,
+      "cameraId": "camera3",
+      "trackId": 51,
+      "personId": 10,
+      "bbox": [
+        0.034429,
+        0.601596,
+        0.352714,
+        0.387869
+      ],
+      "confidence": 0.9261,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 27.821100917431195,
+        "y": 23.513761467889907
+      }
+    },
+    {
+      "id": "aug_1767565124764_7pfck",
+      "timestamp": 30,
+      "cameraId": "camera3",
+      "trackId": 38,
+      "personId": 17,
+      "bbox": [
+        0.772132,
+        0.492582,
+        0.109405,
+        0.276865
+      ],
+      "confidence": 0.7789,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 24.06330275229358,
+        "y": 22.98532110091743
+      }
+    },
+    {
+      "id": "aug_1767565124764_sya2c",
+      "timestamp": 30,
+      "cameraId": "camera4",
+      "trackId": 1,
+      "personId": 5,
+      "bbox": [
+        0.47843,
+        0.597633,
+        0.139451,
+        0.280092
+      ],
+      "confidence": 0.8971,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 19.483486238532112,
+        "y": 17.70091743119266
+      }
+    },
+    {
+      "id": "aug_1767565124764_3l3xa",
+      "timestamp": 30,
+      "cameraId": "camera4",
+      "trackId": 38,
+      "personId": 9,
+      "bbox": [
+        0.796231,
+        0.47936,
+        0.079001,
+        0.133324
+      ],
+      "confidence": 0.801,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 25.589908256880737,
+        "y": 21.047706422018347
+      }
+    },
+    {
+      "id": "aug_1767565124764_yjf4k",
+      "timestamp": 30,
+      "cameraId": "camera4",
+      "trackId": 39,
+      "personId": 10,
+      "bbox": [
+        0.880104,
+        0.416426,
+        0.080373,
+        0.113185
+      ],
+      "confidence": 0.745,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 27.821100917431195,
+        "y": 23.513761467889907
+      }
+    },
+    {
+      "id": "aug_1767565124764_cl17c",
+      "timestamp": 30,
+      "cameraId": "camera4",
+      "trackId": 34,
+      "personId": 10,
+      "bbox": [
+        0.94886,
+        0.356459,
+        0.05078,
+        0.206917
+      ],
+      "confidence": 0.7396,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 27.821100917431195,
+        "y": 23.513761467889907
+      }
+    },
+    {
+      "id": "aug_1767565124764_e8h39",
+      "timestamp": 35,
+      "cameraId": "camera1",
+      "trackId": 44,
+      "personId": 1,
+      "bbox": [
+        0.655905,
+        0.56034,
+        0.028027,
+        0.074726
+      ],
+      "confidence": 0.8467,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 21.655963302752294,
+        "y": 12.65137614678899
+      }
+    },
+    {
+      "id": "aug_1767565124764_dm9bw",
+      "timestamp": 35,
+      "cameraId": "camera2",
+      "trackId": 37,
+      "personId": 14,
+      "bbox": [
+        0.604764,
+        0.34484,
+        0.042131,
+        0.188807
+      ],
+      "confidence": 0.8553,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 20.71651376146789,
+        "y": 10.537614678899082
+      }
+    },
+    {
+      "id": "aug_1767565124764_6wbtt",
+      "timestamp": 35,
+      "cameraId": "camera3",
+      "trackId": 45,
+      "personId": 9,
+      "bbox": [
+        0.50082,
+        0.503735,
+        0.077335,
+        0.162099
+      ],
+      "confidence": 0.6259,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 25.942201834862384,
+        "y": 20.871559633027523
+      }
+    },
+    {
+      "id": "aug_1767565124764_tqvxu",
+      "timestamp": 35,
+      "cameraId": "camera4",
+      "trackId": 1,
+      "personId": 5,
+      "bbox": [
+        0.479299,
+        0.598026,
+        0.138903,
+        0.279438
+      ],
+      "confidence": 0.8822,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 19.777064220183487,
+        "y": 17.70091743119266
+      }
+    },
+    {
+      "id": "aug_1767565124764_lx9wl",
+      "timestamp": 35,
+      "cameraId": "camera4",
+      "trackId": 39,
+      "personId": 10,
+      "bbox": [
+        0.877187,
+        0.418607,
+        0.070409,
+        0.110313
+      ],
+      "confidence": 0.6739,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 27.644954128440368,
+        "y": 23.631192660550457
+      }
+    },
+    {
+      "id": "aug_1767565124764_hh3ht",
+      "timestamp": 35,
+      "cameraId": "camera4",
+      "trackId": 40,
+      "personId": 13,
+      "bbox": [
+        0.820305,
+        0.364557,
+        0.063651,
+        0.158278
+      ],
+      "confidence": 0.612,
+      "assignedAt": "2026-01-04T22:18:44.764Z",
+      "worldPosition": {
+        "x": 26.705504587155964,
+        "y": 23.807339449541285
+      }
+    }
+  ],
+  "persons": [
+    {
+      "id": 0,
+      "label": "Invalid",
+      "color": "#6b7280"
+    },
+    {
+      "id": 1,
+      "label": "Person 1",
+      "color": "#ef4444",
+      "thumbnailUrl": "/people/person1.png"
+    },
+    {
+      "id": 2,
+      "label": "Person 2",
+      "color": "#f97316",
+      "thumbnailUrl": "/people/person2.png"
+    },
+    {
+      "id": 3,
+      "label": "Person 3",
+      "color": "#eab308",
+      "thumbnailUrl": "/people/person3.png"
+    },
+    {
+      "id": 4,
+      "label": "Person 4",
+      "color": "#84cc16",
+      "thumbnailUrl": "/people/person4.png"
+    },
+    {
+      "id": 5,
+      "label": "Person 5",
+      "color": "#22c55e",
+      "thumbnailUrl": "/people/person5.png"
+    },
+    {
+      "id": 6,
+      "label": "Person 6",
+      "color": "#14b8a6",
+      "thumbnailUrl": "/people/person6.png"
+    },
+    {
+      "id": 7,
+      "label": "Person 7",
+      "color": "#06b6d4",
+      "thumbnailUrl": "/people/person7.png"
+    },
+    {
+      "id": 8,
+      "label": "Person 8",
+      "color": "#3b82f6",
+      "thumbnailUrl": "/people/person8.png"
+    },
+    {
+      "id": 9,
+      "label": "Person 9",
+      "color": "#6366f1",
+      "thumbnailUrl": "/people/person9.png"
+    },
+    {
+      "id": 10,
+      "label": "Person 10",
+      "color": "#8b5cf6",
+      "thumbnailUrl": "/people/person10.png"
+    },
+    {
+      "id": 11,
+      "label": "Person 11",
+      "color": "#a855f7",
+      "thumbnailUrl": "/people/person11.png"
+    },
+    {
+      "id": 12,
+      "label": "Person 12",
+      "color": "#d946ef",
+      "thumbnailUrl": "/people/person12.png"
+    },
+    {
+      "id": 13,
+      "label": "Person 13",
+      "color": "#ec4899",
+      "thumbnailUrl": "/people/person13.png"
+    },
+    {
+      "id": 14,
+      "label": "Person 14",
+      "color": "#f43f5e",
+      "thumbnailUrl": "/people/person14.png"
+    },
+    {
+      "id": 15,
+      "label": "Person 15",
+      "color": "#78716c",
+      "thumbnailUrl": "/people/person15.png"
+    },
+    {
+      "id": 16,
+      "label": "Person 16",
+      "color": "#fbbf24",
+      "thumbnailUrl": "/people/person16.png"
+    },
+    {
+      "id": 17,
+      "label": "Person 17",
+      "color": "#a3e635",
+      "thumbnailUrl": "/people/person17.png"
+    },
+    {
+      "id": 18,
+      "label": "Person 18",
+      "color": "#2dd4bf",
+      "thumbnailUrl": "/people/person18.png"
+    },
+    {
+      "id": 19,
+      "label": "Person 19",
+      "color": "#38bdf8",
+      "thumbnailUrl": "/people/person19.png"
+    },
+    {
+      "id": 20,
+      "label": "Person 20",
+      "color": "#c084fc",
+      "thumbnailUrl": "/people/person20.png"
+    }
+  ],
+  "metadata": {
+    "createdAt": "2026-01-04T19:37:18.557Z",
+    "lastModifiedAt": "2026-01-04T22:18:44.765Z"
+  }
+}

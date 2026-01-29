@@ -336,7 +336,7 @@ async function replaySynchronized(
     if (frameSuccess) {
       successCount++
       for (const r of results) {
-        if (r.success && 'detections' in r) {
+        if (r.success && 'detections' in r && typeof r.detections === 'number') {
           totalDetections += r.detections
         }
       }

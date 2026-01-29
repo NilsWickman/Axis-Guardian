@@ -250,6 +250,12 @@ async function initializeConnections() {
         const normalizedMetadata = normalizeMetadata(metadata)
         cameraConnections[camera.id].latestMetadata = normalizedMetadata
         cameraMetadataMap[camera.id] = normalizedMetadata
+
+        // If we're receiving data, consider connection healthy even if transport
+        // hasn't reached 'connected' state yet (data channel is independent)
+        if (!cameraConnections[camera.id].isConnected) {
+          cameraConnections[camera.id].isConnected = true
+        }
       })
 
       // Monitor connection state reactively (not polling)
@@ -324,9 +330,27 @@ function attachToVideoElement(cameraId: string, videoElement: HTMLVideoElement):
   }
 
   videoElement.srcObject = stream
-  videoElement.play().catch(e =>
-    console.error(`[ConnectionManager] Error playing video for ${cameraId}:`, e)
-  )
+
+  // Handle play() with AbortError retry - the play() can be interrupted by a new load request
+  // when multiple attachment calls happen in quick succession
+  const playWithRetry = async () => {
+    try {
+      await videoElement.play()
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        // play() was interrupted by a new load - retry after the load settles
+        await new Promise(resolve => setTimeout(resolve, 100))
+        try {
+          await videoElement.play()
+        } catch (retryError) {
+          console.error(`[ConnectionManager] Retry play failed for ${cameraId}:`, retryError)
+        }
+      } else {
+        console.error(`[ConnectionManager] Error playing video for ${cameraId}:`, e)
+      }
+    }
+  }
+  playWithRetry()
 
   // Track attached elements so sync monitoring can affect what the user actually sees.
   const conn = cameraConnections[cameraId]
@@ -605,11 +629,18 @@ async function attemptStreamRecovery(cameraId: string) {
   const conn = cameraConnections[cameraId]
   if (!conn?.videoElement) return
 
+  // Skip if video is already playing - no recovery needed
+  if (!conn.videoElement.paused) return
+
   try {
     // Try to restart playback
     await conn.videoElement.play()
   } catch (error) {
-    // If playback restart fails, attempt full reconnection
+    // If AbortError, another play/load is in progress - don't force reconnection
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return
+    }
+    // If playback restart fails for other reasons, attempt full reconnection
     await attemptReconnection(cameraId)
   }
 }

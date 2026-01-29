@@ -94,6 +94,8 @@ export class ReplayRecorder {
 
     // Ignore snapshot messages (these are connection-level, not timeline events).
     if (message.type === 'snapshot') return
+    // Ignore frame_info messages (periodic heartbeats for delay counters, not replayable).
+    if (message.type === 'frame_info') return
 
     const { videoTimeMs, rtpTimestamp } = this.extractTiming(message)
     if (videoTimeMs === null) return

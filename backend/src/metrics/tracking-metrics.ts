@@ -102,6 +102,26 @@ export interface DiagnosticMetrics {
   assignmentGateRejects: number
   /** Detections that failed projection */
   projectionFailures: number
+  /** Projection failures by reason */
+  projectionFailuresByReason: {
+    no_calibration: number
+    outside_fov: number
+    behind_camera: number
+    distortion_failure: number
+    invalid_coordinates: number
+    other: number
+  }
+  /** Projection failures by camera */
+  projectionFailuresByCamera: Record<string, number>
+  /** End-to-end latency statistics (detection to broadcast, ms) */
+  latencyStats: {
+    avg: number
+    p50: number
+    p95: number
+    p99: number
+    min: number
+    max: number
+  }
 }
 
 export interface ReIDMetrics {
@@ -262,6 +282,9 @@ interface MetricsState {
   cameraContributions: number[]
   predictionErrors: number[]
 
+  // Latency tracking (end-to-end detection to broadcast)
+  latencies: number[]
+
   // Start time
   startTime: number
 }
@@ -326,6 +349,7 @@ export class MetricsCollector {
       trackPurities: [],
       cameraContributions: [],
       predictionErrors: [],
+      latencies: [],
       startTime: Date.now(),
     }
   }
@@ -539,6 +563,42 @@ export class MetricsCollector {
 
   recordProjectionFailure(): void {
     this.diagnostic.projectionFailures++
+  }
+
+  /**
+   * Record a detailed projection failure with reason and camera
+   */
+  recordProjectionFailureDetailed(
+    reason: 'no_calibration' | 'outside_fov' | 'behind_camera' | 'distortion_failure' | 'invalid_coordinates' | 'other',
+    cameraId: string
+  ): void {
+    this.diagnostic.projectionFailures++
+    this.diagnostic.projectionFailuresByReason[reason]++
+    this.diagnostic.projectionFailuresByCamera[cameraId] =
+      (this.diagnostic.projectionFailuresByCamera[cameraId] ?? 0) + 1
+  }
+
+  /**
+   * Record end-to-end latency from detection dispatch to broadcast
+   */
+  recordLatency(latencyMs: number): void {
+    this.addToWindow(this.state.latencies, latencyMs)
+    this.updateLatencyStats()
+  }
+
+  private updateLatencyStats(): void {
+    const latencies = this.state.latencies
+    if (latencies.length === 0) return
+
+    const sorted = [...latencies].sort((a, b) => a - b)
+    this.diagnostic.latencyStats = {
+      avg: this.average(latencies),
+      min: sorted[0],
+      max: sorted[sorted.length - 1],
+      p50: this.percentile(sorted, 0.5),
+      p95: this.percentile(sorted, 0.95),
+      p99: this.percentile(sorted, 0.99),
+    }
   }
 
   // ========== REID METRICS ==========
@@ -805,7 +865,12 @@ export class MetricsCollector {
       clustering: { ...this.clustering },
       lifecycle: { ...this.lifecycle },
       performance: { ...this.performance },
-      diagnostic: { ...this.diagnostic },
+      diagnostic: {
+        ...this.diagnostic,
+        projectionFailuresByReason: { ...this.diagnostic.projectionFailuresByReason },
+        projectionFailuresByCamera: { ...this.diagnostic.projectionFailuresByCamera },
+        latencyStats: { ...this.diagnostic.latencyStats },
+      },
       reid: { ...this.reid, similarityDistribution: { ...this.reid.similarityDistribution } },
       sync: { ...this.sync, cameraClockOffsets: { ...this.sync.cameraClockOffsets } },
       quality: { ...this.quality },
@@ -891,6 +956,7 @@ export class MetricsCollector {
       trackPurities: [],
       cameraContributions: [],
       predictionErrors: [],
+      latencies: [],
       startTime: Date.now(),
     }
   }
@@ -980,6 +1046,16 @@ export class MetricsCollector {
       costMatrixStats: { avgCost: 0, minCost: 0, maxCost: 0 },
       assignmentGateRejects: 0,
       projectionFailures: 0,
+      projectionFailuresByReason: {
+        no_calibration: 0,
+        outside_fov: 0,
+        behind_camera: 0,
+        distortion_failure: 0,
+        invalid_coordinates: 0,
+        other: 0,
+      },
+      projectionFailuresByCamera: {},
+      latencyStats: { avg: 0, p50: 0, p95: 0, p99: 0, min: 0, max: 0 },
     }
   }
 

@@ -46,13 +46,8 @@ export function calculateAssociationMultiplier(
 ): number {
   const assoc = track.cameraAssociations.get(detection.cameraId)
 
-  // Debug: log all camera1-18 association checks
-  if (detection.trackId === 18 && detection.cameraId === 'camera1') {
-    console.error(`[AssocEntry] ${detection.cameraId}-${detection.trackId} vs ${track.globalTrackId}: assoc=${assoc ? `cam1:[${assoc.trackIds}]` : 'none'}`)
-  }
-
   // Case 1: Same camera + same trackId = strong bonus
-  if (assoc?.trackIds.includes(detection.trackId)) {
+  if (assoc?.trackIds.includes(detection.localTrackId)) {
     return config.associationBonus
   }
 
@@ -78,10 +73,6 @@ export function calculateAssociationMultiplier(
       if (similarity < 0.5) {
         embeddingMismatch = true
       }
-    }
-    // Debug: log same-camera different-trackId decisions for camera1 trackId 18
-    if (detection.trackId === 18 && detection.cameraId === 'camera1') {
-      console.error(`[Assoc] ${detection.cameraId}-${detection.trackId} -> ${track.globalTrackId} (has cam1:[${assoc.trackIds}]): dist=${baseDistance.toFixed(2)}, timeSince=${timeSinceSameCam}ms, isClose=${isRecentAndClose || isVeryClose}, sim=${similarity.toFixed(2)}, mismatch=${embeddingMismatch}, result=${(isRecentAndClose || isVeryClose) && !embeddingMismatch ? 'BONUS' : 'PENALTY'}`)
     }
 
     if ((isRecentAndClose || isVeryClose) && !embeddingMismatch) {

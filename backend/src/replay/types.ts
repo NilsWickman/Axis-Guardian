@@ -34,6 +34,7 @@ export interface ReplayManifest {
 export type ReplayEventType =
   | 'track_created'
   | 'track_updated'
+  | 'track_delta'
   | 'track_expired'
   | 'zone_violation'
   | 'zones_updated'

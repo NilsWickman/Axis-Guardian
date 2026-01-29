@@ -6,22 +6,23 @@
  */
 
 import type { DetectionMessage, RawDetection, GlobalTrack, CameraDetection, CameraFrameInfo, CameraHealthStatus, DetectionAttributes } from '../types.js'
-import {
-  projectDetectionWithKRT,
-  estimateBBoxHeightExtension,
-  radToDeg,
-  angleDifference,
-} from '../projection/ground-plane.js'
+import { projectDetectionWithKRT } from '../projection/ground-plane.js'
 import { TrackManager } from '../tracks/track-manager.js'
 import { CameraRegistry } from './camera-registry.js'
 import { logProjectionFailure } from '../api/routes.js'
 import { getPipelineLogger } from '../debug/pipeline-logger.js'
 import type { SiteMapObstacle } from '../config/sitemap-loader.js'
-import { isPointInsideAnyObstacle, clampBehindOccludingTable2D } from '../geometry/obstacles.js'
-import { isPointOccludedByAnyPillar } from '../geometry/pillar-shadow.js'
 import type { ZoneManager } from '../zones/zone-manager.js'
 import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
 import { BatchOptimizer, type BatchOptimizerConfig, type FrameAssignment } from '../optimization/batch-optimizer.js'
+import { getMetrics } from '../metrics/index.js'
+import {
+  ProjectionPipeline,
+  type IProjectionLogger,
+  type ProjectionPipelineDeps,
+  FULL_PIPELINE_CONFIG,
+  MULTI_CAMERA_PIPELINE_CONFIG,
+} from './projection-pipeline.js'
 
 /**
  * Common interface for detection processors
@@ -48,7 +49,7 @@ export interface IDetectionProcessor {
     cameraId: string,
     bbox: { x: number; y: number; width: number; height: number },
     confidence: number,
-    trackId?: number,
+    localTrackId?: number,
     attributes?: DetectionAttributes
   ): GlobalTrack | null
   processWorldPosition(
@@ -56,20 +57,51 @@ export interface IDetectionProcessor {
     worldX: number,
     worldY: number,
     confidence: number,
-    trackId?: number
+    localTrackId?: number
   ): GlobalTrack
 }
 
-const MIN_CONFIDENCE = ALGORITHM_CONSTANTS.detection.minConfidence
 const IMAGE_WIDTH = ALGORITHM_CONSTANTS.detection.imageWidth
 const IMAGE_HEIGHT = ALGORITHM_CONSTANTS.detection.imageHeight
 // Threshold to detect camera restart (frame number reset)
 const FRAME_JUMP_BACKWARD_THRESHOLD = ALGORITHM_CONSTANTS.detection.frameJumpBackwardThreshold
-// Same-camera deduplication distance (removes duplicate YOLO detections for same person)
-const SAME_CAMERA_DEDUP_DISTANCE = ALGORITHM_CONSTANTS.detection.sameCameraDeduplicationDistanceM
-// Only deduplicate same-camera detections if they're close in BOTH world and image space.
-// This prevents accidentally dropping distinct people when projections collapse (common behind tables).
-const SAME_CAMERA_DEDUP_MAX_IMAGE_DISTANCE_PX = 90
+
+/**
+ * Adapter that wraps the pipeline logger to match IProjectionLogger interface
+ */
+class PipelineLoggerAdapter implements IProjectionLogger {
+  private logger = getPipelineLogger()
+
+  logRawDetection(
+    cameraId: string,
+    detection: RawDetection,
+    frameNumber: number
+  ): string | null {
+    return this.logger.logRawDetection(cameraId, detection, frameNumber)
+  }
+
+  logProjectedPosition(
+    cameraId: string,
+    localTrackId: number | undefined,
+    worldX: number,
+    worldY: number,
+    isValid: boolean,
+    projectionMethod: 'krt',
+    projectionReason?: string,
+    rawDetectionKey?: string
+  ): void {
+    this.logger.logProjectedPosition(
+      cameraId,
+      localTrackId,
+      worldX,
+      worldY,
+      isValid,
+      projectionMethod,
+      projectionReason,
+      rawDetectionKey
+    )
+  }
+}
 
 export class DetectionProcessor implements IDetectionProcessor {
   private lastProcessedFrames: Map<string, number> = new Map()
@@ -77,29 +109,37 @@ export class DetectionProcessor implements IDetectionProcessor {
   private lastCleanupTime: number = Date.now()
   private static readonly MAX_CAMERAS = 100  // Prevent unbounded growth
   private static readonly CLEANUP_INTERVAL_MS = 60000  // Cleanup every minute
-  /** Obstacles that block tracking (detections inside are filtered out) */
-  private trackingBlockingObstacles: SiteMapObstacle[] = []
   /** Tables/furniture that block view (used for occlusion-based position adjustment) */
   private viewBlockingObstacles: SiteMapObstacle[] = []
-  private obstacleFilterCount: number = 0
-  /** Counter for detections filtered for being outside room bounds */
-  private outOfBoundsFilterCount: number = 0
-  /** Room bounds for validating projections (if set) */
-  private roomBounds: RoomBounds | null = null
-  /** Counter for same-camera deduplicated detections */
-  private sameCameraDeduplicatedCount: number = 0
-  /** Counter for detections downweighted for being geometrically behind a pillar */
-  private pillarShadowDownweightedCount: number = 0
   /** Optional batch optimizer for multi-frame global assignment */
   private batchOptimizer: BatchOptimizer | null = null
   /** Callback for when batch optimizer emits a frame */
   public onBatchFrameEmitted?: (assignment: FrameAssignment) => void
+  /** Projection pipeline for detection processing */
+  private projectionPipeline: ProjectionPipeline
+  /** Dependencies for the projection pipeline */
+  private pipelineDeps: ProjectionPipelineDeps
 
   constructor(
     private trackManager: TrackManager,
     protected cameraRegistry: CameraRegistry,
     batchOptimizerConfig?: Partial<BatchOptimizerConfig>
   ) {
+    // Initialize projection pipeline with logger
+    this.projectionPipeline = new ProjectionPipeline(new PipelineLoggerAdapter())
+
+    // Create pipeline dependencies
+    this.pipelineDeps = {
+      getCalibration: (cameraId) => this.cameraRegistry.getCalibration(cameraId),
+      getCamera: (cameraId) => this.cameraRegistry.getCamera(cameraId),
+      getBiasCorrection: (cameraId) => this.cameraRegistry.getBiasCorrection(cameraId),
+      hasKnownLocalAssociation: (cameraId, localTrackId) => {
+        return this.trackManager.getAllActiveTracks().some(t =>
+          (t.cameraAssociations.get(cameraId)?.trackIds.includes(localTrackId)) === true
+        )
+      },
+    }
+
     // Initialize batch optimizer if enabled
     if (ALGORITHM_CONSTANTS.batch.enabled || batchOptimizerConfig?.enabled) {
       this.batchOptimizer = new BatchOptimizer(
@@ -173,23 +213,20 @@ export class DetectionProcessor implements IDetectionProcessor {
    * - Obstacles with blocksView=true and height >= 0.8m will be used for occlusion detection
    */
   setObstacles(obstacles: SiteMapObstacle[]): void {
-    // Obstacles that block tracking (detections inside are filtered out)
-    this.trackingBlockingObstacles = obstacles.filter((obs) => obs.blocksTracking !== false)
+    // Delegate to projection pipeline
+    this.projectionPipeline.setObstacles(obstacles)
 
-    // Tables/furniture that block view (used for occlusion-based position adjustment)
-    // Only include obstacles that:
-    // 1. Have blocksView=true
-    // 2. Are at table height (0.8m - 1.3m) - lower than a standing person
-    // 3. Are furniture category (not structural like pillars)
+    // Keep view-blocking obstacles locally for processInjection()
     this.viewBlockingObstacles = obstacles.filter((obs) =>
       obs.blocksView === true &&
       obs.height !== undefined &&
       obs.height >= 0.8 &&
-      obs.height <= 1.3 &&  // Table height, not pillar height
-      obs.category === 'furniture'  // Only furniture, not structural
+      obs.height <= 1.3 &&
+      obs.category === 'furniture'
     )
 
-    console.log(`[DetectionProcessor] Loaded ${this.trackingBlockingObstacles.length} tracking-blocking obstacles`)
+    const trackingBlocking = obstacles.filter((obs) => obs.blocksTracking !== false)
+    console.log(`[DetectionProcessor] Loaded ${trackingBlocking.length} tracking-blocking obstacles`)
     console.log(`[DetectionProcessor] Loaded ${this.viewBlockingObstacles.length} view-blocking obstacles (tables)`)
   }
 
@@ -198,115 +235,9 @@ export class DetectionProcessor implements IDetectionProcessor {
    * Detections projecting outside room bounds will be filtered out
    */
   setRoomBounds(bounds: RoomBounds): void {
-    this.roomBounds = bounds
+    // Delegate to projection pipeline
+    this.projectionPipeline.setRoomBounds(bounds)
     console.log(`[DetectionProcessor] Room bounds set: ${bounds.width}m x ${bounds.height}m`)
-  }
-
-  /**
-   * Check if a point is outside room bounds (with margin)
-   */
-  private isOutsideRoomBounds(x: number, y: number): boolean {
-    if (!this.roomBounds) return false
-    const margin = 0.5 // Allow 0.5m outside for edge cases
-    return (
-      x < -margin ||
-      x > this.roomBounds.width + margin ||
-      y < -margin ||
-      y > this.roomBounds.height + margin
-    )
-  }
-
-  /**
-   * Check if a world position is inside any tracking-blocking obstacle
-   * Uses a margin to account for projection error - only filters if significantly inside
-   */
-  private isInsideObstacle(worldX: number, worldY: number): boolean {
-    if (this.trackingBlockingObstacles.length === 0) return false
-    // Use 0.15m margin to avoid filtering detections near obstacle edges due to projection error
-    // This allows people sitting near pillars to be tracked
-    const OBSTACLE_FILTER_MARGIN = 0.15
-    return isPointInsideAnyObstacle({ x: worldX, y: worldY }, this.trackingBlockingObstacles, OBSTACLE_FILTER_MARGIN)
-  }
-
-  /**
-   * Deduplicate same-camera detections that are very close in world coordinates.
-   * This handles cases where YOLO outputs multiple overlapping bounding boxes
-   * for the same person with different track IDs.
-   *
-   * Algorithm: Greedy NMS - keep highest confidence detection, remove others within threshold
-   */
-  private deduplicateSameCameraDetections(detections: CameraDetection[]): CameraDetection[] {
-    if (detections.length <= 1) return detections
-
-    // Group detections by camera
-    const byCamera = new Map<string, CameraDetection[]>()
-    for (const det of detections) {
-      const existing = byCamera.get(det.cameraId)
-      if (existing) {
-        existing.push(det)
-      } else {
-        byCamera.set(det.cameraId, [det])
-      }
-    }
-
-    const result: CameraDetection[] = []
-
-    for (const [cameraId, cameraDetections] of byCamera) {
-      if (cameraDetections.length === 1) {
-        result.push(cameraDetections[0])
-        continue
-      }
-
-      // Sort by confidence descending (keep highest confidence first)
-      const sorted = [...cameraDetections].sort((a, b) => b.confidence - a.confidence)
-      const kept: CameraDetection[] = []
-      const suppressed = new Set<number>()
-
-      for (let i = 0; i < sorted.length; i++) {
-        if (suppressed.has(i)) continue
-
-        const current = sorted[i]
-        kept.push(current)
-
-        // Suppress all lower-confidence detections within threshold distance
-        for (let j = i + 1; j < sorted.length; j++) {
-          if (suppressed.has(j)) continue
-
-          const other = sorted[j]
-          const dx = current.worldX - other.worldX
-          const dy = current.worldY - other.worldY
-          const distance = Math.sqrt(dx * dx + dy * dy)
-
-          if (distance < SAME_CAMERA_DEDUP_DISTANCE) {
-            // If both have image centers, require them to also be close in image space.
-            // Otherwise, keep both: two distinct people can project very close in world
-            // when table occlusion correction is imperfect.
-            if (current.imageCenter && other.imageCenter) {
-              const ix = current.imageCenter.x - other.imageCenter.x
-              const iy = current.imageCenter.y - other.imageCenter.y
-              const imageDist = Math.sqrt(ix * ix + iy * iy)
-              if (imageDist > SAME_CAMERA_DEDUP_MAX_IMAGE_DISTANCE_PX) {
-                continue
-              }
-            }
-
-            suppressed.add(j)
-            this.sameCameraDeduplicatedCount++
-            if (this.sameCameraDeduplicatedCount <= 5 || this.sameCameraDeduplicatedCount % 500 === 0) {
-              console.log(
-                `[DetectionProcessor] Deduplicated same-camera detection: camera=${cameraId} ` +
-                `dist=${distance.toFixed(3)}m kept_conf=${current.confidence.toFixed(2)} ` +
-                `removed_conf=${other.confidence.toFixed(2)} [total: ${this.sameCameraDeduplicatedCount}]`
-              )
-            }
-          }
-        }
-      }
-
-      result.push(...kept)
-    }
-
-    return result
   }
 
   /**
@@ -338,7 +269,7 @@ export class DetectionProcessor implements IDetectionProcessor {
     // Periodic cleanup to prevent memory leaks from stale camera entries
     this.periodicCleanup()
 
-    // Get camera parameters
+    // Get camera parameters - early return if camera not found
     const camera = this.cameraRegistry.getCamera(cameraId)
     if (!camera) {
       console.warn(`Unknown camera: ${cameraId}`)
@@ -348,239 +279,42 @@ export class DetectionProcessor implements IDetectionProcessor {
     // Convert timestamp from seconds to ms
     const timestampMs = message.timestamp * 1000
 
-    // Project all detections to world coordinates
-    const projectedDetections: CameraDetection[] = []
-    const logger = getPipelineLogger()
-
-    for (const detection of message.detections) {
-      // Filter for person detections
-      if (detection.class_name !== 'person') {
-        continue
-      }
-
-      // Convert bbox array to object format
-      const bbox = this.parseBBox(detection)
-      if (!bbox) continue
-
-      // Estimate table occlusion (feet hidden) BEFORE confidence filtering.
-      // This lets us keep slightly lower-confidence detections that are still stable (local track_id)
-      // and would otherwise be dropped — a common case for people behind tables.
-      const tableExtension = estimateBBoxHeightExtension(
-        bbox,
-        camera,
-        this.viewBlockingObstacles,
-        true,
-        IMAGE_WIDTH,
-        IMAGE_HEIGHT
-      )
-      const isTableOccluded = tableExtension > 1.05
-
-      // Allow lower confidence for table-occluded detections when the local tracker has an ID.
-      // (Creation is still guarded later; this just prevents early pipeline drop.)
-      const localTrackId = detection.track_id ?? 0
-      const relaxedMinConfidence = Math.max(0.55, MIN_CONFIDENCE - 0.15)
-      if (
-        detection.confidence < MIN_CONFIDENCE &&
-        !(isTableOccluded && localTrackId !== 0 && detection.confidence >= relaxedMinConfidence)
-      ) {
-        continue
-      }
-
-      // Log raw detection
-      const rawDetectionKey = logger.logRawDetection(cameraId, detection, message.frame_number)
-
-      // Project to world coordinates
-      // Project to world coordinates using K/R/T calibration.
-      // Pass camera and view-blocking obstacles for table occlusion detection.
-      const calibration = this.cameraRegistry.getCalibration(cameraId)
-      let worldPoint: { x: number; y: number }
-      let rawWorldPoint: { x: number; y: number }
-      let isValid: boolean
-      let projectionMethod: 'krt'
-      let projectionReason: string | undefined
-
-      if (!calibration) {
-        // KRT-only pipeline: without calibration we cannot project.
-        // Log as invalid and skip this detection.
-        rawWorldPoint = { x: NaN, y: NaN }
-        isValid = false
-        projectionMethod = 'krt'
-        projectionReason = 'no_calibration'
-      } else {
-        const krtResult = projectDetectionWithKRT(
-          bbox,
-          calibration,
-          camera,
-          this.viewBlockingObstacles,
-          true,
-          IMAGE_WIDTH,
-          IMAGE_HEIGHT
-        )
-        rawWorldPoint = krtResult.worldPoint
-        isValid = krtResult.isValid
-        projectionMethod = 'krt'
-        projectionReason = krtResult.reason
-
-        // Sanity check against camera azimuth/FOV; if outside, drop rather than falling back.
-        if (isValid) {
-          const dx = rawWorldPoint.x - camera.position.x
-          const dy = rawWorldPoint.y - camera.position.y
-          const angleToPoint = radToDeg(Math.atan2(dx, dy))
-          const diffDeg = Math.abs(angleDifference(angleToPoint, camera.azimuth))
-          const fovMarginDeg = 15
-          if (diffDeg > (camera.fov / 2 + fovMarginDeg)) {
-            isValid = false
-            projectionReason = 'krt_outside_fov'
-          }
-        }
-      }
-
-      // Apply camera-specific bias correction (from cross-camera evaluation)
-      // This compensates for systematic projection errors identified in ground truth analysis
-      const biasCorrection = this.cameraRegistry.getBiasCorrection(cameraId)
-      worldPoint = {
-        x: rawWorldPoint.x + biasCorrection.x,
-        y: rawWorldPoint.y + biasCorrection.y,
-      }
-
-      // If this detection is table-occluded, clamp the world projection so it can't land
-      // arbitrarily far behind the table (which often manifests as "snapping to the wall").
-      // This uses only sitemap geometry (no camera-specific tuning) and works for both cameras.
-      if (isTableOccluded && this.viewBlockingObstacles.length > 0) {
-        // Clamp into a narrow band just behind the occluding table edge.
-        // This handles BOTH failure modes:
-        // - Over-extension: projection snaps near a wall behind the table.
-        // - Under-extension: projection lands in front of the table (too close to camera),
-        //   which shows up as "too high up" on the site map for HC3.
-        const MAX_BEHIND_TABLE_M = 0.9
-        const MIN_BEHIND_TABLE_M = 0.2
-        const clamped = clampBehindOccludingTable2D(
-          { x: camera.position.x, y: camera.position.y },
-          { x: worldPoint.x, y: worldPoint.y },
-          this.viewBlockingObstacles,
-          MAX_BEHIND_TABLE_M,
-          MIN_BEHIND_TABLE_M
-        )
-        worldPoint = clamped.point
-      }
-
-      // Log projected position (key available for linking in future)
-      logger.logProjectedPosition(
-        cameraId,
-        detection.track_id,
-        worldPoint.x,
-        worldPoint.y,
-        isValid,
-        projectionMethod,
-        projectionReason,
-        rawDetectionKey ?? undefined
-      )
-
-      if (!isValid) {
-        continue
-      }
-
-      // Filter detections that project inside obstacles
-      if (this.isInsideObstacle(worldPoint.x, worldPoint.y)) {
-        this.obstacleFilterCount++
-        if (this.obstacleFilterCount <= 10 || this.obstacleFilterCount % 100 === 0) {
-          console.log(
-            `[DetectionProcessor] Filtered detection inside obstacle: (${worldPoint.x.toFixed(2)}, ${worldPoint.y.toFixed(2)}) [total filtered: ${this.obstacleFilterCount}]`
-          )
-        }
-        continue
-      }
-
-      // Filter detections that project outside room bounds
-      if (this.isOutsideRoomBounds(worldPoint.x, worldPoint.y)) {
-        this.outOfBoundsFilterCount++
-        if (this.outOfBoundsFilterCount <= 10 || this.outOfBoundsFilterCount % 100 === 0) {
-          console.log(
-            `[DetectionProcessor] Filtered detection outside room bounds: (${worldPoint.x.toFixed(2)}, ${worldPoint.y.toFixed(2)}) [total filtered: ${this.outOfBoundsFilterCount}]`
-          )
-        }
-        continue
-      }
-
-      // Filter detections that are geometrically behind pillars from THIS camera's viewpoint.
-      // Instead of dropping them (which can prevent reconnection after a pillar),
-      // downweight their confidence so they can't spawn NEW tracks, but can still be used
-      // to re-associate to existing tracks (especially when local trackId matches).
-      if (
-        this.trackingBlockingObstacles.length > 0 &&
-        isPointOccludedByAnyPillar(
-          { x: camera.position.x, y: camera.position.y },
-          { x: worldPoint.x, y: worldPoint.y },
-          this.trackingBlockingObstacles
-        )
-      ) {
-        const hasKnownLocalAssociation =
-          detection.track_id !== undefined &&
-          detection.track_id !== 0 &&
-          this.trackManager.getAllActiveTracks().some(t =>
-            (t.cameraAssociations.get(cameraId)?.trackIds.includes(detection.track_id ?? 0)) === true
-          )
-
-        if (!hasKnownLocalAssociation) {
-          // Cap confidence below minCreationConfidence so unmatched detections can't create new global tracks.
-          detection.confidence = Math.min(detection.confidence, 0.69)
-          this.pillarShadowDownweightedCount++
-          if (this.pillarShadowDownweightedCount <= 10 || this.pillarShadowDownweightedCount % 200 === 0) {
-            console.log(
-              `[DetectionProcessor] Downweighted detection behind pillar (camera=${cameraId}) ` +
-              `(${worldPoint.x.toFixed(2)}, ${worldPoint.y.toFixed(2)}) [total: ${this.pillarShadowDownweightedCount}]`
-            )
-          }
-        }
-      }
-
-      // Skip invalid projections
-      if (!Number.isFinite(worldPoint.x) || !Number.isFinite(worldPoint.y)) {
-        continue
-      }
-
-      // Add to batch for Hungarian assignment
-      projectedDetections.push({
-        cameraId,
-        trackId: localTrackId,
-        worldX: worldPoint.x,
-        worldY: worldPoint.y,
-        confidence: detection.confidence,
-        timestamp: timestampMs,
-        bbox,
-        frameNumber: message.frame_number,
-        videoTimeMs: message.video_time_ms,
-        rtpTimestamp: message.rtp_timestamp,
-        attributes: detection.attributes,  // Pass through re-ID attributes
-        cameraPosition: { x: camera.position.x, y: camera.position.y },  // For distance-based weighting
-        imageCenter: {
-          x: (bbox.x + bbox.width / 2) * IMAGE_WIDTH,
-          y: (bbox.y + bbox.height / 2) * IMAGE_HEIGHT,
-        },
-        isTableOccluded,
-      })
-    }
-
-    // Deduplicate same-camera detections before sending to track manager
-    const deduplicatedDetections = this.deduplicateSameCameraDetections(projectedDetections)
+    // Use projection pipeline for all detection processing
+    const projectedDetections = this.projectionPipeline.projectDetections(
+      message.detections,
+      cameraId,
+      message.frame_number,
+      timestampMs,
+      message.video_time_ms,
+      message.rtp_timestamp,
+      this.pipelineDeps,
+      FULL_PIPELINE_CONFIG
+    )
 
     // Route through batch optimizer if enabled, otherwise use direct processing
-    if (deduplicatedDetections.length > 0) {
+    let result: GlobalTrack[] = []
+    if (projectedDetections.length > 0) {
       if (this.batchOptimizer) {
         // Batch mode: buffer frames for multi-frame optimization
         // Returns tracks during hybrid mode (first window) or empty during buffering
-        return this.batchOptimizer.addFrame(
+        result = this.batchOptimizer.addFrame(
           message.frame_number,
           timestampMs,
-          deduplicatedDetections
+          projectedDetections
         )
       } else {
         // Frame-by-frame mode: direct Hungarian assignment
-        return this.trackManager.processBatchDetections(deduplicatedDetections)
+        result = this.trackManager.processBatchDetections(projectedDetections)
       }
     }
 
-    return []
+    // Record end-to-end latency if dispatch_time was provided
+    if (message.dispatch_time) {
+      const latencyMs = Date.now() - message.dispatch_time
+      getMetrics().recordLatency(latencyMs)
+    }
+
+    return result
   }
 
   // Debug counter
@@ -593,7 +327,7 @@ export class DetectionProcessor implements IDetectionProcessor {
     cameraId: string,
     bbox: { x: number; y: number; width: number; height: number },
     confidence: number,
-    trackId: number = 0,
+    localTrackId: number = 0,
     attributes?: DetectionAttributes
   ): GlobalTrack | null {
     const normalizedCameraId = this.cameraRegistry.normalizeCameraId(cameraId)
@@ -605,7 +339,7 @@ export class DetectionProcessor implements IDetectionProcessor {
     const calibration = this.cameraRegistry.getCalibration(normalizedCameraId)
     if (!camera || !calibration) {
       if (this.debugCount < 3) console.warn(`No calibration for camera: ${cameraId}`)
-      logProjectionFailure(`track=${trackId}: no_calibration`)
+      logProjectionFailure(`track=${localTrackId}: no_calibration`)
       return null
     }
 
@@ -620,7 +354,7 @@ export class DetectionProcessor implements IDetectionProcessor {
     )
 
     if (!result.isValid) {
-      logProjectionFailure(`track=${trackId}: ${result.reason}`)
+      logProjectionFailure(`track=${localTrackId}: ${result.reason}`)
       return null
     }
 
@@ -631,7 +365,7 @@ export class DetectionProcessor implements IDetectionProcessor {
 
     return this.trackManager.processDetection(
       normalizedCameraId,
-      trackId,
+      localTrackId,
       correctedX,
       correctedY,
       confidence,
@@ -647,54 +381,15 @@ export class DetectionProcessor implements IDetectionProcessor {
     worldX: number,
     worldY: number,
     confidence: number,
-    trackId: number = 0
+    localTrackId: number = 0
   ): GlobalTrack {
     return this.trackManager.processDetection(
       cameraId,
-      trackId,
+      localTrackId,
       worldX,
       worldY,
       confidence
     )
-  }
-
-  private parseBBox(detection: RawDetection): { x: number; y: number; width: number; height: number } | null {
-    // Handle array format [x, y, w, h]
-    if (Array.isArray(detection.bbox) && detection.bbox.length === 4) {
-      const [x, y, width, height] = detection.bbox
-      return { x, y, width, height }
-    }
-
-    // Handle object format (for injection API)
-    if (detection.bbox && typeof detection.bbox === 'object') {
-      const b = detection.bbox as unknown as {
-        x?: number
-        y?: number
-        width?: number
-        height?: number
-        left?: number
-        top?: number
-        right?: number
-        bottom?: number
-      }
-
-      // Handle {x, y, width, height} format
-      if (b.x !== undefined && b.y !== undefined && b.width !== undefined && b.height !== undefined) {
-        return { x: b.x, y: b.y, width: b.width, height: b.height }
-      }
-
-      // Handle {left, top, right, bottom} format (from camera emulators)
-      if (b.left !== undefined && b.top !== undefined && b.right !== undefined && b.bottom !== undefined) {
-        return {
-          x: b.left,
-          y: b.top,
-          width: b.right - b.left,
-          height: b.bottom - b.top,
-        }
-      }
-    }
-
-    return null
   }
 
   /**
@@ -709,7 +404,6 @@ export class DetectionProcessor implements IDetectionProcessor {
     if (messages.length === 0) return []
 
     const allProjectedDetections: CameraDetection[] = []
-    const logger = getPipelineLogger()
 
     for (const message of messages) {
       const cameraId = this.cameraRegistry.normalizeCameraId(message.camera_id)
@@ -730,150 +424,30 @@ export class DetectionProcessor implements IDetectionProcessor {
       this.lastProcessedFrames.set(cameraId, message.frame_number)
       this.lastFrameTimestamps.set(cameraId, Date.now())
 
-      // Get camera parameters
-      const camera = this.cameraRegistry.getCamera(cameraId)
-      if (!camera) {
-        console.warn(`Unknown camera: ${cameraId}`)
-        continue
-      }
-
       // Convert timestamp from seconds to ms
       const timestampMs = message.timestamp * 1000
 
-      // Project all detections to world coordinates
-      for (const detection of message.detections) {
-        // Filter for person detections with sufficient confidence
-        if (detection.class_name !== 'person' || detection.confidence < MIN_CONFIDENCE) {
-          continue
-        }
+      // Use projection pipeline for all detection processing
+      // Note: MULTI_CAMERA_PIPELINE_CONFIG has FOV check disabled and no table occlusion
+      const projectedDetections = this.projectionPipeline.projectDetections(
+        message.detections,
+        cameraId,
+        message.frame_number,
+        timestampMs,
+        message.video_time_ms,
+        message.rtp_timestamp,
+        this.pipelineDeps,
+        MULTI_CAMERA_PIPELINE_CONFIG
+      )
 
-        // Convert bbox array to object format
-        const bbox = this.parseBBox(detection)
-        if (!bbox) continue
-
-        // Log raw detection
-        const rawDetectionKey = logger.logRawDetection(cameraId, detection, message.frame_number)
-
-        // Project to world coordinates
-        const calibration = this.cameraRegistry.getCalibration(cameraId)
-        let worldPoint: { x: number; y: number }
-        let rawWorldPoint: { x: number; y: number }
-        let isValid: boolean
-        let projectionMethod: 'krt'
-        let projectionReason: string | undefined
-
-        if (!calibration) {
-          rawWorldPoint = { x: NaN, y: NaN }
-          isValid = false
-          projectionMethod = 'krt'
-          projectionReason = 'no_calibration'
-        } else {
-          const krtResult = projectDetectionWithKRT(
-            bbox,
-            calibration,
-            camera,
-            this.viewBlockingObstacles,
-            true,
-            IMAGE_WIDTH,
-            IMAGE_HEIGHT
-          )
-          rawWorldPoint = krtResult.worldPoint
-          isValid = krtResult.isValid
-          projectionMethod = 'krt'
-          projectionReason = krtResult.reason
-
-          // Note: FOV angle check disabled - sitemap-generated calibration may not match
-          // actual camera orientations. Room bounds check provides sufficient filtering.
-        }
-
-        // Apply camera-specific bias correction
-        const biasCorrection = this.cameraRegistry.getBiasCorrection(cameraId)
-        worldPoint = {
-          x: rawWorldPoint.x + biasCorrection.x,
-          y: rawWorldPoint.y + biasCorrection.y,
-        }
-
-        // Log projected position
-        logger.logProjectedPosition(
-          cameraId,
-          detection.track_id,
-          worldPoint.x,
-          worldPoint.y,
-          isValid,
-          projectionMethod,
-          projectionReason,
-          rawDetectionKey ?? undefined
-        )
-
-        if (!isValid) {
-          continue
-        }
-
-        // Filter detections that project inside obstacles
-        if (this.isInsideObstacle(worldPoint.x, worldPoint.y)) {
-          this.obstacleFilterCount++
-          continue
-        }
-
-        // Filter detections that project outside room bounds
-        if (this.isOutsideRoomBounds(worldPoint.x, worldPoint.y)) {
-          this.outOfBoundsFilterCount++
-          continue
-        }
-
-        // Filter detections that are geometrically behind pillars from THIS camera's viewpoint.
-        if (
-          this.trackingBlockingObstacles.length > 0 &&
-          isPointOccludedByAnyPillar(
-            { x: camera.position.x, y: camera.position.y },
-            { x: worldPoint.x, y: worldPoint.y },
-            this.trackingBlockingObstacles
-          )
-        ) {
-        const hasKnownLocalAssociation =
-          detection.track_id !== undefined &&
-          detection.track_id !== 0 &&
-          this.trackManager.getAllActiveTracks().some(t =>
-            (t.cameraAssociations.get(cameraId)?.trackIds.includes(detection.track_id ?? 0)) === true
-          )
-        if (!hasKnownLocalAssociation) {
-          detection.confidence = Math.min(detection.confidence, 0.69)
-          this.pillarShadowDownweightedCount++
-        }
-        }
-
-        // Skip invalid projections
-        if (!Number.isFinite(worldPoint.x) || !Number.isFinite(worldPoint.y)) {
-          continue
-        }
-
-        // Add to combined batch for all cameras
-        allProjectedDetections.push({
-          cameraId,
-          trackId: detection.track_id ?? 0,
-          worldX: worldPoint.x,
-          worldY: worldPoint.y,
-          confidence: detection.confidence,
-          timestamp: timestampMs,
-          bbox,
-          frameNumber: message.frame_number,
-          videoTimeMs: message.video_time_ms,
-          rtpTimestamp: message.rtp_timestamp,
-          attributes: detection.attributes,  // Pass through re-ID attributes
-          cameraPosition: { x: camera.position.x, y: camera.position.y },  // For distance-based weighting
-          imageCenter: {
-            x: (bbox.x + bbox.width / 2) * IMAGE_WIDTH,
-            y: (bbox.y + bbox.height / 2) * IMAGE_HEIGHT,
-          },
-        })
-      }
+      allProjectedDetections.push(...projectedDetections)
     }
 
     // Periodic cleanup
     this.periodicCleanup()
 
-    // Deduplicate same-camera detections before sending to track manager
-    const deduplicatedDetections = this.deduplicateSameCameraDetections(allProjectedDetections)
+    // Deduplicate same-camera detections across all cameras
+    const deduplicatedDetections = this.projectionPipeline.deduplicateMultiCameraDetections(allProjectedDetections)
 
     // Process ALL cameras' detections together in a single batch
     // This allows proper cross-camera clustering before Hungarian assignment

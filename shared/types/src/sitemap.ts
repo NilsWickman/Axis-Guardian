@@ -5,7 +5,7 @@
  * Used by frontend, backend, and any other services.
  */
 
-import type { Position2D } from './geometry'
+import type { Position2D } from './geometry.js'
 
 /**
  * Camera configuration as stored in JSON config files.

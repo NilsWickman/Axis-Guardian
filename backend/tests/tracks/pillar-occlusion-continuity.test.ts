@@ -28,7 +28,7 @@ describe('pillar occlusion continuity', () => {
 
     const det = (t: number, x: number, y: number, frame: number): CameraDetection => ({
       cameraId: 'camera1',
-      trackId: 1,
+      localTrackId: 1,
       worldX: x,
       worldY: y,
       confidence: 0.95,

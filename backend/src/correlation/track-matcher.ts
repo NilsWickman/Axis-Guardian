@@ -326,7 +326,7 @@ export function calculateCorrelationScore(
   const confidenceBoost = detection.confidence * 0.2
 
   let associationBoost = 0
-  if (isTrackAssociatedWith(track, detection.cameraId, detection.trackId)) {
+  if (isTrackAssociatedWith(track, detection.cameraId, detection.localTrackId)) {
     associationBoost = 0.5
   }
 

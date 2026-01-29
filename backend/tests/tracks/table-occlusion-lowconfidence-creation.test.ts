@@ -15,7 +15,7 @@ describe('table occlusion low-confidence creation', () => {
 
     const det = (isTableOccluded: boolean, conf: number): CameraDetection => ({
       cameraId: 'camera1',
-      trackId: 42,
+      localTrackId: 42,
       worldX: 5.0,
       worldY: 5.0,
       confidence: conf,

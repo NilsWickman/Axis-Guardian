@@ -133,7 +133,7 @@ function buildFrameIndex(
             cameraId,
             frameNumber: frame.frame_number,
             timestamp: frame.timestamp,
-            trackId: det.track_id ?? -1,
+            localTrackId: det.track_id ?? -1,
             bbox: convertBBox(det.bbox),
             embedding: det.attributes.embedding,
             embeddingQuality: quality,
@@ -182,8 +182,8 @@ function validateWithTrackTruths(
 
   // Build potential globalTrackId patterns
   // Format: "camera1-5" where 5 is the YOLO track_id
-  const id1 = `${det1.cameraId}-${det1.trackId}`
-  const id2 = `${det2.cameraId}-${det2.trackId}`
+  const id1 = `${det1.cameraId}-${det1.localTrackId}`
+  const id2 = `${det2.cameraId}-${det2.localTrackId}`
 
   const personId1 = trackTruthsLookup.get(id1)
   const personId2 = trackTruthsLookup.get(id2)
@@ -294,8 +294,8 @@ function filterAmbiguousMatches(
   const det2BestMatch = new Map<string, CrossCameraMatch>()
 
   for (const match of matches) {
-    const det1Key = `${match.detection1.cameraId}-${match.detection1.frameNumber}-${match.detection1.trackId}`
-    const det2Key = `${match.detection2.cameraId}-${match.detection2.frameNumber}-${match.detection2.trackId}`
+    const det1Key = `${match.detection1.cameraId}-${match.detection1.frameNumber}-${match.detection1.localTrackId}`
+    const det2Key = `${match.detection2.cameraId}-${match.detection2.frameNumber}-${match.detection2.localTrackId}`
 
     // Check if this is the best match for det1
     const existing1 = det1BestMatch.get(det1Key)
@@ -315,8 +315,8 @@ function filterAmbiguousMatches(
   const seen = new Set<string>()
 
   for (const match of matches) {
-    const det1Key = `${match.detection1.cameraId}-${match.detection1.frameNumber}-${match.detection1.trackId}`
-    const det2Key = `${match.detection2.cameraId}-${match.detection2.frameNumber}-${match.detection2.trackId}`
+    const det1Key = `${match.detection1.cameraId}-${match.detection1.frameNumber}-${match.detection1.localTrackId}`
+    const det2Key = `${match.detection2.cameraId}-${match.detection2.frameNumber}-${match.detection2.localTrackId}`
     const matchKey = `${det1Key}|${det2Key}`
 
     // Skip if already added

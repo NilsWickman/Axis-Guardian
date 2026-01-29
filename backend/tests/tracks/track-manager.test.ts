@@ -130,7 +130,7 @@ describe('TrackManager', () => {
       const tm = new TrackManager({
         clock: () => mockTime,
         idGenerator: (() => { let id = 0; return () => `walk-${++id}` })(),
-        config: { maxVelocityMs: 8, correlationDistanceM: 2.0 },
+        config: { maxVelocityMs: 8, correlationDistanceM: 2.5 },
       })
 
       const track1 = tm.processDetection('camera1', 1, 0.0, 0.0, 0.9)
@@ -320,7 +320,7 @@ describe('TrackManager', () => {
       trackManager.updateConfig({ correlationDistanceM: 999 })
       trackManager.resetConfig()
       const config = trackManager.getConfig()
-      expect(config.correlationDistanceM).toBe(2.0) // Default from ALGORITHM_CONSTANTS.trackLifecycle.correlationDistanceM
+      expect(config.correlationDistanceM).toBe(2.5) // Default from ALGORITHM_CONSTANTS.trackLifecycle.correlationDistanceM
     })
   })
 
@@ -406,8 +406,8 @@ describe('TrackManager', () => {
     it('clusters detections from different cameras at similar positions', () => {
       // Simulate two cameras seeing the same person at nearly the same world position
       const detections = [
-        { cameraId: 'camera1', trackId: 1, worldX: 10.0, worldY: 6.0, confidence: 0.9, timestamp: mockTime },
-        { cameraId: 'camera2', trackId: 1, worldX: 10.3, worldY: 5.9, confidence: 0.85, timestamp: mockTime },
+        { cameraId: 'camera1', localTrackId: 1, worldX: 10.0, worldY: 6.0, confidence: 0.9, timestamp: mockTime },
+        { cameraId: 'camera2', localTrackId: 1, worldX: 10.3, worldY: 5.9, confidence: 0.85, timestamp: mockTime },
       ]
 
       const results = trackManager.processBatchDetections(detections)
@@ -429,8 +429,8 @@ describe('TrackManager', () => {
     it('creates separate tracks for distant positions', () => {
       // Two detections far apart - should create separate tracks
       const detections = [
-        { cameraId: 'camera1', trackId: 1, worldX: 5.0, worldY: 5.0, confidence: 0.9, timestamp: mockTime },
-        { cameraId: 'camera2', trackId: 1, worldX: 15.0, worldY: 10.0, confidence: 0.85, timestamp: mockTime },
+        { cameraId: 'camera1', localTrackId: 1, worldX: 5.0, worldY: 5.0, confidence: 0.9, timestamp: mockTime },
+        { cameraId: 'camera2', localTrackId: 1, worldX: 15.0, worldY: 10.0, confidence: 0.85, timestamp: mockTime },
       ]
 
       const results = trackManager.processBatchDetections(detections)
@@ -444,8 +444,8 @@ describe('TrackManager', () => {
       // Two detections from same camera at close positions - should be separate tracks
       // (same camera can't see the same person twice)
       const detections = [
-        { cameraId: 'camera1', trackId: 1, worldX: 10.0, worldY: 6.0, confidence: 0.9, timestamp: mockTime },
-        { cameraId: 'camera1', trackId: 2, worldX: 10.2, worldY: 6.1, confidence: 0.85, timestamp: mockTime },
+        { cameraId: 'camera1', localTrackId: 1, worldX: 10.0, worldY: 6.0, confidence: 0.9, timestamp: mockTime },
+        { cameraId: 'camera1', localTrackId: 2, worldX: 10.2, worldY: 6.1, confidence: 0.85, timestamp: mockTime },
       ]
 
       const results = trackManager.processBatchDetections(detections)
@@ -471,7 +471,7 @@ describe('TrackManager', () => {
       // Process another batch to trigger merge detection
       mockTime += 100
       const detections = [
-        { cameraId: 'camera1', trackId: 1, worldX: 10.1, worldY: 6.0, confidence: 0.9, timestamp: mockTime },
+        { cameraId: 'camera1', localTrackId: 1, worldX: 10.1, worldY: 6.0, confidence: 0.9, timestamp: mockTime },
       ]
 
       trackManager.processBatchDetections(detections)

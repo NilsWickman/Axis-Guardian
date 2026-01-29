@@ -115,7 +115,8 @@ export interface CameraFrameInfo {
  */
 export interface CameraDetection {
   cameraId: string
-  trackId: number
+  /** Local track ID from the camera's tracker (e.g., ByteTrack). NOT a global track ID. */
+  localTrackId: number
   worldX: number
   worldY: number
   confidence: number
@@ -185,6 +186,8 @@ export interface GlobalTrack {
   missedFrames: number
   /** Number of consecutive detections since entering occlusion (for hysteresis) */
   consecutiveDetections: number
+  /** Count of times this track has recovered from occlusion (for adaptive timeout) */
+  occlusionCount: number
   /** Reason why track stopped being detected (for smart timeout behavior) */
   exitReason?: ExitReason
   /** Predicted position during pillar occlusion (ghost track) */

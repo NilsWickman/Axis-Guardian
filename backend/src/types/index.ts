@@ -69,5 +69,6 @@ export type {
   TracksResponse,
   CameraFrameInfo,
   CameraHealthStatus,
+  TrackDelta,
   WebSocketMessage,
 } from './api.js'

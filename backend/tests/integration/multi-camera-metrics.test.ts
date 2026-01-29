@@ -17,7 +17,8 @@ import { TrackManager } from '../../src/tracks/track-manager.js'
 import { DetectionProcessor } from '../../src/detection/detection-processor.js'
 import { CameraRegistry } from '../../src/detection/camera-registry.js'
 import { loadSiteMapConfig } from '../../src/config/sitemap-loader.js'
-import type { Point2D, GlobalTrack } from '../../src/types.js'
+import { projectDetectionWithKRT } from '../../src/projection/ground-plane.js'
+import type { Point2D, GlobalTrack, CameraDetection } from '../../src/types.js'
 import { stitchTracks } from '../helpers/track-stitcher.js'
 
 // ============================================================================
@@ -169,6 +170,8 @@ describe('Multi-Camera Specific Metrics', () => {
     const cameraConfigs = [
       { cameraId: 'camera1', file: 'view-HC3.detections.json.gz' },
       { cameraId: 'camera2', file: 'view-HC4.detections.json.gz' },
+      { cameraId: 'camera3', file: 'view-IP2.detections.json.gz' },
+      { cameraId: 'camera4', file: 'view-IP5.detections.json.gz' },
     ]
 
     for (const config of cameraConfigs) {
@@ -429,24 +432,66 @@ describe('Multi-Camera Specific Metrics', () => {
         clock: () => mockTime,
         idGenerator: (() => { let id = 0; return () => `global-${++id}` })(),
       })
-      const detectionProcessor = new DetectionProcessor(trackManager, cameraRegistry)
 
-      // Process frames
-      const allFrames: Array<{ cameraId: string; frame: DetectionFrame }> = []
-      for (const [cameraId, detFile] of detectionFiles) {
-        for (const frame of detFile.frames) {
-          allFrames.push({ cameraId, frame })
+      // Helper to project detection to world coordinates
+      function projectDetection(cameraId: string, det: any, timestamp: number): CameraDetection | null {
+        const bbox = convertBBox(det.bbox)
+        const calib = cameraRegistry.getCalibration(cameraId)
+        if (!calib) return null
+
+        const result = projectDetectionWithKRT(bbox, calib, null, [], true, 1920, 1080)
+        if (!result.isValid) return null
+
+        return {
+          cameraId,
+          trackId: det.track_id,
+          worldX: result.worldPoint.x,
+          worldY: result.worldPoint.y,
+          confidence: det.confidence,
+          timestamp,
+          attributes: det.attributes,
         }
       }
-      allFrames.sort((a, b) => a.frame.timestamp - b.frame.timestamp)
 
-      for (const { cameraId, frame } of allFrames) {
-        mockTime = Math.floor(frame.timestamp * 1000) + 1000
-
-        for (const det of frame.detections) {
-          const bbox = convertBBox(det.bbox)
-          detectionProcessor.processInjection(cameraId, bbox, det.confidence, det.track_id, det.attributes)
+      // Collect all detections with their timestamps
+      const allDetections: Array<{ cameraId: string; det: any; timestamp: number }> = []
+      for (const [cameraId, detFile] of detectionFiles) {
+        for (const frame of detFile.frames) {
+          const timestamp = Math.floor(frame.timestamp * 1000) + 1000
+          for (const det of frame.detections) {
+            allDetections.push({ cameraId, det, timestamp })
+          }
         }
+      }
+
+      // Sort by timestamp and group into batches (100ms windows)
+      allDetections.sort((a, b) => a.timestamp - b.timestamp)
+      const BATCH_WINDOW_MS = 100
+
+      let currentBatch: CameraDetection[] = []
+      let batchStartTime = allDetections[0]?.timestamp ?? 0
+
+      for (const { cameraId, det, timestamp } of allDetections) {
+        if (timestamp - batchStartTime > BATCH_WINDOW_MS && currentBatch.length > 0) {
+          // Process current batch
+          mockTime = batchStartTime + BATCH_WINDOW_MS / 2
+          trackManager.processBatchDetections(currentBatch)
+
+          // Start new batch
+          currentBatch = []
+          batchStartTime = timestamp
+        }
+
+        const projected = projectDetection(cameraId, det, timestamp)
+        if (projected) {
+          currentBatch.push(projected)
+        }
+      }
+
+      // Process final batch
+      if (currentBatch.length > 0) {
+        mockTime = batchStartTime + BATCH_WINDOW_MS / 2
+        trackManager.processBatchDetections(currentBatch)
       }
 
       // Analyze tracks

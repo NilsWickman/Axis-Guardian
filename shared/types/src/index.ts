@@ -5,7 +5,7 @@
  * frontend, backend, and other services.
  */
 
-export type { Position2D, Position3D } from './geometry'
+export type { Point2D, Point3D, Position2D, Position3D } from './geometry.js'
 
 export type {
   SiteMapCameraConfig,
@@ -21,18 +21,19 @@ export type {
   CircleObstacle,
   PolygonObstacle,
   Obstacle,
-} from './sitemap'
+} from './sitemap.js'
 
 export {
   isRectangleObstacle,
   isCircleObstacle,
   isPolygonObstacle,
-} from './sitemap'
+} from './sitemap.js'
 
 // Track types - canonical definitions for tracking data
 export type {
   TrackState,
   ExitReason,
+  NormalizedBBox,
   CameraDetection,
   DetectionBBox,
   CameraImageDetection,
@@ -46,8 +47,8 @@ export type {
   DetectionAttributes,
   GlobalTrackJSON,
   CameraFrameInfo,
-} from './track'
+} from './track.js'
 
 // Config types - shared configuration interface
-export type { TrackingConfigBase } from './config'
-export { DEFAULT_TRACKING_CONFIG_BASE } from './config'
+export type { TrackingConfigBase } from './config.js'
+export { DEFAULT_TRACKING_CONFIG_BASE } from './config.js'

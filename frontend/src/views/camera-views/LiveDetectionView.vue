@@ -262,6 +262,15 @@ const hlsInstances = ref<Record<string, Hls | null>>({})
 const videoPlaybackTimes = ref<Record<string, number>>({})
 const showDebugOverlay = ref(true)
 
+// Video layout tracking for canvas overlay alignment
+interface VideoLayout {
+  offsetX: number
+  offsetY: number
+  scaleX: number
+  scaleY: number
+}
+const videoLayouts = ref<Record<string, VideoLayout>>({})
+
 // Initialize camera detection data
 cameras.forEach(camera => {
   cameraDetections[camera.id] = { detections: [], count: 0, classCounts: {} }
@@ -320,14 +329,41 @@ function getStreamDelay(cameraId: string): number {
   return Math.max(0, streamDelay)
 }
 
+/**
+ * Calculate and update video layout for proper canvas overlay alignment.
+ * When the video is letterboxed (smaller than its container), we need to
+ * offset the canvas drawing to match the video's actual position.
+ */
+function updateVideoLayout(cameraId: string) {
+  const video = videoRefs.value[cameraId]
+  const canvas = canvasRefs.value[cameraId]
+  if (!video || !canvas || !video.videoWidth) return
+
+  const container = video.parentElement
+  if (!container) return
+
+  const containerRect = container.getBoundingClientRect()
+  const videoRect = video.getBoundingClientRect()
+
+  videoLayouts.value[cameraId] = {
+    offsetX: videoRect.left - containerRect.left,
+    offsetY: videoRect.top - containerRect.top,
+    scaleX: videoRect.width / video.videoWidth,
+    scaleY: videoRect.height / video.videoHeight
+  }
+
+  // Update canvas to match container size
+  canvas.width = containerRect.width
+  canvas.height = containerRect.height
+}
+
 function onVideoLoaded(cameraId: string) {
   const video = videoRefs.value[cameraId]
   const canvas = canvasRefs.value[cameraId]
 
   if (video && canvas) {
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
     videoLoaded.value[cameraId] = true
+    updateVideoLayout(cameraId)
   }
 }
 
@@ -337,6 +373,35 @@ function startDrawing(cameraId: string) {
     animationFrames.value[cameraId] = requestAnimationFrame(draw)
   }
   draw()
+}
+
+/**
+ * Normalize bbox to {left, top, right, bottom} format.
+ * Handles both array [x, y, w, h] and object {left, top, right, bottom} formats.
+ */
+function normalizeBbox(bbox: unknown): { left: number; top: number; right: number; bottom: number } | null {
+  if (!bbox) return null
+
+  // Handle array format [x, y, w, h]
+  if (Array.isArray(bbox) && bbox.length >= 4) {
+    const [x, y, w, h] = bbox
+    return { left: x, top: y, right: x + w, bottom: y + h }
+  }
+
+  // Handle object format {left, top, right, bottom}
+  if (typeof bbox === 'object') {
+    const b = bbox as Record<string, unknown>
+    if ('left' in b && 'top' in b && 'right' in b && 'bottom' in b) {
+      return {
+        left: Number(b.left),
+        top: Number(b.top),
+        right: Number(b.right),
+        bottom: Number(b.bottom)
+      }
+    }
+  }
+
+  return null
 }
 
 function drawDetections(cameraId: string) {
@@ -354,15 +419,26 @@ function drawDetections(cameraId: string) {
   const detections = cameraDetections[cameraId]?.detections
   if (!detections || detections.length === 0) return
 
+  // Get video layout for proper positioning
+  const layout = videoLayouts.value[cameraId]
+  if (!layout) {
+    // Recalculate layout if not available
+    updateVideoLayout(cameraId)
+    return
+  }
+
   // Draw each detection
   detections.forEach(detection => {
-    const { bbox, class_name, confidence } = detection
+    const { class_name, confidence } = detection
+    const bbox = normalizeBbox(detection.bbox)
+    if (!bbox) return
 
-    // Convert VAPIX normalized coordinates to pixel coordinates
-    const x = bbox.left * canvas.width
-    const y = bbox.top * canvas.height
-    const width = (bbox.right - bbox.left) * canvas.width
-    const height = (bbox.bottom - bbox.top) * canvas.height
+    // Convert normalized coordinates to canvas pixel coordinates
+    // Apply layout offset and scale to align with the actual video position
+    const x = layout.offsetX + bbox.left * video.videoWidth * layout.scaleX
+    const y = layout.offsetY + bbox.top * video.videoHeight * layout.scaleY
+    const width = (bbox.right - bbox.left) * video.videoWidth * layout.scaleX
+    const height = (bbox.bottom - bbox.top) * video.videoHeight * layout.scaleY
 
     const color = getClassColor(class_name)
 
@@ -484,6 +560,9 @@ async function setupAdaptiveSync() {
   }
 }
 
+// Resize observer for video layout updates
+let resizeObserver: ResizeObserver | null = null
+
 // Lifecycle
 onMounted(() => {
   // Initialize HLS for each camera
@@ -495,6 +574,21 @@ onMounted(() => {
   // Setup detection and sync systems
   setupDetections()
   setupAdaptiveSync()
+
+  // Setup resize observer to recalculate video layouts on container resize
+  resizeObserver = new ResizeObserver(() => {
+    cameras.forEach(camera => updateVideoLayout(camera.id))
+  })
+
+  // Observe camera containers after a short delay to ensure DOM is ready
+  setTimeout(() => {
+    cameras.forEach(camera => {
+      const video = videoRefs.value[camera.id]
+      if (video?.parentElement) {
+        resizeObserver?.observe(video.parentElement)
+      }
+    })
+  }, 200)
 })
 
 onUnmounted(() => {
@@ -508,6 +602,12 @@ onUnmounted(() => {
   Object.values(hlsInstances.value).forEach(hls => {
     hls?.destroy()
   })
+
+  // Cleanup resize observer
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
 })
 </script>
 

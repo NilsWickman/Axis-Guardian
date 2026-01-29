@@ -250,7 +250,7 @@ export function calculateCorrelationScore(
 
   // Existing association boost
   let associationBoost = 0
-  if (isTrackAssociatedWith(track, detection.cameraId, detection.trackId)) {
+  if (isTrackAssociatedWith(track, detection.cameraId, detection.localTrackId)) {
     associationBoost = 0.5 // Strong boost for existing associations
   }
 

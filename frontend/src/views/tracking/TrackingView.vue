@@ -581,6 +581,35 @@ function onPrimaryVideoLoaded() {
   primaryVideoDimensions.value = { width: video.videoWidth, height: video.videoHeight }
 }
 
+/**
+ * Normalize bbox to {left, top, right, bottom} format.
+ * Handles both array [x, y, w, h] and object {left, top, right, bottom} formats.
+ */
+function normalizeBbox(bbox: unknown): { left: number; top: number; right: number; bottom: number } | null {
+  if (!bbox) return null
+
+  // Handle array format [x, y, w, h]
+  if (Array.isArray(bbox) && bbox.length >= 4) {
+    const [x, y, w, h] = bbox
+    return { left: x, top: y, right: x + w, bottom: y + h }
+  }
+
+  // Handle object format {left, top, right, bottom}
+  if (typeof bbox === 'object') {
+    const b = bbox as Record<string, unknown>
+    if ('left' in b && 'top' in b && 'right' in b && 'bottom' in b) {
+      return {
+        left: Number(b.left),
+        top: Number(b.top),
+        right: Number(b.right),
+        bottom: Number(b.bottom)
+      }
+    }
+  }
+
+  return null
+}
+
 function drawDetections() {
   const canvasEl = primaryCanvasRef.value
   if (!canvasEl || !primaryVideoDimensions.value) return
@@ -592,7 +621,10 @@ function drawDetections() {
   if (currentDetections.value.length === 0) return
 
   for (const detection of currentDetections.value) {
-    const { bbox, class_name, confidence } = detection
+    const { class_name, confidence } = detection
+    const bbox = normalizeBbox(detection.bbox)
+    if (!bbox) continue
+
     const color = CLASS_COLORS[class_name] || '#94a3b8'
 
     const x = bbox.left * canvasEl.width

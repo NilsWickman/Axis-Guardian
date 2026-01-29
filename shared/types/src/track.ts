@@ -5,7 +5,7 @@
  * and track attributes. Used by both backend and frontend.
  */
 
-import type { Position2D } from './geometry'
+import type { Point2D } from './geometry.js'
 
 // ============================================================================
 // Track State Types
@@ -33,15 +33,32 @@ export type ExitReason =
 // ============================================================================
 
 /**
+ * Bounding box in normalized coordinates (0-1)
+ */
+export interface NormalizedBBox {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/**
  * Position data from a single camera detection
  */
 export interface CameraDetection {
   cameraId: string
-  trackId: number
+  /** Local track ID from the camera's tracker (e.g., ByteTrack). NOT a global track ID. */
+  localTrackId: number
   worldX: number
   worldY: number
   confidence: number
   timestamp: number // Unix timestamp in ms
+  /** Image-space detection bounding box (normalized 0..1), if available */
+  bbox?: NormalizedBBox
+  /** Image-space center (pixels) for same-camera deduplication sanity checks */
+  imageCenter?: Point2D
+  /** True if the feet are likely occluded by a table (used for relaxed creation/dedup heuristics) */
+  isTableOccluded?: boolean
   /** Frame number from source camera (for frame-based missed detection) */
   frameNumber?: number
   /** Video time in milliseconds (position within video, for sync) */
@@ -51,7 +68,7 @@ export interface CameraDetection {
   /** Person attributes from re-ID preprocessing (optional) */
   attributes?: DetectionAttributes
   /** Camera position in world coordinates (for distance-based weighting) */
-  cameraPosition?: Position2D
+  cameraPosition?: Point2D
 }
 
 /**
@@ -193,7 +210,7 @@ export interface CameraImageDetection {
 export interface GlobalTrackJSON {
   globalTrackId: string
   cameraAssociations: Record<string, CameraTrackAssociation>
-  currentPosition: Position2D
+  currentPosition: Point2D
   trail: TrailPosition[]
   color: string
   lastSeen: number
@@ -205,7 +222,7 @@ export interface GlobalTrackJSON {
   /** Reason why track stopped being detected */
   exitReason?: ExitReason
   /** Predicted position during pillar occlusion (ghost track) */
-  predictedPosition?: Position2D
+  predictedPosition?: Point2D
   /** Video timing from the most recent detection (for frontend sync) */
   videoTiming?: VideoTimingInfo
   /**

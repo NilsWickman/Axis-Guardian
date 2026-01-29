@@ -16,7 +16,7 @@ describe('ReIDMatcher', () => {
     quality = 0.9
   ): CameraDetection => ({
     cameraId,
-    trackId: 1,
+    localTrackId: 1,
     worldX: 0,
     worldY: 0,
     confidence: 0.9,
@@ -51,6 +51,7 @@ describe('ReIDMatcher', () => {
     consecutiveDetections: 0,
     state: 'confirmed',
     missedFrames: 0,
+    occlusionCount: 0,
     attributes: {
       embedding,
       embedding_quality: quality,
@@ -68,7 +69,7 @@ describe('ReIDMatcher', () => {
     it('should return null when detection has no embedding', () => {
       const detection: CameraDetection = {
         cameraId: 'camera1',
-        trackId: 1,
+        localTrackId: 1,
         worldX: 0,
         worldY: 0,
         confidence: 0.9,
@@ -271,7 +272,7 @@ describe('ReIDMatcher', () => {
     it('should return empty array when detection has no embedding', () => {
       const detection: CameraDetection = {
         cameraId: 'camera1',
-        trackId: 1,
+        localTrackId: 1,
         worldX: 0,
         worldY: 0,
         confidence: 0.9,

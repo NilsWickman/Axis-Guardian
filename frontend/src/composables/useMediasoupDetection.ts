@@ -45,9 +45,9 @@ const DEFAULT_OPTIONS: MediasoupDetectionOptions = {
   reconnectDelay: 3000,
   loopDuration: null,
   onLoop: undefined,
-  // Default -100ms to compensate for typical video decoder latency
-  // (detections tend to lag behind displayed video)
-  videoSyncOffsetMs: Number(import.meta.env.VITE_VIDEO_SYNC_OFFSET_MS) || -100
+  // Manual sync offset - with RTP calibration this should normally be 0
+  // Negative = release detections earlier, Positive = delay detections
+  videoSyncOffsetMs: Number(import.meta.env.VITE_VIDEO_SYNC_OFFSET_MS) || 0
 }
 
 // Adaptive sync constants
@@ -141,6 +141,9 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
   // RTP timestamp tracking for frame-perfect sync
   let lastVideoRtpTimestamp: number | null = null
   let rtpTimestampAvailable = false
+  // RTP calibration offset: difference between FFmpeg's RTP base and our calculated RTP
+  // FFmpeg uses arbitrary base (e.g., starts at 3847291234), we use frameNumber * 3000 (starts at 0)
+  let rtpCalibrationOffset: number | null = null
 
   // Fallback animation frame ID for iOS/browsers without requestVideoFrameCallback
   let fallbackAnimationId: number | null = null
@@ -723,7 +726,11 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
         lastVideoRtpTimestamp = rtpTs
         if (!rtpTimestampAvailable) {
           rtpTimestampAvailable = true
+          console.log(`[VideoSync] Browser provides RTP timestamps: ${rtpTs}`)
         }
+      } else if (!rtpTimestampAvailable && videoFrameHistory.length === 10) {
+        // After 10 frames without RTP, warn that we're using time-based sync
+        console.log('[VideoSync] Browser does NOT provide RTP timestamps, using time-based sync')
       }
 
       // Record correlation: actual video mediaTime -> wall clock time (with RTP timestamp)
@@ -812,6 +819,8 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
         offsetHistory = []
         detectedDriftRate = 0
         lastCalibrationTime = Date.now()
+        // Reset RTP calibration on video loop - FFmpeg RTP timestamps may change
+        rtpCalibrationOffset = null
       }
       lastVideoTime = videoTimeMs
 
@@ -833,9 +842,11 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
 
         let isStale = false
 
-        // Use RTP-based staleness check if available
-        if (rtpTimestampAvailable && lastVideoRtpTimestamp !== null && oldestRtp !== undefined) {
-          const rtpAge = lastVideoRtpTimestamp - oldestRtp
+        // Use RTP-based staleness check only if calibrated (otherwise comparison is meaningless)
+        if (rtpTimestampAvailable && lastVideoRtpTimestamp !== null && oldestRtp !== undefined && rtpCalibrationOffset !== null) {
+          // Apply calibration to align coordinate systems
+          const calibratedOldestRtp = oldestRtp + rtpCalibrationOffset
+          const rtpAge = lastVideoRtpTimestamp - calibratedOldestRtp
           isStale = rtpAge > RTP_STALE_THRESHOLD
         } else {
           // Fallback to time-based staleness
@@ -858,11 +869,22 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
         const detection = videoSyncBuffer[0]
         const detectionRtp = (detection as DetectionMetadata & { rtp_timestamp?: number }).rtp_timestamp
 
+        // Calibrate RTP offset once we have both timestamps
+        // FFmpeg RTP timestamps use an arbitrary base (e.g., 3847291234)
+        // Our calculated RTP = frameNumber * 3000 (starts at 0)
+        // This calibration aligns them to the same coordinate system
+        if (rtpCalibrationOffset === null && lastVideoRtpTimestamp !== null && detectionRtp !== undefined) {
+          rtpCalibrationOffset = lastVideoRtpTimestamp - detectionRtp
+          console.log(`[VideoSync] RTP calibrated: offset=${rtpCalibrationOffset}`)
+        }
+
         // Use RTP timestamp correlation if available (frame-perfect sync)
         if (rtpTimestampAvailable && lastVideoRtpTimestamp !== null && detectionRtp !== undefined) {
           // RTP timestamps use 90kHz clock, tolerance of 1 frame = ~3000 ticks at 30fps
           const RTP_TOLERANCE = 4500  // ~1.5 frames tolerance
-          const rtpDiff = lastVideoRtpTimestamp - detectionRtp
+          // Apply calibration: adjust detection RTP to FFmpeg's coordinate system
+          const calibratedDetectionRtp = detectionRtp + (rtpCalibrationOffset ?? 0)
+          const rtpDiff = lastVideoRtpTimestamp - calibratedDetectionRtp
 
           if (rtpDiff >= -RTP_TOLERANCE) {
             // Video frame matches or is ahead of detection frame
@@ -1047,6 +1069,8 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
         offsetHistory = []
         detectedDriftRate = 0
         lastCalibrationTime = Date.now()
+        // Reset RTP calibration - calculated RTP resets with detection frame numbers
+        rtpCalibrationOffset = null
       }
       lastDetectionVideoTimeMs = metadata.video_time_ms
 
@@ -1061,6 +1085,16 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
         const dropped = videoSyncBuffer.shift()
         if (dropped) {
           stats.value.droppedStaleDetections++
+        }
+      }
+
+      // Call detection callbacks immediately for metadata panel updates.
+      // This ensures components like DetectionMetadataPanel receive data
+      // even when video sync buffering is active (canvas rendering still
+      // uses the buffered release for frame-perfect sync).
+      if (onDetectionUpdateCallbacks.size > 0) {
+        for (const callback of onDetectionUpdateCallbacks) {
+          callback(metadata)
         }
       }
       return

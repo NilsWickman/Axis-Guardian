@@ -27,7 +27,7 @@ describe('occlusion same-camera reacquire (local trackId changes)', () => {
 
     const det = (t: number, cam: string, localId: number, x: number, y: number, frame: number): CameraDetection => ({
       cameraId: cam,
-      trackId: localId,
+      localTrackId: localId,
       worldX: x,
       worldY: y,
       confidence: 0.95,

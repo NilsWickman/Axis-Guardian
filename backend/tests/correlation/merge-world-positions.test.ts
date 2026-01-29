@@ -6,7 +6,7 @@ describe('mergeWorldPositions - image edge weighting', () => {
   it('downweights edge-of-image detections so they do not pull the fused position as much', () => {
     const base: Omit<CameraDetection, 'worldX' | 'worldY'> = {
       cameraId: 'camera2',
-      trackId: 1,
+      localTrackId: 1,
       confidence: 0.9,
       timestamp: 0,
       cameraPosition: { x: 0, y: 0 },

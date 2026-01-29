@@ -60,13 +60,33 @@ export interface CameraHealthStatus {
 // ============================================================================
 
 /**
+ * Track delta for incremental updates (only changed fields)
+ */
+export interface TrackDelta {
+  trackId: string
+  position?: { x: number; y: number }
+  trail?: { x: number; y: number; timestamp: number }[]  // Append-only trail updates
+  confidence?: number
+  state?: string
+  velocity?: { x: number; y: number }
+  lastSeen?: number
+  videoTiming?: {
+    videoTimeMs?: number
+    rtpTimestamp?: number
+    cameraId?: string
+  }
+}
+
+/**
  * WebSocket message types
  */
 export type WebSocketMessage =
   | { type: 'snapshot'; tracks: GlobalTrackJSON[]; frames?: CameraFrameInfo[]; zones?: ZoneConfig[]; zoneMetrics?: ZoneMetricsData[] }
   | { type: 'track_created'; track: GlobalTrackJSON; frames?: CameraFrameInfo[] }
   | { type: 'track_updated'; track: GlobalTrackJSON; frames?: CameraFrameInfo[] }
+  | { type: 'track_delta'; delta: TrackDelta; frames?: CameraFrameInfo[] }
   | { type: 'track_expired'; trackId: string; frames?: CameraFrameInfo[] }
+  | { type: 'frame_info'; frames: CameraFrameInfo[] }
   | { type: 'zone_violation'; violation: ZoneViolation }
   | { type: 'zones_updated'; zones: ZoneConfig[] }
   | { type: 'zone_metrics'; metrics: ZoneMetricsData }

@@ -12,6 +12,7 @@ import { DetectionProcessor } from './detection/detection-processor.js'
 import { SynchronizedDetectionProcessor } from './sync/synchronized-detection-processor.js'
 import { registerRoutes } from './api/routes.js'
 import { WebSocketBroadcaster, registerWebSocket } from './api/websocket.js'
+import { registerWsDetectionIngest } from './api/ws-detection-ingest.js'
 import { loadEnvironment } from './config/environment.js'
 import { loadSiteMapConfig, siteMapCamerasToGeometryConfig } from './config/sitemap-loader.js'
 import { AcapClient } from './acap/acap-client.js'
@@ -136,6 +137,12 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
     allowedOrigins: env.wsAllowedOrigins,
     allowNoOrigin: env.wsAllowNoOrigin,
     maxConnectionsPerIp: env.wsMaxConnectionsPerIp,
+  })
+
+  // Register WebSocket detection ingestion endpoint
+  registerWsDetectionIngest(app, baseDetectionProcessor, cameraRegistry, {
+    maxConnectionsPerIp: env.wsMaxConnectionsPerIp,
+    enableMsgpack: true,
   })
 
   // Cleanup on shutdown
@@ -269,6 +276,12 @@ export async function createServerWithComponents(options: CreateServerOptions = 
     allowedOrigins: env.wsAllowedOrigins,
     allowNoOrigin: env.wsAllowNoOrigin,
     maxConnectionsPerIp: env.wsMaxConnectionsPerIp,
+  })
+
+  // Register WebSocket detection ingestion endpoint
+  registerWsDetectionIngest(app, baseDetectionProcessor, cameraRegistry, {
+    maxConnectionsPerIp: env.wsMaxConnectionsPerIp,
+    enableMsgpack: true,
   })
 
   // Set up periodic cleanup (200ms for quick FOV/boundary exit detection)

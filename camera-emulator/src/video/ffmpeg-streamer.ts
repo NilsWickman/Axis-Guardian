@@ -17,6 +17,18 @@ export interface FFmpegStreamerEvents {
 const MAX_RESTART_ATTEMPTS = 3
 const BASE_RESTART_DELAY_MS = 1000
 
+export interface FFmpegStreamerOptions {
+  fps?: number
+  total_frames?: number
+  duration?: number
+  /** Shared start time across all cameras for synchronization */
+  sharedStartTime?: number
+  /** Callback when this camera requests a sync reset (e.g., on loop) */
+  onSyncReset?: () => void
+  /** Unique SSRC for this camera (derived from port to ensure uniqueness) */
+  ssrc?: number
+}
+
 export class FFmpegStreamer extends EventEmitter {
   private ffmpeg: ChildProcess | null = null
   private frameCount = 0
@@ -27,16 +39,23 @@ export class FFmpegStreamer extends EventEmitter {
   private videoDurationMs = 0  // Total video duration (ms)
   private restartAttempts = 0
   private stopped = false  // Flag to prevent restart after intentional stop
+  private sharedStartTime?: number  // Shared start time for multi-camera sync
+  private onSyncReset?: () => void  // Callback for coordinated loop reset
+  private ssrc: number  // Unique SSRC for RTP stream
 
   constructor(
     private videoPath: string,
     private rtpPort: number,
-    videoInfo?: { fps?: number; total_frames?: number; duration?: number }
+    options?: FFmpegStreamerOptions
   ) {
     super()
-    this.fps = videoInfo?.fps ?? 30
-    this.totalFrames = videoInfo?.total_frames ?? 0
-    this.videoDurationMs = (videoInfo?.duration ?? (this.totalFrames / this.fps)) * 1000
+    this.fps = options?.fps ?? 30
+    this.totalFrames = options?.total_frames ?? 0
+    this.videoDurationMs = (options?.duration ?? (this.totalFrames / this.fps)) * 1000
+    this.sharedStartTime = options?.sharedStartTime
+    this.onSyncReset = options?.onSyncReset
+    // Use provided SSRC or generate from port (ensures uniqueness across cameras)
+    this.ssrc = options?.ssrc ?? (12345678 + rtpPort)
   }
 
   start(): void {
@@ -77,14 +96,14 @@ export class FFmpegStreamer extends EventEmitter {
       '-bufsize', '1M',
       '-f', 'rtp',
       '-payload_type', String(ffmpegConfig.payloadType),
-      '-ssrc', '12345678',
+      '-ssrc', String(this.ssrc),
       `rtp://127.0.0.1:${this.rtpPort}?pkt_size=1200`,
     ], {
       stdio: ['ignore', 'pipe', 'pipe'],
     })
 
-    // Record stream start time
-    this.streamStartTime = Date.now()
+    // Record stream start time - use shared time if available for multi-camera sync
+    this.streamStartTime = this.sharedStartTime ?? Date.now()
 
     // Parse FFmpeg stderr for frame progress
     this.ffmpeg.stderr?.on('data', (data: Buffer) => {
@@ -104,7 +123,13 @@ export class FFmpegStreamer extends EventEmitter {
         // Detect loop (frame number reset or big jump)
         if (this.totalFrames > 0 && newFrame < this.frameCount && this.frameCount > this.totalFrames * 0.9) {
           this.loopCount++
-          this.streamStartTime = Date.now()  // Reset start time on loop
+          // If we have a sync callback, let the coordinator handle the reset
+          // Otherwise reset our own start time
+          if (this.onSyncReset) {
+            this.onSyncReset()
+          } else {
+            this.streamStartTime = Date.now()
+          }
           this.emit('loop', this.loopCount)
           console.log(`FFmpeg loop ${this.loopCount}`)
         }
@@ -187,5 +212,19 @@ export class FFmpegStreamer extends EventEmitter {
 
   isRunning(): boolean {
     return this.ffmpeg !== null
+  }
+
+  /**
+   * Reset the stream start time (called by sync coordinator on loop)
+   */
+  resetStartTime(newStartTime: number): void {
+    this.streamStartTime = newStartTime
+  }
+
+  /**
+   * Set the shared start time (for late initialization)
+   */
+  setSharedStartTime(time: number): void {
+    this.sharedStartTime = time
   }
 }

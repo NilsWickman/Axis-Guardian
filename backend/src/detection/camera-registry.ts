@@ -271,6 +271,52 @@ export class CameraRegistry {
     const content = await fs.readFile(filepath, 'utf-8')
     const data = JSON.parse(content)
 
+    // Handle polynomial calibration format (from fit-polynomial CLI)
+    // Format: { cameras: { camera1: { directPolynomial: {...} }, ... } }
+    if (data.cameras && !Array.isArray(data.cameras) && typeof data.cameras === 'object') {
+      let count = 0
+      for (const [cameraId, camData] of Object.entries(data.cameras)) {
+        const cam = camData as { directPolynomial?: { degree: number; coeffsX: number[]; coeffsY: number[] } }
+        if (cam.directPolynomial) {
+          // Validate degree is 3, 4, or 5
+          const degree = cam.directPolynomial.degree
+          if (degree !== 3 && degree !== 4 && degree !== 5) {
+            console.warn(`[CameraRegistry] Invalid polynomial degree ${degree} for ${cameraId}, skipping`)
+            continue
+          }
+          // Get existing calibration or create minimal one
+          let existing = this.getCalibration(cameraId)
+          if (!existing) {
+            // Create placeholder K/R/T (polynomial will be used instead)
+            existing = {
+              K: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+              R: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+              T: [0, 0, 0],
+              center: [960, 540],
+              scale: 1,
+            }
+          }
+          // Add direct polynomial with validated degree type
+          const calibration: CameraCalibration = {
+            ...existing,
+            directPolynomial: {
+              degree: degree as 3 | 4 | 5,
+              coeffsX: cam.directPolynomial.coeffsX,
+              coeffsY: cam.directPolynomial.coeffsY,
+            },
+          }
+          this.setCalibration(cameraId, calibration)
+          count++
+          console.log(`[CameraRegistry] Loaded polynomial calibration for ${cameraId} (degree ${cam.directPolynomial.degree})`)
+        }
+      }
+      if (count > 0) {
+        console.log(`📷 Loaded polynomial calibration for ${count} camera(s) from ${filepath}`)
+      }
+      return
+    }
+
+    // Handle legacy array format (from calibrate CLI)
     if (data.cameras && Array.isArray(data.cameras)) {
       for (const cam of data.cameras) {
         // Convert distortion array [k1, k2, p1, p2, k3] to DistortionCoeffs object

@@ -14,6 +14,19 @@ import { useZoneStore } from '@/stores/zones'
 import { useConnectionStatusStore } from '@/stores/connectionStatus'
 import { config } from '@/config/environment'
 import { createBackoffCalculator, type BackoffConfig } from '@/utils/exponential-backoff'
+import msgpack from 'msgpack-lite'
+
+/** Track delta for incremental updates (matches backend TrackDelta) */
+export interface TrackDelta {
+  trackId: string
+  position?: { x: number; y: number }
+  trail?: { x: number; y: number; timestamp: number }[]
+  confidence?: number
+  state?: string
+  velocity?: { x: number; y: number }
+  lastSeen?: number
+  videoTiming?: { videoTimeMs?: number; rtpTimestamp?: number; cameraId?: string }
+}
 
 export interface BackendWebSocketOptions {
   autoReconnect?: boolean
@@ -45,8 +58,9 @@ const DEFAULT_OPTIONS: Required<Omit<BackendWebSocketOptions, 'videoElement' | '
 
 /** Track update with video timing for buffering */
 interface BufferedTrackUpdate {
-  type: 'track_created' | 'track_updated'
-  track: unknown
+  type: 'track_created' | 'track_updated' | 'track_delta'
+  track?: unknown
+  delta?: TrackDelta
   videoTiming: VideoTimingInfo
 }
 
@@ -103,10 +117,12 @@ export function useBackendWebSocket(options: BackendWebSocketOptions = {}) {
     }
 
     const wsUrl = config.trackingServiceWsUrl || 'ws://localhost:3010/ws'
+    // Use MessagePack binary protocol for efficient encoding
+    const wsUrlWithFormat = wsUrl.includes('?') ? `${wsUrl}&format=msgpack` : `${wsUrl}?format=msgpack`
     connectionStatus.setBackendConnecting()
 
     try {
-      socket.value = new WebSocket(wsUrl)
+      socket.value = new WebSocket(wsUrlWithFormat)
 
       socket.value.onopen = () => {
         isConnected.value = true
@@ -122,7 +138,23 @@ export function useBackendWebSocket(options: BackendWebSocketOptions = {}) {
 
       socket.value.onmessage = (event) => {
         try {
-          const message = JSON.parse(event.data)
+          let message
+          // Handle both MessagePack binary and JSON text formats
+          if (event.data instanceof ArrayBuffer) {
+            // MessagePack binary
+            message = msgpack.decode(new Uint8Array(event.data))
+          } else if (event.data instanceof Blob) {
+            // Blob needs async conversion - skip for now, should be rare
+            event.data.arrayBuffer().then(buffer => {
+              const decoded = msgpack.decode(new Uint8Array(buffer))
+              handleMessage(decoded)
+              messageCount.value++
+            })
+            return
+          } else {
+            // JSON string
+            message = JSON.parse(event.data)
+          }
           handleMessage(message)
           messageCount.value++
         } catch (error) {
@@ -372,6 +404,9 @@ export function useBackendWebSocket(options: BackendWebSocketOptions = {}) {
     if (update.type === 'track_created' || update.type === 'track_updated') {
       globalTrackStore.upsertTrackFromServer(update.track)
       syncMetrics.value.appliedUpdates++
+    } else if (update.type === 'track_delta' && update.delta) {
+      globalTrackStore.applyTrackDelta(update.delta)
+      syncMetrics.value.appliedUpdates++
     }
   }
 
@@ -390,6 +425,7 @@ export function useBackendWebSocket(options: BackendWebSocketOptions = {}) {
     track?: unknown & { videoTiming?: VideoTimingInfo }
     tracks?: unknown[]
     trackId?: string
+    delta?: TrackDelta
     frames?: unknown[]
     zones?: unknown[]
     zoneMetrics?: unknown[]
@@ -444,6 +480,36 @@ export function useBackendWebSocket(options: BackendWebSocketOptions = {}) {
         }
         break
 
+      case 'track_delta':
+        // Handle incremental track updates
+        if (message.delta) {
+          const delta = message.delta
+
+          // Check if we should buffer this delta for video sync
+          if (isSyncEnabled() && delta.videoTiming) {
+            // Only sync deltas from the specified camera (if configured)
+            const shouldSync = !options.syncCameraId ||
+              delta.videoTiming.cameraId === options.syncCameraId
+
+            if (shouldSync) {
+              // Start sync loop if not running
+              startSyncLoop()
+
+              // Buffer the delta update
+              trackSyncBuffer.push({
+                type: 'track_delta',
+                delta,
+                videoTiming: delta.videoTiming as VideoTimingInfo,
+              })
+              return
+            }
+          }
+
+          // No video sync - apply immediately
+          globalTrackStore.applyTrackDelta(delta)
+        }
+        break
+
       case 'track_expired':
         if (message.trackId) {
           globalTrackStore.removeTrack(message.trackId)
@@ -470,6 +536,13 @@ export function useBackendWebSocket(options: BackendWebSocketOptions = {}) {
 
       case 'zones_reset':
         zoneStore.handleZonesReset()
+        break
+
+      case 'frame_info':
+        // Periodic frame info broadcast for delay counters
+        if (message.frames) {
+          globalTrackStore.updateFrameInfo(message.frames as { cameraId: string; frameNumber: number; timestamp: number }[])
+        }
         break
 
       default:

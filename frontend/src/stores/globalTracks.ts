@@ -114,7 +114,8 @@ const TRACK_COLORS = [
  */
 export interface CameraDetection {
   cameraId: string
-  trackId: number // Per-camera track ID from ByteTrack
+  /** Local track ID from the camera's tracker (e.g., ByteTrack). NOT a global track ID. */
+  localTrackId: number
   worldX: number // World position X (meters)
   worldY: number // World position Y (meters)
   confidence: number
@@ -418,7 +419,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     // Add camera association
     track.cameraAssociations.set(detection.cameraId, {
       cameraId: detection.cameraId,
-      trackIds: [detection.trackId],
+      trackIds: [detection.localTrackId],
       lastSeen: detection.timestamp,
     })
 
@@ -452,14 +453,14 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     // Update or add camera association
     const assoc = track.cameraAssociations.get(detection.cameraId)
     if (assoc) {
-      if (!assoc.trackIds.includes(detection.trackId)) {
-        assoc.trackIds.push(detection.trackId)
+      if (!assoc.trackIds.includes(detection.localTrackId)) {
+        assoc.trackIds.push(detection.localTrackId)
       }
       assoc.lastSeen = detection.timestamp
     } else {
       track.cameraAssociations.set(detection.cameraId, {
         cameraId: detection.cameraId,
-        trackIds: [detection.trackId],
+        trackIds: [detection.localTrackId],
         lastSeen: detection.timestamp,
       })
     }
@@ -548,7 +549,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     const now = Date.now()
     const detection: CameraDetection = {
       cameraId,
-      trackId,
+      localTrackId: trackId,
       worldX,
       worldY,
       confidence,
@@ -806,6 +807,63 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
   }
 
   /**
+   * Apply a delta (partial) update to an existing track
+   * This is used for incremental updates to reduce bandwidth
+   */
+  function applyTrackDelta(delta: {
+    trackId: string
+    position?: { x: number; y: number }
+    trail?: { x: number; y: number; timestamp: number }[]
+    confidence?: number
+    state?: string
+    velocity?: { x: number; y: number }
+    lastSeen?: number
+    videoTiming?: { videoTimeMs?: number; rtpTimestamp?: number; cameraId?: string }
+  }): void {
+    const track = tracks.value.get(delta.trackId)
+    if (!track) {
+      // Track doesn't exist - can't apply delta
+      // This might happen if we receive a delta before the track_created message
+      console.warn(`[GlobalTrackStore] Cannot apply delta to non-existent track: ${delta.trackId}`)
+      return
+    }
+
+    // Apply position update
+    if (delta.position) {
+      track.currentPosition = delta.position
+    }
+
+    // Append new trail points (delta trail is append-only from backend)
+    if (delta.trail && delta.trail.length > 0) {
+      track.trail = [...track.trail, ...delta.trail]
+      // Trim trail to max length
+      if (track.trail.length > config.value.maxTrailLength) {
+        track.trail = track.trail.slice(-config.value.maxTrailLength)
+      }
+    }
+
+    // Apply confidence update
+    if (delta.confidence !== undefined) {
+      track.confidence = delta.confidence
+    }
+
+    // Apply state update
+    if (delta.state) {
+      track.state = delta.state as TrackState
+    }
+
+    // Apply lastSeen update
+    if (delta.lastSeen !== undefined) {
+      track.lastSeen = delta.lastSeen
+    }
+
+    // Apply video timing update
+    if (delta.videoTiming) {
+      track.videoTiming = delta.videoTiming as VideoTimingInfo
+    }
+  }
+
+  /**
    * Remove a track by ID (when server reports expiry)
    * Also adds to recently expired set to prevent zombie track resurrection
    */
@@ -890,6 +948,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
     // Server sync methods
     setTracksFromServer,
     upsertTrackFromServer,
+    applyTrackDelta,
     removeTrack,
     updateFrameInfo,
     getFrameInfoForCamera,

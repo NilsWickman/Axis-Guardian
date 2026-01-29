@@ -293,7 +293,7 @@ export function evaluateTotalCost(
       if (!byCamera.has(camId)) {
         byCamera.set(camId, [])
       }
-      byCamera.get(camId)!.push(assign.detection.trackId)
+      byCamera.get(camId)!.push(assign.detection.localTrackId)
     }
 
     for (const [_camId, localIds] of byCamera) {

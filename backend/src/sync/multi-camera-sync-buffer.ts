@@ -24,6 +24,14 @@ export interface SyncBufferConfig {
   frameBucketMs: number
   /** Enable frame-number based correlation (for emulators with same video) */
   useFrameNumberCorrelation: boolean
+  /** Enable adaptive timeout based on camera count */
+  adaptiveTimeout: boolean
+  /** Minimum timeout for single-camera mode (ms) */
+  singleCameraTimeoutMs: number
+  /** Base timeout per camera for multi-camera mode (ms) */
+  perCameraTimeoutMs: number
+  /** Maximum adaptive timeout (ms) */
+  maxAdaptiveTimeoutMs: number
 }
 
 export interface SyncMetrics {
@@ -104,6 +112,10 @@ export class MultiCameraSyncBuffer {
       maxBufferedDetections: config?.maxBufferedDetections ?? defaults.maxBufferedDetections,
       frameBucketMs: config?.frameBucketMs ?? defaults.frameBucketMs,
       useFrameNumberCorrelation: config?.useFrameNumberCorrelation ?? defaults.useFrameNumberCorrelation,
+      adaptiveTimeout: config?.adaptiveTimeout ?? defaults.adaptiveTimeout,
+      singleCameraTimeoutMs: config?.singleCameraTimeoutMs ?? defaults.singleCameraTimeoutMs,
+      perCameraTimeoutMs: config?.perCameraTimeoutMs ?? defaults.perCameraTimeoutMs,
+      maxAdaptiveTimeoutMs: config?.maxAdaptiveTimeoutMs ?? defaults.maxAdaptiveTimeoutMs,
     }
 
     this.metrics = {
@@ -437,15 +449,41 @@ export class MultiCameraSyncBuffer {
   }
 
   /**
+   * Calculate adaptive timeout based on active camera count
+   * Returns a timeout that scales with the number of cameras:
+   * - 1 camera: minimal timeout (just buffer jitter)
+   * - 2+ cameras: scales up to allow synchronization
+   */
+  private getAdaptiveTimeout(activeCameraCount: number): number {
+    if (!this.config.adaptiveTimeout) {
+      return this.config.syncWindowMs
+    }
+
+    if (activeCameraCount <= 1) {
+      return this.config.singleCameraTimeoutMs
+    }
+
+    // Scale timeout: base + (perCamera * cameras), capped at max
+    const scaledTimeout = this.config.singleCameraTimeoutMs +
+      (activeCameraCount * this.config.perCameraTimeoutMs)
+
+    return Math.min(scaledTimeout, this.config.maxAdaptiveTimeoutMs)
+  }
+
+  /**
    * Flush buckets that have exceeded the sync window
    */
   private flushExpiredBuckets(): void {
     const now = Date.now()
     const expiredBuckets: FrameBucket[] = []
 
+    // Get current active camera count for adaptive timeout
+    const expectedCameras = this.getExpectedCameras(now)
+    const adaptiveTimeout = this.getAdaptiveTimeout(expectedCameras.size)
+
     for (const bucket of this.buckets.values()) {
       const age = now - bucket.createdAt
-      if (age >= this.config.syncWindowMs) {
+      if (age >= adaptiveTimeout) {
         expiredBuckets.push(bucket)
       }
     }

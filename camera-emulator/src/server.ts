@@ -6,7 +6,7 @@
 import Fastify from 'fastify'
 import websocket from '@fastify/websocket'
 import cors from '@fastify/cors'
-import type { CameraConfig } from './types.js'
+import type { CameraConfig, SyncCoordinator } from './types.js'
 import { createWorker, createRouter } from './mediasoup/worker.js'
 import { createPlainTransport, createDirectTransport, createDataProducerOnDirect } from './mediasoup/transports.js'
 import { FFmpegStreamer } from './video/ffmpeg-streamer.js'
@@ -19,9 +19,14 @@ import { WS_MAX_PAYLOAD_BYTES } from './config.js'
 export interface CameraEmulatorServer {
   start(): Promise<void>
   stop(): Promise<void>
+  /** Get the FFmpeg streamer for sync coordination */
+  getFFmpegStreamer(): FFmpegStreamer
 }
 
-export async function createCameraEmulator(config: CameraConfig): Promise<CameraEmulatorServer> {
+export async function createCameraEmulator(
+  config: CameraConfig,
+  syncCoordinator?: SyncCoordinator
+): Promise<CameraEmulatorServer> {
   const app = Fastify({ logger: false, trustProxy: true })
 
   // Register plugins
@@ -38,10 +43,19 @@ export async function createCameraEmulator(config: CameraConfig): Promise<Camera
   const detectionSync = new DetectionSync(config.cameraId, detectionData)
 
   // Create tracking client with video FPS for accurate timing sync
+  // WebSocket transport with MessagePack encoding for lower latency than HTTP
+  // Batching reduces network overhead for high frame rates
   const trackingClient = new TrackingClient(
     config.trackingServiceUrl,
     config.trackingCameraId,
-    { fps: detectionData.video_info.fps || 30 }
+    {
+      fps: detectionData.video_info.fps || 30,
+      useWebSocket: true,
+      useMsgpack: true,
+      enableBatching: true,
+      batchIntervalMs: 50,  // Flush every 50ms for ~20 batches/sec
+      maxBatchSize: 30,     // Or flush after 30 detections
+    }
   )
 
   // Create mediasoup infrastructure
@@ -49,18 +63,25 @@ export async function createCameraEmulator(config: CameraConfig): Promise<Camera
   const router = await createRouter(worker)
 
   // Create PlainTransport for FFmpeg RTP input
-  // The transport returns the actual port to send RTP to
-  const { rtpPort: actualRtpPort, createProducer } = await createPlainTransport(router, 0)
+  // The transport returns the actual port to send RTP to and the unique SSRC
+  const { rtpPort: actualRtpPort, ssrc, createProducer } = await createPlainTransport(router, 0)
 
   // Create DirectTransport for server→client data channel
   const directTransport = await createDirectTransport(router)
   const dataProducer = await createDataProducerOnDirect(directTransport)
 
-  // Create FFmpeg streamer - use the actual port mediasoup is listening on
+  // Create FFmpeg streamer - use the actual port mediasoup is listening on and matching SSRC
   const ffmpegStreamer = new FFmpegStreamer(
     config.videoPath,
     actualRtpPort,
-    detectionData.video_info
+    {
+      fps: detectionData.video_info.fps,
+      total_frames: detectionData.video_info.total_frames,
+      duration: detectionData.video_info.duration,
+      sharedStartTime: syncCoordinator?.sharedStartTime,
+      onSyncReset: syncCoordinator?.onSyncReset,
+      ssrc,  // Pass unique SSRC to match mediasoup producer
+    }
   )
 
   // Start FFmpeg first so it sends packets
@@ -149,7 +170,12 @@ export async function createCameraEmulator(config: CameraConfig): Promise<Camera
 
     async stop() {
       ffmpegStreamer.stop()
+      trackingClient.destroy()  // Flush remaining batches and close WebSocket
       await app.close()
+    },
+
+    getFFmpegStreamer() {
+      return ffmpegStreamer
     },
   }
 }

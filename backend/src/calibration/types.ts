@@ -32,7 +32,8 @@ export interface MatchableDetection {
   cameraId: string
   frameNumber: number
   timestamp: number
-  trackId: number
+  /** Local track ID from the camera's tracker (e.g., ByteTrack) */
+  localTrackId: number
   bbox: NormalizedBBox
   embedding: number[]
   embeddingQuality: number

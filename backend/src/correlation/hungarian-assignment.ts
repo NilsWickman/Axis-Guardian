@@ -615,7 +615,7 @@ function greedyAssignment(
       let cost = calculateDistance(detPos, targetPos)
 
       const assoc = track.cameraAssociations.get(det.cameraId)
-      if (assoc?.trackIds.includes(det.trackId)) {
+      if (assoc?.trackIds.includes(det.localTrackId)) {
         cost *= fullConfig.associationBonus
       }
 
