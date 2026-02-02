@@ -14,7 +14,6 @@
     GitGraph,
     BarChart3,
     Map,
-    Leaf,
   } from 'lucide-vue-next'
   import { useTheme } from '@/composables/useTheme'
   import { useDemoMode } from '@/composables/useDemoMode'
@@ -75,11 +74,6 @@
           name: 'Site Map',
           path: '/dev/sitemap',
           icon: Map,
-        },
-        {
-          name: 'Leaflet Map',
-          path: '/tracking-leaflet',
-          icon: Leaf,
         },
       ],
     },

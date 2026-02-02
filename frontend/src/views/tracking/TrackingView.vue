@@ -201,6 +201,11 @@ import { useDemoMode } from '@/composables/useDemoMode'
 import { useTheme } from '@/composables/useTheme'
 import { extractValue, metersToPixels, RENDER_SCALE } from '@/utils/siteMapConversion'
 import { sleep } from '@/utils/sleep'
+import {
+  calculateObjectCoverTransform,
+  transformBboxToCanvas,
+  type NormalizedBbox,
+} from '@/utils/bbox-transform'
 import PersonPositionOverlay from '@/components/features/site-map/PersonPositionOverlay.vue'
 import DetectionMetadataPanel from '@/components/features/camera/DetectionMetadataPanel.vue'
 import VideoMetrics from '@/components/features/camera/VideoMetrics.vue'
@@ -570,43 +575,26 @@ function onPrimaryVideoLoaded() {
   const canvasEl = primaryCanvasRef.value
   if (!video || !canvasEl || video.videoWidth <= 0) return
 
-  canvasEl.width = video.videoWidth
-  canvasEl.height = video.videoHeight
   primaryVideoDimensions.value = { width: video.videoWidth, height: video.videoHeight }
+  updateCameraCanvasSize()
 }
 
-/**
- * Normalize bbox to {left, top, right, bottom} format.
- * Handles both array [x, y, w, h] and object {left, top, right, bottom} formats.
- */
-function normalizeBbox(bbox: unknown): { left: number; top: number; right: number; bottom: number } | null {
-  if (!bbox) return null
+function updateCameraCanvasSize() {
+  const canvasEl = primaryCanvasRef.value
+  if (!canvasEl) return
 
-  // Handle array format [x, y, w, h]
-  if (Array.isArray(bbox) && bbox.length >= 4) {
-    const [x, y, w, h] = bbox
-    return { left: x, top: y, right: x + w, bottom: y + h }
-  }
+  const dpr = window.devicePixelRatio || 1
+  const containerW = canvasEl.clientWidth
+  const containerH = canvasEl.clientHeight
 
-  // Handle object format {left, top, right, bottom}
-  if (typeof bbox === 'object') {
-    const b = bbox as Record<string, unknown>
-    if ('left' in b && 'top' in b && 'right' in b && 'bottom' in b) {
-      return {
-        left: Number(b.left),
-        top: Number(b.top),
-        right: Number(b.right),
-        bottom: Number(b.bottom)
-      }
-    }
-  }
-
-  return null
+  canvasEl.width = containerW * dpr
+  canvasEl.height = containerH * dpr
 }
 
 function drawDetections() {
   const canvasEl = primaryCanvasRef.value
-  if (!canvasEl || !primaryVideoDimensions.value) return
+  const video = primaryVideoRef.value
+  if (!canvasEl || !video || !primaryVideoDimensions.value) return
 
   const ctx = canvasEl.getContext('2d')
   if (!ctx) return
@@ -614,21 +602,42 @@ function drawDetections() {
   ctx.clearRect(0, 0, canvasEl.width, canvasEl.height)
   if (currentDetections.value.length === 0) return
 
+  const dpr = window.devicePixelRatio || 1
+  const videoW = video.videoWidth
+  const videoH = video.videoHeight
+
+  // Use CSS dimensions for object-cover calculation
+  const containerW = canvasEl.clientWidth
+  const containerH = canvasEl.clientHeight
+
+  const transform = calculateObjectCoverTransform(videoW, videoH, containerW, containerH)
+
+  ctx.save()
+  ctx.scale(dpr, dpr)
+
   for (const detection of currentDetections.value) {
     const { class_name, confidence } = detection
-    const bbox = normalizeBbox(detection.bbox)
-    if (!bbox) continue
-
     const color = CLASS_COLORS[class_name] || '#94a3b8'
 
-    const x = bbox.left * canvasEl.width
-    const y = bbox.top * canvasEl.height
-    const w = (bbox.right - bbox.left) * canvasEl.width
-    const h = (bbox.bottom - bbox.top) * canvasEl.height
+    // Detection bbox is already normalized (0-1 range)
+    const rawBbox = detection.bbox as unknown
+    let normalized: NormalizedBbox
+
+    if (Array.isArray(rawBbox)) {
+      const [x, y, w, h] = rawBbox as [number, number, number, number]
+      normalized = { left: x, top: y, right: x + w, bottom: y + h }
+    } else if (rawBbox && typeof rawBbox === 'object') {
+      const b = rawBbox as { left: number; top: number; right: number; bottom: number }
+      normalized = { left: b.left, top: b.top, right: b.right, bottom: b.bottom }
+    } else {
+      continue
+    }
+
+    const canvasBbox = transformBboxToCanvas(normalized, transform, videoW, videoH)
 
     ctx.strokeStyle = color
     ctx.lineWidth = 3
-    ctx.strokeRect(x, y, w, h)
+    ctx.strokeRect(canvasBbox.x, canvasBbox.y, canvasBbox.width, canvasBbox.height)
 
     const label = `${class_name} ${(confidence * 100).toFixed(0)}%`
     ctx.font = 'bold 14px Arial'
@@ -636,10 +645,12 @@ function drawDetections() {
     const textHeight = 20
 
     ctx.fillStyle = color
-    ctx.fillRect(x, y - textHeight - 5, textMetrics.width + 10, textHeight)
+    ctx.fillRect(canvasBbox.x, canvasBbox.y - textHeight - 5, textMetrics.width + 10, textHeight)
     ctx.fillStyle = '#000'
-    ctx.fillText(label, x + 5, y - 8)
+    ctx.fillText(label, canvasBbox.x + 5, canvasBbox.y - 8)
   }
+
+  ctx.restore()
 }
 
 async function attachPrimaryVideo(cameraId: string) {
@@ -833,6 +844,8 @@ const handleResize = () => {
   schedulePreviewRender()
 }
 
+let cameraResizeObserver: ResizeObserver | null = null
+
 onMounted(async () => {
   void sleep(RESTART_LOADING_MS).then(() => {
     isBootLoading.value = false
@@ -852,6 +865,18 @@ onMounted(async () => {
   }
 
   window.addEventListener('resize', handleResize)
+
+  // Watch for camera container resize to update canvas dimensions
+  cameraResizeObserver = new ResizeObserver(() => {
+    if (activeView.value === 'camera') {
+      updateCameraCanvasSize()
+    }
+  })
+  // Observe the primary canvas element (which has w-full h-full on container)
+  const canvasEl = primaryCanvasRef.value
+  if (canvasEl?.parentElement) {
+    cameraResizeObserver.observe(canvasEl.parentElement)
+  }
 
   await attachThumbnailVideos()
   registerDetectionCallbacks()
@@ -890,6 +915,10 @@ onUnmounted(() => {
   if (nowInterval) {
     clearInterval(nowInterval)
     nowInterval = null
+  }
+  if (cameraResizeObserver) {
+    cameraResizeObserver.disconnect()
+    cameraResizeObserver = null
   }
 
   for (const cleanup of detectionCallbackCleanups.value.values()) {
