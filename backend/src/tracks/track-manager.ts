@@ -20,7 +20,6 @@ import type {
   VideoTimingInfo,
   DetectionAttributes,
 } from '../types.js'
-import type { ZoneManager } from '../zones/zone-manager.js'
 import { DEFAULT_TRACKING_CONFIG } from '../types.js'
 import { AttributeAggregator, cosineSimilarity } from './attribute-aggregator.js'
 import { calculateDistance, predictPosition, mergeWorldPositions } from '../correlation/track-matcher.js'
@@ -156,9 +155,6 @@ export class TrackManager {
     obstacles: SiteMapObstacle[]
     roomBounds: RoomBounds
   }
-
-  /** Zone manager for restricted zone violation detection */
-  private zoneManager?: ZoneManager
 
   // Event callbacks for external integration (e.g., WebSocket broadcasting)
   onTrackCreated?: (track: GlobalTrack) => void
@@ -608,8 +604,7 @@ export class TrackManager {
           this.onTrackExpired?.(track)  // Notify before deletion
           this.tracks.delete(trackId)
           this.kalmanStateManager.removeTrackState(trackId)
-          this.zoneManager?.clearTrackState(trackId)
-          this.attributeAggregators.delete(trackId)
+                    this.attributeAggregators.delete(trackId)
           continue
         }
       }
@@ -761,8 +756,7 @@ export class TrackManager {
         if (timeSinceLastSeen > this.config.trackExpiryMs * 5) {
           this.tracks.delete(trackId)
           this.kalmanStateManager.removeTrackState(trackId)
-          this.zoneManager?.clearTrackState(trackId)
-          this.attributeAggregators.delete(trackId)
+                    this.attributeAggregators.delete(trackId)
         }
       }
 
@@ -784,8 +778,7 @@ export class TrackManager {
         this.releaseColor(track.color)
         this.tracks.delete(trackId)
         this.kalmanStateManager.removeTrackState(trackId)
-        this.zoneManager?.clearTrackState(trackId)
-        this.attributeAggregators.delete(trackId)
+                this.attributeAggregators.delete(trackId)
       }
     }
   }
@@ -798,7 +791,6 @@ export class TrackManager {
     this.usedColors.clear()
     this.nextTrackId = 1
     this.kalmanStateManager.clearCache()
-    this.zoneManager?.resetAllStates()
     this.lastDetectionTimestamp = null
     this.attributeAggregators.clear()
     // Clear extracted component states
@@ -835,14 +827,6 @@ export class TrackManager {
     // Also set geometry on OcclusionHandler for proper coasting
     this.occlusionHandler.setGeometry({ cameras, obstacles, roomBounds })
     console.log(`[TrackManager] Exit detection enabled: ${cameras.length} cameras, ${obstacles.filter(o => o.blocksTracking).length} blocking obstacles, room ${roomBounds.width}x${roomBounds.height}m`)
-  }
-
-  /**
-   * Set zone manager for restricted zone violation detection
-   */
-  setZoneManager(zoneManager: ZoneManager): void {
-    this.zoneManager = zoneManager
-    console.log(`[TrackManager] Zone manager connected`)
   }
 
   /**
@@ -2071,17 +2055,6 @@ export class TrackManager {
 
     track.currentPosition = merged.position
     track.confidence = merged.confidence
-
-    // Check for zone violations if track is confirmed and zone manager is set
-    if (this.zoneManager && track.isConfirmed) {
-      const cameraIds = Array.from(track.cameraAssociations.keys())
-      this.zoneManager.checkTrackPosition(
-        track.globalTrackId,
-        track.currentPosition,
-        cameraIds,
-        now
-      )
-    }
 
     track.pendingDetections = recentDetections.filter(
       det => now - det.timestamp < this.config.mergeWindowMs / 2

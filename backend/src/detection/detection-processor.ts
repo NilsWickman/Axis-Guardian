@@ -12,7 +12,6 @@ import { CameraRegistry } from './camera-registry.js'
 import { logProjectionFailure } from '../api/routes.js'
 import { getPipelineLogger } from '../debug/pipeline-logger.js'
 import type { SiteMapObstacle } from '../config/sitemap-loader.js'
-import type { ZoneManager } from '../zones/zone-manager.js'
 import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
 import { BatchOptimizer, type BatchOptimizerConfig, type FrameAssignment } from '../optimization/batch-optimizer.js'
 import { getMetrics } from '../metrics/index.js'
@@ -37,7 +36,6 @@ export interface RoomBounds {
 export interface IDetectionProcessor {
   processMessage(message: DetectionMessage): GlobalTrack[]
   processMultiCameraMessages(messages: DetectionMessage[]): GlobalTrack[]
-  setZoneManager(zoneManager: ZoneManager): void
   setObstacles(obstacles: SiteMapObstacle[]): void
   setRoomBounds(bounds: RoomBounds): void
   getCameraFrameInfo(): CameraFrameInfo[]
@@ -197,14 +195,6 @@ export class DetectionProcessor implements IDetectionProcessor {
    */
   getBatchOptimizerStatus(): { bufferSize: number; status: string; isBuffering: boolean; framesEmitted: number } | null {
     return this.batchOptimizer?.getStatus() ?? null
-  }
-
-  /**
-   * Set zone manager for camera restart detection (future use)
-   * @param _zoneManager - Zone manager instance (currently unused, placeholder for future feature)
-   */
-  setZoneManager(_zoneManager: ZoneManager): void {
-    // Future use: clear zone states on camera restart
   }
 
   /**

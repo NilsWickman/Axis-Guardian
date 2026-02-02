@@ -7,7 +7,6 @@
     ChevronDown,
     MapPinned,
     Film,
-    ShieldAlert,
     Code,
     Crosshair,
     Menu,
@@ -57,11 +56,6 @@
       name: 'Recordings',
       path: '/recordings',
       icon: Film,
-    },
-    {
-      name: 'Zones',
-      path: '/zones',
-      icon: ShieldAlert,
     },
     {
       name: 'Dev',

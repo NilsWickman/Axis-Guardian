@@ -1,7 +1,6 @@
 import { computed, onUnmounted, ref, type Ref } from 'vue'
 import { config } from '@/config/environment'
 import { useGlobalTrackStore } from '@/stores/globalTracks'
-import { useZoneStore } from '@/stores/zones'
 import type { ReplayEvent, ReplayManifest, ReplaySnapshot } from '@/types/replay'
 
 export interface UseReplayOptions {
@@ -38,7 +37,6 @@ interface ReplayFrameInfo {
 
 export function useReplay(options: UseReplayOptions) {
   const globalTrackStore = useGlobalTrackStore()
-  const zoneStore = useZoneStore()
 
   const manifest = ref<ReplayManifest | null>(null)
   const isLoading = ref(false)
@@ -92,18 +90,6 @@ export function useReplay(options: UseReplayOptions) {
         break
       case 'track_expired':
         if (evt.payload.trackId) globalTrackStore.removeTrack(evt.payload.trackId)
-        break
-      case 'zone_violation':
-        if (evt.payload.violation) zoneStore.handleZoneViolation(evt.payload.violation)
-        break
-      case 'zones_updated':
-        if (evt.payload.zones) zoneStore.handleZonesUpdated(evt.payload.zones)
-        break
-      case 'zone_metrics':
-        if (evt.payload.metrics) zoneStore.handleZoneMetrics(evt.payload.metrics)
-        break
-      case 'zones_reset':
-        zoneStore.handleZonesReset()
         break
       default:
         // ignore
@@ -219,7 +205,6 @@ export function useReplay(options: UseReplayOptions) {
     isSeeking = true
     clearBuffer()
     globalTrackStore.clearAllTracks()
-    zoneStore.handleZonesReset()
     globalTrackStore.setDisableClientExpiry(true)
 
     try {
@@ -243,7 +228,6 @@ export function useReplay(options: UseReplayOptions) {
         })
         globalTrackStore.setTracksFromServer(patched)
       }
-      zoneStore.handleSnapshot(snap?.state?.zones, snap?.state?.zoneMetrics)
 
       // Preload a first window
       await ensurePrefetch(0)
@@ -265,7 +249,6 @@ export function useReplay(options: UseReplayOptions) {
     isSeeking = true
     clearBuffer()
     globalTrackStore.clearAllTracks()
-    zoneStore.handleZonesReset()
     globalTrackStore.setDisableClientExpiry(true)
 
     const snap = await loadSnapshot(m.recordingId, timeMs)
@@ -283,7 +266,6 @@ export function useReplay(options: UseReplayOptions) {
       })
       globalTrackStore.setTracksFromServer(patched)
     }
-    zoneStore.handleSnapshot(snap?.state?.zones, snap?.state?.zoneMetrics)
 
     // Fetch events between snapshot and current time
     const snapTime = snap?.videoTimeMs ?? 0

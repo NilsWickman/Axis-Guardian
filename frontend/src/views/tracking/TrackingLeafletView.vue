@@ -138,7 +138,6 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCameraStore } from '@/stores/cameras'
 import { useGlobalTrackStore } from '@/stores/globalTracks'
-import { useZoneStore } from '@/stores/zones'
 import { useCameraConnectionManager } from '@/composables/useCameraConnectionManager'
 import { useSiteMapConfig } from '@/composables/useSiteMapConfig'
 import { useLeafletSiteMap, type TrackData } from '@/composables/useLeafletSiteMap'
@@ -165,7 +164,6 @@ const router = useRouter()
 // Stores and composables
 const cameraStore = useCameraStore()
 const globalTrackStore = useGlobalTrackStore()
-const zoneStore = useZoneStore()
 const { siteMap: currentMap, loadSiteMap } = useSiteMapConfig()
 
 // Leaflet map composable
@@ -325,7 +323,6 @@ async function initializeMap() {
   leaflet.drawGrid()
   leaflet.drawWalls(currentMap.value.walls)
   leaflet.drawObstacles(currentMap.value.obstacles)
-  leaflet.drawZones(zoneStore.enabledZones, true)
   leaflet.drawCameras(
     currentMap.value.cameras,
     getCameraName,

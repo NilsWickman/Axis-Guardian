@@ -10,7 +10,6 @@
 
 import { ref, onUnmounted, type Ref } from 'vue'
 import { useGlobalTrackStore, type VideoTimingInfo } from '@/stores/globalTracks'
-import { useZoneStore } from '@/stores/zones'
 import { useConnectionStatusStore } from '@/stores/connectionStatus'
 import { config } from '@/config/environment'
 import { createBackoffCalculator, type BackoffConfig } from '@/utils/exponential-backoff'
@@ -71,7 +70,6 @@ export function useBackendWebSocket(options: BackendWebSocketOptions = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...options }
 
   const globalTrackStore = useGlobalTrackStore()
-  const zoneStore = useZoneStore()
   const connectionStatus = useConnectionStatusStore()
 
   // Create backoff calculator for exponential reconnection delays
@@ -427,10 +425,6 @@ export function useBackendWebSocket(options: BackendWebSocketOptions = {}) {
     trackId?: string
     delta?: TrackDelta
     frames?: unknown[]
-    zones?: unknown[]
-    zoneMetrics?: unknown[]
-    violation?: unknown
-    metrics?: unknown
   }): void {
     // Update frame info if present
     if (message.frames) {
@@ -443,11 +437,6 @@ export function useBackendWebSocket(options: BackendWebSocketOptions = {}) {
         if (Array.isArray(message.tracks)) {
           globalTrackStore.setTracksFromServer(message.tracks)
         }
-        // Handle zones and metrics in snapshot
-        zoneStore.handleSnapshot(
-          message.zones as import('@/stores/zones').ZoneConfig[] | undefined,
-          message.zoneMetrics as import('@/stores/zones').ZoneMetricsData[] | undefined
-        )
         break
 
       case 'track_created':
@@ -514,28 +503,6 @@ export function useBackendWebSocket(options: BackendWebSocketOptions = {}) {
         if (message.trackId) {
           globalTrackStore.removeTrack(message.trackId)
         }
-        break
-
-      case 'zone_violation':
-        if (message.violation) {
-          zoneStore.handleZoneViolation(message.violation as import('@/stores/zones').ZoneViolation)
-        }
-        break
-
-      case 'zones_updated':
-        if (message.zones) {
-          zoneStore.handleZonesUpdated(message.zones as import('@/stores/zones').ZoneConfig[])
-        }
-        break
-
-      case 'zone_metrics':
-        if (message.metrics) {
-          zoneStore.handleZoneMetrics(message.metrics as import('@/stores/zones').ZoneMetricsData)
-        }
-        break
-
-      case 'zones_reset':
-        zoneStore.handleZonesReset()
         break
 
       case 'frame_info':

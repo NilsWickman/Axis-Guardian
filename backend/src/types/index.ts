@@ -49,16 +49,6 @@ export type {
   GlobalTrackJSON,
 } from './track.js'
 
-// Zone types
-export type {
-  ZoneType,
-  ZoneSeverity,
-  ZoneVertex,
-  ZoneConfig,
-  ZoneViolation,
-  ZoneMetricsData,
-} from './zone.js'
-
 // Config types
 export type { TrackingConfig } from './config.js'
 export { DEFAULT_TRACKING_CONFIG } from './config.js'

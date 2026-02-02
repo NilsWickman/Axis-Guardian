@@ -5,7 +5,6 @@
  */
 
 import type { GlobalTrackJSON } from './track.js'
-import type { ZoneConfig, ZoneViolation, ZoneMetricsData } from './zone.js'
 
 // ============================================================================
 // REST API Types
@@ -81,13 +80,9 @@ export interface TrackDelta {
  * WebSocket message types
  */
 export type WebSocketMessage =
-  | { type: 'snapshot'; tracks: GlobalTrackJSON[]; frames?: CameraFrameInfo[]; zones?: ZoneConfig[]; zoneMetrics?: ZoneMetricsData[] }
+  | { type: 'snapshot'; tracks: GlobalTrackJSON[]; frames?: CameraFrameInfo[] }
   | { type: 'track_created'; track: GlobalTrackJSON; frames?: CameraFrameInfo[] }
   | { type: 'track_updated'; track: GlobalTrackJSON; frames?: CameraFrameInfo[] }
   | { type: 'track_delta'; delta: TrackDelta; frames?: CameraFrameInfo[] }
   | { type: 'track_expired'; trackId: string; frames?: CameraFrameInfo[] }
   | { type: 'frame_info'; frames: CameraFrameInfo[] }
-  | { type: 'zone_violation'; violation: ZoneViolation }
-  | { type: 'zones_updated'; zones: ZoneConfig[] }
-  | { type: 'zone_metrics'; metrics: ZoneMetricsData }
-  | { type: 'zones_reset' }

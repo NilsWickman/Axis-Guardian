@@ -59,14 +59,6 @@ const routes: RouteRecordRaw[] = [
     redirect: { path: '/tracking', query: { view: 'map' } },
   },
   {
-    path: '/zones',
-    name: 'Zones',
-    component: () => import('@/views/zones/ZonesView.vue'),
-    meta: {
-      title: 'Zone Management',
-    },
-  },
-  {
     path: '/replay/:recordingId',
     name: 'Replay',
     component: () => import('@/views/replay/ReplayView.vue'),

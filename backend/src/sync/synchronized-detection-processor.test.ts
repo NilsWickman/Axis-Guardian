@@ -41,8 +41,7 @@ describe('SynchronizedDetectionProcessor', () => {
         multiCalls.push(messages)
         return [{ globalTrackId: `t-${messages.length}` }] as unknown as GlobalTrack[]
       },
-      setZoneManager: () => {},
-      setObstacles: () => {},
+            setObstacles: () => {},
       setRoomBounds: () => {},
       getCameraFrameInfo: (): CameraFrameInfo[] => [],
       getCameraHealthStatus: () => [],
@@ -78,8 +77,7 @@ describe('SynchronizedDetectionProcessor', () => {
     const base: IDetectionProcessor = {
       processMessage: () => [],
       processMultiCameraMessages: () => [{ globalTrackId: 't' }] as unknown as GlobalTrack[],
-      setZoneManager: () => {},
-      setObstacles: () => {},
+            setObstacles: () => {},
       setRoomBounds: () => {},
       getCameraFrameInfo: (): CameraFrameInfo[] => [],
       getCameraHealthStatus: () => [],

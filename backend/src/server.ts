@@ -16,8 +16,6 @@ import { registerWsDetectionIngest } from './api/ws-detection-ingest.js'
 import { loadEnvironment } from './config/environment.js'
 import { loadSiteMapConfig, siteMapCamerasToGeometryConfig } from './config/sitemap-loader.js'
 import { AcapClient } from './acap/acap-client.js'
-import { ZoneManager } from './zones/zone-manager.js'
-import { getZones } from './db/repositories.js'
 import type { CameraParams } from './types.js'
 import { dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
@@ -258,20 +256,6 @@ export async function createServerWithComponents(options: CreateServerOptions = 
     pingIntervalMs: env.wsPingIntervalMs,
   })
 
-  // Initialize zone manager for restricted zone violation detection
-  const zoneManager = new ZoneManager()
-  try {
-    const zones = getZones()
-    zoneManager.loadZones(zones)
-  } catch (err) {
-    console.log('[ZoneManager] No zones loaded (database may not be seeded)')
-  }
-
-  // Wire up zone manager to track manager, detection processor, and broadcaster
-  trackManager.setZoneManager(zoneManager)
-  detectionProcessor.setZoneManager(zoneManager)
-  broadcaster.setZoneManager(zoneManager)
-
   registerWebSocket(app, broadcaster, {
     allowedOrigins: env.wsAllowedOrigins,
     allowNoOrigin: env.wsAllowNoOrigin,
@@ -317,7 +301,7 @@ export async function createServerWithComponents(options: CreateServerOptions = 
     detectionProcessor,
     cameraRegistry,
     acapClient,
-    zoneManager,
+    null,
     broadcaster,
     detectionProcessor.getSyncBuffer()
   )

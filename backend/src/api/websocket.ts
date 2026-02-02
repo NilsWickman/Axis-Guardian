@@ -7,7 +7,6 @@ import type { WebSocket } from '@fastify/websocket'
 import type { WebSocketMessage, CameraFrameInfo, TrackDelta } from '../types.js'
 import type { GlobalTrack } from '../types.js'
 import { TrackManager, trackToJSON } from '../tracks/track-manager.js'
-import type { ZoneManager } from '../zones/zone-manager.js'
 import msgpack from 'msgpack-lite'
 
 export interface WebSocketBroadcasterOptions {
@@ -32,7 +31,6 @@ export class WebSocketBroadcaster {
   private clients: Set<WebSocket> = new Set()
   private sinks: Set<(message: WebSocketMessage) => void> = new Set()
   private getFrameInfo?: () => CameraFrameInfo[]
-  private zoneManager?: ZoneManager
   private pingIntervalMs: number
   private pingTimers: Map<WebSocket, NodeJS.Timeout> = new Map()
   private lastPongAt: Map<WebSocket, number> = new Map()
@@ -256,36 +254,6 @@ export class WebSocketBroadcaster {
   }
 
   /**
-   * Set zone manager and hook up violation events
-   */
-  setZoneManager(zoneManager: ZoneManager): void {
-    this.zoneManager = zoneManager
-
-    // Hook into zone violation events
-    zoneManager.onViolation = (violation) => {
-      this.broadcast({
-        type: 'zone_violation',
-        violation,
-      })
-    }
-
-    // Hook into zone metrics changes
-    zoneManager.onMetricsChanged = (_zoneId, metrics) => {
-      this.broadcast({
-        type: 'zone_metrics',
-        metrics,
-      })
-    }
-
-    // Hook into zones reset
-    zoneManager.onZonesReset = () => {
-      this.broadcast({
-        type: 'zones_reset',
-      })
-    }
-  }
-
-  /**
    * Add a new client connection (all clients use MessagePack)
    */
   addClient(socket: WebSocket): void {
@@ -368,8 +336,6 @@ export class WebSocketBroadcaster {
       type: 'snapshot',
       tracks: this.trackManager.getActiveTracks().map(trackToJSON),
       frames: this.getFrameInfo?.(),
-      zones: this.zoneManager?.getZones(),
-      zoneMetrics: this.zoneManager?.getAllZoneMetrics(),
     }
     this.send(socket, snapshot)
   }

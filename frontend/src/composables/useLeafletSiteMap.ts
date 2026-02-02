@@ -3,7 +3,6 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { CameraPlacement, Wall, Obstacle } from '../types/site-map-types'
 import type { SiteMap } from './useSiteMapConfig'
-import type { ZoneConfig } from '../stores/zones'
 import {
   metersToLatLng,
   latLngToMeters,
@@ -54,14 +53,6 @@ const tailwindColorToHex = (color: string): string => {
   return TAILWIND_COLORS[cleanColor] || '#6366f1'
 }
 
-// Zone type default colors
-const ZONE_TYPE_COLORS: Record<string, string> = {
-  restricted: '#ef4444',
-  entry: '#22c55e',
-  exit: '#f97316',
-  monitored: '#3b82f6',
-}
-
 export interface LeafletSiteMapOptions {
   showGrid?: boolean
   showCameraLabels?: boolean
@@ -90,7 +81,6 @@ export function useLeafletSiteMap(options: Ref<LeafletSiteMapOptions>) {
     grid: shallowRef<L.LayerGroup | null>(null),
     walls: shallowRef<L.LayerGroup | null>(null),
     obstacles: shallowRef<L.LayerGroup | null>(null),
-    zones: shallowRef<L.LayerGroup | null>(null),
     cameraFov: shallowRef<L.LayerGroup | null>(null),
     cameraIcons: shallowRef<L.LayerGroup | null>(null),
     tracks: shallowRef<L.LayerGroup | null>(null),
@@ -133,7 +123,6 @@ export function useLeafletSiteMap(options: Ref<LeafletSiteMapOptions>) {
     layers.grid.value = L.layerGroup().addTo(map)
     layers.walls.value = L.layerGroup().addTo(map)
     layers.obstacles.value = L.layerGroup().addTo(map)
-    layers.zones.value = L.layerGroup().addTo(map)
     layers.cameraFov.value = L.layerGroup().addTo(map)
     layers.cameraIcons.value = L.layerGroup().addTo(map)
     layers.tracks.value = L.layerGroup().addTo(map)
@@ -484,32 +473,6 @@ export function useLeafletSiteMap(options: Ref<LeafletSiteMapOptions>) {
   }
 
   /**
-   * Draw zones (minimal mode for tracking view)
-   */
-  const drawZones = (zones: ZoneConfig[], minimal: boolean = true) => {
-    if (!layers.zones.value) return
-
-    layers.zones.value.clearLayers()
-
-    for (const zone of zones) {
-      if (zone.vertices.length < 3) continue
-
-      const baseColor = zone.color || ZONE_TYPE_COLORS[zone.type] || ZONE_TYPE_COLORS.restricted
-      const latLngs = pointsToLatLngs(zone.vertices, mapHeight.value)
-
-      const polygon = L.polygon(latLngs, {
-        color: baseColor,
-        fillColor: minimal ? 'transparent' : baseColor,
-        fillOpacity: minimal ? 0 : 0.2,
-        weight: 1.5,
-        opacity: 0.5,
-        dashArray: '6, 4',
-      })
-      polygon.addTo(layers.zones.value)
-    }
-  }
-
-  /**
    * Draw cameras with FOV cones
    */
   const drawCameras = (
@@ -825,7 +788,6 @@ export function useLeafletSiteMap(options: Ref<LeafletSiteMapOptions>) {
     drawGrid,
     drawWalls,
     drawObstacles,
-    drawZones,
     drawCameras,
     highlightCamera,
     setSelectedCamera,

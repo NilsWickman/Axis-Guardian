@@ -12,7 +12,6 @@ import type { DetectionMessage, GlobalTrack, CameraFrameInfo, CameraHealthStatus
 import type { IDetectionProcessor, RoomBounds } from '../detection/detection-processor.js'
 import { MultiCameraSyncBuffer, type SyncBufferConfig } from './multi-camera-sync-buffer.js'
 import type { SiteMapObstacle } from '../config/sitemap-loader.js'
-import type { ZoneManager } from '../zones/zone-manager.js'
 import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
 import { randomUUID } from 'node:crypto'
 
@@ -166,10 +165,6 @@ export class SynchronizedDetectionProcessor implements IDetectionProcessor {
   }
 
   // ========== IDetectionProcessor delegation ==========
-
-  setZoneManager(zoneManager: ZoneManager): void {
-    this.processor.setZoneManager(zoneManager)
-  }
 
   setObstacles(obstacles: SiteMapObstacle[]): void {
     this.processor.setObstacles(obstacles)

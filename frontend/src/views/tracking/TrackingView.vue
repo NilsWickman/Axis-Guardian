@@ -193,7 +193,6 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from
 import { useRoute, useRouter } from 'vue-router'
 import { useCameraStore } from '@/stores/cameras'
 import { useGlobalTrackStore } from '@/stores/globalTracks'
-import { useZoneStore } from '@/stores/zones'
 import { useCameraConnectionManager } from '@/composables/useCameraConnectionManager'
 import { useSiteMapCanvas, type CanvasRenderOptions } from '@/composables/useSiteMapCanvas'
 import { useSiteMapConfig } from '@/composables/useSiteMapConfig'
@@ -220,7 +219,6 @@ const router = useRouter()
 // Stores and composables
 const cameraStore = useCameraStore()
 const globalTrackStore = useGlobalTrackStore()
-const zoneStore = useZoneStore()
 const { siteMap: currentMap, loadSiteMap } = useSiteMapConfig()
 const { isDemoMode } = useDemoMode()
 const { currentTheme } = useTheme()
@@ -453,10 +451,6 @@ const drawMap = () => {
 
   canvas.drawObstacles(currentMap.value.obstacles)
   canvas.drawWalls(currentMap.value.walls)
-
-  if (zoneStore.enabledZones.length > 0) {
-    canvas.drawZones(zoneStore.enabledZones, null, null, false, zoneStore.zoneMetrics, true)
-  }
 
   const allCameraFOVs = currentMap.value.cameras.map(camera =>
     canvas.getCameraFOVPolygon(camera, currentMap.value!.walls, currentMap.value!.obstacles),
@@ -781,10 +775,6 @@ async function renderSiteMapPreview(): Promise<void> {
   previewCanvas.drawObstacles(currentMap.value.obstacles)
   previewCanvas.drawWalls(currentMap.value.walls)
 
-  if (zoneStore.enabledZones.length > 0) {
-    previewCanvas.drawZones(zoneStore.enabledZones, null, null, false, zoneStore.zoneMetrics, true)
-  }
-
   const allCameraFOVs = currentMap.value.cameras.map(camera =>
     previewCanvas.getCameraFOVPolygon(camera, currentMap.value!.walls, currentMap.value!.obstacles),
   )
@@ -826,28 +816,6 @@ watch(currentTheme, () => {
   }
   schedulePreviewRender()
 })
-
-watch(
-  () => zoneStore.zones,
-  () => {
-    if (currentMap.value) {
-      drawMap()
-    }
-    schedulePreviewRender()
-  },
-  { deep: true },
-)
-
-watch(
-  () => zoneStore.zoneMetrics,
-  () => {
-    if (currentMap.value) {
-      drawMap()
-    }
-    schedulePreviewRender()
-  },
-  { deep: true },
-)
 
 watch(currentMap, async newMap => {
   if (newMap) {

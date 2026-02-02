@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync } from 'fs'
 import type { TrackManager } from '../tracks/track-manager.js'
 import { trackToJSON } from '../tracks/track-manager.js'
-import type { ZoneManager } from '../zones/zone-manager.js'
 import type { WebSocketBroadcaster } from '../api/websocket.js'
 import type { ReplayEvent, ReplayManifest, ReplaySnapshot } from './types.js'
 import { readNdjsonFile } from './ndjson.js'
@@ -29,7 +28,6 @@ export class ReplayManager {
   constructor(
     private deps: {
       trackManager: TrackManager
-      zoneManager?: ZoneManager | null
       broadcaster?: WebSocketBroadcaster | null
       recordingsDir?: string
     }
@@ -59,8 +57,6 @@ export class ReplayManager {
       },
       getSnapshotState: () => ({
         tracks: this.deps.trackManager.getActiveTracks().map(trackToJSON),
-        zones: this.deps.zoneManager?.getZones(),
-        zoneMetrics: this.deps.zoneManager?.getAllZoneMetrics(),
       }),
     })
 

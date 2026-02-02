@@ -8,7 +8,6 @@
  *   - types/camera.ts    - CameraConfig, CameraCalibration, SiteMapCameraConfig
  *   - types/projection.ts - ProjectionResult, ImageParams
  *   - types/track.ts     - GlobalTrack, CameraDetection, TrackState
- *   - types/zone.ts      - ZoneConfig, ZoneViolation, ZoneMetricsData
  *   - types/config.ts    - TrackingConfig, DEFAULT_TRACKING_CONFIG
  *   - types/api.ts       - WebSocketMessage, TracksResponse
  */

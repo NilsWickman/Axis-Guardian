@@ -46,29 +46,6 @@ export const walls = sqliteTable('walls', {
   type: text('type').notNull().default('external'),
 });
 
-// Zone types for restricted area monitoring
-export const zoneTypeEnum = ['restricted', 'entry', 'exit', 'monitored'] as const;
-export const zoneSeverityEnum = ['low', 'medium', 'high', 'critical'] as const;
-
-// Zones table - restricted areas that trigger alarms
-export const zones = sqliteTable('zones', {
-  id: text('id').primaryKey(),
-  siteConfigId: text('site_config_id')
-    .notNull()
-    .references(() => siteConfigs.id, { onDelete: 'cascade' }),
-  name: text('name').notNull(),
-  type: text('type', { enum: zoneTypeEnum }).notNull().default('restricted'),
-  // Polygon vertices stored as JSON array: [{x: number, y: number}, ...]
-  vertices: text('vertices', { mode: 'json' }).$type<{ x: number; y: number }[]>().notNull(),
-  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
-  severity: text('severity', { enum: zoneSeverityEnum }).notNull().default('high'),
-  color: text('color').default('#ef4444'),
-  // Cooldown period in ms before re-alarming for same track
-  cooldownMs: integer('cooldown_ms').notNull().default(30000),
-  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
-});
-
 // ============================================================================
 // Debug Logging Tables (for pipeline troubleshooting)
 // ============================================================================
@@ -176,9 +153,3 @@ export type DebugTrackAssociation = typeof debugTrackAssociations.$inferSelect;
 export type NewDebugTrackAssociation = typeof debugTrackAssociations.$inferInsert;
 export type DebugTrackState = typeof debugTrackStates.$inferSelect;
 export type NewDebugTrackState = typeof debugTrackStates.$inferInsert;
-
-// Zone types
-export type Zone = typeof zones.$inferSelect;
-export type NewZone = typeof zones.$inferInsert;
-export type ZoneType = typeof zoneTypeEnum[number];
-export type ZoneSeverity = typeof zoneSeverityEnum[number];
