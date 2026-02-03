@@ -1048,6 +1048,146 @@ export function projectWithKRT(
 }
 
 /**
+ * Project image point to ground plane using ray-based method
+ *
+ * This method is used when calibration is generated from sitemap geometry.
+ * It uses the camera-to-world rotation convention which matches transformRayToWorld().
+ *
+ * The workflow is:
+ * 1. Convert image point to normalized camera coordinates using K
+ * 2. Create a ray in camera space
+ * 3. Transform ray to world space using azimuth/elevation
+ * 4. Find intersection with ground plane
+ *
+ * @param imageX - Image X coordinate (pixels)
+ * @param imageY - Image Y coordinate (pixels)
+ * @param calibration - Camera calibration with K, T, azimuthDeg, elevationDeg
+ */
+export function projectWithRay(
+  imageX: number,
+  imageY: number,
+  calibration: CameraCalibration
+): { worldPoint: Point2D; isValid: boolean; reason?: string; confidence: number } {
+  const { K, T, azimuthDeg, elevationDeg } = calibration
+
+  if (azimuthDeg === undefined || elevationDeg === undefined) {
+    return {
+      worldPoint: { x: 0, y: 0 },
+      isValid: false,
+      reason: 'missing_azimuth_or_elevation',
+      confidence: 0,
+    }
+  }
+
+  // Extract intrinsics from K matrix
+  const fx = K[0][0]
+  const fy = K[1][1]
+  const cx = K[0][2]
+  const cy = K[1][2]
+
+  // Convert image point to normalized camera coordinates
+  const normalizedX = (imageX - cx) / fx
+  const normalizedY = (imageY - cy) / fy
+
+  // Create ray in camera space (pointing forward along Z with offset)
+  const rayCamera = createCameraRay(normalizedX, normalizedY)
+
+  // Transform ray to world space using sitemap azimuth/elevation convention
+  const rayWorld = transformRayToWorld(rayCamera, azimuthDeg, elevationDeg)
+
+  // Camera position in world
+  const cameraOrigin: Point3D = {
+    x: T[0],
+    y: T[1],
+    z: T[2],
+  }
+
+  // Find intersection with ground plane (z=0)
+  const t = intersectGroundPlane(cameraOrigin, rayWorld)
+
+  if (t === null) {
+    return {
+      worldPoint: { x: 0, y: 0 },
+      isValid: false,
+      reason: 'no_ground_intersection',
+      confidence: 0,
+    }
+  }
+
+  const worldPoint: Point2D = {
+    x: cameraOrigin.x + rayWorld.x * t,
+    y: cameraOrigin.y + rayWorld.y * t,
+  }
+
+  // Calculate distance from camera
+  const distance = Math.sqrt(
+    Math.pow(worldPoint.x - T[0], 2) +
+    Math.pow(worldPoint.y - T[1], 2)
+  )
+
+  if (distance < 0.1) {
+    return {
+      worldPoint,
+      isValid: false,
+      reason: 'too_close',
+      confidence: 0,
+    }
+  }
+
+  // Calculate confidence based on distance and ray angle
+  const MAX_RELIABLE_DISTANCE = 15.0
+  const distanceConfidence = Math.max(0, 1 - distance / (MAX_RELIABLE_DISTANCE * 2))
+  const rayAngle = Math.abs(rayWorld.z)
+  const angleConfidence = Math.min(1, rayAngle * 2)
+  const confidence = Math.sqrt(distanceConfidence * angleConfidence)
+
+  return {
+    worldPoint,
+    isValid: true,
+    confidence,
+  }
+}
+
+/**
+ * Debug function to log projection details
+ *
+ * Logs image coordinates, world coordinates, angle from camera to point,
+ * and expected camera azimuth. Useful for diagnosing projection misalignment.
+ *
+ * @param imageX - Image X coordinate (pixels)
+ * @param imageY - Image Y coordinate (pixels)
+ * @param calibration - Camera calibration with K, R, T matrices
+ * @param cameraId - Camera identifier for logging
+ * @param cameraAzimuth - Optional camera azimuth from sitemap (degrees)
+ */
+export function debugProjectionDetails(
+  imageX: number,
+  imageY: number,
+  calibration: CameraCalibration,
+  cameraId: string,
+  cameraAzimuth?: number
+): void {
+  const result = projectWithKRT(imageX, imageY, calibration)
+  const dx = result.worldPoint.x - calibration.T[0]
+  const dy = result.worldPoint.y - calibration.T[1]
+
+  // Calculate angle from camera to projected point
+  // atan2(dx, dy) gives compass bearing: 0=North(+Y), 90=East(+X)
+  const angleToPoint = radToDeg(Math.atan2(dx, dy))
+  const normalizedAngle = normalizeAngle(angleToPoint)
+
+  const azimuthInfo = cameraAzimuth !== undefined
+    ? `, expected_az=${cameraAzimuth.toFixed(1)}°, diff=${angleDifference(normalizedAngle, cameraAzimuth).toFixed(1)}°`
+    : ''
+
+  console.log(
+    `[DEBUG] ${cameraId}: img(${imageX.toFixed(0)},${imageY.toFixed(0)}) -> ` +
+    `world(${result.worldPoint.x.toFixed(2)},${result.worldPoint.y.toFixed(2)}) ` +
+    `angle=${normalizedAngle.toFixed(1)}°${azimuthInfo} valid=${result.isValid}`
+  )
+}
+
+/**
  * Calculate projection confidence score (0-1)
  *
  * Confidence factors:
@@ -1134,6 +1274,13 @@ export function projectDetectionWithKRT(
     return projectWithDirectPolynomial(u, v, calibration.directPolynomial)
   }
 
+  // Use ray-based projection for sitemap-derived calibrations
+  // This handles the camera-to-world R matrix convention correctly
+  if (calibration.useRayProjection) {
+    return projectWithRay(footX, footY, calibration)
+  }
+
+  // Fall back to KRT formula for external calibration data
   const result = projectWithKRT(footX, footY, calibration)
 
   return result

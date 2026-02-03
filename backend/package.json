@@ -27,6 +27,8 @@
     "cli:fit-polynomial": "tsx src/cli/fit-polynomial.ts",
     "cli:augment-gt": "tsx src/cli/augment-gt.ts",
     "cli:evaluate-metrics": "tsx src/cli/evaluate-metrics.ts",
+    "cli:validate-projection": "tsx src/cli/validate-projection.ts",
+    "cli:annotate-gt": "tsx src/cli/annotate-ground-truth.ts",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/migrate.ts && tsx src/db/seed.ts",
     "db:reset": "rm -f data/tracking.db && pnpm db:seed"

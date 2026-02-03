@@ -102,14 +102,39 @@ export function computeRotationMatrix(
   //
   // After full matrix multiplication of Rz(-az) * P * Rx(-el):
   //
-  // R = [-cos(az),  -sin(el)*sin(az),   cos(el)*sin(az)]
-  //     [ sin(az),  -sin(el)*cos(az),   cos(el)*cos(az)]
-  //     [    0,         -cos(el),          -sin(el)    ]
+  // R_c2w = [-cos(az),  -sin(el)*sin(az),   cos(el)*sin(az)]
+  //         [ sin(az),  -sin(el)*cos(az),   cos(el)*cos(az)]
+  //         [    0,         -cos(el),          -sin(el)    ]
   //
   return [
     [-ca,  -se * sa,   ce * sa],
     [ sa,  -se * ca,   ce * ca],
     [  0,       -ce,       -se],
+  ]
+}
+
+/**
+ * Compute the rotation matrix R for KRT projection (world → camera convention)
+ *
+ * The standard KRT projection formula `p = K * R * (P_world - T)` expects R to
+ * transform from WORLD space to CAMERA space. This is the transpose of the
+ * camera-to-world R computed by computeRotationMatrix().
+ *
+ * @param azimuthDeg - Azimuth angle in degrees (compass bearing)
+ * @param elevationDeg - Elevation angle in degrees (positive = looking down)
+ * @returns 3x3 rotation matrix R (world → camera) for KRT projection
+ */
+export function computeRotationMatrixForKRT(
+  azimuthDeg: number,
+  elevationDeg: number
+): number[][] {
+  const R_c2w = computeRotationMatrix(azimuthDeg, elevationDeg)
+
+  // Transpose: R_w2c = R_c2w^T
+  return [
+    [R_c2w[0][0], R_c2w[1][0], R_c2w[2][0]],
+    [R_c2w[0][1], R_c2w[1][1], R_c2w[2][1]],
+    [R_c2w[0][2], R_c2w[1][2], R_c2w[2][2]],
   ]
 }
 
@@ -145,8 +170,9 @@ export function generateCalibrationFromSitemap(
     resolution.height
   )
 
-  // Compute rotation matrix R from azimuth and elevation
-  const R = computeRotationMatrix(config.azimuth, elevation)
+  // Compute rotation matrix R for KRT projection (world → camera convention)
+  // The KRT formula expects R to transform world points to camera space
+  const R = computeRotationMatrixForKRT(config.azimuth, elevation)
 
   // Translation vector T is camera position in world coordinates
   const T: number[] = [config.position.x, config.position.y, config.height]
@@ -162,6 +188,10 @@ export function generateCalibrationFromSitemap(
     scale: 1,
     distortion: config.distortion,
     // No worldTransform needed - K/R/T already produce sitemap coordinates
+    // Enable ray-based projection for sitemap-derived calibrations
+    useRayProjection: true,
+    azimuthDeg: config.azimuth,
+    elevationDeg: elevation,
   }
 }
 

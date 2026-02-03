@@ -202,6 +202,7 @@ simulation/mediamtx/mediamtx.custom.yml
 backend/calibration-*
 backend/visualization-output/
 backend/snapshots/
+backend/annotation-frames/
 
 # Large recording / replay datasets (do not commit)
 backend/recordings/

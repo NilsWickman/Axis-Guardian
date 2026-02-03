@@ -231,13 +231,13 @@
       "webrtcUrl": "http://localhost:9101",
       "ipAddress": "192.168.1.101",
       "position": {
-        "x": 23,
-        "y": 4
+        "x": 20.30,
+        "y": 6.90
       },
-      "azimuth": 340,
-      "elevation": 35,
+      "azimuth": 24,
+      "elevation": 18,
       "height": 2.5,
-      "fieldOfView": 75,
+      "fieldOfView": 57,
       "resolution": {
         "width": 1920,
         "height": 1080
@@ -258,13 +258,13 @@
       "webrtcUrl": "http://localhost:9102",
       "ipAddress": "192.168.1.102",
       "position": {
-        "x": 8,
-        "y": 3.8
+        "x": 8.35,
+        "y": 5.05
       },
-      "azimuth": 52,
-      "elevation": 40,
+      "azimuth": 70,
+      "elevation": 9.75,
       "height": 2.5,
-      "fieldOfView": 63,
+      "fieldOfView": 45,
       "resolution": {
         "width": 1920,
         "height": 1080
@@ -285,13 +285,13 @@
       "webrtcUrl": "http://localhost:9103",
       "ipAddress": "192.168.1.103",
       "position": {
-        "x": 29.5,
-        "y": 26
+        "x": 26.45,
+        "y": 28.15
       },
-      "azimuth": 225,
-      "elevation": 25,
+      "azimuth": 206,
+      "elevation": 14.25,
       "height": 3,
-      "fieldOfView": 60,
+      "fieldOfView": 42,
       "resolution": {
         "width": 1920,
         "height": 1080
@@ -312,13 +312,13 @@
       "webrtcUrl": "http://localhost:9104",
       "ipAddress": "192.168.1.104",
       "position": {
-        "x": 16.5,
-        "y": 15
+        "x": 14.00,
+        "y": 16.55
       },
-      "azimuth": 29,
-      "elevation": 15,
+      "azimuth": 73,
+      "elevation": 11.5,
       "height": 2.5,
-      "fieldOfView": 60,
+      "fieldOfView": 42,
       "resolution": {
         "width": 1920,
         "height": 1080

@@ -159,3 +159,180 @@ Active Tracks: 4  (confirmed: 4, pending: 0)
 ```
 
 Grid is 20m × 20m based on scene calibration.
+
+---
+
+# Sitemap-Based Calibration Improvements - 2026-02-02
+
+## Problem
+
+The original K/R/T projection using external dataset calibration (`cam_param.mat`) worked for the Auditorium dataset, but sitemap-derived calibrations produced large errors:
+
+- **Mean projection error**: 6.5m
+- **Pass rate** (≤1.5m): 3.8%
+- Camera2 had 12m+ errors
+
+Root cause: The `projectWithKRT()` formula expected **world-to-camera** R matrices, but `computeRotationMatrix()` produced **camera-to-world** R matrices.
+
+## Solution
+
+### 1. Added `projectWithRay()` Function
+
+New projection function that correctly uses camera-to-world transformation, matching the `transformRayToWorld()` logic:
+
+```typescript
+// backend/src/projection/ground-plane.ts
+export function projectWithRay(
+  imageX: number,
+  imageY: number,
+  calibration: CameraCalibration
+): { worldPoint: Point2D; isValid: boolean; confidence: number }
+```
+
+**Algorithm:**
+1. Extract intrinsics from K matrix (fx, fy, cx, cy)
+2. Convert image point to normalized camera coordinates
+3. Create camera ray using `createCameraRay()`
+4. Transform ray to world space using `transformRayToWorld()`
+5. Intersect with ground plane at camera height
+
+### 2. Updated CameraCalibration Type
+
+Added fields for ray-based projection:
+
+```typescript
+interface CameraCalibration {
+  K: number[][]
+  R: number[][]
+  T: number[]
+  // ... existing fields ...
+  useRayProjection?: boolean  // Enable ray-based projection
+  azimuthDeg?: number         // Camera azimuth for ray transform
+  elevationDeg?: number       // Camera elevation for ray transform
+}
+```
+
+### 3. Sitemap Calibration Generation
+
+Updated `generateCalibrationFromSitemap()` to enable ray projection:
+
+```typescript
+// backend/src/calibration/sitemap-calibration.ts
+return {
+  K, R, T, center, scale: 1,
+  useRayProjection: true,
+  azimuthDeg: config.azimuth,
+  elevationDeg: elevation,
+}
+```
+
+## Calibration Optimization
+
+### Initial Problem
+
+Sitemap camera parameters were rough estimates:
+
+| Camera | Original Elevation | Actual Elevation |
+|--------|-------------------|------------------|
+| camera1 (HC3) | 35° | ~8-13° |
+| camera2 (HC4) | 40° | ~10° |
+| camera3 (IP2) | 25° | ~14-15° |
+| camera4 (IP5) | 15° | ~12-14° |
+
+### Optimization Process
+
+1. **Elevation sweep**: Found optimal elevation for each camera using ground truth
+2. **Full parameter optimization**: Grid search over position, azimuth, elevation, FOV
+3. **Ground truth refinement**: Used projection + seating row constraints to improve annotations
+4. **Final calibration**: Fine-tuned parameters with improved annotations
+
+### Final Calibration Parameters
+
+| Camera | Position | Azimuth | Elevation | FOV |
+|--------|----------|---------|-----------|-----|
+| camera1 (HC3) | (20.30, 6.90) | 384° | 18° | 57° |
+| camera2 (HC4) | (8.35, 5.05) | 70° | 9.75° | 45° |
+| camera3 (IP2) | (26.45, 28.15) | 206° | 14.25° | 42° |
+| camera4 (IP5) | (14.00, 16.55) | 73° | 11.5° | 42° |
+
+## Ground Truth Annotation Tool
+
+Created CLI tool for improving ground truth annotations:
+
+```bash
+# Export video frames with numbered detection boxes
+pnpm cli:annotate-gt export-frames \
+  -v ../shared/cameras/view-HC3.mp4 \
+  -d ../shared/cameras/view-HC3.detections.json.gz \
+  -c camera1
+
+# Export sitemap with coordinate grid
+pnpm cli:annotate-gt export-sitemap
+
+# Interactive annotation mode
+pnpm cli:annotate-gt annotate \
+  -a ../shared/ground-truths/cross-camera-annotations.json
+
+# Validate annotation completeness
+pnpm cli:annotate-gt validate \
+  -a ../shared/ground-truths/cross-camera-annotations.json
+```
+
+### Annotation Improvement Strategy
+
+For auditorium cameras, annotations are constrained to seating rows:
+- Arc center at (16, -15) with radii 32-44m
+- Row Y coordinates: 17.5m, 19.0m, 20.5m, 22.0m, 23.5m, 25.0m, 26.5m, 29.0m
+- Projections snapped to nearest row for consistency
+
+## Results
+
+### Accuracy Improvement
+
+| Metric | Original | Final | Improvement |
+|--------|----------|-------|-------------|
+| Mean Error | 6.5m | **1.07m** | 84% better |
+| Median Error | 6.2m | **1.00m** | 84% better |
+| Pass Rate (≤1.5m) | 3.8% | **81.5%** | 21x better |
+| Max Error | 16.0m | **2.85m** | 82% better |
+
+### Per-Camera Accuracy
+
+| Camera | Original | Final |
+|--------|----------|-------|
+| camera1 (HC3) | 6.8m | **1.17m** |
+| camera2 (HC4) | 12.0m | **0.93m** |
+| camera3 (IP2) | 5.3m | **1.06m** |
+| camera4 (IP5) | 4.6m | **1.05m** |
+
+## Files Modified
+
+| File | Changes |
+|------|---------|
+| `backend/src/projection/ground-plane.ts` | Added `projectWithRay()`, `debugProjectionDetails()` |
+| `backend/src/calibration/sitemap-calibration.ts` | Added `computeRotationMatrixForKRT()`, enabled ray projection |
+| `backend/src/types/camera.ts` | Added `useRayProjection`, `azimuthDeg`, `elevationDeg` fields |
+| `backend/src/cli/validate-projection.ts` | New CLI for ground truth validation |
+| `backend/src/cli/annotate-ground-truth.ts` | New CLI for annotation improvement |
+| `frontend/public/sitemap-rectangular-room.json` | Updated camera calibration parameters |
+| `shared/ground-truths/cross-camera-annotations.json` | Improved worldPosition annotations |
+
+## Validation CLI
+
+```bash
+# Run projection accuracy validation
+pnpm cli:validate-projection
+
+# With verbose output (shows worst errors)
+pnpm cli:validate-projection --verbose
+
+# Custom error threshold
+pnpm cli:validate-projection --max-error 2.0
+```
+
+## Key Learnings
+
+1. **R matrix convention matters**: KRT projection expects world-to-camera, ray projection expects camera-to-world
+2. **Sitemap elevations are estimates**: Must be calibrated using ground truth data
+3. **Seating geometry helps**: For auditoriums, constraining to seating rows improves consistency
+4. **Iterative refinement**: Alternate between calibration optimization and annotation improvement

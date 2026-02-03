@@ -29,12 +29,27 @@ pnpm build        # TypeScript compilation
 pnpm test         # Vitest tests
 pnpm db:migrate   # Database migration
 pnpm db:reset     # Drop and reseed database
-pnpm cli:inject   # Inject test detections
-pnpm cli:simulate # Simulate person walk
-pnpm cli:replay   # Replay detection frames
 pnpm cli:query    # Query active tracks (--watch for live)
 pnpm cli:sitemap  # Terminal ASCII sitemap (--watch for live)
 ```
+
+#### Algorithm-Only CLI Tools (for isolated testing, NOT full system validation)
+```bash
+pnpm cli:inject   # Inject test detections (algorithm-only)
+pnpm cli:simulate # Simulate person walk (algorithm-only)
+pnpm cli:replay   # Replay detection frames (algorithm-only, no video sync)
+```
+> ⚠️ **Warning**: These CLI tools bypass the camera emulator and inject detections directly.
+> Use them only for algorithm tuning/benchmarking, NOT for validating the full system.
+> For proper MOT evaluation, always use `make dev` which starts all services including the camera emulator.
+
+#### Calibration & Ground Truth CLI Tools
+```bash
+pnpm cli:validate-projection  # Validate projection accuracy against ground truth
+pnpm cli:annotate-gt          # Ground truth annotation tool (export-frames, annotate, validate)
+pnpm cli:calibrate            # Auto-calibrate cameras using cross-camera ReID matches
+```
+> These tools help improve projection accuracy. See `tech-logs/krt-calibration-projection.md` for details.
 
 ### Camera Emulator (`cd camera-emulator`)
 ```bash
@@ -155,28 +170,51 @@ All algorithm tuning parameters are centralized in `backend/src/config/algorithm
 
 Module-specific configs (e.g., `DEFAULT_ASSIGNMENT_CONFIG` in hungarian-assignment.ts) derive from these central constants. To tune algorithm behavior, modify values in `algorithm-constants.ts`.
 
-## Headless Development Workflow
+## Quick Start
 
-For developers without frontend access, the backend provides CLI tools for full iteration:
+The recommended way to start all services:
 
-### Quick Start (No Frontend Required)
 ```bash
-# Terminal 1: Start backend
-cd backend && pnpm cli:start --sitemap ../frontend/public/sitemap-rectangular-room.json
-
-# Terminal 2: Monitor tracks in real-time (ASCII visualization)
-pnpm cli:sitemap --watch --trails
-
-# Terminal 3: Replay detection data
-pnpm cli:replay -f ../shared/cameras/view-HC3.detections.json.gz -c camera1
+# Start all services (backend + camera-emulator + frontend)
+make dev
 ```
 
-### Visualization Tools
+This starts:
+- **Backend** (port 3010) - tracking service
+- **Camera Emulator** (ports 9101-9102) - WebRTC video + detections
+- **Frontend** (port 5173) - visualization UI
+
+Then open http://localhost:5173 in your browser.
+
+### Monitoring Tools
 
 | Command | Purpose |
 |---------|---------|
-| `pnpm cli:sitemap --watch` | Live ASCII sitemap in terminal |
-| `pnpm cli:query --watch` | Live track table with positions |
+| `cd backend && pnpm cli:sitemap --watch` | Live ASCII sitemap in terminal |
+| `cd backend && pnpm cli:query --watch` | Live track table with positions |
+
+## Algorithm-Only Evaluation (Headless)
+
+> ⚠️ **Important**: This workflow is for **algorithm tuning only**. It bypasses the camera emulator
+> and does NOT test the full system pipeline (video sync, WebRTC, network timing).
+> For proper MOT validation, always use `make dev` with all services running.
+
+For rapid algorithm iteration without video infrastructure:
+
+```bash
+# Terminal 1: Start backend only
+cd backend && pnpm dev
+
+# Terminal 2: Monitor tracks
+cd backend && pnpm cli:sitemap --watch --trails
+
+# Terminal 3: Replay detection data (ALGORITHM-ONLY - no video sync)
+cd backend && pnpm cli:replay -f ../shared/cameras/view-HC3.detections.json.gz -c camera1
+```
+
+**What this tests**: Kalman filter, Hungarian assignment, track lifecycle, ReID embeddings
+
+**What this does NOT test**: Video-detection synchronization, WebRTC latency, frame drops, multi-camera timing coordination
 
 ## Tech Stack
 
@@ -196,10 +234,12 @@ Detection files in `shared/cameras/` contain 512-dimensional OSNet embeddings an
 - `view-HC3.detections.json.gz` - Camera 1 detections with ReID embeddings
 - `view-HC4.detections.json.gz` - Camera 2 detections with ReID embeddings
 
-### CLI Replay
+### CLI Replay (Algorithm-Only)
+
+> ⚠️ This bypasses the camera emulator. Use only for algorithm tuning, not system validation.
 
 ```bash
-pnpm cli:replay -f ../shared/cameras/view-HC3.detections.json.gz -c camera1
+cd backend && pnpm cli:replay -f ../shared/cameras/view-HC3.detections.json.gz -c camera1
 ```
 
 ### ReID Metrics

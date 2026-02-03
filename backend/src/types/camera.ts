@@ -171,4 +171,20 @@ export interface CameraCalibration {
    * Maps normalized image coords directly to sitemap coords - annotations are single source of truth
    */
   directPolynomial?: DirectPolynomial
+  /**
+   * If true, use ray-based projection instead of KRT formula.
+   * This is set when calibration is generated from sitemap geometry (generateCalibrationFromSitemap).
+   * The ray-based method works correctly with the camera-to-world R matrix convention.
+   */
+  useRayProjection?: boolean
+  /**
+   * Camera azimuth angle in degrees (required when useRayProjection is true)
+   * Used for ray transformation from camera to world coordinates.
+   */
+  azimuthDeg?: number
+  /**
+   * Camera elevation angle in degrees (required when useRayProjection is true)
+   * Used for ray transformation from camera to world coordinates.
+   */
+  elevationDeg?: number
 }
