@@ -286,18 +286,33 @@ export class OcclusionHandler {
 
         // Increase covariance to reflect growing uncertainty
         // This helps with re-association by expanding the gate
+        // Cap at 25 (5m std) to prevent unbounded growth
+        const maxCovariance = 25
         const uncertaintyGrowthFactor = 1 + (occlusionDurationSec * 0.2)
         if (track.kalmanState.covariance) {
-          track.kalmanState.covariance[0][0] *= uncertaintyGrowthFactor  // Position x uncertainty
-          track.kalmanState.covariance[1][1] *= uncertaintyGrowthFactor  // Position y uncertainty
+          track.kalmanState.covariance[0][0] = Math.min(
+            track.kalmanState.covariance[0][0] * uncertaintyGrowthFactor,
+            maxCovariance
+          )
+          track.kalmanState.covariance[1][1] = Math.min(
+            track.kalmanState.covariance[1][1] * uncertaintyGrowthFactor,
+            maxCovariance
+          )
         }
       } else {
         // Pillar occlusion: maintain velocity but still grow uncertainty
         const occlusionDurationSec = timeSinceOcclusion / 1000
+        const maxCovariance = 25
         const uncertaintyGrowthFactor = 1 + (occlusionDurationSec * 0.1)  // Slower growth for pillar
         if (track.kalmanState.covariance) {
-          track.kalmanState.covariance[0][0] *= uncertaintyGrowthFactor
-          track.kalmanState.covariance[1][1] *= uncertaintyGrowthFactor
+          track.kalmanState.covariance[0][0] = Math.min(
+            track.kalmanState.covariance[0][0] * uncertaintyGrowthFactor,
+            maxCovariance
+          )
+          track.kalmanState.covariance[1][1] = Math.min(
+            track.kalmanState.covariance[1][1] * uncertaintyGrowthFactor,
+            maxCovariance
+          )
         }
       }
     } else if (track.trail.length >= 2) {

@@ -47,6 +47,7 @@ export type {
   DetectionAttributes,
   GlobalTrackJSON,
   CameraFrameInfo,
+  RawDetectionInfo,
 } from './track.js'
 
 // Config types - shared configuration interface

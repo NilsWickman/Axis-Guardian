@@ -61,6 +61,7 @@ export interface PersonPositionOverlayProps {
   showPersonIcon?: boolean
   showStats?: boolean
   showDebugMode?: boolean
+  showRawDetections?: boolean
   markerRadius?: number
   maxTrailLength?: number
 }
@@ -71,9 +72,24 @@ const props = withDefaults(defineProps<PersonPositionOverlayProps>(), {
   showPersonIcon: false,
   showStats: true,
   showDebugMode: false,
+  showRawDetections: false,
   markerRadius: 8,
   maxTrailLength: 20,
 })
+
+// Camera colors for raw detection debug overlay
+const CAMERA_COLORS: Record<string, string> = {
+  camera1: '#ef4444', // red
+  camera2: '#3b82f6', // blue
+  camera3: '#10b981', // green
+  camera4: '#f59e0b', // amber
+  camera5: '#8b5cf6', // purple
+  camera6: '#06b6d4', // cyan
+}
+
+function getCameraColor(cameraId: string): string {
+  return CAMERA_COLORS[cameraId] ?? '#9ca3af' // gray fallback
+}
 
 const globalTrackStore = useGlobalTrackStore()
 
@@ -537,6 +553,64 @@ function drawGhostMarker(ctx: CanvasRenderingContext2D, track: GlobalTrack, posi
 }
 
 /**
+ * Draw raw detection X marker for debugging projection accuracy
+ * Shows the unfiltered detection position before Kalman filtering
+ */
+function drawRawDetectionMarker(ctx: CanvasRenderingContext2D, track: GlobalTrack) {
+  if (!track.lastRawDetection) return
+
+  const rawPos = track.lastRawDetection.position
+  const x = worldToCanvasX(rawPos.x)
+  const y = worldToCanvasY(rawPos.y)
+  const cameraColor = getCameraColor(track.lastRawDetection.cameraId)
+  const size = 6 // Half-size of X marker
+
+  // Draw X marker
+  ctx.strokeStyle = cameraColor
+  ctx.lineWidth = 2
+  ctx.globalAlpha = 0.8
+  ctx.lineCap = 'round'
+
+  // First diagonal line (\)
+  ctx.beginPath()
+  ctx.moveTo(x - size, y - size)
+  ctx.lineTo(x + size, y + size)
+  ctx.stroke()
+
+  // Second diagonal line (/)
+  ctx.beginPath()
+  ctx.moveTo(x + size, y - size)
+  ctx.lineTo(x - size, y + size)
+  ctx.stroke()
+
+  // Draw connecting line from raw to filtered position
+  const filteredX = worldToCanvasX(track.currentPosition.x)
+  const filteredY = worldToCanvasY(track.currentPosition.y)
+
+  ctx.strokeStyle = cameraColor
+  ctx.lineWidth = 1
+  ctx.globalAlpha = 0.4
+  ctx.setLineDash([3, 3])
+
+  ctx.beginPath()
+  ctx.moveTo(x, y)
+  ctx.lineTo(filteredX, filteredY)
+  ctx.stroke()
+
+  ctx.setLineDash([])
+  ctx.globalAlpha = 1
+
+  // Draw camera label
+  ctx.font = '9px ui-monospace, monospace'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.fillStyle = cameraColor
+  ctx.globalAlpha = 0.7
+  ctx.fillText(track.lastRawDetection.cameraId, x + size + 2, y - size)
+  ctx.globalAlpha = 1
+}
+
+/**
  * Draw ghost track trail (dashed, semi-transparent) with velocity-based styling
  * Also fades when stationary for extended periods
  */
@@ -650,6 +724,14 @@ function animate() {
   if (props.showDebugMode) {
     for (const track of unconfirmedTracks.value) {
       drawUnconfirmedMarker(ctx, track)
+    }
+  }
+
+  // Draw raw detection markers (X markers) when enabled
+  // Shows projection accuracy vs Kalman filter smoothing
+  if (props.showRawDetections) {
+    for (const track of visibleGlobalTracks.value) {
+      drawRawDetectionMarker(ctx, track)
     }
   }
 

@@ -396,6 +396,25 @@ export function useBackendWebSocket(options: BackendWebSocketOptions = {}) {
   }
 
   /**
+   * Recalibrate video sync offset
+   *
+   * Call this when the video seeks to a new position. The sync offset
+   * calculated on first update will be invalid after a seek, causing
+   * position/video desync. This resets the calibration state so the
+   * next buffered update will establish a new offset.
+   */
+  function recalibrate(): void {
+    syncCalibrated = false
+    syncOffset = 0
+    trackSyncBuffer.length = 0
+    lastVideoRtpTimestamp = null
+    // Reset adaptive tolerance state since timing characteristics may change
+    syncDeltas.length = 0
+    currentSyncTolerance = opts.baseSyncToleranceMs
+    console.log('[TrackSync] Recalibrated - awaiting next update for new offset')
+  }
+
+  /**
    * Apply a track update to the store
    */
   function applyTrackUpdate(update: BufferedTrackUpdate): void {
@@ -539,5 +558,6 @@ export function useBackendWebSocket(options: BackendWebSocketOptions = {}) {
     updateVideoRtpTimestamp,
     stopSyncLoop,
     resetSyncMetrics,
+    recalibrate,
   }
 }

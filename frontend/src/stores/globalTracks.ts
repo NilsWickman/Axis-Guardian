@@ -27,6 +27,7 @@ import type {
   CameraImageDetection,
   CameraFrameInfo,
   TrackingConfigBase,
+  RawDetectionInfo,
 } from '@axis-guardian/types'
 
 // Re-export shared types for consumers of this module
@@ -43,6 +44,7 @@ export type {
   GlobalTrackJSON,
   CameraFrameInfo,
   TrackingConfigBase,
+  RawDetectionInfo,
 }
 
 /**
@@ -165,6 +167,8 @@ export interface GlobalTrack {
   videoTiming?: VideoTimingInfo
   /** Aggregated person attributes for re-ID and display (optional) */
   attributes?: TrackAttributes
+  /** Last raw detection position before Kalman filtering (for debugging projection accuracy) */
+  lastRawDetection?: RawDetectionInfo
 }
 
 /**
@@ -765,6 +769,7 @@ export const useGlobalTrackStore = defineStore('globalTracks', () => {
       existing.predictedPosition = converted.predictedPosition
       existing.videoTiming = converted.videoTiming
       existing.attributes = converted.attributes
+      existing.lastRawDetection = converted.lastRawDetection
       // Merge cameraDetections instead of replacing - preserve recent detections from other cameras
       // This prevents bbox flickering when a track is only visible in one camera for a frame
       if (converted.cameraDetections) {

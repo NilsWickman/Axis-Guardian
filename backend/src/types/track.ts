@@ -196,6 +196,13 @@ export interface GlobalTrack {
   videoTiming?: VideoTimingInfo
   /** Aggregated person attributes for re-ID and display (optional) */
   attributes?: TrackAttributes
+  /** Last raw detection position before Kalman filtering (for debugging projection accuracy) */
+  lastRawDetection?: {
+    position: Point2D
+    cameraId: string
+    timestamp: number
+    confidence: number
+  }
 }
 
 /**
@@ -229,6 +236,13 @@ export interface GlobalTrackJSON {
   videoTiming?: VideoTimingInfo
   /** Aggregated person attributes for re-ID and display (optional) */
   attributes?: TrackAttributes
+  /** Last raw detection position before Kalman filtering (for debugging projection accuracy) */
+  lastRawDetection?: {
+    position: Point2D
+    cameraId: string
+    timestamp: number
+    confidence: number
+  }
 }
 
 export interface DetectionBBox {

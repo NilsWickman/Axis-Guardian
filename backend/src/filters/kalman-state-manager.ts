@@ -109,19 +109,24 @@ export class KalmanStateManager {
     }
 
     // Clamp filtered output as well (Kalman can overshoot slightly near boundaries)
+    let outputClampedX = false
+    let outputClampedY = false
+
     if (roomBounds) {
       const clampResult = clampPointToRoom(filteredPosition, roomBounds, 0.05)
       filteredPosition = clampResult.point
+      outputClampedX = clampResult.clampedX
+      outputClampedY = clampResult.clampedY
 
       // Keep Kalman internal state consistent with clamped output
       track.kalmanState.mean[0][0] = filteredPosition.x
       track.kalmanState.mean[1][0] = filteredPosition.y
 
       // Zero velocity on clamped axes to prevent "wall bounce"
-      if (clampResult.clampedX) {
+      if (outputClampedX) {
         track.kalmanState.mean[2][0] = 0
       }
-      if (clampResult.clampedY) {
+      if (outputClampedY) {
         track.kalmanState.mean[3][0] = 0
       }
     }
@@ -132,6 +137,45 @@ export class KalmanStateManager {
     }
     if (measurementClampedY) {
       track.kalmanState.mean[3][0] = 0
+    }
+
+    // Reduce covariance on constrained axes
+    // When position is clamped to boundary, we have high certainty about both
+    // position (at boundary) and velocity (zero on that axis)
+    const CONSTRAINED_POSITION_VARIANCE = 0.01 // 10cm std dev when at boundary
+    const CONSTRAINED_VELOCITY_VARIANCE = 0.01 // Very low velocity uncertainty
+
+    const clampedX = measurementClampedX || outputClampedX
+    const clampedY = measurementClampedY || outputClampedY
+
+    if (clampedX) {
+      // Reduce X position and velocity variance
+      track.kalmanState.covariance[0][0] = Math.min(
+        track.kalmanState.covariance[0][0],
+        CONSTRAINED_POSITION_VARIANCE
+      )
+      track.kalmanState.covariance[2][2] = Math.min(
+        track.kalmanState.covariance[2][2],
+        CONSTRAINED_VELOCITY_VARIANCE
+      )
+      // Zero cross-covariances for X axis
+      track.kalmanState.covariance[0][2] = 0
+      track.kalmanState.covariance[2][0] = 0
+    }
+
+    if (clampedY) {
+      // Reduce Y position and velocity variance
+      track.kalmanState.covariance[1][1] = Math.min(
+        track.kalmanState.covariance[1][1],
+        CONSTRAINED_POSITION_VARIANCE
+      )
+      track.kalmanState.covariance[3][3] = Math.min(
+        track.kalmanState.covariance[3][3],
+        CONSTRAINED_VELOCITY_VARIANCE
+      )
+      // Zero cross-covariances for Y axis
+      track.kalmanState.covariance[1][3] = 0
+      track.kalmanState.covariance[3][1] = 0
     }
 
     return filteredPosition
@@ -219,6 +263,23 @@ export class KalmanStateManager {
 
     track.kalmanState.mean[2][0] *= dampingFactor // vx
     track.kalmanState.mean[3][0] *= dampingFactor // vy
+  }
+
+  /**
+   * Scale velocity by a factor (used when position jump is scaled down)
+   *
+   * When jump prevention scales position by factor s, velocity should also
+   * be scaled by s to prevent overprediction on the next frame.
+   * This keeps the Kalman filter's velocity estimate consistent with
+   * the observed (scaled) movement.
+   */
+  scaleVelocity(track: GlobalTrack, scaleFactor: number): void {
+    if (!track.kalmanState) {
+      return
+    }
+
+    track.kalmanState.mean[2][0] *= scaleFactor // vx
+    track.kalmanState.mean[3][0] *= scaleFactor // vy
   }
 
   /**

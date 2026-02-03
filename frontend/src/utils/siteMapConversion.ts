@@ -15,11 +15,22 @@ export const RENDER_SCALE = 100 // pixels per meter (fixed for high-resolution r
 let mapHeightMeters = 30 // default, should be set from sitemap dimensions
 
 /**
+ * Flag to track if map height was explicitly set.
+ * Used for validation and debugging.
+ */
+let mapHeightInitialized = false
+
+/**
  * Set the map height for Y-axis transformation.
  * Call this before rendering when sitemap is loaded.
  */
 export function setMapHeight(heightMeters: number): void {
+  if (heightMeters <= 0) {
+    console.warn('[SiteMapConversion] Invalid map height:', heightMeters)
+    return
+  }
   mapHeightMeters = heightMeters
+  mapHeightInitialized = true
 }
 
 /**
@@ -27,6 +38,66 @@ export function setMapHeight(heightMeters: number): void {
  */
 export function getMapHeight(): number {
   return mapHeightMeters
+}
+
+/**
+ * Check if map height was explicitly initialized.
+ * Returns false if still using the default value.
+ */
+export function isMapHeightInitialized(): boolean {
+  return mapHeightInitialized
+}
+
+/**
+ * Validate the coordinate system configuration.
+ * Returns diagnostic information for debugging projection issues.
+ */
+export function validateCoordinateSystem(): {
+  isValid: boolean
+  mapHeight: number
+  initialized: boolean
+  renderScale: number
+  warnings: string[]
+  sampleTransformations: Array<{
+    input: { x: number; y: number }
+    output: { canvasX: number; canvasY: number }
+  }>
+} {
+  const warnings: string[] = []
+
+  if (!mapHeightInitialized) {
+    warnings.push('Map height not explicitly initialized - using default value')
+  }
+
+  if (mapHeightMeters <= 0) {
+    warnings.push('Map height is zero or negative')
+  }
+
+  // Test sample transformations at corners and center
+  const testPoints = [
+    { x: 0, y: 0 },                                    // Bottom-left (origin)
+    { x: mapHeightMeters, y: 0 },                      // Bottom-right
+    { x: 0, y: mapHeightMeters },                      // Top-left
+    { x: mapHeightMeters, y: mapHeightMeters },        // Top-right
+    { x: mapHeightMeters / 2, y: mapHeightMeters / 2 }, // Center
+  ]
+
+  const sampleTransformations = testPoints.map(input => ({
+    input,
+    output: {
+      canvasX: metersToPixels(input.x),
+      canvasY: metersToCanvasY(input.y),
+    },
+  }))
+
+  return {
+    isValid: mapHeightInitialized && mapHeightMeters > 0,
+    mapHeight: mapHeightMeters,
+    initialized: mapHeightInitialized,
+    renderScale: RENDER_SCALE,
+    warnings,
+    sampleTransformations,
+  }
 }
 
 /**

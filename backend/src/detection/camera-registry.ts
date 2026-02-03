@@ -252,6 +252,58 @@ export class CameraRegistry {
   }
 
   /**
+   * Check if a camera has polynomial calibration (most accurate)
+   */
+  hasPolynomialCalibration(cameraId: string): boolean {
+    const calibration = this.getCalibration(cameraId)
+    return !!calibration?.directPolynomial
+  }
+
+  /**
+   * Get calibration status for all registered cameras
+   *
+   * Returns an object with:
+   * - cameraStatuses: per-camera calibration method and warnings
+   * - allHavePolynomial: true if all cameras have polynomial calibration
+   * - warnings: list of warning messages
+   */
+  getCalibrationStatus(): {
+    cameraStatuses: Record<string, { method: 'polynomial' | 'krt-ray' | 'krt-formula' | 'none'; hasPolynomial: boolean }>
+    allHavePolynomial: boolean
+    warnings: string[]
+  } {
+    const warnings: string[] = []
+    const cameraStatuses: Record<string, { method: 'polynomial' | 'krt-ray' | 'krt-formula' | 'none'; hasPolynomial: boolean }> = {}
+
+    for (const cameraId of this.getCameraIds()) {
+      const calibration = this.getCalibration(cameraId)
+      let method: 'polynomial' | 'krt-ray' | 'krt-formula' | 'none' = 'none'
+      let hasPolynomial = false
+
+      if (calibration) {
+        if (calibration.directPolynomial) {
+          method = 'polynomial'
+          hasPolynomial = true
+        } else if (calibration.useRayProjection) {
+          method = 'krt-ray'
+          warnings.push(`[Calibration] ${cameraId}: Using ray-based projection (less accurate than polynomial)`)
+        } else {
+          method = 'krt-formula'
+          warnings.push(`[Calibration] ${cameraId}: Using K/R/T formula projection (may be inaccurate)`)
+        }
+      } else {
+        warnings.push(`[Calibration] ${cameraId}: No calibration data found!`)
+      }
+
+      cameraStatuses[cameraId] = { method, hasPolynomial }
+    }
+
+    const allHavePolynomial = Object.values(cameraStatuses).every(s => s.hasPolynomial)
+
+    return { cameraStatuses, allHavePolynomial, warnings }
+  }
+
+  /**
    * Set calibration data for a camera at runtime
    *
    * Used by calibration tools to apply optimized parameters without code changes.

@@ -204,6 +204,17 @@ export interface CameraImageDetection {
 }
 
 /**
+ * Raw detection position before Kalman filtering
+ * Used for debugging projection accuracy
+ */
+export interface RawDetectionInfo {
+  position: Point2D
+  cameraId: string
+  timestamp: number
+  confidence: number
+}
+
+/**
  * Global track JSON representation for API and WebSocket messages
  * This is the format sent between backend and frontend
  */
@@ -232,6 +243,8 @@ export interface GlobalTrackJSON {
   cameraDetections?: Record<string, CameraImageDetection>
   /** Aggregated person attributes for re-ID and display (optional) */
   attributes?: TrackAttributes
+  /** Last raw detection position before Kalman filtering (for debugging projection accuracy) */
+  lastRawDetection?: RawDetectionInfo
 }
 
 // ============================================================================

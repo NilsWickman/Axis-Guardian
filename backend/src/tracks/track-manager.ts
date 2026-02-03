@@ -107,6 +107,7 @@ export function trackToJSON(track: GlobalTrack): GlobalTrackJSON {
     predictedPosition: track.predictedPosition,
     videoTiming: track.videoTiming,
     attributes: track.attributes,  // Include re-ID attributes
+    lastRawDetection: track.lastRawDetection,  // Include raw detection for debugging
   }
 }
 
@@ -1831,6 +1832,14 @@ export class TrackManager {
       this.aggregateDetectionAttributes(track, detection.attributes)
     }
 
+    // Store raw detection position for debugging (before Kalman filtering)
+    track.lastRawDetection = {
+      position: { x: detection.worldX, y: detection.worldY },
+      cameraId: detection.cameraId,
+      timestamp: detection.timestamp,
+      confidence: detection.confidence,
+    }
+
     track.detectionCount++
     track.missedFrames = 0  // Reset missed frames on detection
 
@@ -1963,51 +1972,27 @@ export class TrackManager {
       return
     }
 
-    // Clamp measurements to room bounds to prevent visible out-of-bounds jumps
-    // (edge projection noise is common near the top-right / door area).
+    // Update Kalman filter with measurement and room bounds clamping
+    // Uses unified clamping in KalmanStateManager to avoid double-clamping issues:
+    // - Clamps measurement to room bounds (single constraint point)
+    // - Updates Kalman filter with clamped measurement
+    // - Clamps output and zeros velocity on constrained axes
     const roomBounds = this.siteMapGeometry?.roomBounds
-    let measurementClampedX = false
-    let measurementClampedY = false
-    if (roomBounds) {
-      const clampResult = clampPointToRoom(merged.position, roomBounds, 0.05)
-      merged.position = clampResult.point
-      measurementClampedX = clampResult.clampedX
-      measurementClampedY = clampResult.clampedY
-    }
-
-    // Update Kalman filter state with merged position
     if (track.kalmanState) {
-      track.kalmanState = this.kalmanFilter.update(
-        track.kalmanState,
+      const filteredPosition = this.kalmanStateManager.updateWithMeasurement(
+        track,
         merged.position,
         now,
-        track.globalTrackId  // Pass track ID for state caching
+        roomBounds
       )
       // Use Kalman-filtered position for smoother tracking
-      const filteredPosition = this.kalmanFilter.getPosition(track.kalmanState)
-
-      // Validate Kalman output
       if (Number.isFinite(filteredPosition.x) && Number.isFinite(filteredPosition.y)) {
-        // Clamp filtered output as well (Kalman can overshoot slightly near boundaries)
-        if (roomBounds) {
-          const clampResult = clampPointToRoom(filteredPosition, roomBounds, 0.05)
-          merged.position = clampResult.point
-          // Keep Kalman internal state consistent with clamped output
-          this.kalmanStateManager.syncPositionWithClamp(
-            track,
-            merged.position,
-            clampResult.clampedX,
-            clampResult.clampedY
-          )
-        } else {
-          merged.position = filteredPosition
-        }
+        merged.position = filteredPosition
       }
-    }
-
-    // If the measurement itself was clamped, also zero velocity on that axis to avoid oscillation
-    if (measurementClampedX || measurementClampedY) {
-      this.kalmanStateManager.zeroVelocityOnAxes(track, measurementClampedX, measurementClampedY)
+    } else if (roomBounds) {
+      // No Kalman state - just clamp the position directly
+      const clampResult = clampPointToRoom(merged.position, roomBounds, 0.05)
+      merged.position = clampResult.point
     }
 
     // Clamp unrealistically large position jumps to reduce visible teleporting.
@@ -2021,17 +2006,26 @@ export class TrackManager {
           x: previousPosition.x + (merged.position.x - previousPosition.x) * scale,
           y: previousPosition.y + (merged.position.y - previousPosition.y) * scale,
         }
+        // Also scale Kalman velocity to match the scaled position step.
+        // Without this, the filter overpredicts on the next frame because
+        // it still thinks velocity is high based on the original (unscaled) movement.
+        this.kalmanStateManager.scaleVelocity(track, scale)
+        this.kalmanStateManager.syncPosition(track, merged.position)
       }
     }
 
-    // Startup stabilization (first ~1s after creation):
-    // In the first seconds of the video, a couple tracks can still wobble due to
-    // projection noise and incomplete motion estimates. Apply a light low-pass
-    // filter only during this short window.
+    // Startup stabilization (first ~1.2s after creation):
+    // In the first seconds of the video, tracks can wobble due to projection noise
+    // and incomplete motion estimates. Apply a low-pass filter that smoothly ramps
+    // from 35% (strong damping) to 100% (no damping) over the stabilization window.
+    // This avoids the visible "catch-up" jump that occurred with a fixed cutoff.
     const creationTime = track.trail[track.trail.length - 1]?.timestamp ?? track.lastSeen
     const ageMs = now - creationTime
-    if (ageMs >= 0 && ageMs < 1200 && track.detectionCount < 10) {
-      const alpha = 0.35 // 35% new, 65% previous (strong damping, short duration)
+    const stabilizationWindowMs = 1200
+    if (ageMs >= 0 && ageMs < stabilizationWindowMs && track.detectionCount < 10) {
+      // Linear ramp: alpha goes from 0.35 at age=0 to 1.0 at age=stabilizationWindowMs
+      const t = Math.min(1.0, ageMs / stabilizationWindowMs)
+      const alpha = 0.35 + 0.65 * t  // 0.35 → 1.0 over the window
       merged.position = {
         x: previousPosition.x + (merged.position.x - previousPosition.x) * alpha,
         y: previousPosition.y + (merged.position.y - previousPosition.y) * alpha,

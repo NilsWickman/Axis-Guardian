@@ -68,9 +68,34 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
   cameraRegistry.loadFromSiteMapConfig(sitemapConfig.cameras)
 
   // Load optimized calibration from file if available (overrides sitemap-generated calibration)
-  const calibrationPath = resolve(__dirname, '../calibration.json')
-  if (existsSync(calibrationPath)) {
-    await cameraRegistry.loadCalibrationFromFile(calibrationPath)
+  // Try multiple paths for calibration file
+  const calibrationPaths = [
+    resolve(__dirname, '../calibration.json'),
+    resolve(__dirname, '../calibration-polynomial.json'),
+    resolve(__dirname, '../../calibration.json'),
+  ]
+
+  let calibrationLoaded = false
+  for (const calibrationPath of calibrationPaths) {
+    if (existsSync(calibrationPath)) {
+      await cameraRegistry.loadCalibrationFromFile(calibrationPath)
+      console.log(`[Calibration] Loaded from ${calibrationPath}`)
+      calibrationLoaded = true
+      break
+    }
+  }
+
+  if (!calibrationLoaded) {
+    console.warn('[Calibration] WARNING: No calibration file found. Using sitemap-generated K/R/T (less accurate).')
+  }
+
+  // Validate calibration status and warn about missing polynomial calibration
+  const calibrationStatus = cameraRegistry.getCalibrationStatus()
+  for (const warning of calibrationStatus.warnings) {
+    console.warn(warning)
+  }
+  if (!calibrationStatus.allHavePolynomial) {
+    console.warn('[Calibration] WARNING: Not all cameras have polynomial calibration. Projection accuracy may be degraded.')
   }
 
   // Set up sitemap geometry for exit detection (FOV, boundaries, pillars)
@@ -208,9 +233,34 @@ export async function createServerWithComponents(options: CreateServerOptions = 
   cameraRegistry.loadFromSiteMapConfig(sitemapConfig.cameras)
 
   // Load optimized calibration from file if available (overrides sitemap-generated calibration)
-  const calibrationPath = resolve(__dirname, '../calibration.json')
-  if (existsSync(calibrationPath)) {
-    await cameraRegistry.loadCalibrationFromFile(calibrationPath)
+  // Try multiple paths for calibration file
+  const calibrationPaths2 = [
+    resolve(__dirname, '../calibration.json'),
+    resolve(__dirname, '../calibration-polynomial.json'),
+    resolve(__dirname, '../../calibration.json'),
+  ]
+
+  let calibrationLoaded2 = false
+  for (const calibrationPath of calibrationPaths2) {
+    if (existsSync(calibrationPath)) {
+      await cameraRegistry.loadCalibrationFromFile(calibrationPath)
+      console.log(`[Calibration] Loaded from ${calibrationPath}`)
+      calibrationLoaded2 = true
+      break
+    }
+  }
+
+  if (!calibrationLoaded2) {
+    console.warn('[Calibration] WARNING: No calibration file found. Using sitemap-generated K/R/T (less accurate).')
+  }
+
+  // Validate calibration status and warn about missing polynomial calibration
+  const calibrationStatus2 = cameraRegistry.getCalibrationStatus()
+  for (const warning of calibrationStatus2.warnings) {
+    console.warn(warning)
+  }
+  if (!calibrationStatus2.allHavePolynomial) {
+    console.warn('[Calibration] WARNING: Not all cameras have polynomial calibration. Projection accuracy may be degraded.')
   }
 
   // Set up sitemap geometry for exit detection (FOV, boundaries, pillars)

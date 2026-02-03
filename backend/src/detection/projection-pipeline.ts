@@ -27,6 +27,8 @@ import {
   estimateBBoxHeightExtension,
   radToDeg,
   angleDifference,
+  debugProjectionDetails,
+  getBBoxBottomCenter,
 } from '../projection/ground-plane.js'
 import type { SiteMapObstacle } from '../config/sitemap-loader.js'
 import { isPointInsideAnyObstacle, clampBehindOccludingTable2D } from '../geometry/obstacles.js'
@@ -124,12 +126,12 @@ export const FULL_PIPELINE_CONFIG: ProjectionPipelineConfig = {
 
 /**
  * Configuration for processMultiCameraMessages() path (simpler features)
- * FOV check disabled because sitemap-generated calibration may not match
- * actual camera orientations. Room bounds check provides sufficient filtering.
+ * FOV check re-enabled with wider margin (25°) now that calibration has been improved.
+ * Room bounds check provides additional filtering.
  */
 export const MULTI_CAMERA_PIPELINE_CONFIG: ProjectionPipelineConfig = {
   enableTableOcclusion: false,
-  enableFovCheck: false,
+  enableFovCheck: true,
   enableRelaxedConfidence: false,
   enablePillarShadowDownweight: true,
   enableSameCameraDedup: true,
@@ -504,13 +506,34 @@ export class ProjectionPipeline {
       isValid = krtResult.isValid
       projectionReason = krtResult.reason
 
+      // Debug logging for projection analysis
+      if (process.env.DEBUG_PROJECTION === 'true') {
+        const bottomCenter = getBBoxBottomCenter(
+          bbox,
+          camera,
+          this.viewBlockingObstacles,
+          true,
+          IMAGE_WIDTH,
+          IMAGE_HEIGHT,
+          true
+        )
+        debugProjectionDetails(
+          bottomCenter.x,
+          bottomCenter.y,
+          calibration,
+          cameraId,
+          camera.azimuth
+        )
+      }
+
       // FOV angle sanity check (optional)
+      // Use wider margin (25°) to accommodate calibration uncertainty
       if (config.enableFovCheck && isValid) {
         const dx = rawWorldPoint.x - camera.position.x
         const dy = rawWorldPoint.y - camera.position.y
         const angleToPoint = radToDeg(Math.atan2(dx, dy))
         const diffDeg = Math.abs(angleDifference(angleToPoint, camera.azimuth))
-        const fovMarginDeg = 15
+        const fovMarginDeg = 25  // Increased from 15° for calibration tolerance
         if (diffDeg > camera.fov / 2 + fovMarginDeg) {
           isValid = false
           projectionReason = 'krt_outside_fov'

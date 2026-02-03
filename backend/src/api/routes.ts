@@ -305,10 +305,27 @@ export function registerRoutes(
 
     // Convert to DetectionMessage format for batch processing
     // This enables Hungarian algorithm assignment and video timing propagation.
-    // Camera emulator detection files often use relative timestamps (0..duration seconds).
-    // Normalize to wall-clock seconds so track expiry/cleanup works correctly.
-    const rawTimestampSec = data.timestamp ?? Date.now() / 1000
-    const timestampSec = rawTimestampSec > 1e9 ? rawTimestampSec : Date.now() / 1000
+    //
+    // Timestamp handling:
+    // - If video_time_ms is present, this is a replay/emulator scenario with relative timestamps
+    //   In this case, use video_time_ms/1000 as the timestamp base to preserve video timing
+    // - If timestamp > 1e9, it's already wall-clock seconds (Unix epoch)
+    // - Otherwise, fall back to current wall-clock time
+    //
+    // The TrackManager uses detection timestamps as its time base, so preserving
+    // relative timestamps ensures consistent Kalman filtering and track lifecycle.
+    let timestampSec: number
+    if (data.video_time_ms !== undefined) {
+      // Replay mode: use video time as the timestamp base
+      // This keeps track timing consistent with video playback
+      timestampSec = data.video_time_ms / 1000
+    } else if (data.timestamp !== undefined && data.timestamp > 1e9) {
+      // Wall-clock timestamp (Unix epoch seconds)
+      timestampSec = data.timestamp
+    } else {
+      // Fallback to current time
+      timestampSec = Date.now() / 1000
+    }
     const detectionMessage = {
       camera_id: normalizedCameraId,
       frame_number: data.frame_number ?? 0,
@@ -552,6 +569,17 @@ export function registerRoutes(
     }
   })
 
+  // Get calibration status for all cameras
+  // Shows which calibration method is used (polynomial vs K/R/T) and any warnings
+  app.get('/api/calibration/status', async () => {
+    const status = cameraRegistry.getCalibrationStatus()
+    return {
+      allHavePolynomial: status.allHavePolynomial,
+      cameras: status.cameraStatuses,
+      warnings: status.warnings,
+    }
+  })
+
   // Get site map config from JSON file (includes arc geometry support)
   app.get('/api/sitemap', async (_request: FastifyRequest, reply: FastifyReply) => {
     try {
@@ -775,6 +803,89 @@ export function registerRoutes(
     return {
       sessionId: request.params.id,
       stats,
+    }
+  })
+
+  // Get projection debug information
+  // Returns raw vs filtered positions, calibration method, and recent projections for debugging
+  app.get('/api/debug/projections', async () => {
+    const activeTracks = trackManager.getAllActiveTracks()
+    const calibrationStatus = cameraRegistry.getCalibrationStatus()
+
+    // Collect projection debug data from active tracks
+    const projectionData = activeTracks.map(track => {
+      const rawDetection = track.lastRawDetection
+      const filteredPosition = track.currentPosition
+      const kalmanState = track.kalmanState
+
+      // Calculate raw vs filtered delta if raw detection exists
+      let delta: { x: number; y: number; distance: number } | null = null
+      if (rawDetection) {
+        const dx = filteredPosition.x - rawDetection.position.x
+        const dy = filteredPosition.y - rawDetection.position.y
+        delta = {
+          x: dx,
+          y: dy,
+          distance: Math.sqrt(dx * dx + dy * dy),
+        }
+      }
+
+      // Get camera detection info for bbox debugging
+      const cameraDetections: Array<{
+        cameraId: string
+        bbox?: { x: number; y: number; width: number; height: number }
+        timestamp: number
+      }> = []
+      for (const [cameraId, detection] of track.cameraDetections.entries()) {
+        cameraDetections.push({
+          cameraId,
+          bbox: detection.bbox,
+          timestamp: detection.timestamp,
+        })
+      }
+
+      return {
+        globalTrackId: track.globalTrackId,
+        filteredPosition,
+        rawDetection: rawDetection ? {
+          position: rawDetection.position,
+          cameraId: rawDetection.cameraId,
+          confidence: rawDetection.confidence,
+          timestamp: rawDetection.timestamp,
+        } : null,
+        delta,
+        kalmanVelocity: kalmanState ? {
+          vx: kalmanState.mean[2][0],
+          vy: kalmanState.mean[3][0],
+        } : null,
+        cameraDetections,
+        isConfirmed: track.isConfirmed,
+        state: track.state,
+      }
+    })
+
+    // Calculate aggregate statistics
+    const tracksWithRaw = projectionData.filter(p => p.rawDetection !== null)
+    const deltas = tracksWithRaw.map(p => p.delta!.distance)
+    const avgDelta = deltas.length > 0
+      ? deltas.reduce((a, b) => a + b, 0) / deltas.length
+      : 0
+    const maxDelta = deltas.length > 0 ? Math.max(...deltas) : 0
+
+    return {
+      timestamp: Date.now(),
+      calibration: {
+        allHavePolynomial: calibrationStatus.allHavePolynomial,
+        cameras: calibrationStatus.cameraStatuses,
+        warnings: calibrationStatus.warnings,
+      },
+      tracks: projectionData,
+      statistics: {
+        totalTracks: activeTracks.length,
+        tracksWithRawDetection: tracksWithRaw.length,
+        avgRawToFilteredDelta: avgDelta,
+        maxRawToFilteredDelta: maxDelta,
+      },
     }
   })
 
