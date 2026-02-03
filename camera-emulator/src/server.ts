@@ -95,7 +95,7 @@ export async function createCameraEmulator(
 
   // Handle FFmpeg frame events - send detections via DirectTransport DataProducer
   let lastFrameSent = -1
-  ffmpegStreamer.on('frame', (frameNumber: number, videoTimeMs: number) => {
+  ffmpegStreamer.on('frame', (frameNumber: number, videoTimeMs: number, rtpTimestamp: number) => {
     // Only send if frame changed
     if (frameNumber === lastFrameSent) return
     lastFrameSent = frameNumber
@@ -104,18 +104,18 @@ export async function createCameraEmulator(
     const dispatchTime = Date.now()
 
     // Send to all DataConsumers via single DataProducer
-    // Include video_time_ms for frontend sync with video element
-    const detectionBuffer = detectionSync.getDetectionForFrame(frameNumber, dispatchTime, videoTimeMs)
+    // Include video_time_ms and actual RTP timestamp for frontend sync with video element
+    const detectionBuffer = detectionSync.getDetectionForFrame(frameNumber, dispatchTime, videoTimeMs, rtpTimestamp)
     try {
       dataProducer.send(detectionBuffer)
     } catch (error) {
       console.error('Error sending detection data:', error)
     }
 
-    // Also send to tracking service with same dispatch time
+    // Also send to tracking service with same dispatch time and RTP timestamp
     const rawFrame = detectionSync.getRawDetectionForFrame(frameNumber)
     if (rawFrame) {
-      trackingClient.postDetections({ ...rawFrame, dispatch_time: dispatchTime })
+      trackingClient.postDetections({ ...rawFrame, dispatch_time: dispatchTime, rtp_timestamp: rtpTimestamp })
     }
   })
 

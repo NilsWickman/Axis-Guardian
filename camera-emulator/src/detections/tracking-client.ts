@@ -211,8 +211,10 @@ export class TrackingClient {
 
     // Calculate video timing for sync
     const videoTimeMs = (frame.frame_number / this.fps) * 1000
-    const rtpTimestamp = frame.frame_number * this.rtpTicksPerFrame
-    const dispatchTime = Date.now()
+    // Use actual RTP timestamp from FFmpeg if provided, otherwise calculate from frame number
+    const rtpTimestamp = frame.rtp_timestamp ?? (frame.frame_number * this.rtpTicksPerFrame)
+    // Use provided dispatch time or generate new one
+    const dispatchTime = frame.dispatch_time ?? Date.now()
     const wallTimestampSec = dispatchTime / 1000
 
     const payload: BatchedFrame = {

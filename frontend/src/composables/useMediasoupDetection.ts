@@ -22,6 +22,8 @@ export interface DetectionMetadata {
   detection_frame?: number
   dispatch_time?: number  // High-res ms timestamp for timing measurement
   video_time_ms?: number  // Video presentation time in ms (for sync with video element)
+  rtp_timestamp?: number  // RTP timestamp (90kHz clock) derived from FFmpeg's output time
+  fps?: number  // Video frame rate for frame-based sync
 }
 
 export interface MediasoupDetectionOptions {
@@ -50,11 +52,8 @@ const DEFAULT_OPTIONS: MediasoupDetectionOptions = {
   videoSyncOffsetMs: Number(import.meta.env.VITE_VIDEO_SYNC_OFFSET_MS) || 0
 }
 
-// Adaptive sync constants
-const RECALIBRATION_INTERVAL_MS = 15000  // Recalibrate every 15 seconds
-const EMA_ALPHA = 0.3                     // Weight for new measurements (0.3 = 30% new, 70% old)
-const CONFIDENCE_DECAY_RATE = 0.95        // Confidence decay per second
-const MAX_OFFSET_HISTORY = 10             // History size for drift calculation
+// Frame-based sync constants
+const FRAME_TOLERANCE = 1  // Release if detection is within 1 frame of displayed
 
 export function useMediasoupDetection(cameraId: string, options: MediasoupDetectionOptions = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...options }
@@ -113,9 +112,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
   const maxVideoSyncBufferSize = 60  // ~2 seconds at 30fps
   let videoSyncInterval: number | null = null
   let lastVideoTime = 0
-  let videoSyncOffset = 0  // Fallback offset (ms) derived from first metadata with video_time_ms
-  let videoSyncCalibrated = false
-  const VIDEO_SYNC_TOLERANCE_MS = 50  // Release detection if within 50ms of video time
 
   // If the (hidden) video element doesn't advance time (common on some browsers),
   // video-sync buffering would never release detections. Detect this and fall back.
@@ -126,6 +122,9 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
 
   // Manual sync offset (negative = release detections earlier, positive = delay detections)
   const manualSyncOffsetMs = ref(opts.videoSyncOffsetMs ?? 0)
+
+  // Frame-based sync: learned FPS from detection metadata
+  let detectionFps: number | null = null
 
   // Video frame metadata from requestVideoFrameCallback for accurate sync
   interface VideoFrameMetadataInfo {
@@ -138,38 +137,11 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
   const videoFrameHistory: { mediaTimeMs: number; wallTimeMs: number; rtpTimestamp?: number }[] = []
   const MAX_FRAME_HISTORY = 60  // ~2 seconds at 30fps
 
-  // RTP timestamp tracking for frame-perfect sync
-  let lastVideoRtpTimestamp: number | null = null
-  let rtpTimestampAvailable = false
-  // RTP calibration offset: difference between FFmpeg's RTP base and our calculated RTP
-  // FFmpeg uses arbitrary base (e.g., starts at 3847291234), we use frameNumber * 3000 (starts at 0)
-  let rtpCalibrationOffset: number | null = null
-
   // Fallback animation frame ID for iOS/browsers without requestVideoFrameCallback
   let fallbackAnimationId: number | null = null
 
-  // Adaptive sync calibration - measures actual offset and adjusts automatically
-  const syncCalibration = {
-    measuredOffsets: [] as number[],
-    adaptiveOffset: 0,
-    confidenceLevel: 0,
-  }
-  const MAX_CALIBRATION_SAMPLES = 30
-
-  // Adaptive sync state for drift tracking and periodic recalibration
-  let recalibrationTimer: ReturnType<typeof setInterval> | null = null
-  let lastCalibrationTime = 0
-  let lastMeasurementTime = 0
-  let offsetHistory: { time: number; offset: number }[] = []
-  let detectedDriftRate = 0  // ms per second
-
   // Track last detection video_time_ms for loop detection on detection side
   let lastDetectionVideoTimeMs = 0
-
-  // Base offset to align detection time with video time across loops
-  // This is updated when a loop is detected to account for the video stream continuing
-  // while detection video_time_ms resets
-  let detectionTimeBaseOffset = 0
 
   // Stats
   const stats = ref({
@@ -242,77 +214,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
         }
       }, 10000)
     })
-  }
-
-  /**
-   * Update drift rate using linear regression on offset history
-   */
-  function updateDriftRate(newOffset: number): void {
-    const now = Date.now()
-    offsetHistory.push({ time: now, offset: newOffset })
-
-    // Keep only the last MAX_OFFSET_HISTORY entries
-    if (offsetHistory.length > MAX_OFFSET_HISTORY) {
-      offsetHistory.shift()
-    }
-
-    // Need at least 3 samples for meaningful drift calculation
-    if (offsetHistory.length >= 3) {
-      // Linear regression to find drift rate (slope)
-      const n = offsetHistory.length
-      const sumX = offsetHistory.reduce((s, p) => s + p.time, 0)
-      const sumY = offsetHistory.reduce((s, p) => s + p.offset, 0)
-      const sumXY = offsetHistory.reduce((s, p) => s + p.time * p.offset, 0)
-      const sumX2 = offsetHistory.reduce((s, p) => s + p.time * p.time, 0)
-
-      const denominator = n * sumX2 - sumX * sumX
-      if (Math.abs(denominator) > 0.001) {
-        detectedDriftRate = (n * sumXY - sumX * sumY) / denominator
-        // Convert to ms per second (slope is ms per ms)
-        detectedDriftRate *= 1000
-      }
-    }
-  }
-
-  /**
-   * Decay confidence over time if no recent measurements
-   */
-  function decayConfidence(): void {
-    if (lastMeasurementTime === 0) return
-
-    const timeSinceLastMeasurement = Date.now() - lastMeasurementTime
-    const decayFactor = Math.pow(CONFIDENCE_DECAY_RATE, timeSinceLastMeasurement / 1000)
-    syncCalibration.confidenceLevel *= decayFactor
-  }
-
-  /**
-   * Get effective offset including adaptive offset, drift compensation, and manual offset
-   */
-  function getEffectiveOffset(): number {
-    const baseOffset = syncCalibration.confidenceLevel > 0.5
-      ? syncCalibration.adaptiveOffset
-      : (videoSyncCalibrated ? videoSyncOffset : 0)
-
-    // Compensate for drift since last calibration
-    let driftCompensation = 0
-    if (lastCalibrationTime > 0 && Math.abs(detectedDriftRate) > 0.001) {
-      const timeSinceCalibration = (Date.now() - lastCalibrationTime) / 1000
-      driftCompensation = detectedDriftRate * timeSinceCalibration
-    }
-
-    return baseOffset + driftCompensation + manualSyncOffsetMs.value
-  }
-
-  /**
-   * Force recalibration by resetting calibration state
-   */
-  function forceRecalibration(): void {
-    videoSyncCalibrated = false
-    videoSyncOffset = 0
-    syncCalibration.measuredOffsets = []
-    // Don't reset adaptiveOffset - let EMA smooth it
-    // Don't reset drift history - keep tracking drift
-    lastCalibrationTime = Date.now()
   }
 
   /**
@@ -490,12 +391,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
           if (shouldShowToast()) {
             toast.success(`Camera ${cameraId} connected`, 3000)
           }
-          // Start periodic recalibration timer
-          if (recalibrationTimer) clearInterval(recalibrationTimer)
-          recalibrationTimer = setInterval(() => {
-            forceRecalibration()
-          }, RECALIBRATION_INTERVAL_MS)
-          lastCalibrationTime = Date.now()
         } else if (state === 'failed') {
           if (shouldShowToast()) {
             toast.error(`Camera ${cameraId} connection failed`, 5000)
@@ -712,32 +607,17 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
     }
 
     const frameCallback = (now: DOMHighResTimeStamp, metadata: VideoFrameCallbackMetadata) => {
-      // Extract RTP timestamp if available (from VideoFrameCallbackMetadata)
-      const rtpTs = (metadata as VideoFrameCallbackMetadata & { rtpTimestamp?: number }).rtpTimestamp
-
       lastVideoFrameMetadata = {
         mediaTime: metadata.mediaTime,
         presentationTime: now,
-        rtpTimestamp: rtpTs
+        rtpTimestamp: undefined
       }
 
-      // Track RTP timestamp availability
-      if (rtpTs !== undefined) {
-        lastVideoRtpTimestamp = rtpTs
-        if (!rtpTimestampAvailable) {
-          rtpTimestampAvailable = true
-          console.log(`[VideoSync] Browser provides RTP timestamps: ${rtpTs}`)
-        }
-      } else if (!rtpTimestampAvailable && videoFrameHistory.length === 10) {
-        // After 10 frames without RTP, warn that we're using time-based sync
-        console.log('[VideoSync] Browser does NOT provide RTP timestamps, using time-based sync')
-      }
-
-      // Record correlation: actual video mediaTime -> wall clock time (with RTP timestamp)
+      // Record correlation: actual video mediaTime -> wall clock time
       videoFrameHistory.push({
         mediaTimeMs: metadata.mediaTime * 1000,
         wallTimeMs: now,
-        rtpTimestamp: rtpTs
+        rtpTimestamp: undefined
       })
 
       // Trim history
@@ -775,8 +655,12 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
   }
 
   /**
-   * Start video sync polling loop
-   * This releases buffered detections when the video catches up
+   * Start video sync polling loop using frame-number-based synchronization.
+   * This releases buffered detections when the video catches up to the detection's frame.
+   *
+   * Key insight: Both video and detections use the same frame numbers (0, 1, 2, 3...).
+   * If we track which frame the browser is displaying and release detections for that frame,
+   * sync is deterministic with no drift or calibration needed.
    */
   function startVideoSyncLoop() {
     if (videoSyncInterval) return
@@ -784,139 +668,61 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
     videoSyncInterval = window.setInterval(() => {
       if (!videoElement.value || videoSyncBuffer.length === 0) return
 
-      const videoTimeMs = videoElement.value.currentTime * 1000
-
-      // Calibrate offset on first detection with video_time_ms
-      if (!videoSyncCalibrated && videoSyncBuffer.length > 0) {
-        const firstDetection = videoSyncBuffer[0]
-        if (firstDetection.video_time_ms !== undefined) {
-          // Calculate how far ahead detections are from video
-          let rawOffset = firstDetection.video_time_ms - videoTimeMs
-
-          // Handle join-time desync: when browser joins mid-stream, video starts at 0
-          // but detection metadata is for the current stream position.
-          // If offset is too large (> 10s), assume join-time desync and release immediately.
-          const MAX_REASONABLE_OFFSET_MS = 10000  // 10 seconds
-          if (Math.abs(rawOffset) > MAX_REASONABLE_OFFSET_MS) {
-            rawOffset = 0  // Release detections immediately - they match the displayed frame
-          }
-
-          videoSyncOffset = rawOffset
-          videoSyncCalibrated = true
-        }
-      }
-
-      // Detect video loop/seek (large backward OR forward jump)
-      if (videoTimeMs < lastVideoTime - 500 || videoTimeMs > lastVideoTime + 2000) {
-        videoSyncBuffer.length = 0
-        videoSyncCalibrated = false
-        syncCalibration.measuredOffsets = []
-        syncCalibration.adaptiveOffset = 0  // Reset the computed offset too
-        syncCalibration.confidenceLevel = 0
-        videoFrameHistory.length = 0
-        lastVideoFrameMetadata = null  // Reset frame metadata to force recalibration
-        // Reset drift tracking on video loop
-        offsetHistory = []
-        detectedDriftRate = 0
-        lastCalibrationTime = Date.now()
-        // Reset RTP calibration on video loop - FFmpeg RTP timestamps may change
-        rtpCalibrationOffset = null
-      }
-      lastVideoTime = videoTimeMs
-
-      // Apply confidence decay and use adaptive offset with drift compensation
-      decayConfidence()
-      const effectiveOffset = getEffectiveOffset()
-
-      // Use actual mediaTime from frame callback if available (more accurate than currentTime)
+      // Get actual displayed time (prefer requestVideoFrameCallback data for accuracy)
       const actualVideoTimeMs = lastVideoFrameMetadata
         ? lastVideoFrameMetadata.mediaTime * 1000
-        : videoTimeMs
+        : videoElement.value.currentTime * 1000
 
-      // Prune stale detections that are too far behind current video frame
-      const staleThresholdMs = 1000  // Detections more than 1 second old
-      const RTP_STALE_THRESHOLD = 90000  // 1 second at 90kHz clock
-      while (videoSyncBuffer.length > 0) {
-        const oldest = videoSyncBuffer[0]
-        const oldestRtp = (oldest as DetectionMetadata & { rtp_timestamp?: number }).rtp_timestamp
+      // Learn FPS from detection metadata
+      if (detectionFps === null && videoSyncBuffer[0].fps) {
+        detectionFps = videoSyncBuffer[0].fps
+        console.log(`[VideoSync] Learned FPS from detection metadata: ${detectionFps}`)
+      }
+      const fps = detectionFps ?? 30
 
-        let isStale = false
+      // Calculate displayed frame number from video time
+      const displayedFrame = Math.floor((actualVideoTimeMs / 1000) * fps)
 
-        // Use RTP-based staleness check only if calibrated (otherwise comparison is meaningless)
-        if (rtpTimestampAvailable && lastVideoRtpTimestamp !== null && oldestRtp !== undefined && rtpCalibrationOffset !== null) {
-          // Apply calibration to align coordinate systems
-          const calibratedOldestRtp = oldestRtp + rtpCalibrationOffset
-          const rtpAge = lastVideoRtpTimestamp - calibratedOldestRtp
-          isStale = rtpAge > RTP_STALE_THRESHOLD
-        } else {
-          // Fallback to time-based staleness
-          const adjustedOldestTime = (oldest.video_time_ms ?? 0) + detectionTimeBaseOffset
-          const age = actualVideoTimeMs - adjustedOldestTime
-          isStale = age > staleThresholdMs
-        }
+      // Detect video loop/seek (large backward jump in time)
+      if (actualVideoTimeMs < lastVideoTime - 500) {
+        console.log('[VideoSync] Video loop detected, clearing buffer')
+        videoSyncBuffer.length = 0  // Clear buffer on loop
+        videoFrameHistory.length = 0
+        lastVideoFrameMetadata = null
+      }
+      lastVideoTime = actualVideoTimeMs
 
-        if (isStale) {
-          videoSyncBuffer.shift()
-          stats.value.droppedStaleDetections++
-        } else {
-          break
-        }
+      // Prune stale detections (more than 1 second behind displayed frame)
+      const staleFrame = displayedFrame - Math.round(fps)
+      while (videoSyncBuffer.length > 0 && videoSyncBuffer[0].frame_number < staleFrame) {
+        videoSyncBuffer.shift()
+        stats.value.droppedStaleDetections++
       }
 
-      // Release detections that match current video frame
-      let releasedCount = 0
+      // Release detections that match or are behind current displayed frame
       while (videoSyncBuffer.length > 0) {
         const detection = videoSyncBuffer[0]
-        const detectionRtp = (detection as DetectionMetadata & { rtp_timestamp?: number }).rtp_timestamp
 
-        // Calibrate RTP offset once we have both timestamps
-        // FFmpeg RTP timestamps use an arbitrary base (e.g., 3847291234)
-        // Our calculated RTP = frameNumber * 3000 (starts at 0)
-        // This calibration aligns them to the same coordinate system
-        if (rtpCalibrationOffset === null && lastVideoRtpTimestamp !== null && detectionRtp !== undefined) {
-          rtpCalibrationOffset = lastVideoRtpTimestamp - detectionRtp
-          console.log(`[VideoSync] RTP calibrated: offset=${rtpCalibrationOffset}`)
-        }
+        // Apply manual offset (convert ms to frames)
+        // Negative offset -> release detections earlier -> add to threshold
+        // Positive offset -> delay detections -> subtract from threshold
+        const manualFrameOffset = Math.round((manualSyncOffsetMs.value / 1000) * fps)
+        const releaseThreshold = displayedFrame + FRAME_TOLERANCE + manualFrameOffset
 
-        // Use RTP timestamp correlation if available (frame-perfect sync)
-        if (rtpTimestampAvailable && lastVideoRtpTimestamp !== null && detectionRtp !== undefined) {
-          // RTP timestamps use 90kHz clock, tolerance of 1 frame = ~3000 ticks at 30fps
-          const RTP_TOLERANCE = 4500  // ~1.5 frames tolerance
-          // Apply calibration: adjust detection RTP to FFmpeg's coordinate system
-          const calibratedDetectionRtp = detectionRtp + (rtpCalibrationOffset ?? 0)
-          const rtpDiff = lastVideoRtpTimestamp - calibratedDetectionRtp
-
-          if (rtpDiff >= -RTP_TOLERANCE) {
-            // Video frame matches or is ahead of detection frame
-            videoSyncBuffer.shift()
-            releaseDetection(detection)
-            releasedCount++
-          } else {
-            // Detection is ahead of video, wait
-            break
-          }
+        if (detection.frame_number <= releaseThreshold) {
+          videoSyncBuffer.shift()
+          releaseDetection(detection)
         } else {
-          // Fallback to time-based sync
-          // Apply base offset to align detection time with continuous video time
-          const adjustedDetectionTime = (detection.video_time_ms ?? 0) + detectionTimeBaseOffset
-
-          // Check if video has caught up to this detection (with adaptive offset applied)
-          const releaseThreshold = adjustedDetectionTime - VIDEO_SYNC_TOLERANCE_MS + effectiveOffset
-          if (actualVideoTimeMs >= releaseThreshold) {
-            videoSyncBuffer.shift()
-            releaseDetection(detection)
-            releasedCount++
-          } else {
-            // Buffer is sorted by video_time_ms, so we can stop
-            break
-          }
+          break  // Detection is for future frame
         }
       }
 
       // Update stats
       stats.value.videoSyncBufferSize = videoSyncBuffer.length
       if (videoSyncBuffer.length > 0) {
-        stats.value.videoSyncDelayMs = (videoSyncBuffer[0].video_time_ms ?? 0) - videoTimeMs
+        // Calculate delay in ms based on frame difference
+        const frameDelay = videoSyncBuffer[0].frame_number - displayedFrame
+        stats.value.videoSyncDelayMs = (frameDelay / fps) * 1000
       } else {
         stats.value.videoSyncDelayMs = 0
       }
@@ -933,13 +739,9 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
     }
     stopVideoFrameTracking()
     videoSyncBuffer.length = 0
-    videoSyncCalibrated = false
-    syncCalibration.measuredOffsets = []
-    syncCalibration.adaptiveOffset = 0
-    syncCalibration.confidenceLevel = 0
     lastDetectionVideoTimeMs = 0
     lastVideoTime = 0
-    detectionTimeBaseOffset = 0
+    detectionFps = null
   }
 
   /**
@@ -980,55 +782,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
     stats.value.avgDetectionsPerFrame = stats.value.detectionsReceived / stats.value.framesReceived
     stats.value.lastUpdateTime = metadata.timestamp
 
-    // Measure actual offset for adaptive calibration
-    // Compare detection's video_time_ms (adjusted for loops) with current video element time
-    // This gives us the instantaneous offset which should be consistent within a loop
-    if (metadata.video_time_ms !== undefined && videoElement.value) {
-      // Apply base offset to align detection time with continuous video time
-      const adjustedDetectionTimeMs = metadata.video_time_ms + detectionTimeBaseOffset
-      const currentVideoTimeMs = videoElement.value.currentTime * 1000
-
-      // Only calibrate if both times are reasonable (> 100ms to avoid startup noise)
-      if (metadata.video_time_ms > 100 && currentVideoTimeMs > 100) {
-        // Offset = how far ahead detections are compared to video playback
-        // Positive offset means detections arrive before video shows that frame
-        // Negative offset means detections arrive after video shows that frame
-        const measuredOffset = adjustedDetectionTimeMs - currentVideoTimeMs
-
-        // Filter out outliers (offsets > 2 seconds are likely from timing issues)
-        if (Math.abs(measuredOffset) < 2000) {
-          syncCalibration.measuredOffsets.push(measuredOffset)
-          if (syncCalibration.measuredOffsets.length > MAX_CALIBRATION_SAMPLES) {
-            syncCalibration.measuredOffsets.shift()
-          }
-
-          // Update adaptive offset using EMA (Exponential Moving Average)
-          // EMA responds faster to changes than median while still smoothing noise
-          if (syncCalibration.adaptiveOffset === 0) {
-            // First measurement - use directly
-            syncCalibration.adaptiveOffset = measuredOffset
-          } else {
-            // EMA: new = old * (1 - alpha) + sample * alpha
-            syncCalibration.adaptiveOffset =
-              syncCalibration.adaptiveOffset * (1 - EMA_ALPHA) + measuredOffset * EMA_ALPHA
-          }
-
-          // Update drift tracking
-          updateDriftRate(measuredOffset)
-          lastMeasurementTime = Date.now()
-
-          // Calculate confidence from recent variance
-          if (syncCalibration.measuredOffsets.length >= 5) {
-            const recentOffsets = syncCalibration.measuredOffsets.slice(-10)
-            const mean = recentOffsets.reduce((s, v) => s + v, 0) / recentOffsets.length
-            const variance = recentOffsets.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / recentOffsets.length
-            syncCalibration.confidenceLevel = Math.min(1, 1000 / (variance + 100))
-          }
-
-        }
-      }
-    }
-
     // If video_time_ms is available, use video-sync buffer (unless disabled)
     if (metadata.video_time_ms !== undefined && videoElement.value && !videoSyncDisabled) {
       // Track whether the video element time is progressing.
@@ -1054,50 +807,39 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
       if (videoSyncDisabled) {
         // continue to fallback
       } else {
-      // Detect loop on detection side: video_time_ms drops significantly
-      // This happens when the camera emulator loops the video
-      if (lastDetectionVideoTimeMs > 0 && metadata.video_time_ms < lastDetectionVideoTimeMs - 1000) {
-        // Calculate the new base offset: video continues but detection resets
-        // The detection time needs to be shifted by how much the video has progressed
-        const currentVideoTimeMs = videoElement.value.currentTime * 1000
-        detectionTimeBaseOffset = currentVideoTimeMs - metadata.video_time_ms
-
-        // Clear buffers but keep calibration since the relationship should be consistent
-        videoSyncBuffer.length = 0
-        videoSyncCalibrated = false
-        // Reset drift tracking on detection loop - drift characteristics may change
-        offsetHistory = []
-        detectedDriftRate = 0
-        lastCalibrationTime = Date.now()
-        // Reset RTP calibration - calculated RTP resets with detection frame numbers
-        rtpCalibrationOffset = null
-      }
-      lastDetectionVideoTimeMs = metadata.video_time_ms
-
-      // Start sync loop if not running
-      startVideoSyncLoop()
-
-      // Add to video sync buffer (sorted by video_time_ms)
-      videoSyncBuffer.push(metadata)
-
-      // Trim buffer if too large (drop oldest)
-      while (videoSyncBuffer.length > maxVideoSyncBufferSize) {
-        const dropped = videoSyncBuffer.shift()
-        if (dropped) {
-          stats.value.droppedStaleDetections++
+        // Detect loop on detection side: video_time_ms drops significantly
+        // This happens when the camera emulator loops the video
+        if (lastDetectionVideoTimeMs > 0 && metadata.video_time_ms < lastDetectionVideoTimeMs - 1000) {
+          console.log('[VideoSync] Detection loop detected')
+          // Clear buffers - the sync loop will handle alignment via frame numbers
+          videoSyncBuffer.length = 0
         }
-      }
+        lastDetectionVideoTimeMs = metadata.video_time_ms
 
-      // Call detection callbacks immediately for metadata panel updates.
-      // This ensures components like DetectionMetadataPanel receive data
-      // even when video sync buffering is active (canvas rendering still
-      // uses the buffered release for frame-perfect sync).
-      if (onDetectionUpdateCallbacks.size > 0) {
-        for (const callback of onDetectionUpdateCallbacks) {
-          callback(metadata)
+        // Start sync loop if not running
+        startVideoSyncLoop()
+
+        // Add to video sync buffer (sorted by frame_number for frame-based sync)
+        videoSyncBuffer.push(metadata)
+
+        // Trim buffer if too large (drop oldest)
+        while (videoSyncBuffer.length > maxVideoSyncBufferSize) {
+          const dropped = videoSyncBuffer.shift()
+          if (dropped) {
+            stats.value.droppedStaleDetections++
+          }
         }
-      }
-      return
+
+        // Call detection callbacks immediately for metadata panel updates.
+        // This ensures components like DetectionMetadataPanel receive data
+        // even when video sync buffering is active (canvas rendering still
+        // uses the buffered release for frame-perfect sync).
+        if (onDetectionUpdateCallbacks.size > 0) {
+          for (const callback of onDetectionUpdateCallbacks) {
+            callback(metadata)
+          }
+        }
+        return
       }
     }
 
@@ -1169,14 +911,6 @@ export function useMediasoupDetection(cameraId: string, options: MediasoupDetect
 
     stopStatsPolling()
     stopVideoSyncLoop()
-
-    // Clear recalibration timer and reset drift tracking
-    if (recalibrationTimer) {
-      clearInterval(recalibrationTimer)
-      recalibrationTimer = null
-    }
-    offsetHistory = []
-    detectedDriftRate = 0
 
     pendingTimeouts.forEach(id => clearTimeout(id))
     pendingTimeouts.clear()

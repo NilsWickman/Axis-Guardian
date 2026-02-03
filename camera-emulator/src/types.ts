@@ -48,6 +48,7 @@ export interface DetectionFrame {
   timestamp: number  // seconds
   detections: Detection[]
   dispatch_time?: number  // High-res ms timestamp for timing measurement
+  rtp_timestamp?: number  // Actual RTP timestamp from FFmpeg's output time (90kHz clock)
 }
 
 export interface DetectionData {
@@ -77,6 +78,7 @@ export interface DetectionMetadata {
   dispatch_time?: number  // High-res ms timestamp for timing measurement
   video_time_ms?: number  // Video presentation time in ms (for sync with video element)
   rtp_timestamp?: number  // RTP timestamp (90kHz clock) for frame-perfect sync
+  fps?: number  // Video frame rate for frame-based sync
 }
 
 export interface ClientSession {

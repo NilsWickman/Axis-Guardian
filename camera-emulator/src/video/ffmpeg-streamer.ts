@@ -7,8 +7,11 @@ import { spawn, ChildProcess } from 'child_process'
 import { EventEmitter } from 'events'
 import { ffmpegConfig } from '../config.js'
 
+// RTP clock rate for video (H.264 standard)
+const RTP_CLOCK_RATE = 90000
+
 export interface FFmpegStreamerEvents {
-  frame: (frameNumber: number, videoTimeMs: number) => void
+  frame: (frameNumber: number, videoTimeMs: number, rtpTimestamp: number) => void
   loop: (loopCount: number) => void
   error: (error: Error) => void
   exit: (code: number | null) => void
@@ -106,8 +109,21 @@ export class FFmpegStreamer extends EventEmitter {
     this.streamStartTime = this.sharedStartTime ?? Date.now()
 
     // Parse FFmpeg stderr for frame progress
+    // Track the last parsed output time for RTP timestamp calculation
+    let lastOutputTimeSeconds = 0
+
     this.ffmpeg.stderr?.on('data', (data: Buffer) => {
       const line = data.toString()
+
+      // Parse output time: "time=00:00:04.10" -> 4.10 seconds
+      // This is FFmpeg's actual presentation timestamp which matches browser's currentTime
+      const timeMatch = line.match(/time=(\d+):(\d+):(\d+\.?\d*)/)
+      if (timeMatch) {
+        const hours = parseInt(timeMatch[1], 10)
+        const minutes = parseInt(timeMatch[2], 10)
+        const seconds = parseFloat(timeMatch[3])
+        lastOutputTimeSeconds = hours * 3600 + minutes * 60 + seconds
+      }
 
       // Parse frame number: "frame=  123 fps=..."
       const frameMatch = line.match(/frame=\s*(\d+)/)
@@ -142,7 +158,12 @@ export class FFmpegStreamer extends EventEmitter {
           ? this.frameCount % this.totalFrames
           : this.frameCount
         const videoTimeMs = (frameInLoop / this.fps) * 1000
-        this.emit('frame', this.frameCount, videoTimeMs)
+
+        // Calculate RTP timestamp from FFmpeg's actual output time
+        // This ensures detection timestamps match the video's actual presentation time
+        const rtpTimestamp = Math.round(lastOutputTimeSeconds * RTP_CLOCK_RATE)
+
+        this.emit('frame', this.frameCount, videoTimeMs, rtpTimestamp)
       }
     })
 

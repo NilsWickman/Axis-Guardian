@@ -40,9 +40,10 @@ export class DetectionSync {
    * @param frameNumber - Current video frame number
    * @param dispatchTime - High-resolution dispatch timestamp (ms) for timing measurement
    * @param videoTimeMs - Video presentation time in ms (for sync with video element)
+   * @param actualRtpTimestamp - Actual RTP timestamp from FFmpeg's output time (preferred over calculated)
    * @returns MessagePack-encoded detection metadata
    */
-  getDetectionForFrame(frameNumber: number, dispatchTime?: number, videoTimeMs?: number): Buffer {
+  getDetectionForFrame(frameNumber: number, dispatchTime?: number, videoTimeMs?: number, actualRtpTimestamp?: number): Buffer {
     // Handle looping - wrap to video frame range (not array length)
     // This ensures both cameras use the same video frame number for sync
     const videoFrameNumber = frameNumber % this.totalFrames
@@ -53,9 +54,10 @@ export class DetectionSync {
     // Calculate video time from frame number if not provided
     const calculatedVideoTimeMs = videoTimeMs ?? (frameNumber / this.fps) * 1000
 
-    // Calculate RTP timestamp for this frame (90kHz clock)
-    // This allows frame-perfect correlation with browser's VideoFrameCallbackMetadata.rtpTimestamp
-    const rtpTimestamp = frameNumber * this.rtpTicksPerFrame
+    // Use actual RTP timestamp from FFmpeg's output time if available
+    // This ensures detection timestamps match the video's actual presentation time
+    // Fall back to calculated timestamp for backwards compatibility
+    const rtpTimestamp = actualRtpTimestamp ?? (frameNumber * this.rtpTicksPerFrame)
 
     if (!frame) {
       // Return empty detections if no frame data (sparse array - no detections for this frame)
@@ -69,6 +71,7 @@ export class DetectionSync {
         dispatch_time: now,  // High-res ms timestamp for timing measurement
         video_time_ms: calculatedVideoTimeMs,  // Video presentation time for sync
         rtp_timestamp: rtpTimestamp,  // RTP timestamp for frame-perfect sync
+        fps: this.fps,  // Video frame rate for frame-based sync
       }
       return msgpack.encode(metadata)
     }
@@ -83,6 +86,7 @@ export class DetectionSync {
       dispatch_time: now,  // High-res ms timestamp for timing measurement
       video_time_ms: calculatedVideoTimeMs,  // Video presentation time for sync
       rtp_timestamp: rtpTimestamp,  // RTP timestamp for frame-perfect sync
+      fps: this.fps,  // Video frame rate for frame-based sync
     }
 
     return msgpack.encode(metadata)
