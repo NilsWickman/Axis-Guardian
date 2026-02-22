@@ -1240,7 +1240,7 @@ export class TrackManager {
     // Require appearance support for clustering to avoid false identity merges.
     const pairs: Array<{ i: number; j: number; dist: number; similarity: number }> = []
     const minEmbeddingQuality = ALGORITHM_CONSTANTS.assignment.embeddingMinQuality
-    const minSimilarityForCluster = 0.65
+    const minSimilarityForCluster = 0.7
     const noEmbeddingFallbackDistance = Math.min(0.45, clusteringDistance * 0.6)
 
     for (let i = 0; i < detections.length; i++) {
@@ -2233,12 +2233,26 @@ export class TrackManager {
             // This is critical for preventing ID switches when different people are spatially close
             const detEmb = det.attributes?.embedding
             const trackEmb = t.attributes?.embedding
-            let similarity = 1.0  // Default to full similarity if no embeddings
-            if (detEmb && trackEmb && detEmb.length > 0 && trackEmb.length === detEmb.length) {
+            const detQ = det.attributes?.embedding_quality ?? 0
+            const trackQ = t.attributes?.embedding_quality ?? 0
+            const minQuality = ALGORITHM_CONSTANTS.reid.minEmbeddingQuality
+            let similarity = -1
+            if (
+              detEmb &&
+              trackEmb &&
+              detEmb.length > 0 &&
+              trackEmb.length === detEmb.length &&
+              detQ >= minQuality &&
+              trackQ >= minQuality
+            ) {
               similarity = cosineSimilarity(detEmb, trackEmb)
               // If embedding similarity is too low, this is likely a different person
               // Don't anchor to this track
-              if (similarity < 0.5) continue
+              if (similarity < 0.65) continue
+            } else {
+              // No reliable embeddings for occluded same-camera anchoring:
+              // require very tight spatiotemporal proximity.
+              if (dist > 0.45 || timeSinceSeenOnThisCam > 800) continue
             }
 
             const existing = candidates.get(t.globalTrackId)

@@ -303,34 +303,34 @@ export function calculateEmbeddingSimilarityMultiplier(
     // For cross-camera: use embedding similarity as primary cost driver
     // High similarity -> very low multiplier (strong match)
     // Low similarity -> high multiplier (block match)
-    if (similarity > 0.75) {
+    if (similarity >= 0.80) {
       // Very strong embedding match - aggressively reduce cost
-      // similarity 0.75 -> multiplier 0.20, similarity 1.0 -> multiplier 0.05
-      const embeddingBonus = 0.20 - 0.15 * ((similarity - 0.75) / 0.25)
+      // similarity 0.80 -> multiplier 0.20, similarity 1.0 -> multiplier 0.05
+      const embeddingBonus = 0.20 - 0.15 * ((similarity - 0.80) / 0.20)
       result.multiplier = Math.max(0.05, embeddingBonus)
       result.bonusApplied = true
       if (recordMetrics) {
         getMetrics().recordEmbeddingBonus()
       }
-    } else if (similarity > 0.60) {
-      // Moderate match - give smaller bonus
-      // similarity 0.60 -> multiplier 0.5, similarity 0.75 -> multiplier 0.20
-      const embeddingBonus = 0.5 - 0.30 * ((similarity - 0.60) / 0.15)
+    } else if (similarity >= 0.70) {
+      // Good match - give smaller bonus
+      // similarity 0.70 -> multiplier 0.5, similarity 0.80 -> multiplier 0.20
+      const embeddingBonus = 0.5 - 0.30 * ((similarity - 0.70) / 0.10)
       result.multiplier = embeddingBonus
       result.bonusApplied = true
       if (recordMetrics) {
         getMetrics().recordEmbeddingBonus()
       }
-    } else if (similarity < 0.45) {
+    } else if (similarity < 0.55) {
       // Poor embedding match for cross-camera - heavy penalty to block
-      const embeddingPenalty = 2.5 + 4.0 * ((0.45 - similarity) / 0.45)
+      const embeddingPenalty = 2.5 + 4.0 * ((0.55 - similarity) / 0.55)
       result.multiplier = embeddingPenalty
       result.penaltyApplied = true
       if (recordMetrics) {
         getMetrics().recordEmbeddingPenalty()
       }
     }
-    // Between 0.45-0.60: neutral, let position decide
+    // Between 0.55-0.70: neutral, let position/motion decide
     return result
   }
 
