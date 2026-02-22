@@ -137,6 +137,7 @@ describe('Multi-Camera Specific Metrics', () => {
   let cameraRegistry: CameraRegistry
   let sitemapConfig: ReturnType<typeof loadSiteMapConfig>
   let detectionFiles: Map<string, DetectionFile>
+  let latestFalseMergeRate: number | null = null
 
   beforeAll(async () => {
     console.log('\n' + '='.repeat(70))
@@ -348,7 +349,13 @@ describe('Multi-Camera Specific Metrics', () => {
       }
       console.log(`\nSummary: ${highSimilarityMerges} merges with sim>=0.70, ${lowSimilarityMerges} with sim<0.70, ${noEmbeddingMerges} without embeddings`)
 
+      latestFalseMergeRate = falseMergeRate
       expect(falseMergeRate).toBeLessThan(0.15)
+    })
+
+    it('regression guard keeps false merge rate under 5% on replay dataset', () => {
+      expect(latestFalseMergeRate).not.toBeNull()
+      expect(latestFalseMergeRate!).toBeLessThan(0.05)
     })
   })
 

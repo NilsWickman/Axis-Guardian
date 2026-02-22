@@ -283,6 +283,26 @@ export class TrackMerger {
 
     // For cross-camera merges with ReID, use position as a gate but not primary signal
     const embeddingSimilarity = this.calculateEmbeddingSimilarity(track1, track2)
+    const timeDiff = Math.abs(track1.lastSeen - track2.lastSeen)
+
+    // Cross-camera merges are high-risk for false identity merges.
+    // Apply strict early gating before score accumulation.
+    if (isCrossCameraMerge) {
+      // If both tracks have embeddings, require a minimum appearance match.
+      if (embeddingSimilarity >= 0 && embeddingSimilarity < 0.7) {
+        return 0
+      }
+
+      // Without embeddings, only allow near-simultaneous and very close merges.
+      if (embeddingSimilarity < 0) {
+        if (distance > Math.min(distanceThreshold, 1.25)) {
+          return 0
+        }
+        if (timeDiff > 350) {
+          return 0
+        }
+      }
+    }
 
     if (isCrossCameraMerge && embeddingSimilarity > 0.5) {
       // Cross-camera with good embedding match: relax position requirement
@@ -353,7 +373,6 @@ export class TrackMerger {
     }
 
     // 3. Temporal correlation (0-0.2 points)
-    const timeDiff = Math.abs(track1.lastSeen - track2.lastSeen)
     if (timeDiff < 500) {
       // Seen within 500ms of each other
       confidence += 0.2 * (1 - timeDiff / 500)

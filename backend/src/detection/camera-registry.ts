@@ -132,10 +132,10 @@ const CAMERA_CALIBRATIONS: Record<string, CameraCalibration> = {
  * May need re-calibration if per-camera accuracy differs significantly.
  */
 export const CAMERA_BIAS_CORRECTIONS: Record<string, { x: number; y: number }> = {
-  camera1: { x: 0, y: 0 },
+  camera1: { x: -0.0114, y: -0.0175 },
   camera2: { x: 0, y: 0 },
-  camera3: { x: 0, y: 0 },
-  camera4: { x: 0, y: 0 },
+  camera3: { x: -0.1939, y: -0.1532 },
+  camera4: { x: 0.2738, y: 0.5727 },
 }
 
 /**

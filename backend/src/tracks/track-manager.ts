@@ -1087,6 +1087,24 @@ export class TrackManager {
           embeddingSimilarity = cosineSimilarity(detectionEmbedding, trackEmbedding)
         }
 
+        // Cross-camera association is the main source of false merges.
+        // Require stronger appearance agreement than same-camera continuation.
+        const isCrossCameraCandidate = excludeCameraId
+          ? !track.cameraAssociations.has(excludeCameraId)
+          : false
+        if (isCrossCameraCandidate) {
+          if (embeddingSimilarity >= 0 && embeddingSimilarity < 0.7) {
+            continue
+          }
+          if (embeddingSimilarity < 0) {
+            const noEmbeddingDistanceGate = 0.45
+            const noEmbeddingTimeGateMs = 250
+            if (distance > noEmbeddingDistanceGate || timeSinceUpdate > noEmbeddingTimeGateMs) {
+              continue
+            }
+          }
+        }
+
         // If embeddings are available and clearly mismatch, skip this track entirely
         // This prevents stealing another person's identity based on spatial proximity alone
         // Use moderate threshold (0.65) - balance between preventing false merges and
@@ -1207,9 +1225,13 @@ export class TrackManager {
     const baseClusteringDistance = ALGORITHM_CONSTANTS.clustering.clusteringDistanceM  // 1.2m
     const clusteringDistance = hasAnyCrossings ? 0.5 : baseClusteringDistance
 
-    // Build candidate cross-camera pairs under distance threshold
-    // ALSO require embedding similarity for cross-camera clustering
+    // Build candidate cross-camera pairs under distance threshold.
+    // Require appearance support for clustering to avoid false identity merges.
     const pairs: Array<{ i: number; j: number; dist: number; similarity: number }> = []
+    const minEmbeddingQuality = ALGORITHM_CONSTANTS.assignment.embeddingMinQuality
+    const minSimilarityForCluster = 0.65
+    const noEmbeddingFallbackDistance = Math.min(0.45, clusteringDistance * 0.6)
+
     for (let i = 0; i < detections.length; i++) {
       for (let j = i + 1; j < detections.length; j++) {
         if (detections[i].cameraId === detections[j].cameraId) continue
@@ -1221,9 +1243,18 @@ export class TrackManager {
           // Check embedding similarity before clustering
           const emb1 = detections[i].attributes?.embedding
           const emb2 = detections[j].attributes?.embedding
-          let similarity = 0.5 // Default neutral if no embeddings
+          const q1 = detections[i].attributes?.embedding_quality ?? 0
+          const q2 = detections[j].attributes?.embedding_quality ?? 0
+          let similarity = -1
+          const hasReliableEmbeddings =
+            !!emb1 &&
+            !!emb2 &&
+            emb1.length > 0 &&
+            emb1.length === emb2.length &&
+            q1 >= minEmbeddingQuality &&
+            q2 >= minEmbeddingQuality
 
-          if (emb1 && emb2 && emb1.length > 0 && emb1.length === emb2.length) {
+          if (hasReliableEmbeddings) {
             // Compute cosine similarity inline
             let dot = 0, norm1 = 0, norm2 = 0
             for (let k = 0; k < emb1.length; k++) {
@@ -1234,9 +1265,14 @@ export class TrackManager {
             similarity = norm1 > 0 && norm2 > 0 ? dot / (Math.sqrt(norm1) * Math.sqrt(norm2)) : 0
           }
 
-          // Only cluster if embedding similarity is good enough
-          // This prevents different people from being pre-clustered together
-          if (similarity > 0.45) {
+          // Clustering policy:
+          // 1) Reliable embeddings: require strong similarity.
+          // 2) No reliable embeddings: only allow very-close fallback.
+          const canCluster =
+            (hasReliableEmbeddings && similarity >= minSimilarityForCluster) ||
+            (!hasReliableEmbeddings && dist <= noEmbeddingFallbackDistance)
+
+          if (canCluster) {
             pairs.push({ i, j, dist, similarity })
           }
         }
