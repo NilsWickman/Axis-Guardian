@@ -76,6 +76,9 @@ const TRACK_COLORS = [
   '#f43f5e', // rose
 ]
 
+// Canonical cross-camera appearance gate used by direct association paths.
+const CROSS_CAMERA_MIN_SIMILARITY = 0.7
+
 /**
  * Convert GlobalTrack to JSON-serializable format
  */
@@ -915,6 +918,14 @@ export class TrackManager {
         // If no more track IDs for this camera, remove the camera association
         if (assoc.trackIds.length === 0) {
           track.cameraAssociations.delete(cameraId)
+
+          // If a track has no camera associations left, it can no longer be updated
+          // deterministically. Retire it immediately to avoid "active zero-camera" ghosts.
+          if (track.cameraAssociations.size === 0) {
+            track.isActive = false
+            this.releaseColor(track.color)
+            this.onTrackExpired?.(track)
+          }
         }
       }
     }
@@ -1093,7 +1104,7 @@ export class TrackManager {
           ? !track.cameraAssociations.has(excludeCameraId)
           : false
         if (isCrossCameraCandidate) {
-          if (embeddingSimilarity >= 0 && embeddingSimilarity < 0.7) {
+          if (embeddingSimilarity >= 0 && embeddingSimilarity < CROSS_CAMERA_MIN_SIMILARITY) {
             continue
           }
           if (embeddingSimilarity < 0) {
@@ -1852,10 +1863,8 @@ export class TrackManager {
       if (detEmbedding && trackEmbedding &&
           detEmbedding.length > 0 && detEmbedding.length === trackEmbedding.length) {
         const similarity = cosineSimilarity(detEmbedding, trackEmbedding)
-        // For cross-camera, use moderate threshold (0.60)
-        // This is lower than same-camera (0.80) because calibration differences
-        // can affect appearance, but still blocks clearly different people
-        if (similarity < 0.60) {
+        // Cross-camera handoff requires the canonical appearance gate.
+        if (similarity < CROSS_CAMERA_MIN_SIMILARITY) {
           // Not the same person - reject cross-camera association
           return false
         }
