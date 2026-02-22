@@ -219,6 +219,9 @@ export class KalmanStateManager {
 
     track.kalmanState.mean[0][0] = position.x
     track.kalmanState.mean[1][0] = position.y
+
+    // Clear the cached library state so next prediction uses the synced values
+    this.filter.removeTrackState(track.globalTrackId)
   }
 
   /**
@@ -244,6 +247,9 @@ export class KalmanStateManager {
     if (clampedY) {
       track.kalmanState.mean[3][0] = 0
     }
+
+    // Clear the cached library state so next prediction uses the synced values
+    this.filter.removeTrackState(track.globalTrackId)
   }
 
   // ===========================================================================

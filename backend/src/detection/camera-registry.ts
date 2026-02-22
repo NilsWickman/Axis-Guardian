@@ -51,12 +51,13 @@ export const USE_DIRECT_KRT_PROJECTION = true
 // Camera positions: camera1 (23,4), camera2 (8,3.8), camera3 (29.5,26), camera4 (16.5,15)
 
 const CAMERA_CALIBRATIONS: Record<string, CameraCalibration> = {
-  // camera1 - position (23, 4), azimuth 340°
-  // NEEDS NEW CALIBRATION from annotations for 32x30m sitemap
+  // camera1 - position (23, 4), azimuth 340°, elevation 18°, FOV 75°
+  // Fallback only - sitemap-derived calibration (with ray projection) takes precedence
+  // fx = 960 / tan(37.5°) ≈ 1251
   camera1: {
     K: [
-      [1480, 0, 0],
-      [0, 1480, 0],
+      [1251, 0, 960],
+      [0, 1251, 540],
       [0, 0, 1],
     ],
     R: [
@@ -64,17 +65,16 @@ const CAMERA_CALIBRATIONS: Record<string, CameraCalibration> = {
       [0, 1, 0],
       [0, 0, 1],
     ],
-    T: [23, 4, 3],  // Camera position from sitemap
+    T: [23, 4, 2.5],
     center: [960, 540],
     scale: 1,
-    // directPolynomial: TODO - derive from new annotations
   },
-  // camera2 - position (8, 3.8), azimuth 52°
-  // NEEDS NEW CALIBRATION from annotations for 32x30m sitemap
+  // camera2 - position (8, 3.8), azimuth 52°, elevation 10°, FOV 63°
+  // fx = 960 / tan(31.5°) ≈ 1567
   camera2: {
     K: [
-      [1480, 0, 0],
-      [0, 1480, 0],
+      [1567, 0, 960],
+      [0, 1567, 540],
       [0, 0, 1],
     ],
     R: [
@@ -82,17 +82,16 @@ const CAMERA_CALIBRATIONS: Record<string, CameraCalibration> = {
       [0, 1, 0],
       [0, 0, 1],
     ],
-    T: [8, 3.8, 3],  // Camera position from sitemap
+    T: [8, 3.8, 2.5],
     center: [960, 540],
     scale: 1,
-    // directPolynomial: TODO - derive from new annotations
   },
-  // camera3 - position (29.5, 26), azimuth 225°
-  // NEEDS NEW CALIBRATION from annotations for 32x30m sitemap
+  // camera3 - position (29.5, 26), azimuth 225°, elevation 14°, FOV 60°
+  // fx = 960 / tan(30°) ≈ 1663
   camera3: {
     K: [
-      [1480, 0, 0],
-      [0, 1480, 0],
+      [1663, 0, 960],
+      [0, 1663, 540],
       [0, 0, 1],
     ],
     R: [
@@ -100,17 +99,16 @@ const CAMERA_CALIBRATIONS: Record<string, CameraCalibration> = {
       [0, 1, 0],
       [0, 0, 1],
     ],
-    T: [29.5, 26, 3],  // Camera position from sitemap
+    T: [29.5, 26, 3],
     center: [960, 540],
     scale: 1,
-    // directPolynomial: TODO - derive from new annotations
   },
-  // camera4 - position (16.5, 15), azimuth 29°
-  // NEEDS NEW CALIBRATION from annotations for 32x30m sitemap
+  // camera4 - position (16.5, 15), azimuth 29°, elevation 12°, FOV 60°
+  // fx = 960 / tan(30°) ≈ 1663
   camera4: {
     K: [
-      [1480, 0, 0],
-      [0, 1480, 0],
+      [1663, 0, 960],
+      [0, 1663, 540],
       [0, 0, 1],
     ],
     R: [
@@ -118,10 +116,9 @@ const CAMERA_CALIBRATIONS: Record<string, CameraCalibration> = {
       [0, 1, 0],
       [0, 0, 1],
     ],
-    T: [16.5, 15, 3],  // Camera position from sitemap
+    T: [16.5, 15, 2.5],
     center: [960, 540],
     scale: 1,
-    // directPolynomial: TODO - derive from new annotations
   },
 }
 

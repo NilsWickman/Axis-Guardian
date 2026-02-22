@@ -405,27 +405,27 @@ describe('Detection Statistics', () => {
 
   it('calculates track counts correctly', () => {
     // Create 3 tracks with different states
-    // Track 1: confirmed (3 detections, >= minDetectionsToConfirm=2)
-    for (let i = 0; i < 3; i++) {
+    // Track 1: confirmed (4 detections, >= minDetectionsToConfirm=3)
+    for (let i = 0; i < 4; i++) {
       mockTime += 33
       const bbox = convertEmulatorBbox({ left: 0.1, top: 0.4, right: 0.2, bottom: 0.8 })
       detectionProcessor.processInjection('camera1', bbox, 0.9, 1)
     }
 
-    // Track 2: pending (1 detection, < minDetectionsToConfirm=2)
+    // Track 2: pending (1 detection, < minDetectionsToConfirm=3)
     mockTime += 33
     const bbox2 = convertEmulatorBbox({ left: 0.5, top: 0.4, right: 0.6, bottom: 0.8 })
     detectionProcessor.processInjection('camera1', bbox2, 0.9, 2)
 
-    // Track 3: confirmed (2 detections, >= minDetectionsToConfirm=2)
-    for (let i = 0; i < 2; i++) {
+    // Track 3: confirmed (3 detections, >= minDetectionsToConfirm=3)
+    for (let i = 0; i < 3; i++) {
       mockTime += 33
       const bbox3 = convertEmulatorBbox({ left: 0.8, top: 0.4, right: 0.9, bottom: 0.8 })
       detectionProcessor.processInjection('camera1', bbox3, 0.9, 3)
     }
 
-    expect(trackManager.getActiveTrackCount()).toBe(2) // Confirmed (tracks with >= 2 detections)
-    expect(trackManager.getPendingTrackCount()).toBe(1) // Pending (tracks with < 2 detections)
+    expect(trackManager.getActiveTrackCount()).toBe(2) // Confirmed (tracks with >= 3 detections)
+    expect(trackManager.getPendingTrackCount()).toBe(1) // Pending (tracks with < 3 detections)
     expect(trackManager.getAllActiveTracks().length).toBe(3) // All active
   })
 })

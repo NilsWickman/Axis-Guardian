@@ -109,8 +109,12 @@ export class FrameTracker {
   }
 
   /**
-   * Calculate missed frames for a track across multiple cameras
-   * Returns the minimum missed frames across all cameras (track is visible if any camera sees it)
+   * Calculate missed frames for a track across multiple cameras.
+   * Returns the minimum missed frames across all cameras that have seen this track.
+   *
+   * Using min ensures a multi-camera track does NOT become occluded while at least
+   * one camera still actively sees it. If any camera is still tracking the person,
+   * the track should remain active.
    *
    * @param cameraFrames - Map of cameraId to last seen frame number
    * @returns Minimum missed frames, or undefined if no frame data available

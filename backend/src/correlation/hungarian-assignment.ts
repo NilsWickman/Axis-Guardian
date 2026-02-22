@@ -237,28 +237,32 @@ export function buildCostMatrix(
         cost *= ALGORITHM_CONSTANTS.handoff.predictiveHandoffBonus
       }
 
-      // 6. HARD IDENTITY GATE: Block association when embeddings strongly mismatch
-      // This prevents different people from taking over an existing track
+      // 6. SOFT IDENTITY GATE: Graduated penalty when embeddings mismatch
+      // Scaled by embedding quality - noisy embeddings get weaker penalties
       if (embeddingResult.similarity !== undefined) {
         const trackSampleCount = track.attributes?.sample_count ?? 0
         const trackQuality = track.attributes?.embedding_quality ?? 0
         const detQuality = det.attributes?.embedding_quality ?? 0
-        // Apply identity gate with just 1 sample - earlier protection
-        const hasEmbeddings = trackSampleCount >= 1 && trackQuality > 0.1 && detQuality > 0.01
+        const hasEmbeddings = trackSampleCount >= 1 && trackQuality > 0.1 && detQuality > 0.1
 
         if (hasEmbeddings) {
-          // Block association for very different appearances
+          // Quality-weighted penalty: high quality embeddings get full penalty,
+          // low quality embeddings get reduced penalty to avoid false rejections
+          const qualityFactor = Math.min(1.0, Math.sqrt(Math.min(trackQuality, detQuality) / 0.4))
+
           if (embeddingResult.similarity < 0.35) {
-            // Different person - return impossibly high cost
-            return 1000 // Way above any maxCost threshold
-          }
-          // Moderate mismatch - strong penalty but not blocking
-          if (embeddingResult.similarity < 0.45) {
-            cost *= 6.0
-          }
-          // Low-moderate mismatch - moderate penalty
-          if (embeddingResult.similarity < 0.55) {
-            cost *= 3.0
+            // Very different appearance - strong penalty scaled by quality
+            // High quality: cost *= 8.0, Low quality (0.15): cost *= ~4.3
+            const penalty = 1.0 + 7.0 * qualityFactor
+            cost *= penalty
+          } else if (embeddingResult.similarity < 0.45) {
+            // Moderate mismatch - graduated penalty
+            const penalty = 1.0 + 4.0 * qualityFactor
+            cost *= penalty
+          } else if (embeddingResult.similarity < 0.55) {
+            // Low-moderate mismatch - mild penalty
+            const penalty = 1.0 + 1.5 * qualityFactor
+            cost *= penalty
           }
         }
       }

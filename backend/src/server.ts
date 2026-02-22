@@ -162,8 +162,8 @@ export async function createServer(options: CreateServerOptions = {}): Promise<F
     maxConnectionsPerIp: env.wsMaxConnectionsPerIp,
   })
 
-  // Register WebSocket detection ingestion endpoint
-  registerWsDetectionIngest(app, baseDetectionProcessor, cameraRegistry, {
+  // Register WebSocket detection ingestion endpoint (route through sync buffer)
+  registerWsDetectionIngest(app, detectionProcessor, cameraRegistry, {
     maxConnectionsPerIp: env.wsMaxConnectionsPerIp,
     enableMsgpack: true,
   })
@@ -312,8 +312,8 @@ export async function createServerWithComponents(options: CreateServerOptions = 
     maxConnectionsPerIp: env.wsMaxConnectionsPerIp,
   })
 
-  // Register WebSocket detection ingestion endpoint
-  registerWsDetectionIngest(app, baseDetectionProcessor, cameraRegistry, {
+  // Register WebSocket detection ingestion endpoint (route through sync buffer)
+  registerWsDetectionIngest(app, detectionProcessor, cameraRegistry, {
     maxConnectionsPerIp: env.wsMaxConnectionsPerIp,
     enableMsgpack: true,
   })

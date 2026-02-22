@@ -45,7 +45,7 @@ const IMAGE_WIDTH = ALGORITHM_CONSTANTS.detection.imageWidth
 const IMAGE_HEIGHT = ALGORITHM_CONSTANTS.detection.imageHeight
 const SAME_CAMERA_DEDUP_DISTANCE = ALGORITHM_CONSTANTS.detection.sameCameraDeduplicationDistanceM
 const SAME_CAMERA_DEDUP_MAX_IMAGE_DISTANCE_PX = 90
-const OBSTACLE_FILTER_MARGIN = 0.15
+const OBSTACLE_FILTER_MARGIN = 0.5  // Match projection error (0.3-0.6m RMSE per camera)
 
 // ============================================================================
 // Logger Interface
@@ -288,20 +288,21 @@ export class ProjectionPipeline {
         isTableOccluded = tableExtension > 1.05
       }
 
-      // Confidence filtering with optional relaxation
+      // Confidence filtering with optional relaxation and per-camera overrides
       const localTrackId = detection.track_id ?? 0
       let confidence = detection.confidence
+      const cameraMinConfidence = ALGORITHM_CONSTANTS.detection.cameraConfidenceOverrides[cameraId] ?? MIN_CONFIDENCE
 
       if (config.enableRelaxedConfidence) {
-        const relaxedMinConfidence = Math.max(0.55, MIN_CONFIDENCE - 0.15)
+        const relaxedMinConfidence = Math.min(cameraMinConfidence, cameraMinConfidence - 0.15)
         if (
-          confidence < MIN_CONFIDENCE &&
+          confidence < cameraMinConfidence &&
           !(isTableOccluded && localTrackId !== 0 && confidence >= relaxedMinConfidence)
         ) {
           continue
         }
       } else {
-        if (confidence < MIN_CONFIDENCE) {
+        if (confidence < cameraMinConfidence) {
           continue
         }
       }

@@ -8,6 +8,7 @@
 
 import type { GlobalTrack, CameraDetection } from '../types.js'
 import { cosineSimilarity } from '../tracks/attribute-aggregator.js'
+import { ALGORITHM_CONSTANTS } from '../config/algorithm-constants.js'
 
 /**
  * Archived embedding entry
@@ -49,7 +50,7 @@ export interface ArchiveMatchResult {
 export interface EmbeddingArchiveConfig {
   /** Maximum archive age in ms (default: 10 minutes) */
   maxArchiveAgeMs: number
-  /** Minimum embedding quality to archive (default: 0.01) */
+  /** Minimum embedding quality to archive */
   minQualityToArchive: number
   /** Minimum sample count to archive (default: 3) */
   minSampleCount: number
@@ -61,7 +62,7 @@ export interface EmbeddingArchiveConfig {
 
 const DEFAULT_CONFIG: EmbeddingArchiveConfig = {
   maxArchiveAgeMs: 10 * 60 * 1000, // 10 minutes
-  minQualityToArchive: 0.01,
+  minQualityToArchive: ALGORITHM_CONSTANTS.reid.minEmbeddingQuality,
   minSampleCount: 3,
   minSimilarity: 0.80,
   maxEntries: 100,

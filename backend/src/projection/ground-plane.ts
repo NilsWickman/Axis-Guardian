@@ -647,9 +647,10 @@ function detectTableOcclusion(
       ? Math.max(1.0, (bboxWidthPx * EXPECTED_STANDING_ASPECT) / bboxHeightPx)
       : 1.0
 
-  // Table-occluded boxes can be *very* short; allow a higher cap here, while still being bounded
-  // by the later "keep bottom within image" cap in getBBoxBottomCenter().
-  const MAX_TABLE_EXTENSION_FACTOR = 5.0
+  // Cap table extension to prevent extreme displacement of projected positions.
+  // A 2x extension is generous enough for seated people while preventing the 5x factor
+  // from projecting people meters away from their actual position.
+  const MAX_TABLE_EXTENSION_FACTOR = 2.0
   const extensionFactor = Math.min(Math.max(extensionRatio, widthBasedFactor), MAX_TABLE_EXTENSION_FACTOR)
 
   // Only apply if extension is meaningful (>1.05x)

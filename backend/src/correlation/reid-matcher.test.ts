@@ -84,7 +84,7 @@ describe('ReIDMatcher', () => {
     })
 
     it('should return null when detection embedding quality is too low', () => {
-      const detection = createDetection('camera1', [1, 0, 0], 0.005) // Below threshold (reid.minEmbeddingQuality: 0.01)
+      const detection = createDetection('camera1', [1, 0, 0], 0.05) // Below threshold (reid.minEmbeddingQuality: 0.15)
       const track = createTrack('track1', 'camera1', [1, 0, 0])
       const result = matcher.findBestMatch(detection, [track], Date.now())
 

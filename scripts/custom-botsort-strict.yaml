@@ -7,7 +7,7 @@ tracker_type: botsort
 # Detection thresholds - moderate
 track_high_thresh: 0.45     # High confidence threshold (default 0.5)
 track_low_thresh: 0.1       # Low confidence threshold (default 0.1)
-new_track_thresh: 0.5       # New track threshold (default 0.6) - slightly easier to create tracks
+new_track_thresh: 0.7       # New track threshold (default 0.6) - raised to prefer re-associating lost tracks over spawning new ones
 
 # Track memory - extended buffer for re-tracking
 track_buffer: 300           # Frames to keep lost tracks (default 30) - 10s at 30fps

@@ -42,20 +42,46 @@ def get_yolo_model(model_path: str, device: str):
 
 
 def get_reid_model(device: str):
-    """Lazy load OSNet ReID model."""
+    """Lazy load OSNet-AIN ReID model with MSMT17-finetuned weights."""
     global _reid_model, _reid_transform
     if _reid_model is None:
         import torch
         import torchreid
         from torchvision import transforms
+        from pathlib import Path
 
-        # Build OSNet model
-        _reid_model = torchreid.models.build_model(
-            name='osnet_x1_0',
-            num_classes=1000,  # Pretrained classes, we only use features
-            pretrained=True,
-            loss='softmax'
-        )
+        # Use OSNet-AIN (Adaptive Instance Normalization) for better cross-domain generalization
+        # with MSMT17-finetuned weights (person ReID, not ImageNet classification)
+        weights_path = Path(__file__).parent / 'preprocessing' / 'weights' / 'osnet_ain_x1_0_msmt17.pth.tar'
+
+        if weights_path.exists():
+            # Build model without ImageNet pretrained weights, load ReID weights instead
+            _reid_model = torchreid.models.build_model(
+                name='osnet_ain_x1_0',
+                num_classes=1000,
+                pretrained=False,
+                loss='softmax'
+            )
+            # Load MSMT17 ReID-finetuned weights (strip 'module.' prefix from DDP training)
+            checkpoint = torch.load(str(weights_path), map_location=device, weights_only=False)
+            state_dict = checkpoint.get('state_dict', checkpoint)
+            state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
+            # Skip classifier weights (different num_classes)
+            model_dict = _reid_model.state_dict()
+            state_dict = {k: v for k, v in state_dict.items() if k in model_dict and v.shape == model_dict[k].shape}
+            model_dict.update(state_dict)
+            _reid_model.load_state_dict(model_dict)
+            print(f"  Loaded ReID-finetuned OSNet-AIN weights from {weights_path.name} ({len(state_dict)} params)")
+        else:
+            # Fallback to ImageNet-pretrained osnet_x1_0 if ReID weights not available
+            print(f"  WARNING: ReID weights not found at {weights_path}, falling back to ImageNet-pretrained osnet_x1_0")
+            _reid_model = torchreid.models.build_model(
+                name='osnet_x1_0',
+                num_classes=1000,
+                pretrained=True,
+                loss='softmax'
+            )
+
         _reid_model = _reid_model.to(device)
         _reid_model.eval()
 
@@ -148,12 +174,15 @@ def analyze_clothing_colors(
     if crop_h < 10:
         return _empty_colors()
 
-    # Split into upper 40% and lower 40% (skip middle 20%)
-    upper_end = int(crop_h * 0.4)
-    lower_start = int(crop_h * 0.6)
+    # Split into upper clothing (20-50%) and lower clothing (55-90%)
+    # Skip head region (0-20%) and feet region (90-100%) for cleaner color analysis
+    upper_start = int(crop_h * 0.2)
+    upper_end = int(crop_h * 0.5)
+    lower_start = int(crop_h * 0.55)
+    lower_end = int(crop_h * 0.9)
 
-    upper_region = crop[:upper_end, :]
-    lower_region = crop[lower_start:, :]
+    upper_region = crop[upper_start:upper_end, :]
+    lower_region = crop[lower_start:lower_end, :]
 
     result = {}
 
@@ -355,11 +384,16 @@ def extract_reid_embedding(
     # Convert to Python floats for JSON serialization
     embedding = [float(x) for x in features.cpu().numpy().flatten()]
 
-    # Quality based on crop size (larger = better)
-    crop_area = (x2 - x1) * (y2 - y1)
-    quality = min(1.0, crop_area / (128 * 256))  # Normalize to ideal ReID input size
+    # Quality based on crop size relative to practical surveillance ReID baseline.
+    # 80x200 px (16000 area) is a good-quality surveillance crop; normalize so this = 1.0.
+    # Crops smaller than the 40x80 minimum filter (3200 area) get quality ~0.2.
+    crop_w = x2 - x1
+    crop_h = y2 - y1
+    crop_area = crop_w * crop_h
+    GOOD_CROP_AREA = 80 * 200  # 16000 px^2 — practical "good" surveillance crop
+    quality = min(1.0, crop_area / GOOD_CROP_AREA)
 
-    return embedding, round(float(quality), 2)
+    return embedding, round(float(quality), 3)
 
 
 def process_video(
@@ -464,6 +498,13 @@ def process_video(
                 # Get box coordinates (xyxy format)
                 xyxy = boxes.xyxy[i].cpu().numpy()
                 x1, y1, x2, y2 = float(xyxy[0]), float(xyxy[1]), float(xyxy[2]), float(xyxy[3])
+
+                # Skip detections that are too small for reliable ReID embedding
+                # Small crops (< 40x80 px) produce garbage when resized 10x+ to 128x256
+                bbox_w_px = x2 - x1
+                bbox_h_px = y2 - y1
+                if bbox_w_px < 40 or bbox_h_px < 80:
+                    continue
 
                 # Convert to normalized xywh (ensure Python floats)
                 bbox_x = x1 / width
