@@ -426,6 +426,9 @@ describe('Multi-Camera Specific Metrics', () => {
         console.log(`\nCamera Balance Ratio: ${balanceRatio.toFixed(2)}`)
         console.log(`(1.0 = perfectly balanced, 0.0 = one camera dominates)`)
         console.log(`Target: > 0.5`)
+
+        // Regression guard: avoid severe single-camera collapse.
+        expect(balanceRatio).toBeGreaterThan(0.1)
       }
 
       expect(cameraTrackContribution.size).toBeGreaterThan(0)
@@ -506,25 +509,30 @@ describe('Multi-Camera Specific Metrics', () => {
 
       let singleCameraTracks = 0
       let multiCameraTracks = 0
+      let zeroCameraTracks = 0
       const cameraAssociationCounts: number[] = []
 
       for (const track of allTracks) {
         const numCameras = track.cameraAssociations.size
         cameraAssociationCounts.push(numCameras)
 
-        if (numCameras === 1) {
+        if (numCameras === 0) {
+          zeroCameraTracks++
+        } else if (numCameras === 1) {
           singleCameraTracks++
-        } else {
+        } else if (numCameras >= 2) {
           multiCameraTracks++
         }
       }
 
-      const multiCameraRate = allTracks.length > 0 ? multiCameraTracks / allTracks.length : 0
+      const tracksWithAssociations = allTracks.length - zeroCameraTracks
+      const multiCameraRate = tracksWithAssociations > 0 ? multiCameraTracks / tracksWithAssociations : 0
 
       console.log(`\n--- Multi-Camera Track Analysis ---`)
       console.log(`Total active tracks: ${allTracks.length}`)
+      console.log(`Zero-camera tracks: ${zeroCameraTracks}`)
       console.log(`Single-camera tracks: ${singleCameraTracks} (${((singleCameraTracks / allTracks.length) * 100).toFixed(1)}%)`)
-      console.log(`Multi-camera tracks: ${multiCameraTracks} (${((multiCameraTracks / allTracks.length) * 100).toFixed(1)}%)`)
+      console.log(`Multi-camera tracks: ${multiCameraTracks} (${(tracksWithAssociations > 0 ? (multiCameraTracks / tracksWithAssociations) * 100 : 0).toFixed(1)}% of tracks with associations)`)
 
       if (cameraAssociationCounts.length > 0) {
         const avgCameras = cameraAssociationCounts.reduce((a, b) => a + b, 0) / cameraAssociationCounts.length
@@ -534,6 +542,9 @@ describe('Multi-Camera Specific Metrics', () => {
       console.log(`\nTarget multi-camera rate: > 30% (indicates good overlap coverage)`)
 
       expect(allTracks.length).toBeGreaterThan(0)
+      expect(tracksWithAssociations).toBeGreaterThan(0)
+      // Regression guard: preserve overlap utilization in associated tracks.
+      expect(multiCameraRate).toBeGreaterThan(0.3)
     })
   })
 

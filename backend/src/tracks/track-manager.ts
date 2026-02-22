@@ -1601,13 +1601,41 @@ export class TrackManager {
    * 4. Only reject motions that are clearly impossible (>50 m/s = 180 km/h)
    */
   private forceAssociateWithTrack(track: GlobalTrack, detection: CameraDetection): boolean {
+    const detPos = { x: detection.worldX, y: detection.worldY }
+    const distanceToTrack = calculateDistance(detPos, track.currentPosition)
+    const detEmbedding = detection.attributes?.embedding
+    const detEmbeddingQuality = detection.attributes?.embedding_quality ?? 0
+    const trackEmbedding = track.attributes?.embedding
+    const trackEmbeddingQuality = track.attributes?.embedding_quality ?? 0
+    const minEmbeddingQuality = ALGORITHM_CONSTANTS.reid.minEmbeddingQuality
+    let embeddingSimilarity = -1
+    if (
+      detEmbedding &&
+      trackEmbedding &&
+      detEmbedding.length > 0 &&
+      detEmbedding.length === trackEmbedding.length &&
+      detEmbeddingQuality >= minEmbeddingQuality &&
+      trackEmbeddingQuality >= minEmbeddingQuality
+    ) {
+      embeddingSimilarity = cosineSimilarity(detEmbedding, trackEmbedding)
+    }
+
+    // Guard against local-ID reuse: same local ID can occasionally jump people.
+    // For non-trivial gaps, require either a decent appearance match or very close position.
+    const timeDelta = (detection.timestamp - track.lastSeen) / 1000
+    if (timeDelta > 0.2) {
+      if (embeddingSimilarity >= 0 && embeddingSimilarity < 0.55) {
+        return false
+      }
+      if (embeddingSimilarity < 0 && (distanceToTrack > 0.9 || timeDelta > 1.5)) {
+        return false
+      }
+    }
+
     // Only reject truly impossible motions (>50 m/s = 180 km/h)
     // This catches tracker bugs/ID swaps while allowing projection jitter
-    const timeDelta = (detection.timestamp - track.lastSeen) / 1000
     if (timeDelta > 0.05) {  // Only check if time delta is meaningful (>50ms)
-      const detPos = { x: detection.worldX, y: detection.worldY }
-      const distance = calculateDistance(detPos, track.currentPosition)
-      const velocity = distance / timeDelta
+      const velocity = distanceToTrack / timeDelta
       if (velocity > 50) {  // 50 m/s = 180 km/h - clearly impossible for humans
         return false
       }
