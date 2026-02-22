@@ -183,6 +183,8 @@ shared/cameras/rendered
 
 # Large preprocessing output files (keep only compressed versions)
 scripts/preprocessing/*.json
+# Local ReID weights (large, downloaded artifacts)
+scripts/preprocessing/weights/
 
 # YOLO model files (large, auto-downloaded)
 shared/models/**/*.pt

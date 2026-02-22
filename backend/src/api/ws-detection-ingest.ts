@@ -7,7 +7,7 @@
 
 import type { FastifyInstance } from 'fastify'
 import type { WebSocket } from '@fastify/websocket'
-import type { DetectionProcessor } from '../detection/detection-processor.js'
+import type { IDetectionProcessor } from '../detection/detection-processor.js'
 import type { CameraRegistry } from '../detection/camera-registry.js'
 import type { DetectionMessage, DetectionAttributes } from '../types.js'
 import { getMetrics } from '../metrics/tracking-metrics.js'
@@ -54,7 +54,7 @@ interface IngestResponse {
  */
 export function registerWsDetectionIngest(
   app: FastifyInstance,
-  detectionProcessor: DetectionProcessor,
+  detectionProcessor: IDetectionProcessor,
   cameraRegistry: CameraRegistry,
   options: WsIngestionOptions
 ): void {
@@ -98,7 +98,7 @@ export function registerWsDetectionIngest(
         if (Buffer.isBuffer(data) && enableMsgpack) {
           // Check if it looks like msgpack (starts with map/array marker)
           const firstByte = data[0]
-          if (firstByte >= 0x80 || firstByte <= 0x8f || (firstByte >= 0xde && firstByte <= 0xdf)) {
+          if ((firstByte >= 0x80 && firstByte <= 0x8f) || (firstByte >= 0xde && firstByte <= 0xdf)) {
             message = msgpack.decode(data) as IngestMessage
           } else {
             // Fallback to JSON string
@@ -203,7 +203,7 @@ function sendResponse(socket: WebSocket, response: IngestResponse, useMsgpack: b
  */
 async function processDetection(
   message: IngestMessage,
-  detectionProcessor: DetectionProcessor,
+  detectionProcessor: IDetectionProcessor,
   cameraRegistry: CameraRegistry
 ): Promise<{ detectionCount: number; tracksUpdated: number }> {
   const normalizedCameraId = cameraRegistry.normalizeCameraId(message.camera_id!)
@@ -261,7 +261,7 @@ async function processDetection(
  */
 async function processBatch(
   messages: IngestMessage[],
-  detectionProcessor: DetectionProcessor,
+  detectionProcessor: IDetectionProcessor,
   cameraRegistry: CameraRegistry
 ): Promise<{ totalDetections: number; tracksUpdated: number }> {
   let totalDetections = 0

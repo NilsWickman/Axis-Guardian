@@ -166,8 +166,8 @@ export class TrackManager {
     this.config = { ...DEFAULT_TRACKING_CONFIG, ...options.config }
     this.clock = options.clock ?? (() => Date.now())
     this.idGenerator = options.idGenerator ?? (() => `global-${this.nextTrackId++}`)
-    // Embedding weight for re-ID similarity in Hungarian cost (default 0.3)
-    this.embeddingWeight = options.embeddingWeight ?? 0.3
+    // Embedding weight for re-ID similarity in Hungarian cost
+    this.embeddingWeight = options.embeddingWeight ?? ALGORITHM_CONSTANTS.assignment.embeddingWeight
     // Create a new KalmanTrackFilter instance for each TrackManager
     // to avoid state cache pollution between tests or different managers
     this.kalmanFilter = new KalmanTrackFilter()
@@ -222,7 +222,7 @@ export class TrackManager {
       maxArchiveAgeMs: 10 * 60 * 1000, // 10 minutes
       minSimilarity: 0.80,
       minSampleCount: 1, // Archive even with single sample - we need all embeddings for long gaps
-      minQualityToArchive: 0.01, // Match the threshold in findNearbyTrack
+      minQualityToArchive: ALGORITHM_CONSTANTS.reid.minEmbeddingQuality,
     })
   }
 
@@ -1080,8 +1080,7 @@ export class TrackManager {
         let embeddingSimilarity = -1  // -1 means no embedding comparison possible
         const trackEmbedding = track.attributes?.embedding
         const trackEmbeddingQuality = track.attributes?.embedding_quality ?? 0
-        // Use very low quality threshold since preprocessor outputs 0.02 for all detections
-        const minQualityForMatching = 0.01
+        const minQualityForMatching = ALGORITHM_CONSTANTS.reid.minEmbeddingQuality
         if (detectionEmbedding && trackEmbedding &&
             detectionEmbedding.length > 0 && trackEmbedding.length === detectionEmbedding.length &&
             detectionEmbeddingQuality >= minQualityForMatching && trackEmbeddingQuality >= minQualityForMatching) {
@@ -1163,14 +1162,14 @@ export class TrackManager {
    * Check if a detection meets minimum confidence for track creation
    */
   private meetsCreationConfidence(detection: CameraDetection): boolean {
-    const minConfidence = this.config.minCreationConfidence ?? 0.7
+    const minConfidence = this.config.minCreationConfidence ?? ALGORITHM_CONSTANTS.trackLifecycle.minCreationConfidence
     if (detection.confidence >= minConfidence) return true
 
     // Table-occluded people are often legitimately detected at slightly lower confidence
     // (only upper body visible). If the local tracker has assigned a real ID, allow a
     // small relaxation so the second person behind a table can spawn a track at startup.
     if (detection.isTableOccluded && detection.localTrackId !== 0) {
-      const relaxed = Math.max(0.55, minConfidence - 0.15)
+      const relaxed = Math.max(0.35, minConfidence - 0.15)
       return detection.confidence >= relaxed
     }
 
@@ -2224,9 +2223,8 @@ export class TrackManager {
         // Use tighter gating to reduce false merges
         maxCost: this.config.correlationDistanceM,  // Removed 1.2x multiplier for stricter gating
         useKalmanPrediction: true,
-        associationBonus: 0.15,  // Stronger identity binding (85% cost reduction)
+        associationBonus: ALGORITHM_CONSTANTS.assignment.associationBonus,
         kalmanFilter: this.kalmanFilter,
-        // Embedding weight for re-ID similarity (default 0.3)
         embeddingWeight: this.embeddingWeight,
       }
     )
@@ -2634,9 +2632,7 @@ export class TrackManager {
     const detEmbedding = detection.attributes?.embedding
     const detQuality = detection.attributes?.embedding_quality ?? 0
 
-    // Use low quality threshold (0.01) to match algorithm-constants.ts minEmbeddingQuality
-    // Preprocessor outputs quality around 0.02, so 0.25 was filtering out valid embeddings
-    if (detEmbedding && detEmbedding.length > 0 && detQuality >= 0.01) {
+    if (detEmbedding && detEmbedding.length > 0 && detQuality >= ALGORITHM_CONSTANTS.reid.minEmbeddingQuality) {
       let bestEmbeddingTrack: GlobalTrack | null = null
       let bestSimilarity = 0.45  // Lowered to 0.45 - more permissive for same-camera re-ID
 
@@ -2644,7 +2640,7 @@ export class TrackManager {
         const trackEmbedding = track.attributes?.embedding
         const trackQuality = track.attributes?.embedding_quality ?? 0
 
-        if (!trackEmbedding || trackEmbedding.length === 0 || trackQuality < 0.01) continue
+        if (!trackEmbedding || trackEmbedding.length === 0 || trackQuality < ALGORITHM_CONSTANTS.reid.minEmbeddingQuality) continue
 
         // Use quality-adaptive re-ID window per track
         const maxReidAgeMs = this.getAdaptiveReidWindow(track)

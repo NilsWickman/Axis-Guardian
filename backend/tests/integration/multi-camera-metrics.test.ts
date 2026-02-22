@@ -188,7 +188,7 @@ describe('Multi-Camera Specific Metrics', () => {
     it('identifies when different persons are incorrectly merged', () => {
       if (!trackTruths) {
         console.log('Skipping false merge analysis - no track truth data')
-        expect(true).toBe(true)
+        expect(detectionFiles.size).toBeGreaterThan(0)
         return
       }
 
@@ -348,7 +348,7 @@ describe('Multi-Camera Specific Metrics', () => {
       }
       console.log(`\nSummary: ${highSimilarityMerges} merges with sim>=0.70, ${lowSimilarityMerges} with sim<0.70, ${noEmbeddingMerges} without embeddings`)
 
-      expect(falseMergeRate).toBeLessThan(0.5) // Allow up to 50% for now
+      expect(falseMergeRate).toBeLessThan(0.15)
     })
   })
 
@@ -615,7 +615,7 @@ Notes:
 - Requires TrackTruths.json for false merge detection
 `)
 
-      expect(true).toBe(true)
+      expect(detectionFiles.size).toBeGreaterThan(0)
     })
   })
 })

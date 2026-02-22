@@ -29,6 +29,8 @@ export interface DetectionConstants {
   readonly cleanupIntervalMs: number
   /** Same-camera deduplication distance (meters) - removes duplicate detections from same frame */
   readonly sameCameraDeduplicationDistanceM: number
+  /** Per-camera confidence overrides (cameraId → minConfidence). Cameras not listed use the default. */
+  readonly cameraConfidenceOverrides: Record<string, number>
 }
 
 // =============================================================================
@@ -430,6 +432,9 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
     maxCameras: 100,
     cleanupIntervalMs: 60000,
     sameCameraDeduplicationDistanceM: 0.20,  // Reduced from 0.3m - allow closer people to be tracked separately
+    cameraConfidenceOverrides: {
+      camera4: 0.6,  // IP5 has 27.4% low-confidence detections — raise threshold to reduce noise
+    },
   },
 
   assignment: {
@@ -445,9 +450,9 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
     crossCameraBonusWindowMs: 3000,  // Reduced window for cross-camera association
     maxAccelerationMs2: 4.0,  // Slightly relaxed acceleration limit
     accelerationConsistencyWeight: 0.08,  // Reduced weight
-    embeddingWeight: 0.65,  // Higher embedding weight for ReID-primary matching
+    embeddingWeight: 0.15,  // Low weight: OSNet embeddings lack discriminative power in this scene (cross-track sim 0.76-0.83)
     embeddingMinSimilarity: 0.55,  // Slightly raised for more discriminative matching
-    embeddingMinQuality: 0.10,  // Lowered - allow more embeddings
+    embeddingMinQuality: 0.15,  // Filter garbage embeddings from tiny crops
     trajectoryPredictionSteps: [200, 500, 800, 1000],
     trajectoryPredictionWindowMs: 1000,
     intersectionThresholdM: 0.8,
@@ -458,10 +463,10 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
     mergeWindowMs: 300,  // Extended - longer window for batching detections
     trackExpiryMs: 10000,  // Standard 10s - balance FP vs IDSW
     maxTrailLength: 25,  // Increased
-    minDetectionsToConfirm: 2,  // Keep at 2 for good TCI
+    minDetectionsToConfirm: 3,  // Raised from 2 - reduces false-positive tracks (0.3s at 10 FPS)
     maxVelocityMs: 8,
     unconfirmedTrackExpiryMs: 6000,  // Standard 6s
-    minCreationConfidence: 0.55,  // Lowered from 0.72 - allow more track creation for seated/distant people
+    minCreationConfidence: 0.50,  // Align with pipeline minConfidence to avoid 0.50-0.55 dead zone
     maxTracks: 200,
     minTrailMovementThreshold: 0.30,  // Lowered - allow smoother trails
   },
@@ -509,7 +514,7 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
     // Quality-adaptive retention: timeout *= (1 + bonus * normalizedQuality)
     qualityRetentionBonus: 0.4,
     maxRetentionMultiplier: 1.8,
-    minQualityForRetention: 0.01,  // Lowered to 0.01 to work with preprocessor quality bug (outputs 0.02)
+    minQualityForRetention: 0.15,  // Filter low-quality embeddings from tiny crops
   },
 
   stitching: {
@@ -522,7 +527,7 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
     minSimilarity: 0.50,  // Lowered from 0.55 - more permissive matching to reduce IDSW
     sameCameraBonus: 1.5,  // Increased - stronger same-camera binding
     maxTrackAgeMs: 30000,  // Extended to 30s - legacy, use adaptive window instead
-    minEmbeddingQuality: 0.01,  // Lowered to 0.01 for more embeddings (preprocessor outputs 0.02)
+    minEmbeddingQuality: 0.15,  // Filter low-quality embeddings from tiny crops
     highSimilarityThreshold: 0.60,  // Lowered - more high-similarity overrides
     highSimilarityDistanceOverride: 5.0,  // Increased - larger distance override for high similarity
     // Quality-adaptive re-ID window: timeout = baseAge * (1 + boostFactor * quality)
@@ -532,8 +537,8 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   },
 
   kalman: {
-    processNoise: 0.15,  // Standard process noise for responsiveness
-    measurementNoise: 1.5,  // Standard measurement noise
+    processNoise: 0.5,  // Increased from 0.15 - walking humans accelerate at 0.5-2.0 m/s², old value caused sluggish response
+    measurementNoise: 1.0,  // Decreased from 1.5 - q/r ratio 0.5 balances responsiveness vs smoothing (was 0.1, too extreme)
     initialPositionUncertainty: 1,
     initialVelocityUncertainty: 1,
     maxCacheSize: 500,
@@ -544,7 +549,7 @@ export const ALGORITHM_CONSTANTS: AlgorithmConstants = {
   },
 
   positionMerging: {
-    divergenceThreshold: 0.6,  // Balanced - blend when cameras agree, pick best when divergent
+    divergenceThreshold: 1.0,  // Raised from 0.6 - with 0.3-0.6m calibration error per camera, two cameras can exceed 0.6m independently
     distanceWeightEpsilon: 1.5,  // Increased from 1.0 - more conservative weighting to favor closer cameras
   },
 

@@ -59,10 +59,10 @@ export type {
  * 3. Type safety and consistency checks
  */
 export const DEFAULT_TRACKING_CONFIG_BASE: TrackingConfigBase = {
-  correlationDistanceM: 1.0,  // ALGORITHM_CONSTANTS.trackLifecycle.correlationDistanceM
-  mergeWindowMs: 200,         // ALGORITHM_CONSTANTS.trackLifecycle.mergeWindowMs
-  trackExpiryMs: 5000,        // ALGORITHM_CONSTANTS.trackLifecycle.trackExpiryMs
-  maxTrailLength: 20,         // ALGORITHM_CONSTANTS.trackLifecycle.maxTrailLength
+  correlationDistanceM: 2.5,  // ALGORITHM_CONSTANTS.trackLifecycle.correlationDistanceM
+  mergeWindowMs: 300,         // ALGORITHM_CONSTANTS.trackLifecycle.mergeWindowMs
+  trackExpiryMs: 10000,       // ALGORITHM_CONSTANTS.trackLifecycle.trackExpiryMs
+  maxTrailLength: 25,         // ALGORITHM_CONSTANTS.trackLifecycle.maxTrailLength
   minDetectionsToConfirm: 3,  // ALGORITHM_CONSTANTS.trackLifecycle.minDetectionsToConfirm
   maxVelocityMs: 8,           // ALGORITHM_CONSTANTS.trackLifecycle.maxVelocityMs
 }

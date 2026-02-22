@@ -385,7 +385,7 @@ describe('System Performance Metrics', () => {
     it('identifies tracks that may not correspond to real persons', () => {
       if (!trackTruths) {
         console.log('Skipping ghost track detection - no track truth data')
-        expect(true).toBe(true)
+        expect(detectionFiles.size).toBeGreaterThan(0)
         return
       }
 
@@ -470,7 +470,7 @@ describe('System Performance Metrics', () => {
       // Note: High ghost rate indicates tracking creates many false tracks
       // This is diagnostic - actual threshold depends on application requirements
       // With tighter tracking parameters to improve VCI, ghost rate may be higher
-      expect(ghostRate).toBeLessThan(0.95) // Allow up to 95% - this is diagnostic
+      expect(ghostRate).toBeLessThan(0.35)
     })
   })
 
@@ -564,7 +564,7 @@ Notes:
 - Low utilization may indicate overly strict filtering
 `)
 
-      expect(true).toBe(true)
+      expect(detectionFiles.size).toBeGreaterThan(0)
     })
   })
 })

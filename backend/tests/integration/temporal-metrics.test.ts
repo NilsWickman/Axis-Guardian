@@ -503,7 +503,7 @@ Notes:
 - Higher update frequency leads to smoother tracking visualization
 `)
 
-      expect(true).toBe(true)
+      expect(detectionFiles.size).toBeGreaterThan(0)
     })
   })
 })

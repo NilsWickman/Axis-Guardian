@@ -158,7 +158,8 @@ export class OcclusionHandler {
       }
     }
 
-    // Use minimum missed frames (track is visible if any camera sees it)
+    // Use minimum missed frames across cameras so a multi-camera track stays active
+    // while at least one camera still sees the person.
     let totalMissedFrames = perCameraMissed.length > 0
       ? Math.min(...perCameraMissed)
       : 0
@@ -270,25 +271,22 @@ export class OcclusionHandler {
     if (track.kalmanState) {
       predictedPos = this.kalmanFilter.predict(track.kalmanState, dtMs)
 
-      // Apply progressive velocity damping based on time since occlusion
-      // Damping increases over time to account for increasing uncertainty
-      if (!isPillarGhost) {
-        // Calculate time-progressive damping factor
-        // Starts at 0.98 and decreases to 0.85 over 1.5 seconds
-        const occlusionDurationSec = timeSinceOcclusion / 1000
-        const baseDamping = ALGORITHM_CONSTANTS.occlusion.coastingDampingFactor
-        const progressiveDamping = Math.max(
-          0.85,  // Minimum damping factor
-          baseDamping - (occlusionDurationSec * 0.08)  // Reduce by 0.08 per second
-        )
-        track.kalmanState.mean[2][0] *= progressiveDamping // vx
-        track.kalmanState.mean[3][0] *= progressiveDamping // vy
+      // Apply exponential velocity decay during coasting
+      // Velocity decays as exp(-t/tau) where tau is the decay time constant
+      // This naturally reduces drift: at 1s ~37% velocity remains, at 2s ~14%, at 3s ~5%
+      const occlusionDurationSec = timeSinceOcclusion / 1000
+      const maxCovariance = 25
 
-        // Increase covariance to reflect growing uncertainty
-        // This helps with re-association by expanding the gate
-        // Cap at 25 (5m std) to prevent unbounded growth
-        const maxCovariance = 25
-        const uncertaintyGrowthFactor = 1 + (occlusionDurationSec * 0.2)
+      if (!isPillarGhost) {
+        // Non-pillar: exponential decay with 1.2s time constant
+        // At 1.4 m/s walking speed: 1s→0.6m/s, 2s→0.25m/s, 3s→0.11m/s (vs 3.5m drift with old linear)
+        const decayTimeConstant = 1.2  // seconds
+        const decayFactor = Math.exp(-occlusionDurationSec / decayTimeConstant)
+        track.kalmanState.mean[2][0] *= decayFactor // vx
+        track.kalmanState.mean[3][0] *= decayFactor // vy
+
+        // Grow covariance to reflect increasing uncertainty
+        const uncertaintyGrowthFactor = 1 + (occlusionDurationSec * 0.3)
         if (track.kalmanState.covariance) {
           track.kalmanState.covariance[0][0] = Math.min(
             track.kalmanState.covariance[0][0] * uncertaintyGrowthFactor,
@@ -300,10 +298,15 @@ export class OcclusionHandler {
           )
         }
       } else {
-        // Pillar occlusion: maintain velocity but still grow uncertainty
-        const occlusionDurationSec = timeSinceOcclusion / 1000
-        const maxCovariance = 25
-        const uncertaintyGrowthFactor = 1 + (occlusionDurationSec * 0.1)  // Slower growth for pillar
+        // Pillar occlusion: slower exponential decay (2.5s time constant)
+        // Person likely continues moving behind pillar, so decay slower
+        const decayTimeConstant = 2.5  // seconds
+        const decayFactor = Math.exp(-occlusionDurationSec / decayTimeConstant)
+        track.kalmanState.mean[2][0] *= decayFactor // vx
+        track.kalmanState.mean[3][0] *= decayFactor // vy
+
+        // Slower covariance growth for pillar (higher confidence in continued motion)
+        const uncertaintyGrowthFactor = 1 + (occlusionDurationSec * 0.15)
         if (track.kalmanState.covariance) {
           track.kalmanState.covariance[0][0] = Math.min(
             track.kalmanState.covariance[0][0] * uncertaintyGrowthFactor,
